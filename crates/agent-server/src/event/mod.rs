@@ -1,0 +1,170 @@
+//! [`SessionEvent`]：actor 广播给外界的一切，经 `tokio::sync::broadcast` 扇出
+//! （issue 030）。**这是协议雏形**——032 从这里生成 TS 类型，ARCHITECTURE.md
+//! §传输 说的下行 SSE 每一帧就是这个枚举序列化之后的样子（034 起，帧本身是
+//! [`Frame`] 信封，见该类型文档；`SessionEvent` 是信封里 `event` 那一半）。
+//!
+//! # 为什么不是 `agent_runtime::RunnerEvent`
+//!
+//! `RunnerEvent` 是给同线程内一个 `FnMut` 回调用的——它没有 `Serialize`，也没有
+//! 承诺 `'static`（虽然眼下的变体恰好都是 owned，但那是巧合不是契约）。
+//! `broadcast` 的载荷必须 `Clone + Send + 'static`，而且要能真的过一遍
+//! serde（032 的前提）。`SessionEvent` 是 `RunnerEvent` 的 owned、可序列化翻译，
+//! [`From<RunnerEvent>`] 是那条翻译线——两边变体逐一对应，issue 030 的注意事项
+//! 原话「`SessionEvent` 的形状别照抄 `RunnerEvent` 的借用结构」在这里落实成
+//! 一个独立类型而不是拿 `RunnerEvent` 改个 derive 了事。
+//!
+//! # 三个 `RunnerEvent` 之外的变体
+//!
+//! - [`SessionEvent::Undo`] / [`SessionEvent::Redo`]：`/undo` `/redo` `/undo!`
+//!   命令的结果（[`UndoOutcome`]，见该类型自己的模块文档——`agent_core::
+//!   UndoReport` 的可序列化姊妹类型，034 起还带富化）。`Cancel` 落地成
+//!   `Failed(Cancelled)` 之后 actor 的自动擦除策略（027 已裁决，见
+//!   `crate::actor::commands` 模块文档）广播的也是这个变体——擦除本质上就是
+//!   一次 `undo_turn`，复用同一套事件词汇，不必另开一个「自动擦除」变体。
+//! - [`SessionEvent::Lagged`]：订阅者跟丢时的显式补发，见该变体文档。
+//! - [`SessionEvent::SessionDied`]：actor panic 之后的终态广播，见该变体文档。
+//! - [`SessionEvent::Gap`]：031 的 HTTP 层重连补发逻辑合成的一帧，见该变体文档
+//!   ——跟 [`SessionEvent::Lagged`] 哲学同源但触发层不同（那条是 030 的
+//!   `tokio::broadcast` 内部跟丢，这条是 031 的 SSE 环形缓冲被挤空）。
+//!
+//! # 协议决定（032 生成 TS 类型的依据，写进 031 实做记录）
+//!
+//! `#[serde(rename_all = "snake_case", tag = "type", content = "data")]`——
+//! **邻接标签（adjacently tagged）**，不是内部标签（internally tagged）。
+//! 原因：本枚举的变体形状五花八门（`TextDelta(Arc<str>)` 这类 newtype 装的是
+//! 纯字符串，不是 JSON 对象），内部标签要求每个变体序列化成一个 JSON 对象才能
+//! 把 tag 合并进去——`serde` 对「newtype 装非对象」的内部标签枚举会在运行期报错
+//! （不是编译期，这个仓库不允许出现这种只在跑起来才发现的坑）。邻接标签对任意
+//! 变体形状都成立：`{"type":"text_delta","data":"hi"}`、
+//! `{"type":"tool_call_started","data":{"name":"foo"}}`、
+//! `{"type":"redo","data":{"type":"nothing"}}`。生成的 TS 判别联合
+//! （discriminated union）两种标签风格都能落地，邻接标签更省心。
+//! [`UndoOutcome`] 用的是同一套约定。
+//!
+//! # 三个子模块，各管一件事
+//!
+//! | 模块 | 职责 |
+//! |------|------|
+//! | 本文件 | `SessionEvent` 本体 + `From<RunnerEvent>` 翻译线 |
+//! | [`undo_outcome`] | `UndoOutcome`：undo/redo 结果的可序列化姊妹类型，034 起带 `Blocked` 富化 |
+//! | [`frame`] | 034：`Frame { agent, event }`——SSE 帧 data 的信封 |
+
+mod frame;
+mod undo_outcome;
+
+pub use frame::Frame;
+pub use undo_outcome::UndoOutcome;
+
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
+use agent_core::{Adjustment, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest};
+use agent_runtime::RunnerEvent;
+
+/// 一个 session 广播的一件事。`Clone + Send + 'static`（`broadcast` 的硬要求）
+/// 且全部可序列化（032 的前提）——本文件模块文档记了为什么不是直接用
+/// `RunnerEvent`，以及 `tag`/`content` 这两个 serde 属性为什么这么选。
+///
+/// 032：TS 类型从这里生成，`ts` feature 门后面（`crate::ts_protocol`）。**不改
+/// 任何 serde 属性**——生成器适配协议，不是协议适配生成器（issue 032 注意事项）。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "data")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub enum SessionEvent {
+    /// 可见文本的流式增量。
+    TextDelta(Arc<str>),
+    /// 思维链文本的流式增量。
+    ThinkingDelta(Arc<str>),
+    /// 流式过程中看到一次工具调用的声明已完整（拿到了名字）。
+    ToolCallStarted { name: Arc<str> },
+    /// 发前第 1 层告警：`DriftVerdict::Unexpected`。
+    PreflightDriftAlert(DriftVerdict),
+    /// 一次 `post_stream` 调用没能干净收尾的文本描述。
+    TransportTrouble(Arc<str>),
+    /// 即将真的执行一个工具。
+    ToolExecuting { call_id: ToolCallId, request: ToolCallRequest },
+    /// 工具执行完了。
+    ToolExecuted { call_id: ToolCallId, tool: Arc<str>, output_len: usize, is_error: bool },
+    /// 一轮 `CallProvider` 成功收尾：三层判读 + usage + adjustments。
+    TurnGuard { usage: TokenUsage, report: GuardReport, adjustments: Vec<Adjustment> },
+    /// loop 自己发的通报（含 `TurnStatusChanged`——轮终态从这里广播出去）。
+    Notice(Notice),
+    /// `/undo` `/undo!` 的结果，以及取消轮结束后自动擦除的结果
+    /// （见本文件模块文档）。
+    Undo(UndoOutcome),
+    /// `/redo` 的结果。
+    Redo(UndoOutcome),
+    /// 这个订阅者慢了，`broadcast` 的有界环形缓冲把它还没读到的
+    /// `skipped` 条旧事件覆盖掉了——它们永远不会再被这个订阅者看到。
+    /// 补发这一条是为了让下游知道自己瞎过一段，而不是无声地以为事件序列
+    /// 是连续的（跟 [`tokio::sync::broadcast::error::RecvError::Lagged`]
+    /// 的语义一一对应，见 [`crate::handle::Subscription::recv`]）。
+    Lagged { skipped: u64 },
+    /// actor 线程 panic 了，这是这个 session 广播的最后一条事件——线程即将
+    /// 退出，`SessionRegistry` 随后会把它标记为 dead（`reason` 与 registry
+    /// 报的死因同源，见 `crate::actor::spawn` 模块文档）。
+    SessionDied { reason: String },
+    /// **只在 SSE 重连补发时出现，actor 从不广播这个变体**。031 的 HTTP 层
+    /// （`crate::http::hub`）给每个广播出去的事件配一个单调帧 id、存进一个有界
+    /// 环形缓冲（默认 256 帧）供 `Last-Event-ID` 重连补发；客户端带来的
+    /// `Last-Event-ID` 如果比缓冲区当前最旧的一帧还老，中间那些帧已经被挤出去、
+    /// 永远补不回来了——补发逻辑就合成这一帧插进流里，`skipped` 是能精确算出的
+    /// 缺口大小（`oldest_available_id - last_event_id - 1`，不是估计值）。
+    /// 跟 [`SessionEvent::Lagged`] 同一个哲学（瞎过要知道自己瞎过），开一个独立
+    /// 变体是因为触发的层和"瞎过"的原因不同：`Lagged` 是 `tokio::broadcast` 内部
+    /// 判定的，`Gap` 是重连时按帧 id 算出来的。
+    Gap { skipped: u64 },
+}
+
+impl From<RunnerEvent> for SessionEvent {
+    fn from(ev: RunnerEvent) -> Self {
+        match ev {
+            RunnerEvent::TextDelta(text) => SessionEvent::TextDelta(text),
+            RunnerEvent::ThinkingDelta(text) => SessionEvent::ThinkingDelta(text),
+            RunnerEvent::ToolCallStarted { name } => SessionEvent::ToolCallStarted { name },
+            RunnerEvent::PreflightDriftAlert(v) => SessionEvent::PreflightDriftAlert(v),
+            RunnerEvent::TransportTrouble(text) => SessionEvent::TransportTrouble(text),
+            RunnerEvent::ToolExecuting { call_id, request } => SessionEvent::ToolExecuting { call_id, request },
+            RunnerEvent::ToolExecuted { call_id, tool, output_len, is_error } => {
+                SessionEvent::ToolExecuted { call_id, tool, output_len, is_error }
+            }
+            RunnerEvent::TurnGuard { usage, report, adjustments } => SessionEvent::TurnGuard { usage, report, adjustments },
+            RunnerEvent::Notice(notice) => SessionEvent::Notice(notice),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `RunnerEvent` 的九个变体逐一对应，穷举 `match` 已经在编译期保证不漏——
+    /// 这里额外钉一个运行期样本，防止哪天有人把某个变体的字段悄悄改错映射。
+    #[test]
+    fn from_runner_event_maps_text_delta() {
+        let ev = RunnerEvent::TextDelta(Arc::from("hi"));
+        assert_eq!(SessionEvent::from(ev), SessionEvent::TextDelta(Arc::from("hi")));
+    }
+
+    #[test]
+    fn from_runner_event_maps_notice() {
+        let ev = RunnerEvent::Notice(Notice::TurnStatusChanged { status: agent_core::TurnStatus::Idle });
+        assert_eq!(
+            SessionEvent::from(ev),
+            SessionEvent::Notice(Notice::TurnStatusChanged { status: agent_core::TurnStatus::Idle })
+        );
+    }
+
+    /// 红线 3 精神的直接实检：真的过一遍 serde，不是只看 derive 存在。
+    #[test]
+    fn session_event_serializes_round_trip() {
+        let ev = SessionEvent::Lagged { skipped: 7 };
+        let s = serde_json::to_string(&ev).unwrap();
+        assert_eq!(serde_json::from_str::<SessionEvent>(&s).unwrap(), ev);
+
+        let died = SessionEvent::SessionDied { reason: "boom".to_string() };
+        let s = serde_json::to_string(&died).unwrap();
+        assert_eq!(serde_json::from_str::<SessionEvent>(&s).unwrap(), died);
+    }
+}

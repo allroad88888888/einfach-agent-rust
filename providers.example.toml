@@ -1,0 +1,107 @@
+# Provider 连接配置范例。
+#
+# 拷成 providers.toml 再填 key。providers.toml 已在 .gitignore 里，永远不要提交。
+#
+# 查找顺序：$AGENT_PROVIDERS_CONFIG → ./providers.toml → ~/.config/agent/providers.toml
+#
+# ── key 的两种给法 ──
+# api_key      直接写在文件里。方便，但文件落在磁盘上。
+# api_key_env  只写环境变量名，运行时去读。企业部署用这种。
+# 两个都给时 api_key_env 优先 —— 让部署环境能覆盖开发机上的默认值。
+#
+# 表里的能力事实（缓存折扣、工具上限、消息级 tools）是 2026-07 查官方文档得到的，
+# 写在注释里是为了让下面的配置项有据可依；代码里的默认值与这里一致。
+# 价格会变，覆盖用各 provider 段里的 cache_hit_discount。
+
+# ─────────────────────────────────────────────────────────────
+# DeepSeek —— 缓存折扣最狠，但工具表最僵
+#
+#   缓存    全自动硬盘缓存，默认开启，无需改代码
+#   折扣    v4-flash  $0.0028 / $0.14     ≈ 50x
+#           v4-pro    $0.003625 / $0.435  ≈ 120x
+#   TTL     几小时到几天，自动清理（未公布精确值）
+#   工具    仅顶层 tools，上限 128，仅 function 类型
+#           ⚠ 没有消息级 tools。已实测：顶层 tools 在前缀最前面，改动后
+#             那一轮整段对话全价重编码一次（≈120 轮命中的花费）。
+#             工具应一次性声明完，会话中途尽量不动。
+#   实测    块粒度 128；~380 token 起就有 88% 覆盖率，小上下文也能用
+#           匹配语义 = 仅扩展：新请求必须是已见过请求的严格延长，
+#             中途任何分歧命中归零 → 中间改写（压缩）损失 100%，
+#             子 agent 换个任务就完全不共享前缀
+#           thinking 与 reasoning_effort 都不进 prompt，可中途自由改
+#   其他    prefix（assistant 前缀续写）需要把 base_url 换成 /beta
+# ─────────────────────────────────────────────────────────────
+[providers.deepseek]
+api_key = ""
+# api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+# prefix 续写要用这个 base_url，adapter 内部按需切换
+beta_base_url = "https://api.deepseek.com/beta"
+model = "deepseek-v4-pro"
+# 覆盖内置默认。留空则用代码里按 model 匹配的值。
+# cache_hit_discount = 120.0
+
+# ─────────────────────────────────────────────────────────────
+# Kimi —— 唯一支持无损中途加载工具的
+#
+#   缓存    全自动，"无需管理 TTL"
+#   折扣    k3  ¥2 / ¥20  = 10x
+#   门槛    prompt > 256 tokens 才可能命中，短请求直接丢弃不缓存
+#   工具    顶层 tools + 消息级 tools
+#           ✓ KimiK3DynamicToolMessage：role=system + tools，无 content 字段
+#             已实测：末尾追加后 prompt 5276→5382，命中仍为 5120，
+#             新增内容完全落在缓存之后，确实零代价
+#   实测    块粒度 256（最粗）；470 token 的请求只缓存 1 块，浪费 214
+#           匹配语义 = 仅扩展，同 DeepSeek：中间改写损失 100%，
+#             子 agent 不共享前缀
+#           ⚠ temperature 只接受 1，传 0 直接 400
+#           ⚠ 未命中时 cached_tokens 字段整个缺失，不是 0
+#           官方工具（web-search / code-runner / memory 等 12 个）声明是普通
+#           function，但执行要单独 POST /v1/formulas/{uri}/fibers，
+#           且需维护 function.name → formula_uri 的映射
+#   其他    partial（assistant 前缀续写），无需换 base_url
+#
+#   注意    文档站已迁到 platform.kimi.com，但 API 主机仍是 api.moonshot.cn
+# ─────────────────────────────────────────────────────────────
+[providers.kimi]
+api_key = ""
+# api_key_env = "MOONSHOT_API_KEY"
+base_url = "https://api.moonshot.cn/v1"
+model = "kimi-k3"
+# cache_hit_discount = 10.0
+
+# ─────────────────────────────────────────────────────────────
+# GLM —— 折扣最小，所以前缀最不值钱，压缩可以最激进
+#
+#   缓存    隐式自动，"无需手动配置"
+#   折扣    约 2x（文档举例 0.01 → 0.005，非承诺价目表）
+#   TTL     "合理时效性"，未公布
+#   门槛    未公布
+#   工具    仅顶层 tools，128 functions
+#           ⚠ 没有消息级 tools，中途改工具表要全价重编码一轮（但只贵 2x，可接受）
+#   实测    块粒度 64（最细）；但 ~460 token 时完全不缓存，~860 才跳到 98%
+#           匹配语义 = 真前缀树：任意分歧点都能命中到分歧前
+#             → 中间改写只损失 ~3%，子 agent 共享 system+tools 前缀成立
+#             → 折扣虽只有 2x，但压缩几乎免费，可以最激进地压
+#           reasoning_effort 不进前缀，可中途改
+#           ⚠ thinking.type 进前缀（已隔离验证），必须会话级锁定
+#           支持四种类型：function / retrieval / web_search / MCP
+#           后三种由 GLM 服务端执行，我们的 router 不参与 —— 对应
+#           Location::Provider，且副作用等级我们无从判断，见 docs/TOOLS.md
+#   其他    thinking.clear_thinking 控制历史 reasoning 是否留在上下文里，
+#           同样应在会话创建时定死。
+# ─────────────────────────────────────────────────────────────
+[providers.glm]
+api_key = ""
+# api_key_env = "ZHIPU_API_KEY"
+base_url = "https://open.bigmodel.cn/api/paas/v4"
+model = "glm-5.2"
+# cache_hit_discount = 2.0
+# 会话级锁定，中途不可变。改它等于作废整个前缀。
+clear_thinking = false
+
+# ─────────────────────────────────────────────────────────────
+# 默认使用哪个
+# ─────────────────────────────────────────────────────────────
+[default]
+provider = "deepseek"

@@ -1,0 +1,27 @@
+# 035：`agent-server` 的默认宿主二进制——ROADMAP 决策 12「库是主体，bin 只是
+# 众多宿主之一」的另一半。企业不用它也能直接内嵌 `agent-server` 这个库，用它
+# 就是开箱即跑：读 providers.toml、绑 loopback、Ctrl-C 优雅退出。
+[package]
+name = "agent-server-bin"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+# 二进制名字跟 crate 名字分开：`cargo run -p agent-server-bin` 起的进程叫
+# `agent-server`，运维看 `ps`/日志时认的是这个名字，不是 crate 目录名。
+[[bin]]
+name = "agent-server"
+path = "src/main.rs"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+agent-server = { path = "../agent-server" }
+agent-transport = { path = "../agent-transport" }
+
+# `#[tokio::main]` + `AgentServer::bind`/`serve`（`agent-server` 库自己已经要
+# tokio，这里的依赖是宿主自己要跑执行器、要 `tokio::signal::ctrl_c()`）。只开
+# 用到的 feature：`rt-multi-thread`（`AgentServer::serve` 内部起了后台任务，
+# 单线程 executor 会跟它们抢跑）、`macros`（`#[tokio::main]`）、`signal`
+# （Ctrl-C）。不要 `full`——这个仓库的依赖最小化取向（issue 035「注意」条目：
+# clap/手写 args 自选时优先依赖最小，这里同一个取向延伸到 tokio feature 上）。
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }

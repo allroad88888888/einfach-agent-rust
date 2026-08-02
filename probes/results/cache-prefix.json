@@ -1,0 +1,680 @@
+{
+  "deepseek": {
+    "model": "deepseek-v4-pro",
+    "nonce": "1785473465",
+    "observations": [
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=3 冷",
+        "prompt_tokens": 434,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 434,
+          "prompt_tokens": 434,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 450
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 384,
+        "label": "records=3 复发",
+        "prompt_tokens": 434,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 384,
+          "prompt_cache_miss_tokens": 50,
+          "prompt_tokens": 434,
+          "prompt_tokens_details": {
+            "cached_tokens": 384
+          },
+          "total_tokens": 450
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=8 冷",
+        "prompt_tokens": 574,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 574,
+          "prompt_tokens": 574,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 590
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 512,
+        "label": "records=8 复发",
+        "prompt_tokens": 574,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 512,
+          "prompt_cache_miss_tokens": 62,
+          "prompt_tokens": 574,
+          "prompt_tokens_details": {
+            "cached_tokens": 512
+          },
+          "total_tokens": 590
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=22 冷",
+        "prompt_tokens": 966,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 966,
+          "prompt_tokens": 966,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 982
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 896,
+        "label": "records=22 复发",
+        "prompt_tokens": 966,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 896,
+          "prompt_cache_miss_tokens": 70,
+          "prompt_tokens": 966,
+          "prompt_tokens_details": {
+            "cached_tokens": 896
+          },
+          "total_tokens": 982
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=50 冷",
+        "prompt_tokens": 1750,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 1750,
+          "prompt_tokens": 1750,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1766
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 1664,
+        "label": "records=50 复发",
+        "prompt_tokens": 1750,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 1664,
+          "prompt_cache_miss_tokens": 86,
+          "prompt_tokens": 1750,
+          "prompt_tokens_details": {
+            "cached_tokens": 1664
+          },
+          "total_tokens": 1766
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=100 冷",
+        "prompt_tokens": 3150,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 3150,
+          "prompt_tokens": 3150,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 3166
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 3072,
+        "label": "records=100 复发",
+        "prompt_tokens": 3150,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 3072,
+          "prompt_cache_miss_tokens": 78,
+          "prompt_tokens": 3150,
+          "prompt_tokens_details": {
+            "cached_tokens": 3072
+          },
+          "total_tokens": 3166
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "records=205 冷",
+        "prompt_tokens": 6090,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 6090,
+          "prompt_tokens": 6090,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 6106
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 6016,
+        "label": "records=205 复发",
+        "prompt_tokens": 6090,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 6016,
+          "prompt_cache_miss_tokens": 74,
+          "prompt_tokens": 6090,
+          "prompt_tokens_details": {
+            "cached_tokens": 6016
+          },
+          "total_tokens": 6106
+        }
+      }
+    ]
+  },
+  "glm": {
+    "model": "glm-5.2",
+    "nonce": "1785473465",
+    "observations": [
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=3 冷",
+        "prompt_tokens": 316,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 12
+          },
+          "prompt_tokens": 316,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 332
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=3 复发",
+        "prompt_tokens": 316,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 316,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 332
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=8 冷",
+        "prompt_tokens": 456,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 456,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 472
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=8 复发",
+        "prompt_tokens": 456,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 456,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 472
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=22 冷",
+        "prompt_tokens": 848,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 848,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 864
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 832,
+        "label": "records=22 复发",
+        "prompt_tokens": 848,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 848,
+          "prompt_tokens_details": {
+            "cached_tokens": 832
+          },
+          "total_tokens": 864
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=50 冷",
+        "prompt_tokens": 1652,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 1652,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1668
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 1600,
+        "label": "records=50 复发",
+        "prompt_tokens": 1652,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_tokens": 1652,
+          "prompt_tokens_details": {
+            "cached_tokens": 1600
+          },
+          "total_tokens": 1668
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=100 冷",
+        "prompt_tokens": 3101,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 3101,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 3117
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 3072,
+        "label": "records=100 复发",
+        "prompt_tokens": 3101,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 3101,
+          "prompt_tokens_details": {
+            "cached_tokens": 3072
+          },
+          "total_tokens": 3117
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "records=205 冷",
+        "prompt_tokens": 6219,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_tokens": 6219,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 6235
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 6208,
+        "label": "records=205 复发",
+        "prompt_tokens": 6219,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 6219,
+          "prompt_tokens_details": {
+            "cached_tokens": 6208
+          },
+          "total_tokens": 6235
+        }
+      }
+    ]
+  },
+  "kimi": {
+    "model": "kimi-k3",
+    "nonce": "1785473465",
+    "observations": [
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=3 冷",
+        "prompt_tokens": 330,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 330,
+          "total_tokens": 346
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 256,
+        "label": "records=3 复发",
+        "prompt_tokens": 330,
+        "usage": {
+          "cached_tokens": 256,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 330,
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          },
+          "total_tokens": 346
+        }
+      },
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=8 冷",
+        "prompt_tokens": 470,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 470,
+          "total_tokens": 486
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 256,
+        "label": "records=8 复发",
+        "prompt_tokens": 470,
+        "usage": {
+          "cached_tokens": 256,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 470,
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          },
+          "total_tokens": 486
+        }
+      },
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=22 冷",
+        "prompt_tokens": 862,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 862,
+          "total_tokens": 878
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 768,
+        "label": "records=22 复发",
+        "prompt_tokens": 862,
+        "usage": {
+          "cached_tokens": 768,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 862,
+          "prompt_tokens_details": {
+            "cached_tokens": 768
+          },
+          "total_tokens": 878
+        }
+      },
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=50 冷",
+        "prompt_tokens": 1646,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 1646,
+          "total_tokens": 1662
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 1536,
+        "label": "records=50 复发",
+        "prompt_tokens": 1646,
+        "usage": {
+          "cached_tokens": 1536,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 1646,
+          "prompt_tokens_details": {
+            "cached_tokens": 1536
+          },
+          "total_tokens": 1662
+        }
+      },
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=100 冷",
+        "prompt_tokens": 3046,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 3046,
+          "total_tokens": 3062
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 2816,
+        "label": "records=100 复发",
+        "prompt_tokens": 3046,
+        "usage": {
+          "cached_tokens": 2816,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 3046,
+          "prompt_tokens_details": {
+            "cached_tokens": 2816
+          },
+          "total_tokens": 3062
+        }
+      },
+      {
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "records=205 冷",
+        "prompt_tokens": 5986,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 5986,
+          "total_tokens": 6002
+        }
+      },
+      {
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 5888,
+        "label": "records=205 复发",
+        "prompt_tokens": 5986,
+        "usage": {
+          "cached_tokens": 5888,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 5986,
+          "prompt_tokens_details": {
+            "cached_tokens": 5888
+          },
+          "total_tokens": 6002
+        }
+      }
+    ]
+  }
+}

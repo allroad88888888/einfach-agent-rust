@@ -1,0 +1,14 @@
+{
+  "name": "@agent/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "issue 036：Tauri 2 桌面壳——不是第二份前端。窗口只是导航到内嵌 AgentServer（with_static_dir 发 packages/web 的同一份构建产物）的 http://127.0.0.1:PORT，src-tauri 是唯一新代码；这个包本身没有自己的网页源码。",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build --debug"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  参考实现，不是发布物：不推 Maven 仓库、不跟 einfach-agent-rust 的版本号
+  （docs/ROADMAP.md 决策 13）。groupId/artifactId 拷走之后随便改成你自己的。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.4</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.example</groupId>
+  <artifactId>agent-gateway</artifactId>
+  <version>0.0.0-reference</version>
+  <packaging>jar</packaging>
+
+  <name>agent-gateway</name>
+  <description>
+    einfach-agent-rust 的 Java WebFlux 参考网关（examples/java-gateway）。
+    拷走改，别当依赖：不发 Maven、不承诺 Spring Boot 2/3 双兼容、不跟版
+    （docs/ROADMAP.md 决策 13）。本机（开发这份代码的机器）没有装 JDK，
+    mvn -q package 从未在本仓库跑过一次，见 README「诚实边界」一节。
+  </description>
+
+  <properties>
+    <java.version>17</java.version>
+  </properties>
+
+  <dependencies>
+    <!--
+      唯一一个 starter。反向代理 SSE 必须是非阻塞逐块转发，Spring MVC 的
+      SseEmitter 一个连接占一个 Tomcat 线程，默认 max-threads: 200 意味着
+      两百个并发会话就把整个应用的线程池吃光——这是 ARCHITECTURE.md
+      「必须用 WebFlux」一节的原话。不加别的 starter：拷走这份代码的人
+      应该能一眼看完全部依赖来自哪里，不用去 dependency:tree 里找。
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webflux</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

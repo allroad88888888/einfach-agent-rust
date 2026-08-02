@@ -1,0 +1,25 @@
+# 内置工具（issue 013）：srv:fs/read、srv:fs/list 与本地 executor；外加
+# srv:shell/exec（issue 020）。这个 crate 做文件/进程 IO——红线 7 只约束
+# agent-core / agent-store，不含这里。
+[package]
+name = "agent-tools"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde_json = { workspace = true }
+
+# shell/exec 超时后要杀掉整个进程组（`kill(-pgid, SIGKILL)`），std 没有这个
+# API——只在 Unix 上拉，非 Unix 目标不编译这一支（`shell.rs` 的 `kill_group`
+# 用 `#[cfg(not(unix))]` 给了空实现）。
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+# 020 的 History 屏障演示（`src/barrier_demo.rs`，`#[cfg(test)]`）要用真实的
+# `agent_store::History` + `Reversibility::Irreversible` 语义证明「undo 越过
+# 一条标了 irreversible 的 entry → Blocked」——不是重新发明一遍机制，是证明
+# 020 这个工具的 Irreversible 判断接得上 017 已经做好的屏障。只在测试里用，
+# 不进 agent-tools 的公开依赖面。
+agent-store = { path = "../agent-store" }

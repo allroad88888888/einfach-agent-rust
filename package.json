@@ -1,0 +1,8 @@
+{
+  "name": "einfach-agent-rust",
+  "private": true,
+  "description": "pnpm workspace 根——决策 2（docs/ROADMAP.md）：单 monorepo，Cargo 与 pnpm 双 workspace 并存，唯一理由是协议类型能在一个提交里从 Rust 原子生成到 TS。",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck"
+  }
+}

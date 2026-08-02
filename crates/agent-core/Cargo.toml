@@ -1,0 +1,26 @@
+[package]
+name = "agent-core"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+# 红线 7：这个 crate 不得出现 reqwest / hyper / axum / tokio 及其生态。
+# 整个 agent loop 必须能在没有网络的情况下跑单元测试。
+[dependencies]
+# 原子引擎 + command log。依赖方向是 agent-core → agent-store（ARCHITECTURE §包结构：
+# store 只认识 atom / 依赖图 / 日志，不认识 agent、消息、工具；值类型与逻辑键由 core 定）。
+# 反向依赖会让红线 4 的泛型 `K` 退化成具体类型，所以这条方向是结构性的，不是习惯。
+agent-store = { path = "../agent-store" }
+imbl.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# 032：`ts` feature 门后面的可选依赖——**默认关**，core 不为代码生成背常驻依赖
+# （issue 032 原话）。`cargo build`/`cargo test`（不开 feature）时 ts-rs 连编译都
+# 不参与，红线 7 的精神延伸到「不为周边工具常驻依赖」。
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# 只给协议面（agent-server）的载荷可达类型挂 `#[derive(TS)]`。开这个 feature 不
+# 改变任何 serde 属性——生成器适配协议，不是协议适配生成器（issue 032 注意事项）。
+ts = ["dep:ts-rs"]

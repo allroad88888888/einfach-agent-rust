@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>agent-server 最小客户端（M3）</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>agent-server</h1>
+      <div id="status" class="status">未连接</div>
+      <div class="controls">
+        <button id="undo-turn" type="button">Undo</button>
+        <button id="redo" type="button">Redo</button>
+        <button id="cancel" type="button">Cancel</button>
+      </div>
+    </header>
+    <main id="timeline"></main>
+    <form id="composer">
+      <textarea id="input" placeholder="说点什么…" rows="2"></textarea>
+      <button type="submit">发送</button>
+    </form>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

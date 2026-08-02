@@ -1,0 +1,47 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/agent-core",
+    "crates/agent-providers",
+    "crates/agent-store",
+    "crates/agent-tools",
+    "crates/agent-transport",
+    "crates/agent-runtime",
+    "crates/agent-cli",
+    "crates/agent-server",
+    "crates/agent-server-bin",
+]
+
+# probes/api 自带 [workspace]，是独立 workspace，不在这里 —— 见 probes/api/Cargo.toml 的注释。
+
+# apps/desktop/src-tauri 同理自带 [workspace]，独立于这里——tauri 惯例（`tauri
+# init` 生成的项目本身就是独立 workspace）、构建剖面也跟主 workspace 不一样
+# （bundle 目标、tauri-build 的资源打包步骤），混进来只会让主 workspace 的
+# `cargo test --workspace` 意外牵连桌面壳的打包依赖。见 036。
+
+[workspace.package]
+edition = "2024"
+
+[workspace.dependencies]
+# 消息历史 append 要 O(log n) 且结构共享（红线 5：大值 Arc 包住/结构共享，不能每次
+# append 都整体深拷 Vec）。`im` 已停止维护，`imbl` 是维护中的 fork，接口基本兼容。
+# 开 serde：历史要能整份序列化进快照（红线 3）。
+imbl = { version = "7", features = ["serde"] }
+
+# 开 derive：所有值类型走 #[derive(Serialize, Deserialize)]，手写 impl 在这个仓库
+# 体量下只会漏字段。开 rc：红线 3（全部可序列化）和红线 5（大值必须 Arc 包住）同时
+# 成立，序列化就必须能穿透 Arc/Rc——不开 rc，Arc<T> 字段直接编译不过。
+serde = { version = "1", features = ["derive", "rc"] }
+
+# `serde_json::Map` 默认后端是 BTreeMap，key 按字典序排——红线 11（进 prompt 的东西
+# 序列化必须逐字节确定）依赖的正是这个默认行为，不是巧合。**不开 `preserve_order`**：
+# 开了 Map 就换成 IndexMap，顺序跟插入顺序走，前缀会漂。
+serde_json = "1"
+
+# 032：协议面类型生成 TS 绑定。只在 `ts` feature 后面（agent-core 默认关、
+# agent-server 打开它），不是常驻依赖——见 crates/agent-core/Cargo.toml 注释。
+# `serde-json-impl`：`serde_json::Value`（`ToolCallRequest::input` 用它）要有
+# TS 侧形状，ts-rs 自带的影子类型 `JsonValue` 就是这个 feature 给的。
+# `serde-compat`（默认开）：解析 `#[serde(rename_all/tag/content)]`，生成的
+# TS 判别联合要跟协议的邻接标签形状（031 决策）对上，不能让 ts-rs 自己另起一套命名。
+ts-rs = { version = "12", features = ["serde-json-impl"] }

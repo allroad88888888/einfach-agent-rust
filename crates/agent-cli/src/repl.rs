@@ -1,0 +1,90 @@
+//! 会话循环：读一行 → 要么是斜杠命令（`/quit`、`/model <name>`、`/undo`、
+//! `/redo`、`/undo!`），要么喂给 `agent_runtime::run_turn` 跑一整轮（可能含
+//! 若干次 provider 调用/工具调用）→ 打摘要 → 终态就 `Session::begin_turn`
+//! 开下一轮 → 再读一行。`/quit` 退出，EOF（Ctrl-D）也退出。
+//!
+//! **027 换接**：状态从 `TurnState`（栈上单份、不持久化）换成
+//! [`agent_core::Session`]（`main.rs` 建好——可能是全新的，也可能是从
+//! `SessionStore` 恢复出来的）。「取消轮丢弃」不再是这里手写的「截断消息列表」
+//! （022 时代那招退役），而是 [`crate::undo::after_cancelled_turn`] 调
+//! `Session::undo_turn` 的正牌答案。
+
+use std::io::{self, BufRead, Write};
+
+use agent_core::{Failure, Session, TurnStatus};
+use agent_runtime::{RunnerCtx, run_turn};
+use agent_transport::config::RootConfig;
+
+use crate::{model_switch, undo};
+
+/// `config` 是启动时已经加载好的整份 `providers.toml`（014）——`/model <name>`
+/// 切换要从里面查表，不重新读一次文件；这份引用的生命周期跟会话一样长，
+/// `main.rs` 持有它，这里只借。
+///
+/// `session` 由调用方建好（`Session::new` 或者 027 的崩溃恢复），这个函数
+/// 只负责驱动：**只在终态之后才 `begin_turn`**——`Session::new` 与恢复出来的
+/// 会话都可能已经是 `Idle`（前者永远是，后者取决于恢复点），此时第一条
+/// `UserInput` 直接喂给 `run_turn` 就够，多调一次 `begin_turn` 会把 `turn_id`
+/// 平白推进一格。恢复出来卡在非终态（`ToolsPending`/`Thinking`，020/027 的
+/// 「未收敛槽位不自动重发」）也不调——那种状态下第一条新输入会被转移表判成
+/// 协议违规（状态原样不动），用户用 `/undo` 摆脱它，不是这里悄悄开新的一轮。
+pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig) {
+    let stdin = io::stdin();
+    loop {
+        print!("> ");
+        let _ = io::stdout().flush();
+
+        let mut line = String::new();
+        let read = stdin.lock().read_line(&mut line);
+        let Ok(n) = read else {
+            eprintln!("读输入失败: {}", read.unwrap_err());
+            break;
+        };
+        if n == 0 {
+            println!(); // Ctrl-D：EOF，干净地换行退出
+            break;
+        }
+        let input = line.trim();
+        if input.is_empty() {
+            continue;
+        }
+        match input {
+            "/quit" => break,
+            "/undo" => {
+                undo::undo(session, ctx);
+                continue;
+            }
+            "/undo!" => {
+                undo::undo_force(session, ctx);
+                continue;
+            }
+            "/redo" => {
+                undo::redo(session, ctx);
+                continue;
+            }
+            _ => {}
+        }
+        if let Some(name) = input.strip_prefix("/model ") {
+            model_switch::switch(name.trim(), ctx, session, config);
+            continue;
+        }
+
+        if session.status().is_terminal() {
+            session.begin_turn();
+            agent_runtime::persist::sync(ctx, session);
+        }
+
+        // 取消标志的清零在 `run_turn` 内部做（跟 022 时代 `repl::run` 手动
+        // `cancel.store(false, ..)` 是同一个理由：上一轮遗留的标志不该提前
+        // 打断这一轮还没开始的请求），这里不用重复。
+        let status = run_turn(session, ctx, input);
+        crate::print::turn_outcome(&status);
+
+        if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
+            undo::after_cancelled_turn(session, ctx);
+        }
+        // 其余情况（正常终态 / 非终态卡住）状态原样留着：正常终态等下一轮
+        // 输入时上面那个 `begin_turn` 分支处理；非终态已经打过一条协议违规
+        // 通报，用户可以 /quit 重开或者 /undo。
+    }
+}

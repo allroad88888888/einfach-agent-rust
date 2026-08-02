@@ -1,0 +1,19 @@
+{
+  "name": "@agent/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "issue 033：M3 最小 web 客户端——vite + vanilla TS（零框架），连 agent-server 的 HTTP/SSE 面看流、看子 agent、undo。协议类型只从 @agent/protocol 导入，不手写。",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@agent/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vite": "^7.3.0"
+  }
+}

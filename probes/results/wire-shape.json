@@ -1,0 +1,436 @@
+{
+  "deepseek": [
+    {
+      "data": [
+        ": keep-alive",
+        ": keep-alive",
+        ": keep-alive",
+        ": keep-alive",
+        ": keep-alive",
+        ": keep-alive"
+      ],
+      "note": "6 行",
+      "probe": "stream.text.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"用户\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"要求\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"查询\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"北京的\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"天气\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"，\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"并且\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"明确\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"要求\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"必须\"},\"logprobs\":null,\"finish_reason\":null}]}",
+        "data: {\"id\":\"11088886-0ae3-4244-843d-16e1f74672da\",\"object\":\"chat.completion.chunk\",\"created\":1785483332,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"调用\"},\"logprobs\":null,\"finish_reason\":null}]}"
+      ],
+      "note": "12 行",
+      "probe": "stream.tool.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"701eb37c-c0f1-4550-9c9e-02138ca0717e\",\"object\":\"chat.completion.chunk\",\"created\":1785483333,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"。\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+        "data: {\"id\":\"701eb37c-c0f1-4550-9c9e-02138ca0717e\",\"object\":\"chat.completion.chunk\",\"created\":1785483333,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"好\",\"reasoning_content\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+        "data: {\"id\":\"701eb37c-c0f1-4550-9c9e-02138ca0717e\",\"object\":\"chat.completion.chunk\",\"created\":1785483333,\"model\":\"deepseek-v4-pro\",\"system_fingerprint\":\"fp_9954b31ca7_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"reasoning_content\":null},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":18,\"completion_tokens\":15,\"total_tokens\":33,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":13},\"prompt_cache_hit_tokens\":0,\"prompt_cache_miss_tokens\":18}}",
+        "data: [DONE]"
+      ],
+      "note": "含 stream_options.include_usage",
+      "probe": "stream.tail"
+    },
+    {
+      "data": {
+        "content": "好的，我来同时查询这两个信息。",
+        "reasoning_content": "用户要求同时查询北京的天气和上海的当前时间。我需要并行调用这两个工具。",
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"city\": \"北京\"}",
+              "name": "get_weather"
+            },
+            "id": "call_00_tsdA0CxopR9nvmG8nbrq3971",
+            "index": 0,
+            "type": "function"
+          },
+          {
+            "function": {
+              "arguments": "{\"city\": \"上海\"}",
+              "name": "get_time"
+            },
+            "id": "call_01_CJWrSIspIiAxEWS4xLq02947",
+            "index": 1,
+            "type": "function"
+          }
+        ]
+      },
+      "note": "HTTP 200，一次返回 2 个调用",
+      "probe": "parallel.tool_calls"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[显式关思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400",
+      "probe": "forced_tool+thinking"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "invalid_request_error",
+          "message": "The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed definitely-not-a-real-model.",
+          "param": null,
+          "type": "invalid_request_error"
+        }
+      },
+      "note": "HTTP 400",
+      "probe": "error.bad_model"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "invalid_request_error",
+          "message": "Failed to deserialize the JSON body into the target type: max_tokens: invalid value: integer `-1`, expected u32 at line 1 column 16",
+          "param": null,
+          "type": "invalid_request_error"
+        }
+      },
+      "note": "HTTP 400",
+      "probe": "error.bad_param"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "invalid_request_error",
+          "message": "Authentication Fails, Your api key: ****robe is invalid",
+          "param": null,
+          "type": "authentication_error"
+        }
+      },
+      "note": "HTTP 401",
+      "probe": "error.bad_key"
+    },
+    {
+      "data": {
+        "headers": {},
+        "status": 200
+      },
+      "note": "0 个相关头",
+      "probe": "headers.normal"
+    }
+  ],
+  "glm": [
+    {
+      "data": [
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"1\"}}]}",
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\".\"}}]}",
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" \"}}]}",
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" **\"}}]}",
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"分析\"}}]}",
+        "data: {\"id\":\"2026073115363032d9b0da8cb84c97\",\"created\":1785483390,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"请求\"}}]}"
+      ],
+      "note": "6 行",
+      "probe": "stream.text.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"The\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" user\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" is\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" asking\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" about\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" the\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" weather\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" in\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" Beijing\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" and\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" explicitly\"}}]}",
+        "data: {\"id\":\"20260731153631d2aa46a6d47e45af\",\"created\":1785483391,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" requests\"}}]}"
+      ],
+      "note": "12 行",
+      "probe": "stream.tool.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"202607311536357f405a2f5c6b495d\",\"created\":1785483395,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" 好\"}}]}",
+        "data: {\"id\":\"202607311536357f405a2f5c6b495d\",\"created\":1785483395,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"好\"}}]}",
+        "data: {\"id\":\"202607311536357f405a2f5c6b495d\",\"created\":1785483395,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}],\"usage\":{\"prompt_tokens\":28,\"completion_tokens\":185,\"total_tokens\":213,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":182}}}",
+        "data: [DONE]"
+      ],
+      "note": "含 stream_options.include_usage",
+      "probe": "stream.tail"
+    },
+    {
+      "data": {
+        "content": "好的，我同时为您查询北京的天气和上海的当前时间！",
+        "reasoning_content": "The user wants to know Beijing's weather and Shanghai's current time. These two calls are independent, so I should make them simultaneously.",
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"city\":\"北京\"}",
+              "name": "get_weather"
+            },
+            "id": "call_-7391102189101383143",
+            "index": 0,
+            "type": "function"
+          },
+          {
+            "function": {
+              "arguments": "{\"city\":\"上海\"}",
+              "name": "get_time"
+            },
+            "id": "call_-7391102189101383142",
+            "index": 1,
+            "type": "function"
+          }
+        ]
+      },
+      "note": "HTTP 200，一次返回 2 个调用",
+      "probe": "parallel.tool_calls"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[显式关思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "成功",
+      "note": "HTTP 200",
+      "probe": "forced_tool+thinking"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "1211",
+          "message": "模型不存在，请检查模型代码。"
+        }
+      },
+      "note": "HTTP 400",
+      "probe": "error.bad_model"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "1210",
+          "message": "max_tokens参数非法：限制数值范围[1,131072]"
+        }
+      },
+      "note": "HTTP 400",
+      "probe": "error.bad_param"
+    },
+    {
+      "data": {
+        "error": {
+          "code": "401",
+          "message": "令牌已过期或验证不正确"
+        }
+      },
+      "note": "HTTP 401",
+      "probe": "error.bad_key"
+    },
+    {
+      "data": {
+        "headers": {},
+        "status": 200
+      },
+      "note": "0 个相关头",
+      "probe": "headers.normal"
+    },
+    {
+      "data": {
+        "error": null,
+        "extra_top_level": [
+          "choices",
+          "created",
+          "id",
+          "model",
+          "object",
+          "request_id",
+          "usage"
+        ],
+        "finish_reason": "stop",
+        "message_keys": [
+          "content",
+          "reasoning_content",
+          "role"
+        ]
+      },
+      "note": "HTTP 200",
+      "probe": "server_tool.web_search"
+    }
+  ],
+  "kimi": [
+    {
+      "data": [
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"The\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" user\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" is\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" asking\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5051f3fb1d6dd94a5a62\",\"object\":\"chat.completion.chunk\",\"created\":1785483346,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\" me\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea4047ac\"}"
+      ],
+      "note": "6 行",
+      "probe": "stream.text.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"用户\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"问\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"北京\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"天气\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"，\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"且\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"明确要求\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"必须\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"调用\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"工具\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5053f533e66c828636ed\",\"object\":\"chat.completion.chunk\",\"created\":1785483347,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"。\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_ea28f3ff\"}"
+      ],
+      "note": "12 行",
+      "probe": "stream.tool.head"
+    },
+    {
+      "data": [
+        "data: {\"id\":\"chatcmpl-6a6c5054c797b0df82bcc09f\",\"object\":\"chat.completion.chunk\",\"created\":1785483348,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"好\"},\"finish_reason\":null}],\"system_fingerprint\":\"fpv0_5427215b\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5054c797b0df82bcc09f\",\"object\":\"chat.completion.chunk\",\"created\":1785483348,\"model\":\"kimi-k3\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\",\"usage\":{\"prompt_tokens\":110,\"completion_tokens\":61,\"total_tokens\":171,\"cached_tokens\":110,\"completion_tokens_details\":{\"reasoning_tokens\":45},\"prompt_tokens_details\":{\"cached_tokens\":110}}}],\"system_fingerprint\":\"fpv0_5427215b\"}",
+        "data: {\"id\":\"chatcmpl-6a6c5054c797b0df82bcc09f\",\"object\":\"chat.completion.chunk\",\"created\":1785483348,\"model\":\"kimi-k3\",\"choices\":[],\"usage\":{\"prompt_tokens\":110,\"completion_tokens\":61,\"total_tokens\":171,\"cached_tokens\":110,\"completion_tokens_details\":{\"reasoning_tokens\":45},\"prompt_tokens_details\":{\"cached_tokens\":110}}}",
+        "data: [DONE]"
+      ],
+      "note": "含 stream_options.include_usage",
+      "probe": "stream.tail"
+    },
+    {
+      "data": null,
+      "note": "HTTP 429，一次返回 0 个调用",
+      "probe": "parallel.tool_calls"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": {
+        "message": "tool_choice 'specified' is incompatible with thinking enabled",
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": {
+        "error": {
+          "message": "Not found the model definitely-not-a-real-model or Permission denied",
+          "type": "resource_not_found_error"
+        }
+      },
+      "note": "HTTP 404",
+      "probe": "error.bad_model"
+    },
+    {
+      "data": {
+        "error": {
+          "message": "Invalid Request: max_tokens must not be negative",
+          "type": "invalid_request_error"
+        }
+      },
+      "note": "HTTP 400",
+      "probe": "error.bad_param"
+    },
+    {
+      "data": {
+        "error": {
+          "message": "Invalid Authentication",
+          "type": "invalid_authentication_error"
+        }
+      },
+      "note": "HTTP 401",
+      "probe": "error.bad_key"
+    },
+    {
+      "data": {
+        "headers": {},
+        "status": 200
+      },
+      "note": "0 个相关头",
+      "probe": "headers.normal"
+    }
+  ]
+}

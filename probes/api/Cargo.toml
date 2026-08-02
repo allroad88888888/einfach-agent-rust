@@ -1,0 +1,15 @@
+[package]
+name = "probes-api"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# 独立 workspace：根目录的 cargo build / test 不会把 ureq 这些 IO 依赖
+# 拖进主依赖图。探针不是主工程的一部分。
+[workspace]
+
+[dependencies]
+ureq = { version = "2", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"

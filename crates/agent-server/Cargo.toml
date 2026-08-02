@@ -1,0 +1,62 @@
+# session actor（issue 030）：store 独占线程，mpsc<Command> 进、broadcast<Frame>
+# 出（034 起广播载荷是 Frame——agent 归属信封，不再是裸的 SessionEvent）。只有
+# 这个 crate 知道线程与 tokio 的存在（ARCHITECTURE.md 关键判断 1）——红线 7 只辖
+# agent-core / agent-store，不辖这里，tokio 在此合法。
+[package]
+name = "agent-server"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+agent-providers = { path = "../agent-providers" }
+agent-runtime = { path = "../agent-runtime" }
+agent-store = { path = "../agent-store" }
+agent-tools = { path = "../agent-tools" }
+agent-transport = { path = "../agent-transport" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# 030 只要 broadcast。031 加了 axum 层：库自己要 `tokio::spawn`（hub 的 drain 任务、
+# 每条 SSE 连接的转发任务、断开取消的宽限计时器）、`tokio::net::TcpListener`
+# （`AgentServer::bind`）、`tokio::time`（宽限计时、SSE 心跳间隔）——030 当初「不开
+# rt」的理由（库不跑执行器）不再成立：这些任务是库自己的实现细节，调用方只负责
+# `.await AgentServer::serve(addr)`，不负责替库管理这些任务。
+tokio = { version = "1", features = ["sync", "net", "time", "rt"] }
+
+# 031：下行 SSE、上行 POST 的 HTTP 面。只启用直接用到的 feature——不要 ws/
+# multipart/form/query（这个仓库没有文件上传、没有查询参数协议）。
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+
+# 只要 `wrappers::ReceiverStream`——把 `tokio::sync::mpsc::Receiver<BufferedFrame>`
+# 包成 `Stream`，喂给 axum 的 SSE 响应（`crate::http::routes::sse`）。
+tokio-stream = { version = "0.1", default-features = false, features = ["sync"] }
+
+# 036：`ServerConfig::with_static_dir` 的 SPA 静态托管。只开 `fs`——
+# `ServeDir`/`ServeFile` 两个类型，不要 `cors`/`trace`/`compression` 这个仓库
+# 用不上的东西。理由见 `crate::http::static_files` 模块文档「为什么选
+# tower-http 而不是手写」。
+tower-http = { version = "0.6", default-features = false, features = ["fs"] }
+
+# 032：`ts` feature 门后面的可选依赖——`crate::ts_protocol` 只在这个 feature 打开时
+# 才编译，正常 `cargo build`/`cargo test`（不开 feature）零 ts-rs 编译痕迹。
+ts-rs = { workspace = true, optional = true }
+
+[features]
+# 打开自己的 `dep:ts-rs`，同时打开 `agent-core/ts`——协议载荷可达的类型分躺在
+# 两个 crate 里，两边的 derive 得一起生效才编译得过（issue 032：agent-core 默认关，
+# agent-server 打开它）。
+ts = ["dep:ts-rs", "agent-core/ts"]
+
+[dev-dependencies]
+# 测试要 `.await` Subscription::recv、要 `tokio::time::timeout` 掐轮询上限、
+# 031 的测试还要真的起一个 tokio 多线程运行时同时跑 axum 服务器和假浏览器客户端。
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }
+
+[[example]]
+# 032 的「再生成命令」：`cargo run -p agent-server --features ts --example
+# gen_protocol_ts`，把 packages/protocol/src/generated/ 与 fixtures/events.json
+# 重新写一遍——跟 `crate::ts_protocol` 的一致性测试走同一份导出代码，不是另开一套。
+name = "gen_protocol_ts"
+required-features = ["ts"]

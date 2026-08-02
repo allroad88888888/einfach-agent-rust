@@ -1,0 +1,4 @@
+# 唯一的配置项。企业接自家配置中心（Nacos/Apollo/ConfigMap）时，
+# 就是把这一个 key 的来源换掉——网关代码本身不用改一行。
+agent:
+  upstream: http://127.0.0.1:4400

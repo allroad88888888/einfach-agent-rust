@@ -1,0 +1,49 @@
+# issue 036：Tauri 2 桌面壳。独立 workspace（本文件末尾的空 `[workspace]`
+# 表）——tauri 惯例，也是根 `Cargo.toml` 注释里写的理由：构建剖面（bundle 目标、
+# tauri-build 的资源打包）跟主 workspace 不是一回事，混进去会让
+# `cargo test --workspace` 意外牵连打包依赖。独立 workspace 不妨碍下面这些
+# `path = "../../../crates/..."` 依赖——路径依赖只是文件系统坐标，跟依赖方
+# 在哪个 workspace 无关；只是不共享 Cargo.lock/target，这个 crate 自己一份。
+[package]
+name = "agent-desktop"
+version = "0.1.0"
+description = "issue 036：Tauri 内嵌同一个 agent-server 库，前端代码一套不变——窗口只是导航到内嵌 server 的 loopback 地址"
+authors = ["einfach-agent-rust"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "agent_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+
+# 决策 12（docs/ROADMAP.md）：`agent-server` 是库不是二进制，桌面版内嵌它——
+# 这三个是「读 providers.toml → 拼 SessionTemplate → 起 AgentServer」这条装配线
+# 要的全部东西，跟 `crates/agent-server-bin`（035）用的是同一组 crate、同一个
+# `agent_server::bootstrap` 装配函数,不重新发明。`agent-core` 只为
+# `SystemChunk`/`AgentLimits` 两个类型——`BootstrapOptions` 的字段类型,
+# `agent-server` 没有重新导出它们（跟 `examples/serve.rs` 一样得直接依赖）。
+agent-server = { path = "../../../crates/agent-server" }
+agent-core = { path = "../../../crates/agent-core" }
+agent-transport = { path = "../../../crates/agent-transport" }
+
+# `AgentServer::bind`/`serve` 是 async fn——`setup()` 里用
+# `tauri::async_runtime::block_on` 绑端口、`tauri::async_runtime::spawn` 把
+# `serve()` 丢进后台，两个都吃 tauri 自带的 tokio 运行时，不必再起第二个；
+# 但 `agent-server`/`tauri` 各自声明的 tokio feature 未必并集出「本 crate
+# 源码里直接用得到的那几个」，显式声明一份，跟 `agent-server/Cargo.toml`
+# 同一个「只开用到的 feature」取向。
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[workspace]

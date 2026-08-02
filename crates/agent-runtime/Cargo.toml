@@ -1,0 +1,20 @@
+# 把 loop 接到真实 transport 上（issue 012）：runner 是 IO 编排层，不进
+# agent-core（红线 7 只约束 core/store，但这个 crate 本身就是「IO 归哪」这道题
+# 的答案，见 src/lib.rs 顶部注释）。
+#
+# 独立成库不进 agent-cli：M3 的 server 会复用同一个 run_turn（issue 012 的
+# 结构裁决），CLI 只是它现在唯一的宿主。
+[package]
+name = "agent-runtime"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+agent-providers = { path = "../agent-providers" }
+agent-store = { path = "../agent-store" }
+agent-tools = { path = "../agent-tools" }
+agent-transport = { path = "../agent-transport" }
+serde = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,16 @@
+# 阻塞 HTTP transport（issue 022）：ureq 流式 POST + 连接期退避 + providers.toml 解析。
+#
+# 红线 7 的镜像约束：`ureq` 只许出现在这个 crate 的依赖里，其余 crate（尤其
+# agent-core / agent-store）一律不许依赖它——check-invariants.sh 只查
+# agent-core/agent-store，这条「只此一家」靠人读 Cargo.toml 里没有第二处。
+[package]
+name = "agent-transport"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = "0.8"
+ureq = "2"

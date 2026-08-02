@@ -1,0 +1,12 @@
+[package]
+name = "agent-store"
+version = "0.1.0"
+edition.workspace = true
+
+# 红线 7：这个 crate 不得出现 reqwest / hyper / axum / tokio 及其生态。
+# serde 只做内存里的结构↔字节转换，不碰 IO —— 落盘由 agent-runtime 负责（010/011）。
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

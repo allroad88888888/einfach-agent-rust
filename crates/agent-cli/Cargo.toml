@@ -1,0 +1,26 @@
+# 最小 CLI 壳（issue 022，012 接到真实 loop 上）：读一行 → 组装 →
+# agent-runtime 驱动 loop → 流式打印。
+[package]
+name = "agent-cli"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+agent-providers = { path = "../agent-providers" }
+agent-runtime = { path = "../agent-runtime" }
+agent-tools = { path = "../agent-tools" }
+agent-transport = { path = "../agent-transport" }
+serde_json = { workspace = true }
+
+# Ctrl-C：见 src/main.rs 顶部注释——两条路里选的是真信号捕捉，不是「主线程读
+# stdin + /cancel 命令」的纯 std 兜底方案。
+ctrlc = "3"
+
+[dev-dependencies]
+# `model_switch` 的单测要拼一份 `RootConfig` 测试夹具——跟
+# `agent-transport/src/config.rs` 自己的测试同一个手法（直接 `toml::from_str`），
+# 不通过 `AGENT_PROVIDERS_CONFIG` 环境变量绕一圈：那条路径要修改进程级全局
+# 状态，在同一个测试二进制内跟其它测试并发跑会互相打架。
+toml = "0.8"

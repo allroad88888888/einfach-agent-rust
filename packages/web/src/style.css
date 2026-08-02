@@ -1,0 +1,194 @@
+/* 唯一职责：布局与主题——一个页面（header/timeline/composer 三段）+ 一套
+   浅色/深色配色。跟渲染逻辑（render/ 下那几个文件）完全分开：TS 只挂 class，
+   这里决定 class 长什么样。 */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #6b7280;
+  --border: #d9dce1;
+  --accent: #2563eb;
+  --sub-agent-bg: #eef2ff;
+  --sub-agent-border: #6366f1;
+  --ok: #16a34a;
+  --error: #dc2626;
+  --warn: #b45309;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --fg: #e5e7eb;
+    --muted: #9ca3af;
+    --border: #2a2e37;
+    --accent: #60a5fa;
+    --sub-agent-bg: #1e2247;
+    --sub-agent-border: #818cf8;
+    --ok: #4ade80;
+    --error: #f87171;
+    --warn: #fbbf24;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+header h1 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex: 1;
+}
+
+.controls button {
+  margin-left: 0.5rem;
+}
+
+#timeline {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+#timeline > * {
+  max-width: 70ch;
+}
+
+/* 子 agent 归属的视觉标记——034 起是真的（`Frame.agent`，不是数在飞的
+   srv:agent/spawn 调用近似）。`data-agent`（`dom.ts` 的 `shortAgentLabel`,
+   `root/a1/a2` → `a1/a2`）当一个小标签摆在块前面,并行的多个子 agent 因此
+   分得开,不是只有一个笼统的缩进+变色。 */
+#timeline > .sub-agent {
+  position: relative;
+  margin-left: 2rem;
+  padding: 0.15rem 0.6rem;
+  border-left: 3px solid var(--sub-agent-border);
+  background: var(--sub-agent-bg);
+  border-radius: 0 6px 6px 0;
+}
+#timeline > .sub-agent::before {
+  content: attr(data-agent);
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--sub-agent-border);
+  border: 1px solid var(--sub-agent-border);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.bubble {
+  margin: 0;
+  padding: 0.2rem 0.4rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble.thinking {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+.tool-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+.tool-card.running {
+  border-color: var(--accent);
+}
+.tool-card.done {
+  border-color: var(--ok);
+}
+.tool-card.error {
+  border-color: var(--error);
+}
+.tool-card.spawn-card {
+  border-style: dashed;
+}
+.tool-title {
+  font-weight: 600;
+}
+.tool-meta,
+.tool-result {
+  color: var(--muted);
+  font-size: 0.8rem;
+  word-break: break-word;
+}
+
+.guard-line,
+.notice-line,
+.pending-line {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.warn-line {
+  font-size: 0.8rem;
+  color: var(--warn);
+}
+.error-line {
+  font-size: 0.85rem;
+  color: var(--error);
+  font-weight: 600;
+}
+.gap-line {
+  font-size: 0.75rem;
+  color: var(--warn);
+  font-style: italic;
+}
+.undo-line {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+#composer {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border);
+}
+#composer textarea {
+  flex: 1;
+  resize: vertical;
+  font: inherit;
+  padding: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+}
+#composer button {
+  align-self: flex-end;
+}

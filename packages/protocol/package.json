@@ -1,0 +1,15 @@
+{
+  "name": "@agent/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "线上协议的 TS 类型——从 crates/agent-core + crates/agent-server 的 Rust 类型生成，不手写（docs/ARCHITECTURE.md §协议类型）。src/generated/ 与 fixtures/events.json 都是生成物，改协议先改 Rust 侧再跑 `cargo run -p agent-server --features ts --example gen_protocol_ts` 重新生成。",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,11 @@
+# 模型适配层：唯一一处「厂商差异合法存在」的地方（docs/ADAPTER.md）。
+# 零 IO——不依赖 ureq/tokio，验收全部对录制帧跑（issue 025）。
+[package]
+name = "agent-providers"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
