@@ -12,8 +12,9 @@ use support::{provider_done_end_turn, provider_done_tool_use, tool_result_event,
 /// 的全部价值——顺手加一个槽位而没想清楚它进不进快照时，这里会红。
 ///
 /// 026 是 9；028 加了 `Slot::ToolsAllowed`（spawn 时快照的工具子集，同时是子 agent
-/// 的活名单）→ 10。改这个数之前先问：新槽位是不是真的**必须**进快照。
-const EXPECTED_SLOT_COUNT: usize = 10;
+/// 的活名单）→ 10；039 加了 `Slot::SkillsActive`（激活的 skill id 集）→ 11。
+/// 改这个数之前先问：新槽位是不是真的**必须**进快照。
+const EXPECTED_SLOT_COUNT: usize = 11;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

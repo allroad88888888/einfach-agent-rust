@@ -9,21 +9,29 @@
 
 use std::sync::Arc;
 
-use agent_core::{AgentLimits, Location, Reversibility, ToolCallRequest, ToolSpec};
+use agent_core::{AgentLimits, Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
+use crate::skill::{
+    SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillRegistry, activate_spec, deactivate_spec,
+};
 use crate::spawn_tool::{SPAWN_TOOL, spawn_spec};
 
 /// 会话期间不变的工具表：喂模型的声明 + 判 `location`/`reversibility` 用的
-/// 名字规则。
+/// 名字规则 + （039）宿主装载的 skill registry。
+///
+/// registry 住在这里而不是 `RunnerCtx` 的单独字段：`ToolTable::with_skills` 一次把
+/// 「声明两个 skill 工具」和「拥有 registry 供 dispatch 随时查」绑在一起——两件事
+/// 本来就是一件（开了 skill 才有那两个工具，也才需要 registry）。
 pub struct ToolTable {
     specs: Vec<ToolSpec>,
+    registry: SkillRegistry,
 }
 
 impl ToolTable {
     /// 013 的内置工具集：`srv:fs/read`、`srv:fs/list`，服务端本地、纯读。
     pub fn builtin() -> Self {
-        ToolTable { specs: agent_tools::builtin_specs() }
+        ToolTable { specs: agent_tools::builtin_specs(), registry: SkillRegistry::empty() }
     }
 
     /// 027 开闸：内置只读集 + `srv:shell/exec`（020 声明、`agent-tools` 的
@@ -34,7 +42,23 @@ impl ToolTable {
     pub fn with_shell() -> Self {
         let mut specs = agent_tools::builtin_specs();
         specs.push(agent_tools::shell_spec());
-        ToolTable { specs }
+        ToolTable { specs, registry: SkillRegistry::empty() }
+    }
+
+    /// 039 开闸：追加 `srv:skill/activate` + `srv:skill/deactivate`，并把宿主装载的
+    /// `registry` 交给这张表拥有（供 dispatch 截获时查正文/工具、供 `provider_call`
+    /// 组每一轮的 `late_system`/`late_tools`）。
+    ///
+    /// 追加在末尾而不是插进 `builtin()` 内部：`builtin_specs()` 的顺序是 013 钉死的
+    /// 既有契约，工具表在 prompt 最前面（红线 11），只加不改。
+    ///
+    /// **常驻索引不在这里**——它是 system 段的一部分（不是工具），由宿主调
+    /// `registry.skill_index_chunk()` 放进 `Ingredients::system`（见 e2e 测试的装配）。
+    pub fn with_skills(mut self, registry: SkillRegistry) -> Self {
+        self.specs.push(activate_spec());
+        self.specs.push(deactivate_spec());
+        self.registry = registry;
+        self
     }
 
     /// 029 开闸：追加 `srv:agent/spawn`，宿主从此允许模型分解任务（决策 20）。
@@ -55,6 +79,17 @@ impl ToolTable {
     /// 喂给 `Ingredients::tools` 的那张表，顺序原样保留（红线 11）。
     pub fn specs(&self) -> &[ToolSpec] {
         &self.specs
+    }
+
+    /// 这张表拥有的 skill registry（dispatch 截获激活时查它）。没开 skill 时是空的。
+    pub(crate) fn skill_registry(&self) -> &SkillRegistry {
+        &self.registry
+    }
+
+    /// 把一组激活的 skill 展开成本轮的注入料（正文 → `late_system`、工具 →
+    /// `late_tools`）。`provider_call::start` 组料时调它。
+    pub(crate) fn skill_injection(&self, active: &[SkillId]) -> (Vec<SystemChunk>, Vec<ToolSpec>) {
+        self.registry.injection(active)
     }
 
     /// 这张表里有这个工具吗。
@@ -106,6 +141,11 @@ fn reversibility_of(tool: &str) -> Reversibility {
         // 组合因此天然成立，不需要 spawn 自己保守成 `Irreversible`——那样反而会
         // 让「拆了任务的那一轮」一律撤不掉，哪怕子 agent 只读了两个文件。
         SPAWN_TOOL => Reversibility::Reversible,
+        // skill 激活/停用的补偿动作就是彼此（`srv:skill/deactivate` / re-activate），
+        // 而且激活走 command 层、journaled——**有明确且可靠的补偿动作** = `Reversible`
+        // 的定义。它们走 dispatch 截获、不进 `mark_irreversible`，所以不在日志上留
+        // 屏障位：`/undo` 连激活一起退掉是白拿的。
+        SKILL_ACTIVATE | SKILL_DEACTIVATE => Reversibility::Reversible,
         _ => Reversibility::Irreversible,
     }
 }

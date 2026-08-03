@@ -78,6 +78,7 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
         messages: &messages,
         tools: &[],
         late_tools: &[],
+        late_system: &[],
         config: &config,
         intent: RequestIntent::Free,
         prev_prefix: prev_prefix.as_ref(),

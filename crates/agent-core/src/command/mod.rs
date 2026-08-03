@@ -26,6 +26,7 @@
 //! | [`tree`] | 028：这棵树上现在有哪些 agent、谁是谁的孩子、谁还活着 |
 //! | [`spawn`] | 028：`spawn_child` + 结构性硬限（决策 20） |
 //! | [`despawn`] | 028：`despawn_child`——019 三条硬约束的第一次真实执行 |
+//! | [`skill`] | 039：`activate_skill` / `deactivate_skill` / `active_skills`——`SkillsActive` 槽位的 journaled 读写（决策 21） |
 //! | [`cross_read`] | 028：跨 agent 读的两个口，没有第三个（红线 10） |
 //!
 //! ## 一个 `Session` = 整棵树
@@ -44,6 +45,7 @@ pub mod meta;
 pub mod read;
 mod restore;
 pub mod session;
+pub mod skill;
 pub mod spawn;
 pub mod step;
 pub mod tree;
@@ -56,6 +58,7 @@ pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};
+pub use skill::SkillError;
 pub use spawn::{
     AgentLimits, ChildConfig, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused,
 };

@@ -58,9 +58,10 @@ fn the_complete_state_is_exactly_the_source_slot_table() {
         v
     };
     assert_eq!(primitives, expected);
-    // 条数写死一份（028 起是 10：026 的九个 + `Slot::ToolsAllowed`）——上面那句
-    // 比的是「和 `Slot::ALL` 一致」，这句比的是「`Slot::ALL` 本身没被顺手加过东西」。
-    assert_eq!(primitives.len(), 10);
+    // 条数写死一份（028 是 10：026 的九个 + `Slot::ToolsAllowed`；039 加
+    // `Slot::SkillsActive` → 11）——上面那句比的是「和 `Slot::ALL` 一致」，
+    // 这句比的是「`Slot::ALL` 本身没被顺手加过东西」。
+    assert_eq!(primitives.len(), 11);
 
     // derived 一个都不在里面——它们的键是另一张表。
     assert!(primitives.iter().all(|(key, _)| matches!(key, AtomKey::Agent(_, _))));

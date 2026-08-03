@@ -118,6 +118,12 @@ impl RunnerCtx {
         Arc::clone(&self.cancel)
     }
 
+    /// 宿主装载的全部 skill 的 (id, 描述)，按 id 排序（039）。CLI 的 `/skills`
+    /// 列表用它——「有哪些可用」是 registry 的事，「哪些激活了」问 `Session`。
+    pub fn available_skills(&self) -> Vec<(Arc<str>, Arc<str>)> {
+        self.tools.skill_registry().listing()
+    }
+
     /// 覆盖默认的 120s 超时——测试用短超时把「挂住不回」的场景压到毫秒级。
     pub fn with_provider_timeout(mut self, timeout: Duration) -> Self {
         self.provider_timeout = timeout;
@@ -228,6 +234,7 @@ mod tests {
             messages: &[],
             tools: &[],
             late_tools: &[],
+            late_system: &[],
             config: &ctx.session_config,
             intent: agent_core::RequestIntent::Free,
             prev_prefix: None,

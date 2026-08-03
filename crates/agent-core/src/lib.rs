@@ -40,11 +40,11 @@ pub use cache::{
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, ChildConfig, DEFAULT_HISTORY_CAP,
     DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused, DespawnReport, EntryMeta,
-    ReadDenied, Session, SpawnRefused, UndoReport, known_label,
+    ReadDenied, Session, SkillError, SpawnRefused, UndoReport, known_label,
 };
 pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
-pub use ids::{AGENT_PATH_SEP, AgentId, MessageId, ToolCallId};
+pub use ids::{AGENT_PATH_SEP, AgentId, MessageId, SkillId, ToolCallId};
 pub use limits::{DEFAULT_TOOL_OUTPUT_BYTES, truncate_tool_output, truncated_content_bytes};
 pub use value::atom_value::AgentValue;
 pub use seam::{

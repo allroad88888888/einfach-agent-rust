@@ -37,7 +37,7 @@ use std::sync::atomic::Ordering;
 
 use agent_cli::{print, provider, repl, session_path};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
-use agent_runtime::{RunnerCtx, ToolTable};
+use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
 use agent_tools::ToolExecutor;
 use agent_transport::{Client, config};
 
@@ -87,6 +87,16 @@ fn main() {
     } else {
         eprintln!("会话文件=（未指定，临时会话，进程退出即丢——用 --session <path> 或 AGENT_SESSION_PATH 落盘）");
     }
+    // 039：从项目 `./skills/`（相对启动目录）装载 skill。装载失败不致命——退回
+    // 空 registry，CLI 照跑，只是没有 skill 可激活。索引常驻进 system 前缀（跟
+    // 工具表一样随时都在），激活集在会话状态里。
+    let skills = SkillRegistry::load(&[tool_root.join("skills")]).unwrap_or_else(|e| {
+        eprintln!("[skills] 装载失败，按无 skill 继续: {e}");
+        SkillRegistry::empty()
+    });
+    let skill_index = skills.skill_index_chunk();
+    eprintln!("skills={}", if skills.is_empty() { "（无）".to_string() } else { skills.listing().len().to_string() });
+
     let store = agent_runtime::open_backend(session_file, |e| eprintln!("[会话文件] {e}"));
 
     let mut session = match agent_runtime::recover(store.as_ref(), AgentId::root(), agent_core::DEFAULT_HISTORY_CAP, &mut |key| {
@@ -113,11 +123,16 @@ fn main() {
         // 029 开闸：内置只读集 + `shell/exec` + `srv:agent/spawn`。上限传的是
         // `session.agent_limits()`——工具描述里告诉模型的数字，必须跟真正拦它的
         // 那两道闸是同一组（`ToolTable::with_spawn` 的文档记了这个耦合）。
-        ToolTable::with_shell().with_spawn(session.agent_limits()),
-        vec![SystemChunk {
-            label: Arc::from("base"),
-            text: Arc::from("你是一个简洁、诚实的助手。"),
-        }],
+        ToolTable::with_shell().with_spawn(session.agent_limits()).with_skills(skills),
+        vec![
+            SystemChunk {
+                label: Arc::from("base"),
+                text: Arc::from("你是一个简洁、诚实的助手。"),
+            },
+            // 常驻 skill 索引（039）：跟工具表一样是稳定前缀的一部分，模型第一轮、
+            // 激活之前就能发现有哪些 skill。空 registry → 空文本，被 system_text 滤掉。
+            skill_index,
+        ],
         SessionConfig {
             model: Arc::from(provider_cfg.model.as_str()),
             temperature: None,
@@ -148,7 +163,7 @@ fn main() {
 
     println!(
         "输入一句话开始对话。命令：/quit 退出，/model <name> 切换 provider（可选：{}），\
-         /undo 撤销上一轮，/redo 重做，/undo! 越过不可逆操作强制撤销。",
+         /undo 撤销上一轮，/redo 重做，/undo! 越过不可逆操作强制撤销，/skills 看已装载的技能。",
         provider_names(&root)
     );
     repl::run(&mut session, &mut ctx, &root);

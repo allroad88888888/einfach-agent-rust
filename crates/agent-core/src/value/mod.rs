@@ -9,4 +9,5 @@
 pub mod atom_value;
 pub mod message;
 pub mod session;
+pub mod str_set;
 pub mod tool;

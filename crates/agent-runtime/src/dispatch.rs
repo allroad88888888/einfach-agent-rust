@@ -28,6 +28,7 @@ use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::io_thread::IoMsg;
 use crate::provider_call::{self, ProviderCall};
+use crate::skill::{self, SKILL_ACTIVATE, SKILL_DEACTIVATE};
 use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::subagent;
 use crate::subtree::Subtree;
@@ -68,6 +69,12 @@ pub(crate) fn run_effect(
         Effect::ExecuteTool { agent, call_id, tool, input, epoch } => {
             if &*tool == SPAWN_TOOL && ctx.tools.declares(SPAWN_TOOL) {
                 return spawn(session, ctx, subtree, &agent, call_id, &input, epoch);
+            }
+            // skill 激活/停用同款截获（039）：它们改会话状态（写 `SkillsActive`），
+            // executor 够不着 `Session`。宿主没声明（没开 skill）就不截获，模型凭空
+            // 猜出来的这个名字跟别的不存在的工具走同一条路（`unknown_tool`）。
+            if (&*tool == SKILL_ACTIVATE || &*tool == SKILL_DEACTIVATE) && ctx.tools.declares(&tool) {
+                return skill::intercept(session, ctx, &agent, call_id, &tool, &input, epoch);
             }
             // 027：发起时快照在这里造一次，`Irreversible` 的立刻登记——记录点
             // 必须在**派发**这一刻，而不是等结果落地才回头看，否则进程在工具

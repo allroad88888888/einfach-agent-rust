@@ -72,6 +72,18 @@ pub enum Slot {
     /// 排序去重后落盘（红线 11）：它会被渲染进子 agent 的 prompt，顺序一漂前缀
     /// 缓存就全价。写入点在 `Session::spawn_child`。
     ToolsAllowed,
+    /// **当前激活的 skill id 列表**（039）。值是 [`AgentValue::Json`] 里一个
+    /// **排序去重的字符串数组**，`Json([])` = 没有激活任何 skill（默认值）。
+    ///
+    /// store 里只存「哪些被激活」，skill 的正文/工具在 store 外的 registry 里
+    /// （TOOLS.md §Skills；也是 `AtomKey` 没有 `Skill` 变体的原因）——于是
+    /// undo 撤一次激活就退化成一次普通的值回滚（跟 `ToolsAllowed` 一视同仁），
+    /// 崩溃恢复靠这个 primitive 自动回来、正文从 registry 现取。
+    ///
+    /// 为什么是排序去重的数组而不是 `HashSet`（红线 11）：它会被 registry 展开成
+    /// 注入进 system prompt 的正文，顺序一漂前缀缓存就全价。写入点在
+    /// `Session::activate_skill` / `deactivate_skill`，那两处落值前排序去重。
+    SkillsActive,
 }
 
 /// 一次工具调用自己的槽位。
@@ -138,6 +150,12 @@ impl Slot {
             // 拿的就是这个默认值，若默认成「活着」，undo 路径上凭空重建出来的
             // atom 会让一个早就 despawn 的子 agent 复活——链通、值错、不报错。
             Slot::ToolsAllowed => AgentValue::Null,
+            // 「没有激活任何 skill」= 一个**空的有序数组**，不是 `Null`：SkillsActive
+            // 永远持一个数组（跟 ToolSlots 永远持 Slots 同一个道理），读取点因此不必
+            // 区分「空」和「类型错」。空数组序列化成 `[]`，逐字节确定（红线 11）。
+            Slot::SkillsActive => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
+                Vec::new(),
+            ))),
         }
     }
 
@@ -148,7 +166,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 10] = [
+    pub const ALL: [Slot; 11] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -159,6 +177,7 @@ impl Slot {
         Slot::RetriesUsed,
         Slot::MaxRetries,
         Slot::ToolsAllowed,
+        Slot::SkillsActive,
     ];
 }
 

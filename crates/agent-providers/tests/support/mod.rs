@@ -60,7 +60,10 @@ pub fn ingredients<'a>(
     intent: agent_core::RequestIntent,
     prev_prefix: Option<&'a PrefixImage>,
 ) -> Ingredients<'a> {
-    Ingredients { system, messages, tools, late_tools, config, intent, prev_prefix }
+    // 039 的 `late_system` 走独立的 `skill_indep_late_system_placement.rs`（它直接
+    // 构造 `Ingredients` 字面量），这个共用 builder 的既有调用方都不带 skill 注入，
+    // 所以这里硬编码空——加成参数会波及 32 个调用点却没有一个真的用它。
+    Ingredients { system, messages, tools, late_tools, late_system: &[], config, intent, prev_prefix }
 }
 
 /// 两个不常用工具的 schema，用两种不同 key 插入顺序构造出「值相等」的

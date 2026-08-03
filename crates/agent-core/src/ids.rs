@@ -49,6 +49,32 @@ impl ToolCallId {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct MessageId(pub u64);
 
+/// 一个 skill 的标识（039）。skill 的**内容**（正文 + 携带的工具）活在 store 外的
+/// registry 里，store 里只有「哪些被激活」——那是 `Slot::SkillsActive` 槽位里一个
+/// **有序的 id 数组**（STATE-MODEL §「落盘的键必须是 AtomKey」：没有 `Skill` 变体，
+/// skill 不是一个 atom key，是某个 `Agent(_, SkillsActive)` 槽位的值的一员）。
+///
+/// `Arc<str>` 而不是 `String`：同一个 id 会在活名单、命令入参、渲染进 prompt 的
+/// 注入内容里各被引用一份，克隆压到指针拷贝（红线 5）。
+///
+/// `Ord` / `Hash`：活名单要**排序去重**后落盘（红线 11——它会被渲染进 system
+/// prompt，顺序一漂前缀缓存就全价），排序要一个全序。
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+pub struct SkillId(pub Arc<str>);
+
+impl SkillId {
+    /// 从一个字符串造 id。**落盘/传输的反序列化入口**——活名单里的 id 都是这么
+    /// 回来的（存成 JSON 字符串数组）。不校验形状：skill 存不存在是 registry 的事
+    /// （在 core 之外，红线 7），core 只管这个 id 在不在活名单里。
+    pub fn new(id: impl Into<Arc<str>>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,5 +100,13 @@ mod tests {
         let s = serde_json::to_string(&id).unwrap();
         assert_eq!(serde_json::from_str::<AgentId>(&s).unwrap(), id);
         assert_eq!(id.as_str(), "root");
+    }
+
+    #[test]
+    fn skill_id_roundtrip() {
+        let id = SkillId::new("pirate-speak");
+        let s = serde_json::to_string(&id).unwrap();
+        assert_eq!(serde_json::from_str::<SkillId>(&s).unwrap(), id);
+        assert_eq!(id.as_str(), "pirate-speak");
     }
 }

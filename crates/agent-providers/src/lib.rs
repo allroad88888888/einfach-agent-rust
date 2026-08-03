@@ -32,6 +32,12 @@ pub struct Ingredients<'a> {
     pub tools: &'a [ToolSpec],
     /// 本轮中途激活的工具。
     pub late_tools: &'a [ToolSpec],
+    /// **本轮激活的 skill 正文段**（039）——跟 `late_tools` 一样「宁可分不可合」：
+    /// Kimi/GLM 把它挂成消息级 system（~100% 保前缀，免费），DeepSeek 拼进顶层
+    /// system 段尾部（插新 system 消息 038 实测 120x 归零，改段尾保 ~91%）。怎么摆
+    /// 各家 `encode` 自己判（红线 12），妥协报 `Adjustment`。空 = 没有中途激活的
+    /// skill，各家 encode 逐字节回到 039 之前。
+    pub late_system: &'a [SystemChunk],
     pub config: &'a SessionConfig,
     pub intent: RequestIntent,
     /// 上一轮的前缀镜像（core 只存不判读），没有则是冷启动。

@@ -30,10 +30,10 @@ fn a_dead_agents_tombstone_key_exists_with_null_but_is_live_says_no() {
     let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn");
 
     let before = session.primitives().iter().filter(|(k, _)| k.agent() == &child).count();
-    assert_eq!(before, 10);
+    assert_eq!(before, 11);
 
     let report = session.despawn_child(&child).expect("despawn");
-    assert_eq!(report.atoms_evicted, 9);
+    assert_eq!(report.atoms_evicted, 10);
     assert!(!session.is_live(&child), "despawn 之后 is_live 该是假");
 
     let remaining: Vec<_> = session.primitives().into_iter().filter(|(k, _)| k.agent() == &child).collect();

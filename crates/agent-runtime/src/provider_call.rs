@@ -72,11 +72,17 @@ pub(crate) fn start(
     let prev_prefix = session.prev_prefix_of(&agent);
     let system = subagent::system_for(session, ctx, &agent);
     let tools = subagent::tools_for(session, ctx, &agent);
+    // 039：这个 agent 当前激活的 skill 展开成本轮注入——正文进 `late_system`、
+    // 携带的工具进 `late_tools`。空激活集 → 两个都空，`Ingredients` 逐字节回到
+    // 039 之前（向后兼容）。索引不在这里，它常驻在 `ctx.system`（宿主放进去的）。
+    let active = session.active_skills_of(&agent);
+    let (late_system, late_tools) = ctx.tools.skill_injection(&active);
     let ing = Ingredients {
         system: &system,
         messages: &messages,
         tools: &tools,
-        late_tools: &[],
+        late_tools: &late_tools,
+        late_system: &late_system,
         config: &ctx.session_config,
         intent: RequestIntent::Free,
         prev_prefix: prev_prefix.as_ref(),

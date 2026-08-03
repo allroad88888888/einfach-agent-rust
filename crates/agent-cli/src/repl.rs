@@ -1,6 +1,6 @@
 //! 会话循环：读一行 → 要么是斜杠命令（`/quit`、`/model <name>`、`/undo`、
-//! `/redo`、`/undo!`），要么喂给 `agent_runtime::run_turn` 跑一整轮（可能含
-//! 若干次 provider 调用/工具调用）→ 打摘要 → 终态就 `Session::begin_turn`
+//! `/redo`、`/undo!`、`/skills`），要么喂给 `agent_runtime::run_turn` 跑一整轮
+//! （可能含若干次 provider 调用/工具调用）→ 打摘要 → 终态就 `Session::begin_turn`
 //! 开下一轮 → 再读一行。`/quit` 退出，EOF（Ctrl-D）也退出。
 //!
 //! **027 换接**：状态从 `TurnState`（栈上单份、不持久化）换成
@@ -62,6 +62,10 @@ pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig) {
                 undo::redo(session, ctx);
                 continue;
             }
+            "/skills" => {
+                print_skills(session, ctx);
+                continue;
+            }
             _ => {}
         }
         if let Some(name) = input.strip_prefix("/model ") {
@@ -86,5 +90,23 @@ pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig) {
         // 其余情况（正常终态 / 非终态卡住）状态原样留着：正常终态等下一轮
         // 输入时上面那个 `begin_turn` 分支处理；非终态已经打过一条协议违规
         // 通报，用户可以 /quit 重开或者 /undo。
+    }
+}
+
+/// `/skills`（039 step 6）：列出宿主装载的全部 skill，标出哪些已激活。
+/// 「有哪些可用」问 registry（`ctx.available_skills`），「哪些激活」问 `Session`
+/// （`active_skills`）——两个来源各答各的，跟 `docs/TOOLS.md` §Skills 的分工一致。
+fn print_skills(session: &Session, ctx: &RunnerCtx) {
+    let available = ctx.available_skills();
+    if available.is_empty() {
+        println!("（没有装载任何 skill。把 <name>/SKILL.md 放进启动目录的 ./skills/ 下。）");
+        return;
+    }
+    let active: std::collections::BTreeSet<String> =
+        session.active_skills().into_iter().map(|s| s.as_str().to_string()).collect();
+    println!("skills（[*] = 已激活）:");
+    for (id, description) in available {
+        let mark = if active.contains(&*id) { "*" } else { " " };
+        println!("  [{mark}] {id}: {description}");
     }
 }

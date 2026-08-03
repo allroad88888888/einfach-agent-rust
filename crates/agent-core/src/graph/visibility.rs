@@ -63,6 +63,13 @@ impl Slot {
             // 子读父的消息历史是决策 3 兑现「子读父是一次 get」的那一下：不需要
             // 任何消息传递机制，走依赖图自动追踪、自动失效。
             Slot::Messages => Visibility::Upward,
+            // `SkillsActive` 是 STATE-MODEL §「读取边界」点名 `read_ancestor` 读的
+            // 「skills」那一样（039 让它落地）：skill 是上下文资产，子 agent 若要
+            // 继承父的激活集，走的就是这条往上的边。M5 里子 agent 各有各的（空）
+            // 激活集、各自注入，这条边还没有真实读者——但它跟 `Messages` 一样属于
+            // 「子干活要的上下文」，站队要按语义、不按当下有没有用到（模块文档：
+            // 开放一个方向要有理由，而 STATE-MODEL 已经给了理由）。
+            Slot::SkillsActive => Visibility::Upward,
 
             // —— 往下：父 agent 要知道子干完了没 ————————————————
             //
@@ -132,7 +139,12 @@ mod tests {
     /// 钉住当下的具体归属：改动任何一条都得先在这里改，顺便解释为什么。
     #[test]
     fn the_current_assignment_is_pinned() {
-        assert_eq!(slots_with(Visibility::Upward), vec![Slot::Messages]);
+        // 顺序 = `Slot::ALL` 里的相对次序（`slots_with` 保序过滤）：Messages 在最前，
+        // 039 追加的 SkillsActive 在末尾。两者都是「子干活要的上下文」（往上读）。
+        assert_eq!(
+            slots_with(Visibility::Upward),
+            vec![Slot::Messages, Slot::SkillsActive]
+        );
         assert_eq!(
             slots_with(Visibility::Downward),
             vec![Slot::Status, Slot::ToolsAllowed]

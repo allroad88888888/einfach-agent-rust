@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use crate::graph::{AtomKey, Slot, build_agent};
 use crate::ids::AgentId;
-use crate::value::atom_value::AgentValue;
+use crate::value::str_set;
 
 use super::session::Session;
 
@@ -162,7 +162,9 @@ impl Session {
         let child = parent.child(self.next_child_seq(parent));
         build_agent(&self.store, &self.sources, &self.derived, &child);
 
-        let tools = tools_value(config.tools_allowed);
+        // 排序去重后落盘（红线 11），机制在 `value::str_set`——跟 039 激活的 skill
+        // 集是同一个「有序字符串集当值」的形状，只有一处编解码。
+        let tools = str_set::to_value(config.tools_allowed);
         let key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
         self.commit_as(parent, "spawn_child", |txn| txn.set_key(key, tools));
 
@@ -191,21 +193,6 @@ fn child_seq(parent: &AgentId, child: &AgentId) -> Option<u32> {
     tail.strip_prefix('/')?.strip_prefix('a')?.parse().ok()
 }
 
-/// 工具子集 → 落进槽位的值：**排序去重**的 JSON 字符串数组（红线 11）。
-///
-/// 用 `Vec` + `sort` + `dedup` 而不是 `HashSet`：无序容器的迭代顺序在 Rust 里是
-/// 随机化的，同一份工具表两次序列化可能顺序不同，而它会进 prompt。
-/// `serde_json::Value` 的数组保序、对象是 `BTreeMap`，整条链因此逐字节确定。
-fn tools_value(mut tools: Vec<Arc<str>>) -> AgentValue {
-    tools.sort();
-    tools.dedup();
-    let arr: Vec<serde_json::Value> = tools
-        .into_iter()
-        .map(|t| serde_json::Value::String(t.to_string()))
-        .collect();
-    AgentValue::Json(Arc::new(serde_json::Value::Array(arr)))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,16 +206,18 @@ mod tests {
     }
 
     /// 红线 11 的最小实检：入参顺序不同、含重复，落进槽位的值逐字节相同。
+    /// 机制现在住在 `value::str_set`（跟 039 的 skill 集共用），这里验的是
+    /// spawn 真的走了它。
     #[test]
     fn the_tool_subset_is_sorted_and_deduped_before_it_lands() {
-        let a = tools_value(vec![Arc::from("srv:fs/read"), Arc::from("srv:shell/exec")]);
-        let b = tools_value(vec![
+        let a = str_set::to_value(vec![Arc::from("srv:fs/read"), Arc::from("srv:shell/exec")]);
+        let b = str_set::to_value(vec![
             Arc::from("srv:shell/exec"),
             Arc::from("srv:fs/read"),
             Arc::from("srv:fs/read"),
         ]);
         assert_eq!(a, b);
-        let AgentValue::Json(v) = &a else { panic!("工具子集落 Json") };
+        let crate::value::atom_value::AgentValue::Json(v) = &a else { panic!("工具子集落 Json") };
         assert_eq!(
             serde_json::to_string(&**v).unwrap(),
             r#"["srv:fs/read","srv:shell/exec"]"#

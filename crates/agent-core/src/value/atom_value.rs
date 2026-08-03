@@ -14,7 +14,7 @@
 //! | `Bool` | `tools_converged` 收敛时的答案 |
 //! | `U64` | 六个计数槽位：epoch 之外的 `NextMessageId` / `TurnsUsed` / `MaxTurns` / `RetriesUsed` / `MaxRetries`，以及 M3 的 `tools_registry_version` |
 //! | `Text` | 一段不可变文本：M3 的 `SystemBase`、`ToolCall(_, _, Result)` 落地后的内容 |
-//! | `Json` | 未解析的工具入参（core 不解析参数含义，只透传） |
+//! | `Json` | 未解析的工具入参（core 不解析参数含义，只透传）；也装「有序字符串集」——`ToolsAllowed` 的工具子集、`SkillsActive` 的激活 skill id（`value::str_set`，红线 11 排序去重） |
 //! | `Messages` | 消息历史 |
 //! | `Status` | `TurnStatus` |
 //! | `Prefix` | 上一次请求的前缀镜像 |

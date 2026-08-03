@@ -59,7 +59,8 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
 
 /// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的七个 +
 /// `Session` 会话级命令的四个（`begin_turn` / `set_max_turns` / `set_max_retries` /
-/// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）。
+/// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）+ 039
+/// 的两条 skill 命令（`activate_skill` / `deactivate_skill`）。
 /// 这是一个**封闭的、有限的编译期常量集**（`EntryMeta.label` 的文档注释）。
 const KNOWN_LABELS: &[&str] = &[
     "user_input",
@@ -75,6 +76,8 @@ const KNOWN_LABELS: &[&str] = &[
     "clear_prev_prefix",
     "spawn_child",
     "despawn_child",
+    "activate_skill",
+    "deactivate_skill",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

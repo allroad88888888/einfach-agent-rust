@@ -19,7 +19,7 @@ fn spawn_two_level(session: &mut Session) -> (AgentId, AgentId) {
 }
 
 /// 划分性质本身：对 `Slot::ALL` 穷举，每个槽位两个跨 agent 读口至多一个能
-/// 成功——不是抽样几个槽位测几个用例，是覆盖全部十个。
+/// 成功——不是抽样几个槽位测几个用例，是覆盖全部（039 起是十一个）。
 #[test]
 fn for_every_slot_at_most_one_direction_can_succeed() {
     let mut session = new_session();
@@ -69,7 +69,7 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
         }
     }
 
-    assert_eq!(upward, vec![Slot::Messages]);
+    assert_eq!(upward, vec![Slot::Messages, Slot::SkillsActive]);
     assert_eq!(downward, vec![Slot::Status, Slot::ToolsAllowed]);
     assert_eq!(
         upward.len() + downward.len() + private.len(),

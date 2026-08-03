@@ -30,7 +30,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             | Slot::RetriesUsed
             | Slot::MaxRetries
             // 028 新增：spawn 时快照的工具子集，同时是活名单。
-            | Slot::ToolsAllowed => {}
+            | Slot::ToolsAllowed
+            // 039 新增：激活的 skill id 集。
+            | Slot::SkillsActive => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

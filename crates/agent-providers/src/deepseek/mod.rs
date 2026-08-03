@@ -42,6 +42,16 @@ pub(crate) const MAX_TOOLS: usize = 128;
 /// **别做**（PROVIDERS.md §二）。
 pub(crate) const LATE_TOOLS_COST_MULTIPLE: f32 = 120.0;
 
+/// 中途激活 skill 把正文拼进 system 段尾部的估计代价倍数（039）。
+///
+/// 038 实测：改现有 system 段尾部**保 ~91%** 前缀命中（对照插新 system 消息的
+/// 120x 归零）。仅扩展匹配下，改动点之后（system 尾 + 整段 history）失配，约 9%
+/// 的前缀落回全价、而 DeepSeek 缓存折扣最陡（未命中 vs 命中差 ~120x），量级估计
+/// ≈ 0.91·1 + 0.09·120 ≈ 11。这是**激活那一跳**的上界；skill 稳定不变的后续跳
+/// system 段逐字节相同、不漂、满命中，真实代价 ~1x（兜底第 2 层的 predicted vs
+/// 实测对账会认出来）——这条 Adjustment 是「做了这个妥协」的**标记**，不是每跳账单。
+pub(crate) const LATE_SYSTEM_COST_MULTIPLE: f32 = 11.0;
+
 pub struct DeepSeek;
 
 impl Provider for DeepSeek {

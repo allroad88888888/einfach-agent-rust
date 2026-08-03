@@ -49,6 +49,14 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M5 skills 装载（2026-08-03）
+
+放 skill 进 ./skills/ → 模型经常驻索引自己发现并激活 → 用上它带的工具 → undo 连
+激活一起退（journaled 白拿）。三家注入分策由 038 探针实测钉死（Kimi/GLM 消息级免费、
+DeepSeek 改 system 段尾保 91%——插新消息 120x 归零）。真机 dogfood：模型激活
+commit-cn skill 给 039 自己写了提交信息。你最初「前后端都可以 tool+skills+mcp」
+里的 skills 补齐；剩 mcp（source:Mcp 地基早留）。
+
 ### 已完成：M4 全部 3 个 issue（2026-08-02）——四里程碑收官
 
 `agent-desktop.app`（+dmg）真机起窗：内嵌同一个 `agent-server` 库、托管同一套

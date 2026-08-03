@@ -12,4 +12,4 @@
  * 032：`SessionEvent::TurnGuard.adjustments` 的元素类型，`ts` feature 门后面
  * 导出 TS。
  */
-export type Adjustment = { "ToolChoiceDowngraded": { wanted: string, used: string, } } | "ThinkingDisabledForToolChoice" | { "TemperatureOverridden": { wanted: number, used: number, } } | { "LateToolsForcedIntoPrefix": { count: number, est_cost_multiple: number, } } | { "ToolsTruncated": { kept: number, dropped: number, } };
+export type Adjustment = { "ToolChoiceDowngraded": { wanted: string, used: string, } } | "ThinkingDisabledForToolChoice" | { "TemperatureOverridden": { wanted: number, used: number, } } | { "LateToolsForcedIntoPrefix": { count: number, est_cost_multiple: number, } } | { "ToolsTruncated": { kept: number, dropped: number, } } | { "LateSystemReshapedPrefix": { est_cost_multiple: number, } };
