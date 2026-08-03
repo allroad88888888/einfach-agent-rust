@@ -21,9 +21,13 @@ M5 验收整句：放一个 skill 进目录 → 模型自己发现并激活 → 
 3. **激活工具**：`srv:skill/activate`/`deactivate`，runner 截获（spawn 同款），
    写 `skills_active`（**经 command 层，journaled——undo 退激活是白拿的**）；
    `Reversibility::Reversible`
-4. **注入**：`Ingredients` 加 `late_system: &[SystemChunk]`（宁可分不可合——
-   核心规则第三次应用）；adapter 按 038 实测决定placement，妥协报
-   `Adjustment`（需要新变体就加 + 协议重生成）
+4. **注入**（038 实测已定策略，不再猜）：`Ingredients` 加
+   `late_system: &[SystemChunk]`（宁可分不可合）。**每家分策**——
+   Kimi/GLM 消息级追加（~100% 保前缀，免费）；**DeepSeek 改 system 段尾部**
+   （插新 system 消息会 120x 归零，改现有段尾保 ~91%）。这条差异是 adapter
+   的活（红线 12：core 只给 late_system，怎么放各家 encode 自己判）。中途
+   激活在 DeepSeek 上仍有成本（改 system 尾 = 该段之后失配），报
+   `Adjustment::LateSystemReshapedPrefix{est_cost_multiple}` 或复用现有变体
 5. **恢复**：`skills_active` 在快照里，内容从 registry 现取（store 只存激活，
    TOOLS.md 原文）；registry 内容漂移的语义写文档
 6. CLI `/skills` 列表；web 显示激活集
@@ -31,6 +35,6 @@ M5 验收整句：放一个 skill 进目录 → 模型自己发现并激活 → 
 ## 注意
 
 红线 11：索引与注入内容逐字节确定。红线 2/4：激活必须走 command。
-探针结论若是「三家都不收消息级 system」→ 注入退化为「顶层重build + 如实
-Adjustment」，设计仍成立只是代价档不同——038 的数据决定的是**默认策略**，
-不是可行性。
+038 已实测：三家都收都听，注入策略分家（Kimi/GLM 消息级、DeepSeek 改 system
+尾部）。可行性确认，代价差异进各家 encode。DeepSeek 的「改现有 system 段尾部」
+需要 `late_system` 能拼进那一段而非独立消息——adapter placement 的实现要点。

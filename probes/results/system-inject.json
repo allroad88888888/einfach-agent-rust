@@ -1,0 +1,486 @@
+{
+  "deepseek": {
+    "model": "deepseek-v4-pro",
+    "nonce": "1785721851",
+    "observations": [
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "轮1 建立前缀 冷",
+        "prompt_tokens": 4382,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 4382,
+          "prompt_tokens": 4382,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4398
+        }
+      },
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 4352,
+        "label": "轮1 建立前缀 复发（基准）",
+        "prompt_tokens": 4382,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 4352,
+          "prompt_cache_miss_tokens": 30,
+          "prompt_tokens": 4382,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4398
+        }
+      },
+      {
+        "content": "tier=1。【标记X】",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "轮2 消息级注入 第1次",
+        "prompt_tokens": 4421,
+        "usage": {
+          "completion_tokens": 166,
+          "completion_tokens_details": {
+            "reasoning_tokens": 157
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 4421,
+          "prompt_tokens": 4421,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4587
+        }
+      },
+      {
+        "content": "tier=1。【标记X】",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第2次",
+        "prompt_tokens": 4421,
+        "usage": {
+          "completion_tokens": 84,
+          "completion_tokens_details": {
+            "reasoning_tokens": 75
+          },
+          "prompt_cache_hit_tokens": 4352,
+          "prompt_cache_miss_tokens": 69,
+          "prompt_tokens": 4421,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4505
+        }
+      },
+      {
+        "content": "tier=1。【标记X】",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第3次",
+        "prompt_tokens": 4421,
+        "usage": {
+          "completion_tokens": 73,
+          "completion_tokens_details": {
+            "reasoning_tokens": 64
+          },
+          "prompt_cache_hit_tokens": 4352,
+          "prompt_cache_miss_tokens": 69,
+          "prompt_tokens": 4421,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4494
+        }
+      },
+      {
+        "content": "确认：quota=1364。【标记X】",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 4352,
+        "label": "轮3 注入后继续一轮",
+        "prompt_tokens": 4452,
+        "usage": {
+          "completion_tokens": 59,
+          "completion_tokens_details": {
+            "reasoning_tokens": 47
+          },
+          "prompt_cache_hit_tokens": 4352,
+          "prompt_cache_miss_tokens": 100,
+          "prompt_tokens": 4452,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4511
+        }
+      },
+      {
+        "content": "tier=1。【标记X】",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 3968,
+        "label": "对照组 并入顶层 system 重建",
+        "prompt_tokens": 4421,
+        "usage": {
+          "completion_tokens": 83,
+          "completion_tokens_details": {
+            "reasoning_tokens": 74
+          },
+          "prompt_cache_hit_tokens": 3968,
+          "prompt_cache_miss_tokens": 453,
+          "prompt_tokens": 4421,
+          "prompt_tokens_details": {
+            "cached_tokens": 3968
+          },
+          "total_tokens": 4504
+        }
+      },
+      {
+        "accepted_of_3": 3,
+        "baseline_hit": 4352,
+        "baseline_prompt": 4382,
+        "control_rebuild_hit": 3968,
+        "control_rebuild_prompt": 4421,
+        "control_vs_inject_delta": 3968,
+        "extend_hit": 4352,
+        "extend_prompt": 4452,
+        "heard_of_3": 3,
+        "inject_first_hit": 0,
+        "inject_first_prompt": 4421,
+        "inject_last_hit": 4352,
+        "inject_last_prompt": 4421,
+        "majority_accepted": true,
+        "majority_heard": true,
+        "summary": "system-injection"
+      }
+    ]
+  },
+  "glm": {
+    "model": "glm-5.2",
+    "nonce": "1785721851",
+    "observations": [
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "轮1 建立前缀 冷",
+        "prompt_tokens": 4391,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 4391,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4407
+        }
+      },
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮1 建立前缀 复发（基准）",
+        "prompt_tokens": 4391,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 15
+          },
+          "prompt_tokens": 4391,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4407
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第1次",
+        "prompt_tokens": 4434,
+        "usage": {
+          "completion_tokens": 124,
+          "completion_tokens_details": {
+            "reasoning_tokens": 114
+          },
+          "prompt_tokens": 4434,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4558
+        }
+      },
+      {
+        "content": "tier=1。【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4416,
+        "label": "轮2 消息级注入 第2次",
+        "prompt_tokens": 4434,
+        "usage": {
+          "completion_tokens": 112,
+          "completion_tokens_details": {
+            "reasoning_tokens": 103
+          },
+          "prompt_tokens": 4434,
+          "prompt_tokens_details": {
+            "cached_tokens": 4416
+          },
+          "total_tokens": 4546
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4416,
+        "label": "轮2 消息级注入 第3次",
+        "prompt_tokens": 4434,
+        "usage": {
+          "completion_tokens": 120,
+          "completion_tokens_details": {
+            "reasoning_tokens": 110
+          },
+          "prompt_tokens": 4434,
+          "prompt_tokens_details": {
+            "cached_tokens": 4416
+          },
+          "total_tokens": 4554
+        }
+      },
+      {
+        "content": "确认：quota=1364。【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4416,
+        "label": "轮3 注入后继续一轮",
+        "prompt_tokens": 4462,
+        "usage": {
+          "completion_tokens": 65,
+          "completion_tokens_details": {
+            "reasoning_tokens": 53
+          },
+          "prompt_tokens": 4462,
+          "prompt_tokens_details": {
+            "cached_tokens": 4416
+          },
+          "total_tokens": 4527
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "对照组 并入顶层 system 重建",
+        "prompt_tokens": 4433,
+        "usage": {
+          "completion_tokens": 155,
+          "completion_tokens_details": {
+            "reasoning_tokens": 145
+          },
+          "prompt_tokens": 4433,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4588
+        }
+      },
+      {
+        "accepted_of_3": 3,
+        "baseline_hit": 4352,
+        "baseline_prompt": 4391,
+        "control_rebuild_hit": 0,
+        "control_rebuild_prompt": 4433,
+        "control_vs_inject_delta": -4352,
+        "extend_hit": 4416,
+        "extend_prompt": 4462,
+        "heard_of_3": 3,
+        "inject_first_hit": 4352,
+        "inject_first_prompt": 4434,
+        "inject_last_hit": 4416,
+        "inject_last_prompt": 4434,
+        "majority_accepted": true,
+        "majority_heard": true,
+        "summary": "system-injection"
+      }
+    ]
+  },
+  "kimi": {
+    "model": "kimi-k3",
+    "nonce": "1785721851",
+    "observations": [
+      {
+        "content": "",
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "轮1 建立前缀 冷",
+        "prompt_tokens": 4384,
+        "usage": {
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 13
+          },
+          "prompt_tokens": 4384,
+          "total_tokens": 4400
+        }
+      },
+      {
+        "content": "第 4 轮回答：",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮1 建立前缀 复发（基准）",
+        "prompt_tokens": 4384,
+        "usage": {
+          "cached_tokens": 4352,
+          "completion_tokens": 16,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1
+          },
+          "prompt_tokens": 4384,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4400
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第1次",
+        "prompt_tokens": 4443,
+        "usage": {
+          "cached_tokens": 4352,
+          "completion_tokens": 397,
+          "completion_tokens_details": {
+            "reasoning_tokens": 375
+          },
+          "prompt_tokens": 4443,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4840
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第2次",
+        "prompt_tokens": 4443,
+        "usage": {
+          "cached_tokens": 4352,
+          "completion_tokens": 178,
+          "completion_tokens_details": {
+            "reasoning_tokens": 156
+          },
+          "prompt_tokens": 4443,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4621
+        }
+      },
+      {
+        "content": "tier=1【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮2 消息级注入 第3次",
+        "prompt_tokens": 4443,
+        "usage": {
+          "cached_tokens": 4352,
+          "completion_tokens": 210,
+          "completion_tokens_details": {
+            "reasoning_tokens": 188
+          },
+          "prompt_tokens": 4443,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4653
+        }
+      },
+      {
+        "content": "quota=1364。【标记X】",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4352,
+        "label": "轮3 注入后继续一轮",
+        "prompt_tokens": 4502,
+        "usage": {
+          "cached_tokens": 4352,
+          "completion_tokens": 211,
+          "completion_tokens_details": {
+            "reasoning_tokens": 188
+          },
+          "prompt_tokens": 4502,
+          "prompt_tokens_details": {
+            "cached_tokens": 4352
+          },
+          "total_tokens": 4713
+        }
+      },
+      {
+        "content": "tier=1",
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "对照组 并入顶层 system 重建",
+        "prompt_tokens": 4432,
+        "usage": {
+          "completion_tokens": 193,
+          "completion_tokens_details": {
+            "reasoning_tokens": 175
+          },
+          "prompt_tokens": 4432,
+          "total_tokens": 4625
+        }
+      },
+      {
+        "accepted_of_3": 3,
+        "baseline_hit": 4352,
+        "baseline_prompt": 4384,
+        "control_rebuild_hit": 0,
+        "control_rebuild_prompt": 4432,
+        "control_vs_inject_delta": -4352,
+        "extend_hit": 4352,
+        "extend_prompt": 4502,
+        "heard_of_3": 3,
+        "inject_first_hit": 4352,
+        "inject_first_prompt": 4443,
+        "inject_last_hit": 4352,
+        "inject_last_prompt": 4443,
+        "majority_accepted": true,
+        "majority_heard": true,
+        "summary": "system-injection"
+      }
+    ]
+  }
+}

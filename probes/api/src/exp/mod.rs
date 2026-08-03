@@ -4,6 +4,10 @@ pub mod granularity;
 pub mod invalidation;
 pub mod mutation;
 pub mod sharing;
+// 038 消息级 system 注入：签名兼容 ALL 的 `fn(&mut Ctx)`，但故意不注册进去——
+// 它有自己的独立结果文件（system-inject.json，见 bin/system_inject.rs），
+// 混进 cache_prefix 的默认全跑会把它的花费也捎带上，且写错文件。
+pub mod system_inject;
 pub mod thinking;
 
 use crate::client::Ctx;

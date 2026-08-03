@@ -10,6 +10,9 @@ pub struct Obs {
     pub hit: Option<(u64, &'static str)>,
     pub usage_raw: Value,
     pub error: Option<String>,
+    /// `choices[0].message.content`。默认丢弃（大多数实验只关心 usage），
+    /// 但行为级断言（比如「回答里有没有注入的标记」）离不开它，所以留一份原文。
+    pub content: Option<String>,
 }
 
 impl Obs {
@@ -19,6 +22,10 @@ impl Obs {
     pub fn prompt(&self) -> u64 {
         self.prompt_tokens.unwrap_or(0)
     }
+    /// 行为级断言：回答原文里有没有出现某个标记。**不是**状态码断言。
+    pub fn heard(&self, marker: &str) -> bool {
+        self.content.as_deref().is_some_and(|c| c.contains(marker))
+    }
     pub fn to_json(&self) -> Value {
         json!({
             "label": self.label,
@@ -27,6 +34,7 @@ impl Obs {
             "hit_field": self.hit.map(|(_, f)| f),
             "usage": self.usage_raw,
             "error": self.error,
+            "content": self.content,
         })
     }
 }
@@ -74,12 +82,17 @@ fn send(url: &str, key: &str, body: &Value, label: &str) -> Obs {
         Ok(r) => match r.into_json::<Value>() {
             Ok(v) => {
                 let usage = v.get("usage").cloned().unwrap_or(Value::Null);
+                let content = v
+                    .pointer("/choices/0/message/content")
+                    .and_then(Value::as_str)
+                    .map(String::from);
                 Obs {
                     label: label.to_string(),
                     prompt_tokens: prompt_tokens(&usage),
                     hit: cache_hit(&usage),
                     usage_raw: usage,
                     error: None,
+                    content,
                 }
             }
             Err(e) => err(label, format!("响应不是 JSON: {e}")),
@@ -99,6 +112,7 @@ fn err(label: &str, msg: String) -> Obs {
         hit: None,
         usage_raw: Value::Null,
         error: Some(msg),
+        content: None,
     }
 }
 

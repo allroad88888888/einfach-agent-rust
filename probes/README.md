@@ -25,6 +25,7 @@ adapter 层吸收（红线 12、[docs/ADAPTER.md](../docs/ADAPTER.md)），架�
 cd probes/api
 cargo run --bin cache_prefix     # 前缀缓存：命中语义、块粒度、共享、压缩代价
 cargo run --bin wire_shape       # wire 行为：流式分帧、tool_choice、错误形状、响应头
+cargo run --bin system_inject    # 消息级 system 注入：收/听/前缀保持/对照差值（038）
 cargo run --bin cache_prefix -- --help
 ```
 
