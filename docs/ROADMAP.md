@@ -29,6 +29,7 @@
 | 16 | **`ProviderRequest` 存在的理由是线程边界，不是组装** | store 是 `Rc<RefCell>` 不 `Send`，HTTP 在别的线程。必须有一份「在 actor 线程上提取、能带走」的东西 |
 | 17 | **core 里不许有任何模型相关的判断**（红线 12）：从「事前问能力」改成「事后报调整」 | core 只说意图，adapter 做不到就报一条 `Adjustment`（encode 时产生，宿主随 `ProviderDone` 事件喂进 loop）。事前分支 N 位就是 2^N 种组合、多数没跑过、加一家要改 core；事后报调整是可见可审计的，加 provider 不动 core，测试组合掉回 1 |
 | 18 | **压缩三分**：触发在 core（当前 tokens vs `SessionConfig` 的窗口大小，纯算术——红线 12 禁分支不禁参数）；实现在 core（统一一份，压缩是状态变更，走 command 层进 undo log）；压后摆盘在 adapter（前缀树的家能保共享分支，仅扩展的认赔并报 `Adjustment`） | adapter 是纯函数无权改世界——它偷偷压，prompt 和状态对不上，undo / 审计 / 前缀镜像一起断 |
+| 21 | **skill 激活 = 模型经工具 + 常驻索引，宿主可显式预激活，否决自动触发** | 鸡生蛋靠索引解：system 常驻每 skill 一行「名字+描述」（前缀稳定近零成本），模型按需调 `srv:skill/activate` 拉全量。与决策 20 同一条开山原则：AI 决定用哪个能力。关键词/向量自动触发否决——prompt 被看不见的机制改动是静默行为，缓存后果还最大。中途激活的注入位置**待 038 探针实测**（消息级 system 注入三家收不收、保不保前缀），不猜 |
 | 20 | **子 agent 由模型经内置工具 spawn**（006 拍板）：`spawn_agent` 是 Server 工具，spawn 即 tool call 进日志，「等子树完成」= 该槽位收敛，结果以 tool_result 回父 | ①undo/审计免费——走既有 ToolCall 机制，turn_id 继承让「撤一轮连带子树」天然成立；B 路要为编排动作另发明记账路（第二真值来源）②与开山原则一致：AI 决定调用哪个工具，分解只是又一个工具 ③A 不封死 B（编排层=另一个会调 spawn 的调用方），反向不成立。成本兜底：深度≤3/子数≤8/子树轮预算全是参数，超限 = is_error 的 tool_result 让模型自己收敛 |
 | 19 | **工具结果上限：默认 32 KiB、只留头部、core 边界截断、标记确定可见** | ≈8k 英文 token，一次调用最多吃 128k 窗口的 ~8%；`fs/read` 有行范围可分次拿。executor 不知道 prompt 预算所以在 core 截；标记进 prompt 必须逐字节确定（红线 11），写明原始大小与「缩小范围重调」指引。头尾各半到 020（shell）再议 |
 

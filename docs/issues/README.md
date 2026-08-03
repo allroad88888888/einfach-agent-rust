@@ -130,6 +130,17 @@
 **M4 验收**：桌面 app 打开即同一套 web 前端、内嵌同一个 server 库、真实对话可用；
 `agent-server-bin` 独立起、Java 网关文档能指导企业内嵌。
 
+## M5 · skills 装载
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [038](038-skill-injection-probe.md) | **探针**：消息级 system 注入的三家实测 | — | sonnet | 探针类 |
+| [039](039-skills-loading.md) | skills 装载全链（registry/激活工具/注入/undo） | 038 | **opus** | ✅ |
+
+**M5 验收**：放一个 skill 进目录 → 模型在对话里自己发现并激活它 → 用上它带的
+工具 → `/undo` 连激活一起退掉；中途激活在 DeepSeek 上**不炸前缀**（探针结论
+兑现到对账数字）。
+
 未排期：**skills 装载**（system 段注入与 late_tools 的来源——料单字段已留位，M1 用完两周再定形态）、`agent-mcp`、多租户、多副本的 `RedisRegistry`。
 
 ---
