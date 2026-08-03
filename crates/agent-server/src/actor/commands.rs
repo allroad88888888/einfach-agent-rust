@@ -12,8 +12,8 @@
 
 use tokio::sync::broadcast::Sender as BroadcastSender;
 
-use agent_core::{AgentId, Failure, Session, TurnStatus};
-use agent_runtime::{RunnerCtx, run_turn};
+use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus};
+use agent_runtime::{RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool, run_turn};
 
 use crate::command::Granularity;
 use crate::event::{Frame, SessionEvent, UndoOutcome};
@@ -59,6 +59,7 @@ pub(super) fn handle_input(session: &mut Session, ctx: &mut RunnerCtx, events: &
 /// 的另一种传输、或者测试），也不会把这个字段吞成「什么都不做」，而是做一件
 /// 明确定义的事（忽略 force，退一条 entry）。
 pub(super) fn handle_undo(session: &mut Session, ctx: &mut RunnerCtx, events: &Events, granularity: Granularity, force: bool) {
+    ctx.discard_remote_tools();
     let report = match (granularity, force) {
         (Granularity::Turn, false) => session.undo_turn(),
         (Granularity::Turn, true) => session.undo_turn_force(),
@@ -69,6 +70,10 @@ pub(super) fn handle_undo(session: &mut Session, ctx: &mut RunnerCtx, events: &E
     // 裸的 `UndoReport` 字段翻译——`session` 此刻还没被这次 undo 之外的任何东西
     // 改动过，barrier entry 就在它的 history 里。
     emit_root(events, SessionEvent::Undo(UndoOutcome::from_report(report, session)));
+    // 048 补漏：undo 撤掉的子树也要让活树面板 / `GET .../agents` 看到——`handle_undo`
+    // 不经 `run_turn` 的 pump，得在这里显式发一次树快照（真机验收逮到的漏投影：
+    // core 层 `agent_tree()` 退了，SSE/GET 那一路没跟上）。
+    ctx.emit_tree_snapshot(session);
 }
 
 /// `Command::Redo`。redo 没有屏障（`Session::redo_turn` 的文档：只是把值写
@@ -76,9 +81,43 @@ pub(super) fn handle_undo(session: &mut Session, ctx: &mut RunnerCtx, events: &E
 /// `UndoOutcome::Blocked` 做穷举排除——`UndoOutcome` 是个诚实的镜像类型，
 /// 不该为了「redo 理论上到不了这个分支」而挖一个 `unreachable!`。
 pub(super) fn handle_redo(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
+    ctx.discard_remote_tools();
     let report = session.redo_turn();
     agent_runtime::persist::sync(ctx, session);
     emit_root(events, SessionEvent::Redo(UndoOutcome::from_report(report, session)));
+    // 048 补漏：redo 把子树接回来同样要让面板/GET 看到（见 handle_undo 同款注释）。
+    ctx.emit_tree_snapshot(session);
+}
+
+/// `Command::Cancel`：Web 工具在等待槽位时 actor 会空闲地等待队列，因此除了
+/// 立即翻转的原子标志，还要恢复一次事件泵使取消真正落入 session 历史。
+pub(super) fn handle_cancel(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
+    if session.status().is_terminal() {
+        return;
+    }
+    let status = cancel_pending_remote_tools(session, ctx);
+    if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
+        erase_cancelled_turn(session, ctx, events);
+    }
+}
+
+/// 远端回传先由 runtime 按 `(agent, call_id)` 消费等待槽，再恢复事件泵。无效或
+/// 迟到结果只广播传输故障，绝不会写进当前工具调用。
+pub(super) fn handle_remote_tool_result(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    events: &Events,
+    agent: AgentId,
+    call_id: ToolCallId,
+    content: String,
+    is_error: bool,
+) {
+    let output = if is_error { RemoteToolOutput::Failure(content) } else { RemoteToolOutput::Success(content) };
+    match resolve_remote_tool(session, ctx, agent, call_id, output) {
+        Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
+        Ok(_) => {}
+        Err(error) => emit_root(events, SessionEvent::TransportTrouble(std::sync::Arc::from(error.to_string()))),
+    }
 }
 
 /// 取消轮结束时的自动策略（027 已裁决，本文件模块文档）：非 force 的
@@ -89,4 +128,6 @@ fn erase_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx, events: &Eve
     let report = session.undo_turn();
     agent_runtime::persist::sync(ctx, session);
     emit_root(events, SessionEvent::Undo(UndoOutcome::from_report(report, session)));
+    // 048 补漏：取消轮自动擦除也撤子树，同样发一次树快照（见 handle_undo 同款注释）。
+    ctx.emit_tree_snapshot(session);
 }

@@ -1,16 +1,11 @@
 //! [`Command`]：外界唯一能对一个 session 说的话，经 [`crate::handle::SessionHandle`]
 //! 送进 actor 线程的 `mpsc` 队列（issue 030）。
 //!
-//! **`Cancel` 不真的排队**——[`SessionHandle::send`](crate::handle::SessionHandle::send)
-//! 特判它，直接旁路写共享的取消原子标志（复用
-//! [`agent_runtime::RunnerCtx::cancel_flag`]），不经过 `mpsc`：队列里的取消要等
-//! 前面所有命令处理完、轮到它才生效，那时轮次早结束了，不叫「取消」。这个变体
-//! 仍然留在枚举里（而不是从 `Command` 里拿掉改成一个独立方法）是防御性的第二
-//! 道闸——万一将来有调用方绕过 `SessionHandle::send`、直接把 `Command::Cancel`
-//! 塞进底层 `mpsc::Sender`（比如 031 的网络层反序列化出一条命令直接转发），
-//! actor 循环本身也认得这个变体、也会把它当成「翻标志」处理，只是慢一拍
-//! （要排在它前面的命令处理完）。两条路径殊途同归，语义不会因为走哪条线而不同。
+//! `Cancel` 会先立即翻转共享取消标志，再进入队列：正在跑 provider 时可及时被
+//! 打断；会话正等待 Web 工具回传时，actor 也会被这条队列消息唤醒并结束轮次。
 use serde::{Deserialize, Serialize};
+
+use agent_core::{AgentId, ToolCallId};
 
 /// undo/redo 的粒度（决策 5 的两档）。031 把 `POST /sessions/:id/undo` 的请求体
 /// 原样搬进这里——issue 原文的 wire 形状是 `{ "granularity": "turn"|"step",
@@ -54,8 +49,11 @@ pub enum Command {
     /// 反演一次 undo（turn 粒度——ARCHITECTURE.md §传输 的 `POST .../redo` 请求体
     /// 是空对象，没有 `granularity` 字段，031 原样照办）。
     Redo,
-    /// 取消当前在飞的轮次——**不排队**，见本文件模块文档。
+    /// 取消当前在飞的轮次，见本文件模块文档。
     Cancel,
+    /// Web 宿主确认一个先前已派发的远端工具。actor 会再次核验精确调用槽位，
+    /// 因而 HTTP 客户端不能借此填充任意本地工具调用。
+    RemoteToolResult { agent: AgentId, call_id: ToolCallId, content: String, is_error: bool },
     /// 优雅关闭：处理完队列里排在它前面的命令后，落最后一次持久化、退出线程。
     Shutdown,
 }

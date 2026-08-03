@@ -8,13 +8,13 @@
 //! 于是 `SessionHandle` 本身整体 `Clone`——多个调用方（未来 031 的多个并发 HTTP
 //! 请求）可以各自拿一份，互不干扰。
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use agent_core::AgentId;
+use agent_core::{AgentId, AgentTree};
 
 use crate::command::Command;
 use crate::event::{Frame, SessionEvent};
@@ -41,29 +41,40 @@ pub struct SessionHandle {
     /// 034：广播载荷是 [`Frame`]（agent 归属信封），不再是裸的 `SessionEvent`
     /// ——见 `crate::event::frame` 模块文档。
     pub(crate) events: broadcast::Sender<Frame>,
+    /// 048：整棵活 agent 树**此刻**的快照——`crate::actor::body` 在 actor 起来时
+    /// 用 `Session::agent_tree()` 现造的初值种它，之后 `RunnerCtx::with_tree_events`
+    /// 的回调每次树变了就重写一遍。`GET /sessions/:id/agents`
+    /// （[`Self::agent_tree`]）直接读它，**不排 `mpsc` 队列**——一轮跑到一半，
+    /// `Command::Input` 还在 actor 的命令循环里没处理完，这里也能立刻拿到当下的
+    /// 活树，不用等排在它前面的命令处理完（048 issue 范围条款 4）。
+    pub(crate) tree: Arc<Mutex<AgentTree>>,
 }
 
 impl SessionHandle {
-    /// 送一条命令。**`Command::Cancel` 在这里被特判**：不进 `mpsc` 队列，
-    /// 直接把共享的取消原子标志翻成 `true`——旁路排队正是这条命令存在的意义
-    /// （`crate::command` 模块文档）。其余变体照常入队，由 actor 线程按到达
-    /// 顺序处理。
+    /// 送一条命令。`Command::Cancel` 会立即翻转共享取消标志，并额外入队一个
+    /// 唤醒消息：前者及时打断正在跑的 provider，后者结束正在等待 Web 工具回传
+    /// 的空闲 actor。其余变体照常入队，由 actor 线程按到达顺序处理。
     ///
     /// 失败只有一种情况：actor 线程已经不在了（`mpsc::Receiver` 被丢弃）。
-    /// `Cancel` 因为压根不碰队列，永远成功——即使 session 已经死了，翻一个
-    /// 没人再读的标志也无害，不构成错误。
+    /// `Cancel` 同样会检查队列是否还存活；actor 已死时返回 `SessionClosed`，避免
+    /// 向客户端谎称一个等待中的远端调用已经被处理。
     pub fn send(&self, cmd: Command) -> Result<(), SessionClosed> {
         if matches!(cmd, Command::Cancel) {
             self.cancel.store(true, Ordering::Relaxed);
-            return Ok(());
         }
         self.tx.send(cmd).map_err(|_| SessionClosed)
     }
 
-    /// 便捷方法：等价于 `send(Command::Cancel)`，但类型上更直接地表达
-    /// 「这是一次旁路操作，不是排队」。
-    pub fn cancel(&self) {
-        self.cancel.store(true, Ordering::Relaxed);
+    /// 便捷方法：等价于 `send(Command::Cancel)`。
+    pub fn cancel(&self) -> Result<(), SessionClosed> {
+        self.send(Command::Cancel)
+    }
+
+    /// 048：整棵活 agent 树此刻的快照——克隆一份共享单元格里的值（`AgentTree`
+    /// 小，克隆成本可忽略）。`GET /sessions/:id/agents` 的唯一数据来源，见
+    /// [`Self::tree`] 字段文档。
+    pub fn agent_tree(&self) -> AgentTree {
+        self.tree.lock().unwrap().clone()
     }
 
     /// 订阅这个 session 的事件流。新订阅者只看得见**订阅之后**广播的事件——
@@ -111,15 +122,16 @@ mod tests {
     fn handle() -> (SessionHandle, mpsc::Receiver<Command>) {
         let (tx, rx) = mpsc::channel();
         let (events, _) = broadcast::channel(16);
-        (SessionHandle { tx, cancel: Arc::new(AtomicBool::new(false)), events }, rx)
+        let tree = Arc::new(Mutex::new(AgentTree { nodes: Vec::new() }));
+        (SessionHandle { tx, cancel: Arc::new(AtomicBool::new(false)), events, tree }, rx)
     }
 
     #[test]
-    fn cancel_bypasses_the_queue_and_flips_the_flag_directly() {
+    fn cancel_flips_the_flag_and_wakes_the_actor() {
         let (handle, rx) = handle();
         handle.send(Command::Cancel).unwrap();
-        assert!(handle.cancel.load(Ordering::Relaxed), "旁路写标志该立刻生效");
-        assert!(rx.try_recv().is_err(), "Cancel 不该出现在 mpsc 队列里");
+        assert!(handle.cancel.load(Ordering::Relaxed), "取消标志该立刻生效");
+        assert_eq!(rx.try_recv().unwrap(), Command::Cancel, "等待远端工具时 actor 需要被唤醒");
     }
 
     #[test]
@@ -139,10 +151,10 @@ mod tests {
     }
 
     #[test]
-    fn cancel_via_send_never_fails_even_after_the_actor_is_gone() {
+    fn cancel_via_send_fails_after_the_actor_is_gone() {
         let (handle, rx) = handle();
         drop(rx);
-        assert_eq!(handle.send(Command::Cancel), Ok(()), "旁路操作不该因为队列没人收而报错");
+        assert_eq!(handle.send(Command::Cancel), Err(SessionClosed));
     }
 
     #[tokio::test]

@@ -29,7 +29,7 @@ use std::thread;
 
 use tokio::sync::broadcast;
 
-use agent_core::AgentId;
+use agent_core::{AgentId, AgentTree};
 
 use crate::event::{Frame, SessionEvent};
 use crate::handle::SessionHandle;
@@ -73,10 +73,18 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
     let (events_tx, _initial_receiver) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = mpsc::channel::<ReadyMsg>();
     let died: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    // 048：GET `/sessions/:id/agents` 读的共享单元格。造在这里（不是握手之后
+    // 才由线程内部传回来）是因为 `AgentTree` 是普通 `Send` 数据（不像
+    // `Session`/`RunnerCtx` 那样含 `Rc<RefCell<_>>`），不需要走 `ReadyMsg`
+    // 那趟握手才能拿到——直接建一个空快照占位（`body::run` 会在真正的
+    // `Session` 现造出来的第一时间用 `agent_tree()` 覆盖它，`open()` 返回
+    // 之前这个占位永远不会被外界看到）。
+    let tree: Arc<Mutex<AgentTree>> = Arc::new(Mutex::new(AgentTree { nodes: Vec::new() }));
 
     let thread_name = format!("session-actor-{}", spec.id);
     let events_for_thread = events_tx.clone();
     let died_for_thread = Arc::clone(&died);
+    let tree_for_thread = Arc::clone(&tree);
 
     let join = thread::Builder::new()
         .name(thread_name)
@@ -87,7 +95,7 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
             let events_for_panic = events_for_thread.clone();
             let ready_for_panic = ready_tx.clone();
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                body::run(spec, cmd_rx, events_for_thread, ready_tx);
+                body::run(spec, cmd_rx, events_for_thread, ready_tx, tree_for_thread);
             }));
             if let Err(payload) = result {
                 // `&*payload`，不是 `&payload`：`payload: Box<dyn Any + Send>`，
@@ -115,7 +123,9 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
         .expect("起 session actor 线程失败（系统资源耗尽一类），这个仓库其它地方对 std::thread::spawn 失败的既有处理方式也是让它 panic，不是这个 issue 要新定义的错误分类");
 
     match ready_rx.recv() {
-        Ok(Ok(cancel)) => Ok(SpawnedActor { handle: SessionHandle { tx: cmd_tx, cancel, events: events_tx }, join, died }),
+        Ok(Ok(cancel)) => {
+            Ok(SpawnedActor { handle: SessionHandle { tx: cmd_tx, cancel, events: events_tx, tree }, join, died })
+        }
         Ok(Err(reason)) => {
             let _ = join.join();
             Err(OpenError(reason))

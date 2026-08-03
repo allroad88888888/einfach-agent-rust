@@ -52,7 +52,7 @@ fn parse_optional_ge1(obj: &Map<String, Value>, key: &str) -> Result<Option<u64>
 
 /// 按 1-based `offset`（默认 1）与 `limit`（默认到文件末尾）选中行，
 /// 用 `\n` 重新连接。`offset` 超过总行数返回空字符串。
-fn select_lines(content: &str, offset: Option<u64>, limit: Option<u64>) -> String {
+pub(crate) fn select_lines(content: &str, offset: Option<u64>, limit: Option<u64>) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let total = lines.len() as u64;
 

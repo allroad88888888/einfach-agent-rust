@@ -9,7 +9,9 @@
 
 use std::sync::Arc;
 
-use agent_core::{AgentLimits, Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec};
+use agent_core::{
+    AgentLimits, Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec,
+};
 use serde_json::Value;
 
 use crate::skill::{
@@ -31,7 +33,10 @@ pub struct ToolTable {
 impl ToolTable {
     /// 013 的内置工具集：`srv:fs/read`、`srv:fs/list`，服务端本地、纯读。
     pub fn builtin() -> Self {
-        ToolTable { specs: agent_tools::builtin_specs(), registry: SkillRegistry::empty() }
+        ToolTable {
+            specs: agent_tools::builtin_specs(),
+            registry: SkillRegistry::empty(),
+        }
     }
 
     /// 027 开闸：内置只读集 + `srv:shell/exec`（020 声明、`agent-tools` 的
@@ -42,6 +47,30 @@ impl ToolTable {
     pub fn with_shell() -> Self {
         let mut specs = agent_tools::builtin_specs();
         specs.push(agent_tools::shell_spec());
+        ToolTable {
+            specs,
+            registry: SkillRegistry::empty(),
+        }
+    }
+
+    /// web-agent 兼容的本地标准工具集：四个只读文件工具、受版本保护的工作区
+    /// 事务、测试/lint 命令发现与六个静态命令工具。`read_file` 直接返回事务所需
+    /// revision，因此模型不需要学习额外的内部前置工具。
+    ///
+    /// 此构造器不夹带历史 `srv:*` 别名，避免模型面对两套同义工具。浏览器交互工具
+    /// 必须由 [`ToolTable::standard`] 的远程 router 注册，不能伪装为本地 executor。
+    pub fn standard_local() -> Self {
+        ToolTable {
+            specs: standard_local_specs(),
+            registry: SkillRegistry::empty(),
+        }
+    }
+
+    /// 完整的 web-agent 标准工具集：本地工具外加三个由 Web 宿主执行并回传的交互
+    /// 工具。它不注册计划、子 agent 或 MCP 工具。
+    pub fn standard() -> Self {
+        let mut specs = standard_local_specs();
+        specs.extend(agent_tools::interaction_specs());
         ToolTable { specs, registry: SkillRegistry::empty() }
     }
 
@@ -119,6 +148,9 @@ impl ToolTable {
 }
 
 fn location_of(tool: &str) -> Location {
+    if matches!(tool, "ask_user_question" | "browser_action" | "save_file") {
+        return Location::Web;
+    }
     match tool.split_once(':').map(|(prefix, _)| prefix) {
         Some("web") => Location::Web,
         Some("desk") => Location::Desktop,
@@ -130,7 +162,15 @@ fn location_of(tool: &str) -> Location {
 
 fn reversibility_of(tool: &str) -> Reversibility {
     match tool {
-        "srv:fs/read" | "srv:fs/list" => Reversibility::Pure,
+        "srv:fs/read"
+        | "srv:fs/list"
+        | "read_file"
+        | "list_files"
+        | "search_files"
+        | "rg_search"
+        | "find_test_lint_commands"
+        | "git_diff_review"
+        | "ask_user_question" => Reversibility::Pure,
         // spawn 的补偿动作是 `despawn_child`（028 已经实现，019 三约束逐条走完）
         // ——**有明确且可靠的补偿动作**正是 `Reversible` 的定义。
         //
@@ -148,6 +188,14 @@ fn reversibility_of(tool: &str) -> Reversibility {
         SKILL_ACTIVATE | SKILL_DEACTIVATE => Reversibility::Reversible,
         _ => Reversibility::Irreversible,
     }
+}
+
+fn standard_local_specs() -> Vec<ToolSpec> {
+    let mut specs = agent_tools::standard_readonly_file_specs();
+    specs.extend(agent_tools::standard_workspace_file_specs());
+    specs.push(agent_tools::find_test_lint_commands_spec());
+    specs.extend(agent_tools::command_specs());
+    specs
 }
 
 #[cfg(test)]
@@ -201,7 +249,15 @@ mod tests {
     fn with_spawn_appends_the_spawn_tool_and_it_is_reversible() {
         let table = ToolTable::with_shell().with_spawn(AgentLimits::default());
         let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
-        assert_eq!(names, vec!["srv:fs/read", "srv:fs/list", "srv:shell/exec", "srv:agent/spawn"]);
+        assert_eq!(
+            names,
+            vec![
+                "srv:fs/read",
+                "srv:fs/list",
+                "srv:shell/exec",
+                "srv:agent/spawn"
+            ]
+        );
 
         let snap = table.snapshot(SPAWN_TOOL, Arc::new(Value::Null));
         assert_eq!(snap.location, Location::Server);
@@ -212,7 +268,11 @@ mod tests {
     #[test]
     fn a_table_without_spawn_does_not_declare_it() {
         assert!(!ToolTable::builtin().declares(SPAWN_TOOL));
-        assert!(ToolTable::builtin().with_spawn(AgentLimits::default()).declares(SPAWN_TOOL));
+        assert!(
+            ToolTable::builtin()
+                .with_spawn(AgentLimits::default())
+                .declares(SPAWN_TOOL)
+        );
     }
 
     /// 上限进描述是给模型看的（029：「描述写给模型看」），换一组数就该换一份
@@ -220,9 +280,16 @@ mod tests {
     #[test]
     fn the_declared_limits_follow_the_limits_that_are_actually_enforced() {
         let default = ToolTable::builtin().with_spawn(AgentLimits::default());
-        let tighter = ToolTable::builtin().with_spawn(AgentLimits { max_depth: 1, max_children: 2 });
+        let tighter = ToolTable::builtin().with_spawn(AgentLimits {
+            max_depth: 1,
+            max_children: 2,
+        });
         let text = |t: &ToolTable| t.specs().last().unwrap().description.to_string();
         assert!(text(&default).contains('8'));
         assert!(text(&tighter).contains('2') && !text(&tighter).contains('8'));
     }
 }
+
+#[cfg(test)]
+#[path = "standard_local_tests.rs"]
+mod standard_local_tests;

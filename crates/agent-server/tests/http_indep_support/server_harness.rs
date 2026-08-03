@@ -111,7 +111,7 @@ impl TestServer {
     }
 
     pub fn post_tool_result(&self, id: &str) -> Response {
-        let body = serde_json::json!({ "tool_call_id": "x", "epoch": 0, "result": "x" }).to_string();
+        let body = serde_json::json!({ "agent": "root", "tool_call_id": "x", "result": { "content": "x" } }).to_string();
         post_json(self.addr, &format!("/sessions/{id}/tool_result"), &body)
     }
 

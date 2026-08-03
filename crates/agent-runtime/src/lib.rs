@@ -48,8 +48,10 @@
 
 mod dispatch;
 mod guard;
+mod ctx_remote_tools;
 mod io_thread;
 mod provider_call;
+mod remote_tool;
 mod runner;
 mod skill;
 mod spawn_tool;
@@ -67,6 +69,7 @@ pub use ctx::RunnerCtx;
 pub use event::{AgentEvent, RunnerEvent};
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover};
+pub use remote_tool::{RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool};
 pub use runner::run_turn;
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_tool::{SPAWN_TOOL, spawn_spec};

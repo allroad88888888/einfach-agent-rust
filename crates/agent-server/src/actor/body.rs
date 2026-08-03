@@ -2,13 +2,13 @@
 //! 这个线程内部诞生，见 `super` 模块文档），握手告诉 `open()` 「起好了还是
 //! 起失败了」，然后进入命令循环直到 `Shutdown` 或者队列的发送端被丢弃。
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use agent_core::{AgentId, Session, SessionConfig};
+use agent_core::{AgentId, AgentTree, Session, SessionConfig};
 use agent_runtime::{AgentEvent, RunnerCtx};
 use agent_tools::ToolExecutor;
 
@@ -30,7 +30,13 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
     let _ = events_tx.send(Frame { agent: AgentId::root(), event });
 }
 
-pub(super) fn run(spec: OpenSpec, rx: mpsc::Receiver<Command>, events_tx: broadcast::Sender<Frame>, ready_tx: mpsc::Sender<ReadyMsg>) {
+pub(super) fn run(
+    spec: OpenSpec,
+    rx: mpsc::Receiver<Command>,
+    events_tx: broadcast::Sender<Frame>,
+    ready_tx: mpsc::Sender<ReadyMsg>,
+    tree: Arc<Mutex<AgentTree>>,
+) {
     let agent = AgentId::root();
     let history_cap = spec.history_cap.unwrap_or(agent_core::DEFAULT_HISTORY_CAP);
 
@@ -73,6 +79,13 @@ pub(super) fn run(spec: OpenSpec, rx: mpsc::Receiver<Command>, events_tx: broadc
             return;
         }
     };
+    // 048：`GET /sessions/:id/agents` 读的共享单元格，在这里第一次写真实值——
+    // `session` 这一刻已经落定（新建或者恢复完毕，含恢复出来的既有子 agent 树），
+    // 这一行必须排在 `ready_tx.send(Ok(cancel))`（下面）之前：`open()` 只有在
+    // 那次握手成功之后才会把 `SessionHandle` 交给调用方，调用方能看到这个
+    // 单元格的那一刻，它已经是真实的初始快照，不会是 `actor::spawn` 造的空
+    // 占位（`crate::actor` 模块文档）。
+    *tree.lock().unwrap() = session.agent_tree();
 
     // 快照里认不出的键不是硬失败（`recover` 忽略了它们，继续往下走），但也
     // 不能悄悄吞掉——`agent-cli` 的 main.rs 对同一个回调是 `eprintln!`，这里
@@ -105,6 +118,8 @@ pub(super) fn run(spec: OpenSpec, rx: mpsc::Receiver<Command>, events_tx: broadc
     };
 
     let events_for_callback = events_tx.clone();
+    let events_for_tree = events_tx.clone();
+    let tree_for_callback = Arc::clone(&tree);
     let mut ctx = RunnerCtx::new(
         Arc::clone(&spec.provider),
         Arc::clone(&spec.client),
@@ -122,6 +137,18 @@ pub(super) fn run(spec: OpenSpec, rx: mpsc::Receiver<Command>, events_tx: broadc
     )
     .with_agent_events(Box::new(move |ev: AgentEvent| {
         let _ = events_for_callback.send(Frame { agent: ev.agent, event: ev.event.into() });
+    }))
+    // 048：树快照变化——独立回调，不走上面那条 `AgentEvent` 通道（048 issue
+    // 范围条款 1：树是整棵状态的投影，不是 `RunnerEvent` 的第十个变体）。每次
+    // `run_turn` 判定树变了都会调用它一次：先重写共享单元格（`GET .../agents`
+    // 的数据源），再广播一帧标 root 的 `SessionEvent::AgentTree`（`emit_root`——
+    // 跟 `Undo`/`SessionDied`/`Gap` 同一条「会话级事实标 root」的判据，
+    // `crate::event::frame` 模块文档）。写单元格排在广播前面：真的有并发的
+    // `GET` 请求跟这次广播打个照面，它读到的至少是这次广播里同一份新树，不会
+    // 是旧值（两者其实没有严格的先后依赖，只是这个顺序更符合直觉）。
+    .with_tree_events(Box::new(move |snapshot: AgentTree| {
+        *tree_for_callback.lock().unwrap() = snapshot.clone();
+        emit_root(&events_for_tree, SessionEvent::AgentTree(snapshot));
     }));
     if let Some(timeout) = spec.provider_timeout {
         ctx = ctx.with_provider_timeout(timeout);
@@ -148,9 +175,10 @@ pub(super) fn run(spec: OpenSpec, rx: mpsc::Receiver<Command>, events_tx: broadc
             Command::Input(text) => commands::handle_input(&mut session, &mut ctx, &events_tx, &text),
             Command::Undo { granularity, force } => commands::handle_undo(&mut session, &mut ctx, &events_tx, granularity, force),
             Command::Redo => commands::handle_redo(&mut session, &mut ctx, &events_tx),
-            // 防御性第二道闸：正常路径下这个变体不会出现在队列里，
-            // 见 `crate::command` 模块文档。
-            Command::Cancel => ctx.cancel_flag().store(true, std::sync::atomic::Ordering::Relaxed),
+            Command::Cancel => commands::handle_cancel(&mut session, &mut ctx, &events_tx),
+            Command::RemoteToolResult { agent, call_id, content, is_error } => {
+                commands::handle_remote_tool_result(&mut session, &mut ctx, &events_tx, agent, call_id, content, is_error)
+            }
             Command::Shutdown => break,
         }
     }

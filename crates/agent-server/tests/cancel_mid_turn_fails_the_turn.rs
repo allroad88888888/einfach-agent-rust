@@ -27,7 +27,7 @@ async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_
     let cancel_handle = handle.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
-        cancel_handle.cancel();
+        let _ = cancel_handle.cancel();
     });
 
     let start = Instant::now();

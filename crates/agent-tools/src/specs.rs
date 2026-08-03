@@ -52,7 +52,8 @@ fn fs_read_spec() -> ToolSpec {
                     "description": "最多返回的行数，可选，缺省读到文件末尾。"
                 }
             },
-            "required": ["path"]
+            "required": ["path"],
+            "additionalProperties": false
         })),
     }
 }
@@ -88,7 +89,8 @@ pub(crate) fn shell_spec() -> ToolSpec {
                     "description": "超时秒数，可选，缺省 30，范围 1~300。"
                 }
             },
-            "required": ["cmd"]
+            "required": ["cmd"],
+            "additionalProperties": false
         })),
     }
 }
@@ -108,7 +110,8 @@ fn fs_list_spec() -> ToolSpec {
                     "type": "string",
                     "description": "相对 root 的目录路径，可选，缺省为 \".\"。"
                 }
-            }
+            },
+            "additionalProperties": false
         })),
     }
 }

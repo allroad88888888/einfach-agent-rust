@@ -110,9 +110,11 @@ impl SseHub {
             grace_task: Mutex::new(None),
         });
 
+        // 订阅必须在 spawn 前同步完成。否则首个 HTTP 请求紧跟 SSE 握手时，
+        // actor 可能在 drain 任务第一次被调度前发布事件，从而永久漏掉首帧。
+        let mut sub = handle.subscribe();
         let drain_hub = Arc::clone(&hub);
         tokio::spawn(async move {
-            let mut sub = handle.subscribe();
             // 034：`sub.recv()` 给的是 `Frame`（agent + event 信封），不再是裸
             // 的 `SessionEvent`——`ring.push` 直接收它，配一个 SSE 帧 id。
             while let Some(envelope) = sub.recv().await {

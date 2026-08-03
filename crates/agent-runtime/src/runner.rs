@@ -45,7 +45,7 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use agent_core::{AgentId, Event, Session, TurnStatus};
+use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
 
 use crate::ctx::RunnerCtx;
 use crate::dispatch::{self, Dispatched};
@@ -76,6 +76,15 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
 pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
     ctx.cancel.store(false, Ordering::Relaxed);
+    let root = session.agent().clone();
+    resume(session, ctx, Event::UserInput { agent: root, text: Arc::from(user_input) })
+}
+
+/// 从一项已发生的事件继续驱动会话。
+///
+/// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
+/// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
+pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event) -> TurnStatus {
 
     // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
     // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
@@ -86,8 +95,14 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
     let mut subtree = Subtree::default();
     let root = session.agent().clone();
     let mut cancel_seen = false;
+    // 048：树快照变化检测的起点——`ctx.tree_events_enabled()` 是 `false`（CLI）
+    // 时留 `None`，一次 `agent_tree()` 都不多算；是 `true`（server）时用**这一轮
+    // 开始之前**的树种它，而不是留 `None`：这样只有这一轮里真正改变了树的 step
+    // 才会跟它比出差异、触发一次回调，`run_turn` 被反复调用（一轮接一轮）也不会
+    // 在每轮开头都白白重发一次跟上一轮收尾时完全相同的树（见 `maybe_emit_tree`）。
+    let mut last_tree: Option<AgentTree> = ctx.tree_events_enabled().then(|| session.agent_tree());
 
-    pending.push_back(Event::UserInput { agent: root.clone(), text: Arc::from(user_input) });
+    pending.push_back(initial);
 
     loop {
         // A. 排空待办。FIFO：一批 effect 产出的事件排在当前这批后面，
@@ -96,6 +111,7 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
             let source = event.agent().clone();
             let effects = session.step(event);
             persist::sync(ctx, session);
+            maybe_emit_tree(ctx, session, &mut last_tree);
             for effect in effects {
                 match dispatch::run_effect(session, ctx, &mut subtree, &tx, &source, effect) {
                     Dispatched::Nothing => {}
@@ -132,6 +148,28 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
         // D. 等一条 IO 消息。
         receive(ctx, &rx, &mut calls, &mut pending);
     }
+}
+
+/// 048：一次 `session.step` + persist 之后重算 `agent_tree()`，跟 `last_tree`
+/// 比，**变了才经 `ctx.emit_tree` 发出去**并更新 `last_tree`——`SessionEvent
+/// 没变的 step 不该重复推同一棵树`（048 验收原文）落在这一个函数上，调用点
+/// （`run_turn` 主循环）不需要自己判断。
+///
+/// `!ctx.tree_events_enabled()`（`with_tree_events` 没设，CLI 的默认状态）直接
+/// 返回——`agent_tree()` 遍历 `live_agents()` 逐个组 `AgentNode`，没人要看的话
+/// 这次计算就是纯粹的浪费，`RunnerCtx::with_tree_events` 文档「CLI 不设 → 无
+/// 开销」的承诺就靠这一行判断兑现，不是靠 `on_tree_change` 内部的 `None` 分支
+/// （那时已经算完了）。
+fn maybe_emit_tree(ctx: &mut RunnerCtx, session: &Session, last_tree: &mut Option<AgentTree>) {
+    if !ctx.tree_events_enabled() {
+        return;
+    }
+    let tree = session.agent_tree();
+    if last_tree.as_ref() == Some(&tree) {
+        return;
+    }
+    *last_tree = Some(tree.clone());
+    ctx.emit_tree(tree);
 }
 
 /// 每个在飞调用各有各的截止线（它们不是同时起飞的）。到点的从表里划掉——

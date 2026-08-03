@@ -1,6 +1,7 @@
 //! 路由表——issue 031 的六个端点 + 会话创建/查询，一比一对应
-//! `docs/issues/031-http-sse.md` 的「做什么」小节。每个端点的处理函数在自己的
-//! 文件里，这里只做装配。
+//! `docs/issues/031-http-sse.md` 的「做什么」小节；`GET /sessions/:id/agents`
+//! 是 048 补的第七个（整棵活 agent 树此刻的快照，见 `sessions::agents`）。
+//! 每个端点的处理函数在自己的文件里，这里只做装配。
 
 mod cancel;
 mod input;
@@ -18,6 +19,7 @@ pub(in crate::http) fn router(state: AppState) -> Router {
     Router::new()
         .route("/sessions", post(sessions::create))
         .route("/sessions/{id}", get(sessions::status))
+        .route("/sessions/{id}/agents", get(sessions::agents))
         .route("/sessions/{id}/events", get(sse::events))
         .route("/sessions/{id}/input", post(input::input))
         .route("/sessions/{id}/tool_result", post(tool_result::tool_result))

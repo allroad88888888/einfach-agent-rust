@@ -8,8 +8,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use agent_core::{
-    Adjustment, AgentId, DriftVerdict, GuardReport, Location, Notice, ReconcileVerdict,
-    Reversibility, Segment, TokenUsage, ToolCallId, ToolCallRequest, TurnStatus, WindowVerdict,
+    Adjustment, AgentActivity, AgentId, AgentNode, AgentTree, DriftVerdict, GuardReport, Location,
+    Notice, ReconcileVerdict, Reversibility, Segment, TokenUsage, ToolCallId, ToolCallRequest,
+    TurnStatus, WindowVerdict,
 };
 
 use crate::{Frame, SessionEvent, UndoOutcome};
@@ -22,7 +23,7 @@ use crate::{Frame, SessionEvent, UndoOutcome};
 /// match 没有 `_` 分支，编译器直接拒绝编译，直到给出对应的样本（issue 032 原话
 /// 「编译器保证全覆盖」）。少铸一个骨架只会让那个变体缺样本，不会让代码编译
 /// 不过——`cast_sample` 的穷举挡的是「变体存在但没人处理」，不是「样本数组
-/// 没写全」，这一条留给 review 与验收表核对（当前 14 个变体、14 个骨架）。
+/// 没写全」，这一条留给 review 与验收表核对（当前 15 个变体、15 个骨架）。
 pub fn sample_session_events() -> Vec<SessionEvent> {
     let skeletons = [
         SessionEvent::TextDelta(Arc::from("")),
@@ -60,6 +61,7 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
         SessionEvent::Lagged { skipped: 0 },
         SessionEvent::SessionDied { reason: String::new() },
         SessionEvent::Gap { skipped: 0 },
+        SessionEvent::AgentTree(AgentTree { nodes: Vec::new() }),
     ];
 
     skeletons.into_iter().map(cast_sample).collect()
@@ -125,6 +127,28 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
             SessionEvent::SessionDied { reason: "actor panicked: boom".to_string() }
         }
         SessionEvent::Gap { .. } => SessionEvent::Gap { skipped: 3 },
+        // 048：样本挑「root + 一个子 agent」而不是只有 root——`AgentNode` 的
+        // `parent`/`depth` 两个字段在单节点样本上永远是 `None`/`0`，选一个
+        // 带子 agent 的样本才能让 TS 的 `satisfies` 检查真的照到「非 root
+        // 节点长什么样」这个形状，跟上面 `Undo` 选 `Blocked` 同一条理由。
+        SessionEvent::AgentTree(_) => SessionEvent::AgentTree(AgentTree {
+            nodes: vec![
+                AgentNode {
+                    id: AgentId::root(),
+                    parent: None,
+                    depth: 0,
+                    task: Some("帮我查一下今天的天气".to_string()),
+                    activity: AgentActivity::Working { tools: vec!["srv:agent/spawn".to_string()] },
+                },
+                AgentNode {
+                    id: AgentId::root().child(1),
+                    parent: Some(AgentId::root()),
+                    depth: 1,
+                    task: Some("查天气".to_string()),
+                    activity: AgentActivity::Done { truncated: false },
+                },
+            ],
+        }),
     }
 }
 

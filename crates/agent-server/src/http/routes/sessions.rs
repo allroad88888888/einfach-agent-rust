@@ -9,6 +9,8 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use agent_core::AgentTree;
+
 use crate::http::error::ApiError;
 use crate::http::json::ApiJson;
 use crate::http::state::AppState;
@@ -58,4 +60,20 @@ pub(in crate::http) async fn status(State(state): State<AppState>, Path(id): Pat
         Some(SessionQuery::Alive(_)) => Ok(Json(SessionStatusResponse::Alive)),
         Some(SessionQuery::Dead { reason }) => Ok(Json(SessionStatusResponse::Dead { reason })),
     }
+}
+
+/// `GET /sessions/:id/agents`（048）：整棵活 agent 树此刻的快照——
+/// [`crate::handle::SessionHandle::agent_tree`] 直接读共享单元格,**不走
+/// actor 的 `mpsc` 命令队列**（048 issue 范围条款 4：一轮跑到一半也能立刻
+/// 拿到当下的活树,不用排在 in-flight 的 `Command::Input` 后面）。开页/
+/// reconnect 用它做种,之后靠 `GET /sessions/:id/events` 的 `agent_tree`
+/// 帧增量更新（同一份 `Session::agent_tree()`,推和拉两条路给出同一棵树）。
+///
+/// 死会话报 410（跟 `input`/`undo`/`redo`/`cancel` 同一条判据,`state.
+/// session_handle` 这一个函数——见该方法文档），不像 [`status`] 那样把
+/// `dead` 当成 200 的一种正常结果：那是「问问这个 id 现在死没死」,这里
+/// 问的是「给我看现在的活树」,树只在活着的 actor 手上才有意义。
+pub(in crate::http) async fn agents(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<AgentTree>, ApiError> {
+    let handle = state.session_handle(&SessionId::from(id))?;
+    Ok(Json(handle.agent_tree()))
 }

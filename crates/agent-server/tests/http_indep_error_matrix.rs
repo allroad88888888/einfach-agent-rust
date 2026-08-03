@@ -1,6 +1,6 @@
 //! 031 独立测试 agent：错误码矩阵（issue 031 验收「不存在的 id → 404
 //! `session_not_found`；dead 会话 → 410 `session_dead`；坏 JSON body → 400；
-//! `tool_result` → 501 恒定（哪怕 id 不存在）；`undo` step+force → 400」）。
+//! `tool_result` → 202/404（与其它会话命令一致）；`undo` step+force → 400」）。
 //!
 //! # 410（dead 会话）：如实记录未能独立复现
 //!
@@ -125,21 +125,20 @@ async fn undo_step_granularity_with_force_is_400() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn tool_result_is_a_constant_501_even_for_a_nonexistent_session() {
+async fn tool_result_uses_the_same_session_lookup_as_other_commands() {
     let server = server().await;
     let id = server.create_session();
 
     let existing = server.post_tool_result(&id);
-    assert_eq!(existing.status, 501, "存在的会话上也该是 501（未启用，不是找不到），body={}", existing.body_str());
-    assert_error_shape(&existing.json(), "not_implemented");
+    assert_eq!(existing.status, 202, "活 session 的回传应成功入 actor 队列，body={}", existing.body_str());
 
     let missing = post_json(
         server.addr,
         "/sessions/does-not-exist/tool_result",
-        "{\"tool_call_id\":\"x\",\"epoch\":0,\"result\":\"x\"}",
+        "{\"agent\":\"root\",\"tool_call_id\":\"x\",\"result\":{\"content\":\"x\"}}",
     );
-    assert_eq!(missing.status, 501, "不存在的会话上也该是 501，不是 404——tool_result 压根不查 session，body={}", missing.body_str());
-    assert_error_shape(&missing.json(), "not_implemented");
+    assert_eq!(missing.status, 404, "不存在的 session 不应接受回传，body={}", missing.body_str());
+    assert_error_shape(&missing.json(), "session_not_found");
 }
 
 /// 附带发现（不在原 8 条覆盖点里，顺手钉住）：`session_path` 指向一个已存在

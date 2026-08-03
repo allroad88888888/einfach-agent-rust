@@ -39,7 +39,10 @@ fn is_known_pure(tool: &str) -> bool {
 }
 
 fn call(tool: &'static str) -> ToolCallMeta {
-    ToolCallMeta { tool, irreversible: !is_known_pure(tool) }
+    ToolCallMeta {
+        tool,
+        irreversible: !is_known_pure(tool),
+    }
 }
 
 /// undo 的屏障谓词：`Reversibility::Irreversible` ⇒ 挡。
@@ -59,7 +62,11 @@ type Log = History<String, i64, ToolCallMeta>;
 /// 不经过任何 `Store`——`current` 就是一个普通的本地变量，模拟「这个工具调用
 /// 之后世界变成了什么样」。
 fn write(history: &mut Log, current: &mut i64, next: i64, meta: ToolCallMeta) -> u64 {
-    let change = Change { key: "workspace".to_string(), prev: *current, next };
+    let change = Change {
+        key: "workspace".to_string(),
+        prev: *current,
+        next,
+    };
     *current = next;
     history.append(meta, vec![change]).unwrap()
 }
@@ -86,14 +93,20 @@ fn undo_stops_at_the_door_of_a_shell_exec_entry() {
 
     let before_cursor = history.cursor();
     match history.undo_one(is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert!(applied.is_empty(), "门口即屏障，没有任何条目该被应用");
             assert_eq!(bs, barrier_seq);
         }
         other => panic!("expected Blocked，got {other:?}"),
     }
     assert_eq!(history.cursor(), before_cursor, "撞门口屏障，游标不动");
-    assert_eq!(current, 2, "shell/exec 已经跑过的效果原样保留——不是静默回滚");
+    assert_eq!(
+        current, 2,
+        "shell/exec 已经跑过的效果原样保留——不是静默回滚"
+    );
 }
 
 /// `undo_turn`（UI 默认粒度）中途撞上 `shell/exec`：屏障之后的纯读被弹出，
@@ -109,13 +122,20 @@ fn undo_turn_stops_one_slot_past_a_mid_turn_shell_exec() {
     write(&mut history, &mut current, 4, call("srv:fs/read")); // e3：纯读
 
     let applied = match history.undo_turn(same_turn, is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert_eq!(bs, barrier_seq);
             applied
         }
         other => panic!("expected Blocked，got {other:?}"),
     };
-    assert_eq!(applied.len(), 2, "屏障之后的 e3、e2 被弹出，屏障本身（e1）不弹");
+    assert_eq!(
+        applied.len(),
+        2,
+        "屏障之后的 e3、e2 被弹出，屏障本身（e1）不弹"
+    );
     rollback(&mut current, &applied);
     assert_eq!(current, 2, "停在 shell/exec 生效之后的状态，不是它生效之前");
 }

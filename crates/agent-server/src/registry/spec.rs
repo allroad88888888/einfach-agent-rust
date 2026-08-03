@@ -46,14 +46,21 @@ pub struct OpenSpec {
     pub provider_timeout: Option<Duration>,
 }
 
-/// 工具表的三档，跟 `agent_runtime::ToolTable::builtin`/`with_shell`/
-/// `with_spawn` 一一对应——`OpenSpec` 不直接收一个建好的 `ToolTable`：那个类型
+/// 工具表的五档，跟 `agent_runtime::ToolTable::builtin`/`standard_local`/`standard`/
+/// `with_shell`/`with_spawn` 一一对应——`OpenSpec` 不直接收一个建好的 `ToolTable`：那个类型
 /// 不是 `Clone`，而 `spawn` 失败重试、未来配置热更新一类场景要求这份配置本身
 /// 可以廉价复制。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ToolTableSpec {
     /// 013 的内置只读集：`srv:fs/read`、`srv:fs/list`。
     Builtin,
+    /// web-agent 兼容的本地标准工具：只读文件、受版本保护的可撤回文本事务、
+    /// 测试/lint 发现与静态命令；不包含远端交互、计划、子 agent 或 MCP。
+    StandardLocal,
+    /// web-agent 标准工具集：本地标准工具外加 `ask_user_question`、
+    /// `browser_action` 与 `save_file`。这三项只经 Web 回传通道执行，不注册计划、
+    /// 子 agent 或 MCP。
+    Standard,
     /// 内置只读集 + `srv:shell/exec`（020/027 开闸）。
     WithShell,
     /// 034 开闸：内置只读集 + `srv:shell/exec` + `srv:agent/spawn`
@@ -73,8 +80,12 @@ impl ToolTableSpec {
     pub(crate) fn build(self) -> agent_runtime::ToolTable {
         match self {
             ToolTableSpec::Builtin => agent_runtime::ToolTable::builtin(),
+            ToolTableSpec::StandardLocal => agent_runtime::ToolTable::standard_local(),
+            ToolTableSpec::Standard => agent_runtime::ToolTable::standard(),
             ToolTableSpec::WithShell => agent_runtime::ToolTable::with_shell(),
-            ToolTableSpec::Full { spawn_limits } => agent_runtime::ToolTable::with_shell().with_spawn(spawn_limits),
+            ToolTableSpec::Full { spawn_limits } => {
+                agent_runtime::ToolTable::with_shell().with_spawn(spawn_limits)
+            }
         }
     }
 
@@ -85,7 +96,9 @@ impl ToolTableSpec {
     pub(crate) fn spawn_limits(self) -> Option<AgentLimits> {
         match self {
             ToolTableSpec::Full { spawn_limits } => Some(spawn_limits),
-            ToolTableSpec::Builtin | ToolTableSpec::WithShell => None,
+            ToolTableSpec::Builtin | ToolTableSpec::StandardLocal | ToolTableSpec::Standard | ToolTableSpec::WithShell => {
+                None
+            }
         }
     }
 }

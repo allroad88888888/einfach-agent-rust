@@ -38,7 +38,7 @@ impl Drop for SubscriberGuard {
             // 宽限期内可能又连回来了（`Self::attach` 已经 abort 过这个任务的话
             // 根本不会跑到这里；这里读到的是真的一直没人回来的情况）。
             if hub.subscribers.load(Ordering::SeqCst) == 0 {
-                hub.handle.cancel();
+                let _ = hub.handle.cancel();
             }
         });
         *self.hub.grace_task.lock().unwrap() = Some(task);
@@ -64,7 +64,8 @@ mod tests {
     fn fake_hub(grace: Duration) -> Arc<SseHub> {
         let (tx, _rx) = mpsc::channel::<crate::Command>();
         let (events, _keep_alive) = broadcast::channel(4);
-        let handle = crate::SessionHandle { tx, cancel: Arc::new(AtomicBool::new(false)), events };
+        let tree = Arc::new(Mutex::new(agent_core::AgentTree { nodes: Vec::new() }));
+        let handle = crate::SessionHandle { tx, cancel: Arc::new(AtomicBool::new(false)), events, tree };
         let hubs = Arc::new(Mutex::new(HashMap::new()));
         SseHub::spawn(handle, 8, grace, SessionId::from("guard-test"), hubs)
     }

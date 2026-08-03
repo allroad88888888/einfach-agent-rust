@@ -42,12 +42,6 @@ impl ApiError {
         ApiError { status: StatusCode::BAD_REQUEST, code: "bad_request", message: message.into() }
     }
 
-    /// `POST /sessions/:id/tool_result`：前端工具是 033 之后的事，M3 先诚实地
-    /// 501，不是 404——issue 原文点名要求这两者不能混（客户端要能分清「这条路
-    /// 不存在」和「这条路存在、这一版没做」）。
-    pub fn not_implemented(message: impl Into<String>) -> Self {
-        ApiError { status: StatusCode::NOT_IMPLEMENTED, code: "not_implemented", message: message.into() }
-    }
 }
 
 impl IntoResponse for ApiError {

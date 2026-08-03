@@ -13,7 +13,7 @@
 //! 原话「`SessionEvent` 的形状别照抄 `RunnerEvent` 的借用结构」在这里落实成
 //! 一个独立类型而不是拿 `RunnerEvent` 改个 derive 了事。
 //!
-//! # 三个 `RunnerEvent` 之外的变体
+//! # 四个 `RunnerEvent` 之外的变体
 //!
 //! - [`SessionEvent::Undo`] / [`SessionEvent::Redo`]：`/undo` `/redo` `/undo!`
 //!   命令的结果（[`UndoOutcome`]，见该类型自己的模块文档——`agent_core::
@@ -26,6 +26,12 @@
 //! - [`SessionEvent::Gap`]：031 的 HTTP 层重连补发逻辑合成的一帧，见该变体文档
 //!   ——跟 [`SessionEvent::Lagged`] 哲学同源但触发层不同（那条是 030 的
 //!   `tokio::broadcast` 内部跟丢，这条是 031 的 SSE 环形缓冲被挤空）。
+//! - [`SessionEvent::AgentTree`]：048。整棵活 agent 树此刻的快照
+//!   （`agent_core::Session::agent_tree()` 原样翻译，snapshot 不是 diff——
+//!   docs/OBSERVABILITY.md §「snapshot 不是 reconstruct」），由
+//!   `agent_runtime::RunnerCtx::with_tree_events` 的独立回调发出（`crate::actor::body`
+//!   模块文档），**不经过 `From<RunnerEvent>`**——树快照不是 `RunnerEvent` 的
+//!   第十个变体，是独立于它的一条通道（048 issue 范围条款 1）。
 //!
 //! # 协议决定（032 生成 TS 类型的依据，写进 031 实做记录）
 //!
@@ -59,7 +65,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use agent_core::{Adjustment, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest};
+use agent_core::{Adjustment, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest};
 use agent_runtime::RunnerEvent;
 
 /// 一个 session 广播的一件事。`Clone + Send + 'static`（`broadcast` 的硬要求）
@@ -115,6 +121,13 @@ pub enum SessionEvent {
     /// 变体是因为触发的层和"瞎过"的原因不同：`Lagged` 是 `tokio::broadcast` 内部
     /// 判定的，`Gap` 是重连时按帧 id 算出来的。
     Gap { skipped: u64 },
+    /// 048：整棵活 agent 树此刻的快照——`agent_core::Session::agent_tree()`
+    /// 原样翻译（推快照不推 diff，本文件模块文档「四个 `RunnerEvent` 之外的
+    /// 变体」）。由 [`agent_runtime::RunnerCtx::with_tree_events`] 的独立回调
+    /// 发出（`crate::actor::body`），标 [`agent_core::AgentId::root`]（`crate::
+    /// event::frame` 模块文档同一条判据：树是会话级事实，不属于某一个具体
+    /// agent 的 `step`）。**不经过 [`From<RunnerEvent>`]**——见该 impl 文档。
+    AgentTree(AgentTree),
 }
 
 impl From<RunnerEvent> for SessionEvent {

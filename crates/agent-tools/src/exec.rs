@@ -12,7 +12,7 @@
 //! root，但替换之后的结果一样要过这个祖先检查，一样会被判定跑出了 root。
 
 use crate::ToolError;
-use crate::{fs_list, fs_read, shell};
+use crate::{fs_list, fs_read, fs_rg_search, fs_search_files, shell};
 use serde_json::Value;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -51,6 +51,9 @@ pub(crate) fn execute(root: &Path, tool: &str, input: &Value) -> Result<String, 
     match tool {
         "srv:fs/read" => fs_read::read(root, input),
         "srv:fs/list" => fs_list::list(root, input),
+        "srv:fs/search_files" => fs_search_files::search(root, input),
+        "srv:fs/rg_search" => fs_rg_search::search(root, input),
+        "srv:workspace/find_test_lint_commands" => crate::command_discovery::discover(root, input),
         "srv:shell/exec" => shell::execute(root, input),
         other => Err(tool_err("unknown_tool", format!("未知工具：{other}"))),
     }

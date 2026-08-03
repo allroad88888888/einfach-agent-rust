@@ -16,7 +16,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use agent_core::cache::TurnHit;
-use agent_core::{AgentId, SessionConfig, SystemChunk};
+use agent_core::{AgentId, AgentTree, Session, SessionConfig, SystemChunk};
 use agent_providers::Provider;
 use agent_tools::ToolExecutor;
 use agent_transport::Client;
@@ -24,10 +24,8 @@ use agent_transport::Client;
 use crate::event::{AgentEvent, RunnerEvent};
 use crate::persist::SessionBackend;
 use crate::tool_table::ToolTable;
-
 /// 单次 `CallProvider` 允许占用的总时长，到点注入 `Event::Timeout`（012）。
 pub const DEFAULT_PROVIDER_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// 快照节奏默认值（027 决策 3）：每 10 个 turn 落一张。
 pub const DEFAULT_SNAPSHOT_EVERY: u64 = 10;
 
@@ -43,6 +41,7 @@ pub struct RunnerCtx {
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) provider_timeout: Duration,
     pub(crate) guard_history: Vec<TurnHit>,
+    pub(crate) pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools,
     /// 011 的端口，027 上岗：`persist::sync` 每条命令之后转发进它，
     /// `persist::recover` 启动时从它读回。
     pub(crate) session_store: Box<SessionBackend>,
@@ -58,6 +57,12 @@ pub struct RunnerCtx {
     /// 而不是「普通回调 + 归属回调」两个字段，是因为两个字段就有「两条都设了
     /// 谁生效」这个必须回答、答什么都不好的问题。
     on_event: Box<dyn FnMut(AgentEvent)>,
+    /// 048：树快照变化回调，**独立于 `on_event`**——树快照是整棵状态的投影，
+    /// 不是 `RunnerEvent` 的第十个变体（那样会逼 `RunnerEvent` 的穷举 `match`
+    /// 在 CLI print / io_thread / server `From` 三处连锁改，见 048 issue 范围
+    /// 条款 1）。`None` = 没设（`with_tree_events` 也没调）——CLI 就是这个默认值，
+    /// 它的 `/agents` 是按需读 `Session::agent_tree()`，不需要 pump 每步都算一遍。
+    on_tree_change: Option<Box<dyn FnMut(AgentTree)>>,
 }
 
 impl RunnerCtx {
@@ -87,11 +92,13 @@ impl RunnerCtx {
             cancel: Arc::new(AtomicBool::new(false)),
             provider_timeout: DEFAULT_PROVIDER_TIMEOUT,
             guard_history: Vec::new(),
+            pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools::default(),
             session_store,
             persisted_seq: None,
             snapshot_every: DEFAULT_SNAPSHOT_EVERY,
             last_snapshotted_turn: None,
             on_event,
+            on_tree_change: None,
         }
     }
 
@@ -110,6 +117,51 @@ impl RunnerCtx {
     pub fn with_agent_events(mut self, on_event: Box<dyn FnMut(AgentEvent)>) -> Self {
         self.on_event = on_event;
         self
+    }
+
+    /// 设一条树快照变化回调（048）。`run_turn` 每次 `session.step` + persist 之后
+    /// 重算 `Session::agent_tree()`，跟上一次算出来的比（`AgentTree: PartialEq`），
+    /// **变了才调它**——见 `crate::runner` 模块里那个调用点的文档。
+    ///
+    /// 照 [`RunnerCtx::with_agent_events`] 同款：独立字段，**替换**不是追加。
+    /// CLI 不设这一条——它的 `/agents` 是按需读 `agent_tree()`，没有必要为一条
+    /// 从没接的回调让 `run_turn` 每步多算一次树（见 [`RunnerCtx::tree_events_enabled`]）。
+    pub fn with_tree_events(mut self, on_tree_change: Box<dyn FnMut(AgentTree)>) -> Self {
+        self.on_tree_change = Some(on_tree_change);
+        self
+    }
+
+    /// 有没有设树快照回调——`run_turn` 用它决定要不要为这一步多算一次
+    /// `agent_tree()`（048：没设就完全不算，`with_tree_events` 文档「CLI 不设」
+    /// 那句话的落地，不是「算了但不发」）。
+    pub(crate) fn tree_events_enabled(&self) -> bool {
+        self.on_tree_change.is_some()
+    }
+
+    /// 树快照变了（由 `run_turn` 判断），把它发给宿主设的回调。没设就什么都
+    /// 不做——`tree_events_enabled` 已经在调用点挡过一次，这里再挡一次纯粹是
+    /// 防御性的（`Option::as_mut` 天然处理，没有 `unwrap` 需要担心的分支）。
+    pub(crate) fn emit_tree(&mut self, tree: AgentTree) {
+        if let Some(on_tree_change) = self.on_tree_change.as_mut() {
+            on_tree_change(tree);
+        }
+    }
+
+    /// pump 之外的路径也把当前树快照发出去（048 真机验收补漏）。
+    ///
+    /// `run_turn` 靠 pump 里的 change 检测 + [`RunnerCtx::emit_tree`] 发树；但
+    /// undo / redo / 取消轮自动擦除走的是宿主的命令处理（**不经 `run_turn`**），
+    /// 它们撤掉一棵子树之后同样得让活树面板 / `GET .../agents` 看到——否则
+    /// 「undo 撤了子 agent，面板不动」（真机逮到的漏投影：core 层 `agent_tree()`
+    /// 退了，SSE/GET 那一路没跟上）。宿主在这些命令之后调它一次。
+    ///
+    /// 没设 `with_tree_events`（CLI）就是 no-op，且不白算一次 `agent_tree()`
+    /// （`tree_events_enabled` 先挡）。它无条件发（不做 change 检测）——调用点
+    /// 已经知道「刚撤了一轮，树必然变了」，再比一次多余。
+    pub fn emit_tree_snapshot(&mut self, session: &Session) {
+        if self.tree_events_enabled() {
+            self.emit_tree(session.agent_tree());
+        }
     }
 
     /// 共享的取消标志：宿主的 Ctrl-C 处理器翻它。`run_turn` 内部只读它
@@ -160,6 +212,7 @@ impl RunnerCtx {
     pub(crate) fn emit(&mut self, agent: &AgentId, event: RunnerEvent) {
         (self.on_event)(AgentEvent { agent: agent.clone(), event });
     }
+
 }
 
 #[cfg(test)]

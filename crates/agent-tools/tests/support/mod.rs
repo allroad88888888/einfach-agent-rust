@@ -20,10 +20,8 @@ impl TestRoot {
     /// `tag` 只用来让临时目录名可读，不参与任何断言。
     pub fn new(tag: &str) -> Self {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "agent-tools-test-{}-{tag}-{n}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("agent-tools-test-{}-{tag}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("create test root dir");
         TestRoot(dir)
     }

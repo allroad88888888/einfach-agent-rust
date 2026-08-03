@@ -22,9 +22,20 @@ async fn create_session_with_sse(addr: std::net::SocketAddr) -> (String, http_cl
 }
 
 /// 034：SSE 帧 data 是 `Frame` 信封，不再是裸的 `SessionEvent`。
+///
+/// 048 起 undo/redo 之后、以及每轮进行中都会穿插 `SessionEvent::AgentTree` 快照帧
+/// （活树面板/`GET .../agents` 的数据源）。这个文件测的是 undo/redo/cancel 的**命令
+/// 语义**，树帧对它们是噪声——跳过它，专门断言下一条真正关心的事件。树帧本身由
+/// `http_agent_tree_get_matches_sse` / `tree_snapshot_emits_on_change` 专门测。
 fn next_typed(sse: &mut http_client::SseReader, budget: Duration) -> Frame {
-    let frame = sse.next_event(budget).expect("该收到一帧");
-    serde_json::from_str(&frame.data).unwrap_or_else(|e| panic!("{e}: {}", frame.data))
+    loop {
+        let frame = sse.next_event(budget).expect("该收到一帧");
+        let parsed: Frame = serde_json::from_str(&frame.data).unwrap_or_else(|e| panic!("{e}: {}", frame.data));
+        if matches!(parsed.event, SessionEvent::AgentTree(_)) {
+            continue;
+        }
+        return parsed;
+    }
 }
 
 async fn run_one_turn_to_completion(addr: std::net::SocketAddr, id: &str, sse: &mut http_client::SseReader) {

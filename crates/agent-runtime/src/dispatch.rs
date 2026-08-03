@@ -85,10 +85,16 @@ pub(crate) fn run_effect(
             if matches!(request.reversibility, Reversibility::Irreversible) {
                 session.mark_irreversible(call_id.clone());
             }
+            if request.location.is_remote() {
+                ctx.register_remote_tool(agent.clone(), call_id.clone(), epoch, request.clone());
+                ctx.emit(&agent, RunnerEvent::ToolExecuting { call_id, request });
+                return Dispatched::Nothing;
+            }
             Dispatched::Event(tool_exec::execute(ctx, agent, call_id, request, epoch))
         }
         Effect::CancelInFlight { epoch: _ } => {
             ctx.cancel.store(true, Ordering::Relaxed);
+            ctx.discard_remote_tools();
             Dispatched::CancelAll
         }
         // `Notice` 没有 agent 字段，也不该有（029 §事件归属：别为多 agent 输出去改
