@@ -49,6 +49,7 @@
 //! 而这时转发任务已经不会错过它了。
 
 mod guard;
+mod replay;
 mod ring;
 
 use std::collections::HashMap;
@@ -59,15 +60,13 @@ use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 
-use agent_core::AgentId;
-
 use crate::SessionHandle;
-use crate::event::{Frame, SessionEvent};
 use crate::registry::SessionId;
 
 pub(super) use guard::SubscriberGuard;
 pub(super) use ring::BufferedFrame;
-use ring::{Replay, RingState};
+use replay::frames;
+use ring::RingState;
 
 /// 每条转发任务发进 `mpsc` 通道的容量——只是给下游一点缓冲，不代表任何协议
 /// 承诺，随便挑一个不至于让快速连续的几条事件互相卡背的数字。
@@ -139,48 +138,33 @@ impl SseHub {
     pub(super) fn spawn_forwarder(self: &Arc<Self>, last_event_id: Option<u64>) -> (mpsc::Receiver<BufferedFrame>, SubscriberGuard) {
         let (tx, rx) = mpsc::channel(FORWARD_CHANNEL_CAPACITY);
 
-        // 见模块文档「补发和直播的接缝为什么不会漏一帧」：`replay` 和
-        // `live.subscribe()` 必须在同一次持锁里做。
-        let (replay, live_rx) = {
-            let ring = self.ring.lock().unwrap();
-            let live_rx = self.live.subscribe();
-            (ring.replay(last_event_id), live_rx)
-        };
+        let (frames, live_rx) = self.replay_and_subscribe(last_event_id);
 
         // 同步 attach——这一刻就是「这条连接算不算一个订阅者」的真实生效时间，
         // 不等转发任务哪天被调度到。
         let guard = SubscriberGuard::attach(Arc::clone(self));
 
         tokio::spawn(async move {
-            if send_replay(&tx, replay).await {
+            if send_frames(&tx, frames).await {
                 forward_live(live_rx, &tx).await;
             }
         });
 
         (rx, guard)
     }
-}
+    /// 在同一把 ring 锁下拍 replay 快照并订阅直播，供 SSE 和长轮询共同使用。
+    pub(super) fn replay_and_subscribe(
+        &self,
+        last_event_id: Option<u64>,
+    ) -> (Vec<BufferedFrame>, broadcast::Receiver<BufferedFrame>) {
+        let ring = self.ring.lock().unwrap();
+        let live_rx = self.live.subscribe();
+        (frames(ring.replay(last_event_id)), live_rx)
+    }
 
-/// 把 [`Replay`] 的结果灌进 `tx`。返回 `false` = 对端已经没了（客户端在补发
-/// 阶段就断了），调用方不必再继续接直播。
-///
-/// `Gap` 分支（031 独测分歧 2 的裁决）：gap 帧只代表「被冲掉、补不回来」的
-/// 那一段，不是「放弃这条连接接下来的全部补发」——发完 gap 帧之后，紧接着把
-/// `tail`（缓冲区里仍然保留的那一段）原样重放，跟 `Backlog` 分支同一套逐帧
-/// 发送逻辑，最后才续上直播。
-async fn send_replay(tx: &mpsc::Sender<BufferedFrame>, replay: Replay) -> bool {
-    match replay {
-        Replay::Live => true,
-        Replay::Backlog(frames) => send_frames(tx, frames).await,
-        Replay::Gap { skipped, gap_frame_id, tail } => {
-            // 034：gap 帧标 root——它是重连补发算出来的传输层事实，不属于树上
-            // 任何一个具体 agent（`crate::event::frame` 模块文档同一条判据）。
-            let envelope = Frame { agent: AgentId::root(), event: SessionEvent::Gap { skipped } };
-            if tx.send(BufferedFrame { id: gap_frame_id, event: envelope }).await.is_err() {
-                return false;
-            }
-            send_frames(tx, tail).await
-        }
+    /// 只读当前 ring 快照，供长轮询在 live 通知后补齐同批帧。
+    pub(super) fn replay_frames(&self, last_event_id: Option<u64>) -> Vec<BufferedFrame> {
+        frames(self.ring.lock().unwrap().replay(last_event_id))
     }
 }
 

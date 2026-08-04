@@ -10,10 +10,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import com.example.agentgateway.runtime.AgentServerProcess;
+
 /**
- * `/agent/**` 除 SSE 之外的全部转发：POST /sessions、GET /sessions/:id、
- * POST /sessions/:id/{input,tool_result,undo,redo,cancel}——031 的路由表
- * 除 GET /sessions/:id/events 之外的六条，前缀剥离后原样转给 agent-server。
+ * `/agent/**` 除浏览器 SSE 之外的全部短请求转发：状态、输入、工具结果、
+ * undo/redo 与显式 cancel。会话创建由 AgentSseController 按 chatid 幂等发起，
+ * 不再由这条通配代理替浏览器生成随机 id。
  *
  * SSE 端点单独在 {@link AgentSseController}：Spring 按路径特异度派发，
  * 具体路径的 @GetMapping("/agent/sessions/{id}/events") 比这里的
@@ -23,9 +25,11 @@ import reactor.core.publisher.Mono;
 public class AgentProxyController {
 
     private final WebClient webClient;
+    private final AgentServerProcess agentServer;
 
-    public AgentProxyController(WebClient agentWebClient) {
+    public AgentProxyController(WebClient agentWebClient, AgentServerProcess agentServer) {
         this.webClient = agentWebClient;
+        this.agentServer = agentServer;
     }
 
     @RequestMapping("/agent/**")
@@ -38,7 +42,7 @@ public class AgentProxyController {
         String uri = rawQuery == null ? upstreamPath : upstreamPath + "?" + rawQuery;
 
         return webClient.method(request.getMethod())
-                .uri(uri)
+                .uri(agentServer.resolve(uri))
                 // 全量转发，不逐个白名单复制（ARCHITECTURE.md「header 做全量
                 // 转发」）。你的鉴权 filter 加在这条请求进网关之前：验完身份
                 // 写进 X-Agent-User-Id，下面这一行原样把它带到 agent-server，

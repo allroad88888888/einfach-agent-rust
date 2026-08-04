@@ -24,8 +24,8 @@
   <description>
     einfach-agent-rust 的 Java WebFlux 参考网关（examples/java-gateway）。
     拷走改，别当依赖：不发 Maven、不承诺 Spring Boot 2/3 双兼容、不跟版
-    （docs/ROADMAP.md 决策 13）。本机（开发这份代码的机器）没有装 JDK，
-    mvn -q package 从未在本仓库跑过一次，见 README「诚实边界」一节。
+    （docs/ROADMAP.md 决策 13）。本参考实现以 Java 17 为编译目标；当前
+    mvn -q package 已在本仓库通过。
   </description>
 
   <properties>
@@ -34,11 +34,10 @@
 
   <dependencies>
     <!--
-      唯一一个 starter。反向代理 SSE 必须是非阻塞逐块转发，Spring MVC 的
-      SseEmitter 一个连接占一个 Tomcat 线程，默认 max-threads: 200 意味着
-      两百个并发会话就把整个应用的线程池吃光——这是 ARCHITECTURE.md
-      「必须用 WebFlux」一节的原话。不加别的 starter：拷走这份代码的人
-      应该能一眼看完全部依赖来自哪里，不用去 dependency:tree 里找。
+      唯一一个 starter。此参考实现选 WebFlux + ServerSentEvent 生成浏览器
+      SSE；Rust 侧已改为有界长轮询，不再要求 Java 代理一条上游 SSE。Spring
+      MVC 也可以移植这份协议，但必须以异步方式处理浏览器流。不加别的
+      starter：拷走代码的人应能一眼看完全部依赖来自哪里。
     -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

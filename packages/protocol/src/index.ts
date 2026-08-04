@@ -10,6 +10,8 @@ export type { Granularity } from "./generated/Granularity";
 // 034：SSE 帧 data 的信封——{ agent, event }。`AgentId` 是它的 `agent` 字段
 // 类型（`type AgentId = string`），下游按帧归属分栏/打标签时要用到这个类型名。
 export type { Frame } from "./generated/Frame";
+export type { PollFrame } from "./generated/PollFrame";
+export type { PollResponse } from "./generated/PollResponse";
 export type { AgentId } from "./generated/AgentId";
 
 // 033：`packages/web` 的渲染层按帧分发时，直接点名了这几个嵌套在

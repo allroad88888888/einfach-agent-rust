@@ -5,6 +5,7 @@
 
 mod cancel;
 mod input;
+mod poll;
 mod sessions;
 mod sse;
 mod tool_result;
@@ -21,6 +22,7 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions/{id}", get(sessions::status))
         .route("/sessions/{id}/agents", get(sessions::agents))
         .route("/sessions/{id}/events", get(sse::events))
+        .route("/sessions/{id}/events/poll", get(poll::events))
         .route("/sessions/{id}/input", post(input::input))
         .route("/sessions/{id}/tool_result", post(tool_result::tool_result))
         .route("/sessions/{id}/undo", post(undo::undo))

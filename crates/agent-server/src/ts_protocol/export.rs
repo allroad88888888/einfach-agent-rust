@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use ts_rs::TS;
 
+use crate::http::PollResponse;
 use crate::{Command, Frame};
 
 /// 每个生成文件顶部多加的一行。**不是**替换 ts-rs 自己那行
@@ -41,6 +42,7 @@ pub fn export_protocol_types(dir: &Path) -> Result<(), ts_rs::ExportError> {
 
     Command::export_all(&cfg)?;
     Frame::export_all(&cfg)?;
+    PollResponse::export_all(&cfg)?;
 
     prepend_regen_banner(dir)
 }

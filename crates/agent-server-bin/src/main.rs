@@ -7,6 +7,7 @@
 //! [`run`] 模块，参数解析在 [`cli`] 模块——三十行以上的装配逻辑不堆在这里。
 
 mod cli;
+mod ready_file;
 mod run;
 
 #[tokio::main]

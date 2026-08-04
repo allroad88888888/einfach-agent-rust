@@ -26,6 +26,7 @@ mod config;
 mod error;
 mod hub;
 mod json;
+mod poll_protocol;
 mod routes;
 mod sessions_handle;
 mod state;
@@ -41,6 +42,9 @@ use axum::Router;
 use tokio::net::TcpListener;
 
 use state::AppState;
+
+#[cfg(feature = "ts")]
+pub(crate) use poll_protocol::PollResponse;
 
 /// `AgentServer::new(config)` 之后拿到的东西：路由已经装好，还没绑端口。
 pub struct AgentServer {

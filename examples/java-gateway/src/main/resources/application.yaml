@@ -1,4 +1,12 @@
-# 唯一的配置项。企业接自家配置中心（Nacos/Apollo/ConfigMap）时，
-# 就是把这一个 key 的来源换掉——网关代码本身不用改一行。
+# 只放非机密的 Rust 运行时定位信息。真实 API key 永远不写进本文件；
+# key-env 只是变量名，agent-server 从 Java 子进程继承的环境读取其值。
 agent:
-  upstream: http://127.0.0.1:4400
+  runtime:
+    command: ${AGENT_SERVER_BIN:agent-server}
+    working-dir: ${AGENT_WORKING_DIR:.}
+    providers-config: ${AGENT_PROVIDERS_CONFIG:providers.toml}
+    sessions-dir: ${AGENT_SESSIONS_DIR:agent-sessions}
+    key-env: ${AGENT_API_KEY_ENV:DEEPSEEK_API_KEY}
+    startup-timeout: 20s
+    shutdown-timeout: 30s
+    poll-wait-ms: 25000

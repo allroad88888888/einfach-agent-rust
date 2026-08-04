@@ -62,6 +62,13 @@ pub struct SessionTemplate {
 }
 
 impl SessionTemplate {
+    /// `session_path` 省略时、给某个 id 自动分配的默认持久化文件。路由在真正
+    /// `open_spec` 之前用它判断指定 id 是否已经有可恢复的历史；目录创建仍只
+    /// 发生在 [`Self::open_spec`]，因此无效请求不会留下空目录或文件。
+    pub(crate) fn default_session_path(&self, id: &SessionId) -> Option<PathBuf> {
+        self.default_sessions_dir.as_ref().map(|dir| dir.join(format!("{}.jsonl", id.as_str())))
+    }
+
     /// 补上 `id`/`store_path`，造一份可以直接喂给
     /// [`crate::registry::SessionRegistry::open`] 的 [`OpenSpec`]。
     ///
