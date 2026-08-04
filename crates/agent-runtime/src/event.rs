@@ -76,4 +76,39 @@ pub enum RunnerEvent {
 
     /// loop 自己发的通报，原样透传——见本文件顶部的判据。
     Notice(Notice),
+
+    /// 054：轮末清算的孤儿告警——模型开了后台子 agent（`spawn(background=true)`），
+    /// 父这一轮收尾时却没有 `srv:agent/collect` 去领它。
+    ///
+    /// 判据跟本文件顶部一致：**只有 runner 自己知道**。detached 名单与 stash 都是
+    /// [`crate::subtree::Subtree`] 的轮内局部表，core 里没有任何东西认识「后台子」
+    /// 这个概念，所以它走不了 `Notice`。
+    ///
+    /// **052 借的是 [`RunnerEvent::TransportTrouble`]**（既有变体里唯一「一句话
+    /// 文本、只进日志/面板、不参与任何判断」的口子），并在实做记录里诚实标注了
+    /// 那个名字对不上语义——这不是传输故障，是编排失误。054 收掉那笔账。
+    ///
+    /// 归属（[`AgentEvent::agent`]）恒是**父**：「spawn 了后台子却没领」是父的
+    /// 编排失误，告警该出现在父的时间线上；出事的那个子在 `child` 字段里，两者
+    /// 不该挤在同一个位置上。
+    ///
+    /// 载荷是**事实**不是句子（[`OrphanFate`]）：措辞由看的人组，CLI 一份、web
+    /// 一份，跟 `AgentActivity` 在 `agent-cli::print::agent_tree` 与
+    /// `packages/web/src/render/agent_tree.ts` 各有一份呈现是同一条规矩。
+    OrphanedChild { child: AgentId, fate: OrphanFate },
+}
+
+/// 一个没人领的后台子 agent 在轮末是怎么收场的——[`crate::orphan::reap`] 的三条
+/// 出路，一一对应。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrphanFate {
+    /// 还活着 → 连同 `descendants` 个后代一起被 `Session::despawn_child` 拆掉。
+    /// 它在飞的那次调用回来时会撞活性闸被丢（`crate::orphan` 模块文档 §砍尾）。
+    Despawned { descendants: usize },
+    /// 拆不掉（`agent_core::DespawnRefused`，比如子树之外还有读者）：状态一个
+    /// 字节没改，它会以**活着**的状态留到下一轮。`reason` 是那个拒绝的可读描述。
+    Kept { reason: String },
+    /// 已经跑完，结果在「已完成未领取」stash 里躺到轮末没人领，`bytes` 字节被
+    /// 丢弃。`is_error` 说的是**子自己**成没成，不是这次丢弃成没成。
+    Discarded { bytes: usize, is_error: bool },
 }

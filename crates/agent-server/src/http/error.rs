@@ -42,6 +42,16 @@ impl ApiError {
         ApiError { status: StatusCode::BAD_REQUEST, code: "bad_request", message: message.into() }
     }
 
+    /// 073：这个 chatid 已经有历史了，还带着 `capabilities` 来建会话——**拒绝**。
+    /// 能力属于历史，历史不接受改写（`docs/HOST-CAPABILITIES.md` §三）。
+    ///
+    /// **为什么不复用 `bad_request`**：调用方必须能把「我名字写错了」（改一下重发
+    /// 就行）和「这个会话已有历史」（不该带声明，去掉它重发）分开——两者都是 400，
+    /// 光看状态码分不出来，而它们的正确应对完全相反。所以这一条有自己的
+    /// `code`（`session_has_history`），这是本 issue 欠客户端的那个可判别错误码。
+    pub fn session_has_history(message: impl Into<String>) -> Self {
+        ApiError { status: StatusCode::BAD_REQUEST, code: "session_has_history", message: message.into() }
+    }
 }
 
 impl IntoResponse for ApiError {

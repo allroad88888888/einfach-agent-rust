@@ -54,6 +54,12 @@ impl FakeServer {
                 }
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // **必须清掉 O_NONBLOCK**（issue 077）：BSD/macOS 上 accept
+                        // 出来的 socket 继承 listener 的非阻塞标志（Linux 不继承）。
+                        // 不清的话，请求字节还在路上时下面的读会立刻拿到
+                        // `WouldBlock`，被当成「没带请求」——上面 `bodies()` 那句
+                        // 「第 N 个就是第 N 次网络请求」的承诺当场作废。
+                        let _ = stream.set_nonblocking(false);
                         let bodies = Arc::clone(&bodies_bg);
                         let scripts = Arc::clone(&scripts);
                         thread::spawn(move || handle_connection(stream, &bodies, &scripts));
@@ -90,7 +96,8 @@ impl Drop for FakeServer {
 }
 
 fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
-    let body = read_request_body(&mut stream);
+    // 没带请求的连接不记账、也不消耗脚本槽位（issue 077）。
+    let Some(body) = read_request_body(&mut stream) else { return };
     // 用“推进 bodies 之后的新长度 - 1”当脚本下标，保证下标严格对应
     // “这是第几个真正到达的请求”，不受 accept 顺序和处理线程调度的影响。
     let idx = {
@@ -114,13 +121,14 @@ fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts
 }
 
 /// 读一个请求到「空行」为止，再按 `Content-Length` 吃掉请求体，返回文本。
-fn read_request_body(stream: &mut TcpStream) -> String {
+/// **读不到请求返回 `None`**——「对面没发请求」不是「请求体是空串」（issue 077）。
+fn read_request_body(stream: &mut TcpStream) -> Option<String> {
     let mut reader = BufReader::new(stream.try_clone().expect("clone stream for reading"));
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return String::new();
+            return None;
         }
         if line == "\r\n" || line.is_empty() {
             break;
@@ -132,7 +140,7 @@ fn read_request_body(stream: &mut TcpStream) -> String {
     }
     let mut body = vec![0u8; content_length];
     let _ = reader.read_exact(&mut body);
-    String::from_utf8_lossy(&body).into_owned()
+    Some(String::from_utf8_lossy(&body).into_owned())
 }
 
 fn write_sse_headers(stream: &mut TcpStream) {

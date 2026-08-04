@@ -12,9 +12,19 @@ use support::{provider_done_end_turn, provider_done_tool_use, tool_result_event,
 /// 的全部价值——顺手加一个槽位而没想清楚它进不进快照时，这里会红。
 ///
 /// 026 是 9；028 加了 `Slot::ToolsAllowed`（spawn 时快照的工具子集，同时是子 agent
-/// 的活名单）→ 10；039 加了 `Slot::SkillsActive`（激活的 skill id 集）→ 11。
+/// 的活名单）→ 10；039 加了 `Slot::SkillsActive`（激活的 skill id 集）→ 11；
+/// 073 加了 `Slot::HostTools`（宿主建会话时声明的工具）→ 12；
+/// 064 加了 `Slot::HostSkills`（宿主建会话时声明的 skill）→ 13；
+/// 076 加了 `Slot::DisabledBuiltins`（这个会话关掉了哪些内置工具）→ 14。
 /// 改这个数之前先问：新槽位是不是真的**必须**进快照。
-const EXPECTED_SLOT_COUNT: usize = 11;
+///
+/// `HostTools` 的答案是必须：不进快照 = 一次落快照之后声明就丢了，恢复出来的
+/// 会话少几个工具且不报错——正是这个测试要拦的那种「顺手加一个槽位」。
+/// `HostSkills` 同理，而且更硬：`SkillsActive` 本来就在快照里，声明不进快照就是
+/// 一份**指向空 registry 的激活集**（状态说某个 skill 激活着、正文却取不到）。
+/// `DisabledBuiltins` 也必须：它是**减法**，不进快照 = 恢复出来的会话把当初藏起来
+/// 的工具又端给模型看，而那段历史里从没出现过它们。
+const EXPECTED_SLOT_COUNT: usize = 14;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

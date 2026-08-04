@@ -73,6 +73,41 @@ server 无鉴权是 by design（网关挡前面，ARCHITECTURE §部署形态）
 这条写进文档是因为它是**部署契约**，不是代码能自己保证的事。裸奔的 server + 可猜的
 chatid = 越权读别人对话。
 
+### 安全点三：**复用 chatid 的宿主必须先查再建**（073，能力注入）
+
+这一条只影响**注入了 `capabilities` 的宿主**（`docs/HOST-CAPABILITIES.md`）——网关正是
+那个宿主，因为它复用 chatid。规则一句话：
+
+> **一个 chatid 只有在它还没有任何历史的时候才可以带 `capabilities`。**
+
+宿主注入的工具声明是**会话状态**：建会话那一次写进会话日志，恢复时自动回来。所以恢复
+出来的会话**不需要**也**不接受**再声明一遍——历史对话是在**那一份**工具表下产生的，
+换一份就自相矛盾，而且工具表在 prompt 最前面，换一份 = 恢复出来的第一轮前缀全断
+（红线 11，`docs/HOST-CAPABILITIES.md` §三）。有历史还带声明 = **400，错误码
+`session_has_history`**（不是通用 `bad_request`——调用方要能把它跟「我工具名写错了」
+分开，两者的正确应对相反）。
+
+**推荐做法：先查再建。**
+
+```
+GET /sessions/{chatid}
+  ├─ 404                                  → 这个 chatid 没有任何历史
+  │                                          POST /sessions {"id":…, "capabilities":{…}}   ← 带声明
+  └─ 200 {"status":"alive"|"dormant"|"dead"} → 有历史（活着 / 关掉了但盘上有 / 崩了）
+                                             POST /sessions {"id":…}                       ← 不带
+```
+
+`dormant` = registry 里没有、但 `<sessions-dir>/<chatid>.jsonl` 在，也就是**下一次 POST
+会走恢复**的那种情况。它专为这条契约存在：没有它，「关掉之后重连」——恰恰是最常见的
+那种恢复——会被答成 404，网关据此判定「新会话」于是带上声明，然后被顶回来。
+
+**另一种写法**（少一次往返）：乐观带上声明 POST，收到 `session_has_history` 就去掉声明
+重试一次。**能用，但不推荐**——它把控制流架在错误码上；上面那条只是一次普通的 GET。
+
+**前端（浏览器）这一侧天然合规**，不需要改：`packages/web` 每次开页都建**全新会话**
+（`createSession` 不带 chatid、id 不落 localStorage），永远走「新建」那一支。这条契约的
+读者是**复用 chatid 的宿主**，也就是网关。
+
 ## 四、传输：ring 的第二个投影
 
 ### 真值源是 ring，不是 SSE

@@ -62,7 +62,7 @@ pub use actor::OpenError;
 pub use bind::{AGENT_BIND_ENV, BindConfigError, default_bind_addr, default_bind_ip, resolve_bind_ip};
 pub use bootstrap::{Bootstrapped, BootstrapError, BootstrapOptions, bootstrap};
 pub use command::{Command, Granularity};
-pub use event::{Frame, SessionEvent, UndoOutcome};
+pub use event::{Frame, OrphanFate, SessionEvent, UndoOutcome};
 pub use handle::{SessionClosed, SessionHandle, Subscription};
 pub use http::{AgentServer, BoundAgentServer, ServerConfig, SessionTemplate, SessionsHandle};
 pub use provider_dispatch::resolve_provider;

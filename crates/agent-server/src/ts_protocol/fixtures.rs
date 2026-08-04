@@ -13,7 +13,7 @@ use agent_core::{
     TurnStatus, WindowVerdict,
 };
 
-use crate::{Frame, SessionEvent, UndoOutcome};
+use crate::{Frame, OrphanFate, SessionEvent, UndoOutcome};
 
 /// `SessionEvent` 每个变体一个样本，值确定（无时钟无随机——红线 1 的精神延伸到
 /// fixtures：同一次生成必须逐字节相同）。
@@ -62,6 +62,10 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
         SessionEvent::SessionDied { reason: String::new() },
         SessionEvent::Gap { skipped: 0 },
         SessionEvent::AgentTree(AgentTree { nodes: Vec::new() }),
+        SessionEvent::OrphanedChild {
+            child: AgentId::root(),
+            fate: OrphanFate::Despawned { descendants: 0 },
+        },
     ];
 
     skeletons.into_iter().map(cast_sample).collect()
@@ -149,6 +153,15 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
                 },
             ],
         }),
+        // 054：样本挑 `Discarded`（不是 `Despawned`）——它是三个变体里字段最多
+        // 的那个（`bytes` + `is_error`），选它才能让 TS 的 `satisfies` 检查真的
+        // 照到嵌套那一层的字段形状，跟上面 `Undo` 选 `Blocked`、`AgentTree` 选
+        // 带子 agent 的样本同一条理由。`child` 挑一个非 root 的 id：孤儿按定义
+        // 就不可能是 root（`despawn_child` 拒绝拆 root）。
+        SessionEvent::OrphanedChild { .. } => SessionEvent::OrphanedChild {
+            child: AgentId::root().child(1),
+            fate: OrphanFate::Discarded { bytes: 128, is_error: false },
+        },
     }
 }
 

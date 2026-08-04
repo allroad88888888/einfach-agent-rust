@@ -1,10 +1,12 @@
 //! 路由表——issue 031 的六个端点 + 会话创建/查询，一比一对应
 //! `docs/issues/031-http-sse.md` 的「做什么」小节；`GET /sessions/:id/agents`
-//! 是 048 补的第七个（整棵活 agent 树此刻的快照，见 `sessions::agents`）。
-//! 每个端点的处理函数在自己的文件里，这里只做装配。
+//! 是 048 补的第七个（整棵活 agent 树此刻的快照，见 `sessions::agents`），
+//! `GET /sessions/:id/pending_tools` 是 072 补的（还欠着的远端调用，见
+//! `pending_tools`）。每个端点的处理函数在自己的文件里，这里只做装配。
 
 mod cancel;
 mod input;
+mod pending_tools;
 mod poll;
 mod sessions;
 mod sse;
@@ -21,6 +23,7 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions", post(sessions::create))
         .route("/sessions/{id}", get(sessions::status))
         .route("/sessions/{id}/agents", get(sessions::agents))
+        .route("/sessions/{id}/pending_tools", get(pending_tools::list))
         .route("/sessions/{id}/events", get(sse::events))
         .route("/sessions/{id}/events/poll", get(poll::events))
         .route("/sessions/{id}/input", post(input::input))

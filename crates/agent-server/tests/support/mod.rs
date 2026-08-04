@@ -50,6 +50,13 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
         history_cap: None,
         snapshot_every: Some(0), // 关掉节奏噪音——恢复靠 entry 重放，快照不是这些测试关心的事。
         provider_timeout: Some(Duration::from_secs(5)),
+        remote_tool_timeout: None,
+        // 062：宿主注入是 per-session 的，这条共用的装配路径默认不注入——要注入的
+        // 测试自己在返回的 `OpenSpec` 上改这个字段（跟 `tools`/`store_path` 一样的
+        // 既有手法）。
+        host_tools: Vec::new(),
+        host_skills: Vec::new(),
+        disable_builtin: Vec::new(),
     }
 }
 

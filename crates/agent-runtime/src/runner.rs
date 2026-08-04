@@ -23,8 +23,14 @@
 //! 029 原文写的是「root 终态且无在飞」。实现成「**无在飞**」一个条件，是因为
 //! 另一半是它的推论而不是补充：root 只有在自己那批工具槽全部收敛之后才可能落
 //! 终态，而 spawn 的槽位要等子 agent 落终态才收敛，子 agent 同理递归——所以
-//! 「root 终态」的时候在飞表必然已经空了。反过来写两个条件，就等于承认存在
-//! 「root 已经终态、子树还在跑」的世界，那个世界里泵该怎么办没有答案。
+//! 「root 终态」的时候在飞表必然已经空了。
+//!
+//! **052 的修正**：后台 spawn（`background=true`）让父那个槽在 spawn 那一刻就
+//! 收敛，于是「root 已经终态、子树还在跑」这个世界**真的存在**了。它不需要新的
+//! 静止条件——后台子自己的 provider 调用就住在同一张 `calls` 表里，所以泵照旧把
+//! 它驱动到静止再返回，语义天然是「一轮结束 = root 终态 **且** 后台子静止」。
+//! 需要补的只是别把没人要的子跑到底（浪费）：B 之前加一道定点 `despawn_child`，
+//! 见 [`crate::orphan`]。原先这段文档说那个世界「没有答案」，是过虑。
 //!
 //! 真正需要单独说的是另一支：在飞表空了但 root **不是**终态。那是 016 裁决过的
 //! 「转移表判了 `ProtocolViolation` 但状态没落终态」（例子见 `provider_done` 模块
@@ -43,13 +49,16 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
 
 use crate::ctx::RunnerCtx;
+use crate::deadline;
 use crate::dispatch::{self, Dispatched};
 use crate::io_thread::IoMsg;
+use crate::mcp_call::{self, McpCall};
+use crate::orphan;
 use crate::persist;
 use crate::provider_call::{self, ProviderCall};
 use crate::subtree::Subtree;
@@ -92,6 +101,11 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
     let (tx, rx) = mpsc::sync_channel::<IoMsg>(0);
     let mut pending: VecDeque<Event> = VecDeque::new();
     let mut calls: Vec<ProviderCall> = Vec::new();
+    // MCP 第四路（043）的在飞表，跟 `calls` 并列——两类在飞凭据（工具结果 vs 模型
+    // 响应）各自按键落地，收工要两张表都空（见 B）。`Dispatched::CancelAll` **不清**
+    // 这张表（跟 `calls` 一样）：留着让迟到的结果回来撞 `Session::step` 的 epoch 闸
+    // 被正当丢弃（红线 6），而不是在泵这层无声抹掉。
+    let mut mcp_calls: Vec<McpCall> = Vec::new();
     let mut subtree = Subtree::default();
     let root = session.agent().clone();
     let mut cancel_seen = false;
@@ -116,7 +130,11 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
                 match dispatch::run_effect(session, ctx, &mut subtree, &tx, &source, effect) {
                     Dispatched::Nothing => {}
                     Dispatched::Event(next) => pending.push_back(next),
+                    // 后台 spawn（052）：父的槽收敛 + 子开工，两件事按 dispatch
+                    // 给的顺序排进同一批待办。
+                    Dispatched::Events(list) => pending.extend(list),
                     Dispatched::Call(call) => calls.push(call),
+                    Dispatched::McpCall(call) => mcp_calls.push(call),
                     // 会话级取消：在飞的流由取消标志斩断（它们各自会以
                     // `StreamOutcome::Cancelled` 回来），队列里还没喂进去的
                     // 待办在这里斩断——见 `Dispatched::CancelAll` 的文档。
@@ -129,8 +147,18 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
             pending.extend(subtree.harvest(session, ctx));
         }
 
-        // B. 没有在飞的东西了 —— 收工。
-        if calls.is_empty() {
+        // B0. 轮末清算（052）：root 已经答完，而后台子还没人领 —— 活的定点拆掉
+        //     （不走会话级取消，理由见 `crate::orphan`），跑完没人领的告警丢掉。
+        //     放在 B **之前**：这一圈可能就是收工的那一圈（后台子已经静止但还活
+        //     着），拆干净了再返回，别把一棵没人要的子树留给下一轮。
+        if orphan::reap(session, ctx, &mut subtree) {
+            // 拆掉一棵子树改变了 `agent_tree()`，而 A 那段的变化检测只跟着
+            // `session.step` 走 —— 这条路不经过 step，得自己补一次。
+            maybe_emit_tree(ctx, session, &mut last_tree);
+        }
+
+        // B. 没有在飞的东西了 —— 收工。两张在飞表都空才算空（MCP 第四路，043）。
+        if calls.is_empty() && mcp_calls.is_empty() {
             let status = session.status();
             if status.is_terminal() {
                 persist::maybe_snapshot(ctx, session);
@@ -139,14 +167,20 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
         }
 
         // C. 到点的在飞调用：注入 `Timeout` 事件，回 A 让转移表决定重试还是失败。
-        sweep_deadlines(&mut calls, &mut pending);
+        // 060 起同一次扫描也管远端等待槽（到点注入 `ToolFailed`）——它们没有在飞
+        // 凭据，但泵这一圈本来就活着（root 等远端、后台子还在飞）时顺手扫掉，
+        // 比等泵收工再由宿主扫更早。判定与注入都在 `crate::deadline`。
+        // MCP 调用没有泵级截止线——`tools/call` 自带客户端侧超时（`ctx.mcp_timeout`
+        // 传给背景线程），线程必在超时内报回一条 `McpDone`（成功/错误/超时都算），
+        // 所以 MCP 凭据一定会被 D 排空，不需要在这里扫。
+        deadline::sweep(ctx, &mut calls, &mut pending);
         speak_for_root_on_cancel(session, ctx, &root, &calls, &mut pending, &mut cancel_seen);
         if !pending.is_empty() {
             continue;
         }
 
         // D. 等一条 IO 消息。
-        receive(ctx, &rx, &mut calls, &mut pending);
+        receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending);
     }
 }
 
@@ -170,21 +204,6 @@ fn maybe_emit_tree(ctx: &mut RunnerCtx, session: &Session, last_tree: &mut Optio
     }
     *last_tree = Some(tree.clone());
     ctx.emit_tree(tree);
-}
-
-/// 每个在飞调用各有各的截止线（它们不是同时起飞的）。到点的从表里划掉——
-/// **不 join、不断连接**，理由见 `provider_call` 模块文档。
-fn sweep_deadlines(calls: &mut Vec<ProviderCall>, pending: &mut VecDeque<Event>) {
-    let now = Instant::now();
-    let mut i = 0;
-    while i < calls.len() {
-        if calls[i].deadline > now {
-            i += 1;
-            continue;
-        }
-        let call = calls.remove(i);
-        pending.push_back(Event::Timeout { agent: call.agent, epoch: call.epoch, call_id: None });
-    }
 }
 
 /// 宿主按了 Ctrl-C（翻了 [`RunnerCtx::cancel_flag`]），而 **root 手上没有在飞的
@@ -225,6 +244,7 @@ fn receive(
     ctx: &mut RunnerCtx,
     rx: &mpsc::Receiver<IoMsg>,
     calls: &mut Vec<ProviderCall>,
+    mcp_calls: &mut Vec<McpCall>,
     pending: &mut VecDeque<Event>,
 ) {
     match rx.recv_timeout(POLL_INTERVAL) {
@@ -244,6 +264,15 @@ fn receive(
         Ok(IoMsg::Gone { agent }) => {
             if let Some(call) = take_call(calls, &agent) {
                 pending.push_back(provider_call::thread_gone(call.agent, call.epoch));
+            }
+        }
+        // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
+        // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
+        // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
+        // 返回 `None` 同款。
+        Ok(IoMsg::McpDone { agent, call_id, content, is_error }) => {
+            if let Some(call) = mcp_call::take(mcp_calls, &agent, &call_id) {
+                pending.push_back(mcp_call::finish(ctx, call, content, is_error));
             }
         }
         Err(RecvTimeoutError::Timeout) => {}

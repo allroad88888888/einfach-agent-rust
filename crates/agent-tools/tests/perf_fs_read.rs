@@ -47,7 +47,7 @@ fn paged_read_has_an_exact_line_and_prompt_byte_budget() {
         "limit={PAGE_LIMIT} 的返回字节数必须由单行最大长度线性限制"
     );
     assert_eq!(
-        agent_core::truncate_tool_output(&page, agent_core::DEFAULT_TOOL_OUTPUT_BYTES),
+        agent_core::truncate_tool_output(page, agent_core::DEFAULT_TOOL_OUTPUT_BYTES),
         page,
         "小分页不应消耗截断预算或产生截断标记"
     );
@@ -62,7 +62,7 @@ fn paged_read_has_an_exact_line_and_prompt_byte_budget() {
     let full = full["content"].as_str().unwrap();
     assert!(full.len() > agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
     let prompt_view =
-        agent_core::truncate_tool_output(&full, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
+        agent_core::truncate_tool_output(full, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
     assert!(prompt_view.len() < agent_core::DEFAULT_TOOL_OUTPUT_BYTES + 200);
     assert!(prompt_view.contains("输出被截断"));
 }

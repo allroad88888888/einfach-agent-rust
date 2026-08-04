@@ -84,6 +84,49 @@ pub enum Slot {
     /// 注入进 system prompt 的正文，顺序一漂前缀缓存就全价。写入点在
     /// `Session::activate_skill` / `deactivate_skill`，那两处落值前排序去重。
     SkillsActive,
+    /// **宿主建会话时声明的工具**（073）。值是 [`AgentValue::Json`] 里一个
+    /// **按名字排序的对象数组**（`value::host_tools` 那一处编解码），
+    /// `Json([])` = 这个会话没有任何注入（默认值）。
+    ///
+    /// 跟 [`Slot::SkillsActive`] **同构**：声明（可序列化的静态描述）在 store，
+    /// 执行（真的去跑这个工具）在宿主侧。差别只在存的是什么——skill 存 id、正文
+    /// 从 registry 现取，注入的工具**连描述和 schema 一起存**：它们是宿主这一次
+    /// 报进来的、store 外没有第二份，取不回来就没有别处可取。
+    ///
+    /// 为什么必须进 store 而不是每次建会话时由宿主重报（用户 2026-08-04 拍板）：
+    /// **历史对话是在那一份工具表下产生的**，恢复时装上宿主今天的新清单，历史就
+    /// 自相矛盾（模型当初说「我调了 `web:crm/lookup`」，而今天的清单里可能没有
+    /// 它了）；而且工具表在 prompt 最前面，换一份 = 恢复出来的第一轮前缀全断
+    /// （红线 11）。恢复是忠实重放，不是用今天的配置重建。
+    HostTools,
+    /// **宿主建会话时声明的 skill**（064）。值是 [`AgentValue::Json`] 里一个
+    /// **按 id 排序的对象数组**（`value::host_skills` 那一处编解码），
+    /// `Json([])` = 这个会话没有任何注入的 skill（默认值）。
+    ///
+    /// 跟 [`Slot::HostTools`] 同一条理由（声明是会话状态、索引行进 prompt 最前面、
+    /// 恢复是忠实重放），另外还有两条是 skill 独有的：
+    ///
+    /// - [`Slot::SkillsActive`] **早就在 store 里了**。声明不落盘，恢复出来就是一份
+    ///   指向空 registry 的激活集——状态说某个 skill 激活着、展开注入却什么都取不到
+    ///   （查不到的 id 静默跳过），而模型的历史里明明写着它读过那段正文。
+    /// - 073 之后有历史的会话**不接受再声明**（400 `session_has_history`），所以
+    ///   不存下来就是永久没了，连「重连时重报一遍」这条退路都不存在。
+    HostSkills,
+    /// **这个会话关掉了哪些内置工具**（076）。值是 [`AgentValue::Json`] 里一个
+    /// **排序去重的字符串数组**（跟 [`Slot::SkillsActive`] 共用 `value::str_set`
+    /// 那一处编解码），`Json([])` = 一个都没关（默认值，也就是今天的行为）。
+    ///
+    /// 前三个 Host* 槽位是**加法**（宿主报进来的能力），这一个是**减法**：它列的
+    /// 名字必须在部署方装配出来的那张表里，装表时整条剔掉，于是那些工具**连名字
+    /// 带描述都不进 prompt**，模型压根不知道有它。
+    ///
+    /// 为什么它跟声明一样必须进 store（073 那三条原样成立）：历史对话是在**那一份
+    /// 减过的表**下产生的；工具表在 prompt 最前面（红线 11），恢复时按今天的开关
+    /// 重建 = 第一轮前缀全断；恢复是忠实重放，不是用今天的配置重建。
+    ///
+    /// **默认值必须是空数组**——019 的按需重建拿的就是它，若默认成别的，undo 路径上
+    /// 凭空重建出来的 atom 会把一个从没关过任何东西的会话的工具表悄悄削掉几项。
+    DisabledBuiltins,
 }
 
 /// 一次工具调用自己的槽位。
@@ -156,6 +199,25 @@ impl Slot {
             Slot::SkillsActive => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
                 Vec::new(),
             ))),
+            // 「这个会话没有任何注入」= 空数组，同 `SkillsActive` 那条理由：槽位
+            // 永远持一个数组，读取点不必区分「空」和「类型错」。**默认值必须是空**
+            // ——019 的按需重建拿的就是它，若默认成别的，undo 路径上凭空重建出来的
+            // atom 会给一个从没声明过的会话平添几个工具，而工具表在 prompt 最前面。
+            Slot::HostTools => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
+                Vec::new(),
+            ))),
+            // 同 `HostTools`：空数组而不是 `Null`。默认值必须是空——019 的按需重建
+            // 拿的就是它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没
+            // 声明过的会话平添几行常驻索引，而索引跟工具表一样在 prompt 最前面。
+            Slot::HostSkills => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
+                Vec::new(),
+            ))),
+            // 「一个内置工具都没关」= 空数组，同上两条理由。这一条的默认值格外要紧：
+            // 它是**减法**，默认成非空就等于给一个从没提过要求的会话偷偷少几个工具，
+            // 而少掉的那些模型压根不知道存在过——查起来没有任何线索。
+            Slot::DisabledBuiltins => AgentValue::Json(std::sync::Arc::new(
+                serde_json::Value::Array(Vec::new()),
+            )),
         }
     }
 
@@ -166,7 +228,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 11] = [
+    pub const ALL: [Slot; 14] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -178,6 +240,9 @@ impl Slot {
         Slot::MaxRetries,
         Slot::ToolsAllowed,
         Slot::SkillsActive,
+        Slot::HostTools,
+        Slot::HostSkills,
+        Slot::DisabledBuiltins,
     ];
 }
 

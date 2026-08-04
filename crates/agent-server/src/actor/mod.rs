@@ -20,6 +20,7 @@
 //! `SessionRegistry::get`/`close` 读 `died` 就能报出死因，事件流的订阅者立刻
 //! 收到终态——不是进程崩、也不是静默消失。
 mod body;
+mod capabilities;
 mod commands;
 
 use std::panic::AssertUnwindSafe;
@@ -30,9 +31,10 @@ use std::thread;
 use tokio::sync::broadcast;
 
 use agent_core::{AgentId, AgentTree};
+use agent_runtime::RemoteToolWaiting;
 
 use crate::event::{Frame, SessionEvent};
-use crate::handle::SessionHandle;
+use crate::handle::{CancelHandle, SessionHandle};
 use crate::registry::OpenSpec;
 
 use body::ReadyMsg;
@@ -80,11 +82,16 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
     // `Session` 现造出来的第一时间用 `agent_tree()` 覆盖它，`open()` 返回
     // 之前这个占位永远不会被外界看到）。
     let tree: Arc<Mutex<AgentTree>> = Arc::new(Mutex::new(AgentTree { nodes: Vec::new() }));
+    // 072：`GET /sessions/:id/pending_tools` 读的共享单元格，同上一条逐行同款。
+    // 空 `Vec` 是**真实**初值（不是占位）：一个刚起来的会话确实一件远端活都没欠，
+    // 所以这里不像 `tree` 那样需要 `body::run` 在握手前覆盖一次。
+    let pending_tools: Arc<Mutex<Vec<RemoteToolWaiting>>> = Arc::new(Mutex::new(Vec::new()));
 
     let thread_name = format!("session-actor-{}", spec.id);
     let events_for_thread = events_tx.clone();
     let died_for_thread = Arc::clone(&died);
     let tree_for_thread = Arc::clone(&tree);
+    let pending_for_thread = Arc::clone(&pending_tools);
 
     let join = thread::Builder::new()
         .name(thread_name)
@@ -95,7 +102,7 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
             let events_for_panic = events_for_thread.clone();
             let ready_for_panic = ready_tx.clone();
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                body::run(spec, cmd_rx, events_for_thread, ready_tx, tree_for_thread);
+                body::run(spec, cmd_rx, events_for_thread, ready_tx, tree_for_thread, pending_for_thread);
             }));
             if let Err(payload) = result {
                 // `&*payload`，不是 `&payload`：`payload: Box<dyn Any + Send>`，
@@ -124,7 +131,8 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
 
     match ready_rx.recv() {
         Ok(Ok(cancel)) => {
-            Ok(SpawnedActor { handle: SessionHandle { tx: cmd_tx, cancel, events: events_tx, tree }, join, died })
+            let handle = SessionHandle { canceller: CancelHandle::new(cmd_tx, cancel), events: events_tx, tree, pending_tools };
+            Ok(SpawnedActor { handle, join, died })
         }
         Ok(Err(reason)) => {
             let _ = join.join();

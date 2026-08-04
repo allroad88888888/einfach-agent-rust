@@ -200,3 +200,72 @@ async fn polling_and_sse_share_one_subscriber_count() {
         "the countdown must still fire once both transports are gone: {after_last_left}"
     );
 }
+
+/// 057 验收「宽限内再拉不取消」在拉取这一层的直接证据。此前只有两处间接覆盖：
+/// `hub/guard.rs` 的单测（机制层）和 `http_indep_grace_cancel.rs`（SSE 层），没有
+/// 一条真的走过「poll → 宽限内再 poll → 断言轮次还活着」。
+///
+/// 形状是「网关按比宽限更快的节奏短轮询」而不是「poll 一次就长轮询挂住」，因为后者
+/// 钉不住 `attach` 里那句 `task.abort()`：长轮询挂着的时候计数是 1，旧倒计时到点撞上
+/// `Drop` 那条「二次确认 `== 0`」的第二道防线，abort 没了也照样不取消。短轮询把这层
+/// 遮蔽掀开——旧倒计时是在两次 poll 的**间隙**到点的，那一刻计数确实是 0，二次确认
+/// 拦不住，只有 abort 能。
+#[tokio::test(flavor = "multi_thread")]
+async fn re_polling_within_the_grace_period_aborts_the_countdown() {
+    let upstream = FakeUpstream::start(vec![Script::Hang]);
+    let grace = Duration::from_millis(300);
+    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let id = server.create_session();
+
+    // 这次 poll 建 hub、attach 又 drop：第一轮倒计时从这里开始跑，`grace` 之后到点。
+    assert!(poll(server.addr, &id, None, None)["frames"].as_array().unwrap().is_empty());
+    assert_eq!(server.post_input(&id, "hang").status, 202);
+
+    // 每 0.4 个宽限回来一次，共 2.4 个宽限——每次 attach 都该 abort 掉上一次 drop
+    // 起的倒计时，于是没有任何一轮倒计时活到到点。轮询节奏刻意不是宽限的整数分之一，
+    // 让「没被 abort 的倒计时」的到点时刻落在两次 poll 的正中间。
+    for _ in 0..6 {
+        tokio::time::sleep(grace * 2 / 5).await;
+        let batch = poll(server.addr, &id, None, None);
+        assert!(!batch.to_string().contains("Cancelled"), "宽限内又来拉了，倒计时该被 abort：{batch}");
+    }
+}
+
+/// `poll_long_wait_returns_when_a_new_event_arrives` 走的是 `timeout` 的成功分支；
+/// 这条走它的超时分支：等待窗口里始终没有帧，约 `wait` 之后返回空批，游标原地不动。
+#[tokio::test(flavor = "multi_thread")]
+async fn a_long_poll_with_no_traffic_returns_an_empty_batch_at_its_deadline() {
+    let upstream = FakeUpstream::start(vec![Script::Text("never requested".to_string())]);
+    let server = start(upstream.endpoint(), HarnessConfig::default()).await;
+    let id = server.create_session();
+
+    // 从不 `POST /input`：这次等待只可能靠自己的 deadline 结束。
+    let wait = Duration::from_millis(400);
+    let started = Instant::now();
+    let idle = poll(server.addr, &id, Some(7), Some(wait.as_millis() as u64));
+    let elapsed = started.elapsed();
+
+    assert!(elapsed >= wait - Duration::from_millis(50), "该等满 wait 才返回，实际 {elapsed:?}");
+    assert!(elapsed < wait * 3, "到点就该返回，不该拖到读超时，实际 {elapsed:?}");
+    assert!(idle["frames"].as_array().unwrap().is_empty(), "等待期间一帧都没有：{idle}");
+    assert_eq!(idle["next"].as_u64(), Some(7), "空批不能推进游标：{idle}");
+}
+
+/// 解析不出数字的 `X-Poll-Wait-Ms` 静默降级成 `wait = 0`，跟垃圾 `Last-Event-ID`
+/// 同款（降级，不是 400）。`routes/poll.rs` 的模块内单测只钉了解析函数，这条把它
+/// 钉到线上：真发一个垃圾 header，仍是 200 且立刻返回。
+#[tokio::test(flavor = "multi_thread")]
+async fn a_malformed_poll_wait_header_degrades_to_an_immediate_poll() {
+    let upstream = FakeUpstream::start(vec![Script::Text("never requested".to_string())]);
+    let server = start(upstream.endpoint(), HarnessConfig::default()).await;
+    let id = server.create_session();
+    let path = format!("/sessions/{id}/events/poll");
+
+    for garbage in ["not-a-number", "-1", "1.5", ""] {
+        let started = Instant::now();
+        let response = request(server.addr, "GET", &path, &[("X-Poll-Wait-Ms", garbage)], None);
+        assert_eq!(response.status, 200, "{garbage:?} 不该让请求失败：{}", response.body_str());
+        assert!(started.elapsed() < Duration::from_millis(500), "{garbage:?} 该立刻返回，实际 {:?}", started.elapsed());
+        assert!(response.json()["frames"].as_array().unwrap().is_empty(), "{garbage:?}：{}", response.body_str());
+    }
+}

@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::SystemChunk;
+use agent_core::{HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
 use agent_transport::Client;
 
@@ -51,6 +51,9 @@ pub struct SessionTemplate {
     pub history_cap: Option<usize>,
     pub snapshot_every: Option<u64>,
     pub provider_timeout: Option<Duration>,
+    /// `None` → `agent_runtime` 的默认远端工具超时（060，10 分钟）。宿主的交互
+    /// 形态决定这个数：纯机器执行的注入能力可以调短，含真人问答的该留够。
+    pub remote_tool_timeout: Option<Duration>,
     /// `None`（默认）→ 旧行为：`POST /sessions` 不带 `session_path` 就是
     /// `Memory`，进程退出即丢。`Some(dir)` → 不带 `session_path` 时自动落盘到
     /// `dir/<session-id>.jsonl`（[`Self::open_spec`]），`dir` 本身在那一刻现
@@ -80,7 +83,30 @@ impl SessionTemplate {
     /// 才会碰到的）`default_sessions_dir` 本身。`std::io::Error` 直接透传，路由
     /// 层负责翻成 500（这是宿主环境的磁盘/权限问题，不是客户端输入错误，不该
     /// 套用 `ApiError` 那几个 4xx 语义）。
-    pub fn open_spec(&self, id: SessionId, session_path: Option<PathBuf>) -> std::io::Result<OpenSpec> {
+    ///
+    /// # 062/064/076：后三个参数是**这一次请求**带来的，不是模板的一部分
+    ///
+    /// 五个参数正好是「每次开会话才知道的东西」：`id`、`session_path`，以及宿主这一次
+    /// 声明的工具与 skill、这一次关掉的内置工具。它们跟 `self` 上那些部署期就定好的
+    /// 字段（provider、工具表五档、超时……）分得清清楚楚——**`SessionTemplate` 全进程
+    /// 只有一份**（`AppState` 持有），往它身上写注入的能力就等于开了一个全局表的写口，
+    /// A 客户端声明的东西 B 客户端下一次建会话就看得见。所以注入从参数进、原样落进
+    /// 这一份 `OpenSpec`，`self` 一个字节不动（docs/HOST-CAPABILITIES.md §二）。
+    ///
+    /// **076 的开关同一条论证，而且更要紧**：它是减法，粘上模板就等于「A 客户端关掉
+    /// 的工具 B 客户端也没了」——而 B 从没提过这个要求，它少掉的那些工具模型压根不
+    /// 知道存在过，查起来没有任何线索。这里同样只落进这一次的 `OpenSpec`
+    /// （`self.tools` 这个五档字段一个字节不动，天花板还是那张表）。
+    ///
+    /// 什么都不带就传三个 `Vec::new()`，工具表与 system 段跟 062/064/076 之前逐字节相同。
+    pub fn open_spec(
+        &self,
+        id: SessionId,
+        session_path: Option<PathBuf>,
+        host_tools: Vec<(ToolSpec, Reversibility)>,
+        host_skills: Vec<HostSkill>,
+        disable_builtin: Vec<Arc<str>>,
+    ) -> std::io::Result<OpenSpec> {
         let tools_root = self.tools_root.join(id.as_str());
         std::fs::create_dir_all(&tools_root)?;
         let store_path = match session_path {
@@ -107,6 +133,10 @@ impl SessionTemplate {
             history_cap: self.history_cap,
             snapshot_every: self.snapshot_every,
             provider_timeout: self.provider_timeout,
+            remote_tool_timeout: self.remote_tool_timeout,
+            host_tools,
+            host_skills,
+            disable_builtin,
         })
     }
 }
@@ -186,6 +216,7 @@ mod tests {
             history_cap: None,
             snapshot_every: None,
             provider_timeout: None,
+            remote_tool_timeout: None,
             default_sessions_dir,
         }
     }
@@ -197,7 +228,7 @@ mod tests {
     #[test]
     fn no_default_dir_and_no_explicit_path_stays_memory() {
         let template = minimal_template(temp_dir("tools-a"), None);
-        let spec = template.open_spec(SessionId::from("s-1"), None).unwrap();
+        let spec = template.open_spec(SessionId::from("s-1"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
         assert_eq!(spec.store_path, None, "没有 default_sessions_dir，也没有显式 session_path，该还是 Memory");
     }
 
@@ -206,7 +237,7 @@ mod tests {
         let default_dir = temp_dir("tools-b-default");
         let explicit = temp_dir("tools-b-explicit").join("custom.jsonl");
         let template = minimal_template(temp_dir("tools-b"), Some(default_dir));
-        let spec = template.open_spec(SessionId::from("s-2"), Some(explicit.clone())).unwrap();
+        let spec = template.open_spec(SessionId::from("s-2"), Some(explicit.clone()), Vec::new(), Vec::new(), Vec::new()).unwrap();
         assert_eq!(spec.store_path, Some(explicit), "客户端显式给的 session_path 该赢");
     }
 
@@ -214,8 +245,55 @@ mod tests {
     fn missing_session_path_auto_assigns_under_default_dir() {
         let dir = temp_dir("tools-c-sessions");
         let template = minimal_template(temp_dir("tools-c"), Some(dir.clone()));
-        let spec = template.open_spec(SessionId::from("s-3"), None).unwrap();
+        let spec = template.open_spec(SessionId::from("s-3"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
         assert_eq!(spec.store_path, Some(dir.join("s-3.jsonl")), "该自动分配 <dir>/<id>.jsonl");
         assert!(dir.is_dir(), "default_sessions_dir 该被现造出来，不能指望 Jsonl 的 IO 线程默默失败");
+    }
+
+    /// 062 作用域那一条在这一层的形状：注入只落进**这一次**的 `OpenSpec`，同一份
+    /// template 下一次开会话拿到的还是空的——`SessionTemplate` 全进程一份，往它身上
+    /// 写就等于开了全局表的写口。
+    #[test]
+    fn injected_tools_ride_this_one_spec_and_never_stick_to_the_template() {
+        let template = minimal_template(temp_dir("tools-d"), None);
+        let injected = vec![(
+            ToolSpec {
+                name: Arc::from("web:crm/lookup"),
+                description: Arc::from("查 CRM 档案"),
+                schema: Arc::new(serde_json::json!({ "type": "object" })),
+            },
+            Reversibility::Pure,
+        )];
+
+        let declared = template.open_spec(SessionId::from("s-4"), None, injected, Vec::new(), Vec::new()).unwrap();
+        assert_eq!(declared.host_tools.len(), 1);
+        assert_eq!(&*declared.host_tools[0].0.name, "web:crm/lookup");
+        assert_eq!(declared.host_tools[0].1, Reversibility::Pure);
+
+        let plain = template.open_spec(SessionId::from("s-5"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
+        assert!(plain.host_tools.is_empty(), "同一个 template 的下一个会话不该看见上一个的声明");
+    }
+
+    /// 064：skill 那一半**同一条论证**——注入的 skill 也只骑这一份 `OpenSpec`。
+    /// 它比工具那条更容易被忽略：skill 的索引行进的是 `system` 段，而 `system` 恰好
+    /// 是 `SessionTemplate` 上真有的一个字段（`self.system.clone()`），顺手往那儿写
+    /// 就是给全局开写口。
+    #[test]
+    fn injected_skills_ride_this_one_spec_and_never_stick_to_the_template() {
+        let template = minimal_template(temp_dir("tools-e"), None);
+        let injected = vec![HostSkill {
+            id: agent_core::SkillId::new("crm-flow"),
+            description: Arc::from("处理客户工单"),
+            body: Arc::from("第一步……"),
+            tools: Vec::new(),
+        }];
+
+        let declared = template.open_spec(SessionId::from("s-6"), None, Vec::new(), injected, Vec::new()).unwrap();
+        assert_eq!(declared.host_skills.len(), 1);
+        assert_eq!(declared.host_skills[0].id.as_str(), "crm-flow");
+        assert_eq!(declared.system.len(), template.system.len(), "template 自己的 system 段不该被这次声明改动");
+
+        let plain = template.open_spec(SessionId::from("s-7"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
+        assert!(plain.host_skills.is_empty(), "同一个 template 的下一个会话不该看见上一个声明的 skill");
     }
 }

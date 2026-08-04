@@ -108,11 +108,22 @@
 3. **分头**：
    - 实现：按第二节选的模型
    - 测试：碰红线就派独立 agent，只给它验收标准 + 接口签名 + 红线条目
-4. **合并**，跑 `cargo test` 与 `scripts/check-invariants.sh --all`
+4. **合并**，跑 `cargo test` 与 `scripts/check-invariants.sh --all`；
+   **动过任何进协议面的 Rust 类型**（`SessionEvent`/`Command`/请求响应体，哪怕只改文档注释）
+   → 还要跑 `cargo test -p agent-server --features ts`，红了就
+   `cargo run -p agent-server --features ts --example gen_protocol_ts` 重新生成
 5. **红线检查报了行数**（>300）→ 拆分是本次改动的一部分，不留「下次再拆」
 6. **回填 issue**：状态改「完成」，把实际遇到的坑写进「注意」
 
 第 6 步别省。下一个人（或下一个会话）读的是 issue 文件，不是提交记录。
+
+**第 4 步那半句 `--features ts` 也是补上去的，代价是两处漂移。** 一致性测试
+（`ts_protocol::consistency`）本身没毛病——它把整棵 `packages/protocol/src/generated/`
+递归逐字节比一遍，漏不掉任何一个文件。问题在于它**只在这个 feature 下编译**，而这一步
+以前只写「跑 `cargo test`」，于是每个 agent 收工都合规、也都没跑到它。等到 062 因为改了
+一句文档注释才第一次跑，才发现 `Command.ts` 缺 `RemoteToolResult`、`SessionEvent.ts` 缺两个
+import——**M8/M9 就漂在那儿，没人知道**。CI 里有这条，但 CI 不是每个 agent 收工时会经过的地方；
+**收工清单才是**。护栏存在 ≠ 护栏在路上。
 
 **第 0 步是补上去的，代价是三个 crate。** 之前有一轮直接照着记忆动手，
 把自己上一轮抢跑写的代码当成了别人的既有实现，在错的地基上又加了一层。

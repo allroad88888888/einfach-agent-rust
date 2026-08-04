@@ -12,7 +12,7 @@
 use std::io::{self, Write};
 
 use agent_core::{Adjustment, AgentId, GuardReport, Notice, TokenUsage};
-use agent_runtime::{AgentEvent, RunnerEvent};
+use agent_runtime::{AgentEvent, OrphanFate, RunnerEvent};
 
 const DIM_ON: &str = "\x1b[2m";
 const RESET: &str = "\x1b[0m";
@@ -76,6 +76,12 @@ impl EventPrinter {
                 print_turn_guard(&at, &usage, &report, &adjustments);
             }
             RunnerEvent::Notice(notice) => self.handle_notice(&at, notice),
+            // 054：轮末孤儿告警的专属变体。归属（`at`）是**父**，出事的子在
+            // `child` 里——事件载荷只带事实，句子在这里组（见 `describe_fate`）。
+            RunnerEvent::OrphanedChild { child, fate } => {
+                self.finish_line();
+                eprintln!("{at}[后台子未领取] {} {}", child.as_str(), describe_fate(&fate));
+            }
         }
     }
 
@@ -181,6 +187,28 @@ fn prefix(agent: &AgentId) -> String {
     }
 }
 
+/// [`OrphanFate`] 的可读呈现（054）。跟 `print::agent_tree::describe_activity`
+/// 同一条规矩：事实由 `agent-runtime` 定，措辞由看的人组——web 端那份在
+/// `packages/web/src/render/notice.ts`，两处该说同一件事，但各自按自己的排版说。
+fn describe_fate(fate: &OrphanFate) -> String {
+    match fate {
+        OrphanFate::Despawned { descendants: 0 } => {
+            "还在跑，这一轮收尾时被拆掉了；它在飞的那次调用回来会被丢弃。".to_string()
+        }
+        OrphanFate::Despawned { descendants } => format!(
+            "还在跑，这一轮收尾时连同它的 {descendants} 个后代一起被拆掉了；\
+             它在飞的那次调用回来会被丢弃。"
+        ),
+        OrphanFate::Kept { reason } => {
+            format!("没能在这一轮收尾时拆掉（{reason}），它会以活着的状态留到下一轮。")
+        }
+        OrphanFate::Discarded { bytes, is_error } => {
+            let how = if *is_error { "失败收场" } else { "干完了" };
+            format!("已经{how}，但这一轮结束前没有人 collect 它，{bytes} 字节的结果被丢弃。")
+        }
+    }
+}
+
 fn print_turn_guard(at: &str, usage: &TokenUsage, report: &GuardReport, adjustments: &[Adjustment]) {
     let cached_str = match usage.cached {
         Some(n) => n.to_string(),
@@ -209,5 +237,30 @@ mod tests {
         assert_eq!(prefix(&AgentId::root()), "");
         assert_eq!(prefix(&AgentId::new("root/a1")), "[a1] ");
         assert_ne!(prefix(&AgentId::new("root/a1/a1")), prefix(&AgentId::new("root/a2/a1")));
+    }
+
+    /// 054：三种收场各说各的话，且**互不相同**——一个 `_ =>` 兜底把三种说成
+    /// 一句的话，面板上「被拆了」和「跑完没人领」就分不出来了，而这两件事对
+    /// 模型编排的含义完全不同。
+    #[test]
+    fn each_orphan_fate_reads_differently() {
+        let despawned = describe_fate(&OrphanFate::Despawned { descendants: 2 });
+        let alone = describe_fate(&OrphanFate::Despawned { descendants: 0 });
+        let kept = describe_fate(&OrphanFate::Kept { reason: "StillRead".to_string() });
+        let discarded = describe_fate(&OrphanFate::Discarded { bytes: 15, is_error: false });
+        let failed = describe_fate(&OrphanFate::Discarded { bytes: 15, is_error: true });
+
+        assert!(despawned.contains("2 个后代"), "{despawned}");
+        assert!(!alone.contains("后代"), "没有后代就别说后代：{alone}");
+        assert!(kept.contains("StillRead") && kept.contains("留到下一轮"), "{kept}");
+        assert!(discarded.contains("15 字节") && discarded.contains("干完了"), "{discarded}");
+        assert!(failed.contains("失败收场"), "{failed}");
+
+        let all = [&despawned, &alone, &kept, &discarded, &failed];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(a, b, "四种收场不该渲染成同一句话");
+            }
+        }
     }
 }

@@ -69,7 +69,10 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
         }
     }
 
-    assert_eq!(upward, vec![Slot::Messages, Slot::SkillsActive]);
+    assert_eq!(
+        upward,
+        vec![Slot::Messages, Slot::SkillsActive, Slot::HostTools, Slot::HostSkills, Slot::DisabledBuiltins]
+    );
     assert_eq!(downward, vec![Slot::Status, Slot::ToolsAllowed]);
     assert_eq!(
         upward.len() + downward.len() + private.len(),

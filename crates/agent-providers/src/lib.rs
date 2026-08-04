@@ -19,6 +19,22 @@ pub(crate) mod wire;
 
 pub use stream::{StreamAccumulator, StreamEvent};
 
+/// 工具名在 wire 上的转义与还原（`srv:fs/list` ⇄ `srv_3Afs_2Flist`）。
+///
+/// **它住在 `wire/` 而不是某一家的目录下，因为它不是厂商差异**：三家的
+/// `function.name` 都受同一条 OpenAI 惯例字符集 `[A-Za-z0-9_-]` 约束，所以三家
+/// 共用同一份编解码（`deepseek/glm/kimi::accumulator()` 全都挂
+/// `wire::names::from_wire`）。
+///
+/// **公开出去是给宿主用的**（050）：模型看到的工具名是 wire 名，于是它写进
+/// **自由参数**里的工具名（`srv:agent/spawn` 的 `tools` 子集）也是 wire 名——
+/// 函数名那条路 adapter 自己解回来了，参数那条路 adapter 不知道哪个 arg 是工具名，
+/// 只能由持有权威工具表的宿主去还原。见 `agent-runtime` 的 `tool_name`。
+///
+/// 哪天真出现一家字符集不同的 provider，这里就该改成 per-provider 的取值（跟
+/// usage 字段路径同款「数据不是方法」），宿主那侧把 `from_wire` 当参数传进解析函数。
+pub use wire::names as wire_name;
+
 /// 料单：core 供给 adapter 的原材料，**未加工、未合并**（ADAPTER.md §料单）。
 ///
 /// 纯数据引用。`tools` 已按优先级排好（产品判断，跟模型无关）；`late_tools`

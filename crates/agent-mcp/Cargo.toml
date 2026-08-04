@@ -1,0 +1,15 @@
+# MCP 适配层：外部工具服务器的差异合法存在的地方（docs/MCP.md）。
+# 和 agent-providers 同类接缝，唯一的不同是它**要做 IO**（042 起子进程、JSON-RPC 往返）——
+# 所以不在红线 7 的两个 crate 里。协议 + 翻译那一层（041）是纯函数、零 IO，对录制帧回归；
+# 042 的 stdio 传输 + 握手 + McpClient/McpRegistry 只用 std::process/std::io（子进程 spawn、
+# 阻塞式读写 + 后台读线程），不需要引入 tokio/async 生态——042 的验收明确是「阻塞式请求-
+# 响应」，std 就够。所以本 Cargo.toml 到 042 为止仍然没有新增依赖。
+[package]
+name = "agent-mcp"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }

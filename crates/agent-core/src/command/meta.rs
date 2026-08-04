@@ -60,8 +60,12 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
 /// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的七个 +
 /// `Session` 会话级命令的四个（`begin_turn` / `set_max_turns` / `set_max_retries` /
 /// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）+ 039
-/// 的两条 skill 命令（`activate_skill` / `deactivate_skill`）。
+/// 的两条 skill 命令（`activate_skill` / `deactivate_skill`）+ 073 的宿主注入声明
+/// （`declare_host_tools`）。
 /// 这是一个**封闭的、有限的编译期常量集**（`EntryMeta.label` 的文档注释）。
+///
+/// **加一条就是一次协议变更**：用新代码写出来的会话文件，旧二进制打开时会在这里
+/// 认不出这个标签，`recover` 硬失败而不是编一个假的凑合用（[`known_label`]）。
 const KNOWN_LABELS: &[&str] = &[
     "user_input",
     "provider_done",
@@ -78,6 +82,9 @@ const KNOWN_LABELS: &[&str] = &[
     "despawn_child",
     "activate_skill",
     "deactivate_skill",
+    "declare_host_tools",
+    "declare_host_skills",
+    "disable_builtins",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

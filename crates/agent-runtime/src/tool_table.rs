@@ -6,37 +6,95 @@
 //! 没有 `Location`/`Reversibility`——那两个维度是 router/undo 用的，`agent-tools`
 //! 也没暴露它们（013 的 `ToolExecutor` 只按全名分发，不声明位置/可逆性）。这张表
 //! 补的就是这一格。
+//!
+//! # 这个文件只留「表本身」，专门的事各在一个文件里
+//!
+//! | 文件 | 那一件事 |
+//! |---|---|
+//! | 本文件 | 五档装配 + `snapshot` 的三级判定 + `push_spec` 判重（075） |
+//! | [`names`]（`tool_table_names.rs`，076 拆出） | **名字规则**：全名怎么机械推出 `Location`/`Reversibility` |
+//! | [`host`]（`tool_table_host.rs`，062） | **宿主注入这件事**：那张可逆性映射怎么进表、为什么排序、为什么另挂一张表 |
+//! | [`skill_tools`]（`tool_table_skill.rs`，039/064） | **skill 这件事**：registry 归表拥有、每轮怎么展开成注入料、撞名怎么滤 |
+//! | [`disable`]（`tool_table_disable.rs`，076） | **关掉内置这件事**：会话建立时把部署方给的某几件整条剔掉（唯一往回减的一件） |
+//!
+//! 拆的判据是「说得清它是干嘛的、且不含『和』」（红线 9）：注入、skill、关掉内置、
+//! 名字规则各自都有一整套自己的理由要写，混在这里会让「工具表是什么」这句话说不完。
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use agent_core::{
-    AgentLimits, Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec,
-};
+use agent_core::{AgentLimits, Reversibility, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
-use crate::skill::{
-    SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillRegistry, activate_spec, deactivate_spec,
-};
-use crate::spawn_tool::{SPAWN_TOOL, spawn_spec};
+use crate::collect_tool::collect_spec;
+use crate::skill::SkillRegistry;
+use crate::spawn_tool::spawn_spec;
+use crate::status_tool::status_spec;
+
+use names::{location_of, reversibility_of};
 
 /// 会话期间不变的工具表：喂模型的声明 + 判 `location`/`reversibility` 用的
 /// 名字规则 + （039）宿主装载的 skill registry。
-///
-/// registry 住在这里而不是 `RunnerCtx` 的单独字段：`ToolTable::with_skills` 一次把
-/// 「声明两个 skill 工具」和「拥有 registry 供 dispatch 随时查」绑在一起——两件事
-/// 本来就是一件（开了 skill 才有那两个工具，也才需要 registry）。
 pub struct ToolTable {
     specs: Vec<ToolSpec>,
+    /// 这张表拥有的 skill registry（039）。为什么它住在表里而不是 `RunnerCtx` 的
+    /// 单独字段、每轮怎么展开成注入料、`late_tools` 撞上表里已有的名字怎么办，
+    /// 全在 [`skill_tools`]（`with_skills`）。空 = 这个会话没开 skill。
     registry: SkillRegistry,
+    /// `mcp:<server>/<tool>` → 它的可逆性（042 握手时经 [`ToolTable::with_mcp`] 装进
+    /// 来，041 从 `readOnlyHint` 翻译）。`snapshot` 撞 `mcp:` 前缀查这份映射，**查不到
+    /// 落保守 `Irreversible`**——MCP 可逆性是 per-tool 元数据，不能从名字推
+    /// （docs/MCP.md §「可逆性不能再从名字推」）。有序容器（红线 11 精神；也不进
+    /// prompt，纯查表）。空表 = 没接 MCP。
+    mcp_reversibility: BTreeMap<Arc<str>, Reversibility>,
+    /// 宿主建会话时注入的工具（062）→ 它的可逆性。装配、排序与「为什么另挂一张表
+    /// 而不是给 `ToolSpec` 加字段」全在 [`host`]（`with_host_tools`）。空表 = 这个
+    /// 会话没有注入。
+    host_reversibility: BTreeMap<Arc<str>, Reversibility>,
 }
 
+#[path = "tool_table_names.rs"]
+mod names;
+
+#[path = "tool_table_host.rs"]
+mod host;
+
+#[path = "tool_table_skill.rs"]
+mod skill_tools;
+
+#[path = "tool_table_disable.rs"]
+mod disable;
+
 impl ToolTable {
+    /// 从一组 specs 造一张表：空 skill registry、空 MCP 映射、空注入映射。四个内置
+    /// 构造器共用它，免得每加一个字段就四处补一遍。
+    fn from_specs(specs: Vec<ToolSpec>) -> Self {
+        ToolTable { specs, registry: SkillRegistry::empty(), mcp_reversibility: BTreeMap::new(), host_reversibility: BTreeMap::new() }
+    }
+
+    /// 075：`with_*` 系列 `push` 进 `specs` 的唯一入口。**名字已经在表里 → 整条丢弃**
+    /// （不 `push`），返回 `false` 交给调用方——`with_mcp`/`with_host_tools` 靠这个
+    /// 返回值判断要不要顺带 `insert` 对应的可逆性映射，不然会造出「表里没有对应 spec
+    /// 的映射项」这种隐式耦合（069 §拍板 D 第二条理由）。丢的是**后来的**那一条：
+    /// 工具表在 prompt 最前面（红线 11），既有前缀一个字节不能动。
+    ///
+    /// **生产不 panic**（069 §拍板 D 被否①明确否决过硬失败）：`with_mcp` 收的是
+    /// 第三方 MCP server 的 `tools/list` 回包，`with_host_tools` 收的是客户端建会话
+    /// 的请求体——外部数据写错了就把宿主进程打死不可接受，两条路各自也已经有更早、
+    /// 更该报错的裁判点（074 的 `list_tools` 去重 / 061 的 400）。`debug_assert!`
+    /// 只在 debug 构建炸，点得出撞的是哪个名字；release 静默丢弃。
+    fn push_spec(&mut self, spec: ToolSpec) -> bool {
+        if self.declares(&spec.name) {
+            debug_assert!(false, "ToolTable 已经有工具 `{}` 了，同名的后来这一条整条丢弃（specs 不 push，可逆性也不 insert）", spec.name);
+            return false;
+        }
+        self.specs.push(spec);
+        true
+    }
+
     /// 013 的内置工具集：`srv:fs/read`、`srv:fs/list`，服务端本地、纯读。
     pub fn builtin() -> Self {
-        ToolTable {
-            specs: agent_tools::builtin_specs(),
-            registry: SkillRegistry::empty(),
-        }
+        Self::from_specs(agent_tools::builtin_specs())
     }
 
     /// 027 开闸：内置只读集 + `srv:shell/exec`（020 声明、`agent-tools` 的
@@ -47,10 +105,7 @@ impl ToolTable {
     pub fn with_shell() -> Self {
         let mut specs = agent_tools::builtin_specs();
         specs.push(agent_tools::shell_spec());
-        ToolTable {
-            specs,
-            registry: SkillRegistry::empty(),
-        }
+        Self::from_specs(specs)
     }
 
     /// web-agent 兼容的本地标准工具集：四个只读文件工具、受版本保护的工作区
@@ -60,10 +115,7 @@ impl ToolTable {
     /// 此构造器不夹带历史 `srv:*` 别名，避免模型面对两套同义工具。浏览器交互工具
     /// 必须由 [`ToolTable::standard`] 的远程 router 注册，不能伪装为本地 executor。
     pub fn standard_local() -> Self {
-        ToolTable {
-            specs: standard_local_specs(),
-            registry: SkillRegistry::empty(),
-        }
+        Self::from_specs(standard_local_specs())
     }
 
     /// 完整的 web-agent 标准工具集：本地工具外加三个由 Web 宿主执行并回传的交互
@@ -71,23 +123,7 @@ impl ToolTable {
     pub fn standard() -> Self {
         let mut specs = standard_local_specs();
         specs.extend(agent_tools::interaction_specs());
-        ToolTable { specs, registry: SkillRegistry::empty() }
-    }
-
-    /// 039 开闸：追加 `srv:skill/activate` + `srv:skill/deactivate`，并把宿主装载的
-    /// `registry` 交给这张表拥有（供 dispatch 截获时查正文/工具、供 `provider_call`
-    /// 组每一轮的 `late_system`/`late_tools`）。
-    ///
-    /// 追加在末尾而不是插进 `builtin()` 内部：`builtin_specs()` 的顺序是 013 钉死的
-    /// 既有契约，工具表在 prompt 最前面（红线 11），只加不改。
-    ///
-    /// **常驻索引不在这里**——它是 system 段的一部分（不是工具），由宿主调
-    /// `registry.skill_index_chunk()` 放进 `Ingredients::system`（见 e2e 测试的装配）。
-    pub fn with_skills(mut self, registry: SkillRegistry) -> Self {
-        self.specs.push(activate_spec());
-        self.specs.push(deactivate_spec());
-        self.registry = registry;
-        self
+        Self::from_specs(specs)
     }
 
     /// 029 开闸：追加 `srv:agent/spawn`，宿主从此允许模型分解任务（决策 20）。
@@ -101,24 +137,63 @@ impl ToolTable {
     /// 追加在末尾而不是插进 `builtin()` 内部：`builtin_specs()` 的顺序是 013 钉死
     /// 的既有契约，工具表在 prompt 最前面（红线 11），只加不改。
     pub fn with_spawn(mut self, limits: AgentLimits) -> Self {
-        self.specs.push(spawn_spec(limits));
+        self.push_spec(spawn_spec(limits));
+        self
+    }
+
+    /// 051 开闸：追加 `srv:agent/status`，模型从此能在子 agent 还在跑的时候看它们
+    /// 此刻在干啥（M8，docs/ORCHESTRATION.md §三）。
+    ///
+    /// **跟 `with_spawn` 分开两个开关**（而不是塞进它）：每个 `with_*` 是一档独立的
+    /// 授权，跟 `with_shell`/`with_skills`/`with_mcp` 一套规矩；而且工具表在 prompt
+    /// 最前面（红线 11），把 status 折进 `with_spawn` 会让所有既有宿主的前缀无声
+    /// 变一次。只开 status 不开 spawn 是**合法但没用**的组合（永远没有后代可看），
+    /// 宿主该两个一起开——`agent-cli` / `ToolTableSpec::Full` 就是这么接的。
+    ///
+    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。宿主的链式顺序决定它落在
+    /// 哪一格，`agent-cli` 把它紧跟在 `with_spawn` 之后、`with_skills`/`with_mcp`
+    /// 之前：这样「静态那一段」在所有会话里逐字节相同，不随装了几个 skill / 几个
+    /// MCP 工具而移位。
+    pub fn with_status(mut self) -> Self {
+        self.push_spec(status_spec());
+        self
+    }
+
+    /// 053 开闸：追加 `srv:agent/collect`，模型从此能**择时**领后台子 agent 的结果
+    /// （M8 闭环的最后一格，docs/ORCHESTRATION.md §三）。
+    ///
+    /// 跟 `with_spawn`/`with_status` 各自一档，理由同 `with_status`。只开 collect
+    /// 不开 spawn 是**合法但没用**的组合（永远没有后台子可领）；反过来——开了
+    /// spawn 不开 collect——才是真的会咬人：模型看得见 `background=true` 却没有
+    /// 任何办法把结果拿回来，发出去的子全部在轮末被拆掉。宿主要么三个一起开，
+    /// 要么把 spawn 也关掉。
+    ///
+    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。
+    pub fn with_collect(mut self) -> Self {
+        self.push_spec(collect_spec());
+        self
+    }
+
+    /// 043 装载：把一批 MCP 工具（041 翻译产出的 `(ToolSpec, Reversibility)`，042
+    /// 握手时 `McpClient::list_tools` 拿到）追加进表，并把每个工具的可逆性记进
+    /// `mcp:` 映射。`snapshot("mcp:...")` 从此查这份映射（见 `snapshot`）。
+    ///
+    /// 追加在末尾（红线 11：工具表在 prompt 最前面，顺序是既有契约，只加不改）。
+    /// 名字里已带 server id 消歧（`mcp:<server>/<tool>`），所以两个 server 的同名
+    /// 工具在这份映射里也不会撞键。
+    pub fn with_mcp(mut self, tools: Vec<(ToolSpec, Reversibility)>) -> Self {
+        for (spec, reversibility) in tools {
+            let name = Arc::clone(&spec.name);
+            if self.push_spec(spec) {
+                self.mcp_reversibility.insert(name, reversibility);
+            }
+        }
         self
     }
 
     /// 喂给 `Ingredients::tools` 的那张表，顺序原样保留（红线 11）。
     pub fn specs(&self) -> &[ToolSpec] {
         &self.specs
-    }
-
-    /// 这张表拥有的 skill registry（dispatch 截获激活时查它）。没开 skill 时是空的。
-    pub(crate) fn skill_registry(&self) -> &SkillRegistry {
-        &self.registry
-    }
-
-    /// 把一组激活的 skill 展开成本轮的注入料（正文 → `late_system`、工具 →
-    /// `late_tools`）。`provider_call::start` 组料时调它。
-    pub(crate) fn skill_injection(&self, active: &[SkillId]) -> (Vec<SystemChunk>, Vec<ToolSpec>) {
-        self.registry.injection(active)
     }
 
     /// 这张表里有这个工具吗。
@@ -138,55 +213,24 @@ impl ToolTable {
     /// 两个内置工具都是已知的纯读，显式列出，其余一律走保守默认，不臆造
     /// `Pure`。
     pub fn snapshot(&self, tool: &str, input: Arc<Value>) -> ToolCallRequest {
+        // **三张表的优先级写死在这里**（062）：宿主注入的映射 → MCP 映射 → 名字规则。
+        // 第一级按**表**查、不按前缀查，理由（以及 062 之前那个前缀门会怎么静默咬人）
+        // 见 [`host`] 模块文档。MCP 那一级仍然按前缀进：它的可逆性是 per-tool 元数据
+        // （来自 server 的 `readOnlyHint`，042 翻译进映射），**不从名字推**——
+        // `mcp:everything/echo` 和 `mcp:everything/sendEmail` 同前缀，一个 readOnly
+        // 一个不是。查不到落保守 `Irreversible`（把数据事故开关交给第三方的代价不
+        // 对称，docs/MCP.md）。
+        let reversibility = match self.host_reversibility.get(tool).copied() {
+            Some(declared) => declared,
+            None if tool.starts_with("mcp:") => self.mcp_reversibility.get(tool).copied().unwrap_or(Reversibility::Irreversible),
+            None => reversibility_of(tool),
+        };
         ToolCallRequest {
             tool: Arc::from(tool),
             input,
             location: location_of(tool),
-            reversibility: reversibility_of(tool),
+            reversibility,
         }
-    }
-}
-
-fn location_of(tool: &str) -> Location {
-    if matches!(tool, "ask_user_question" | "browser_action" | "save_file") {
-        return Location::Web;
-    }
-    match tool.split_once(':').map(|(prefix, _)| prefix) {
-        Some("web") => Location::Web,
-        Some("desk") => Location::Desktop,
-        // `srv` 或者压根没有认得出的前缀：M1 没有 router，落进这个分支的只有
-        // 013 的内置工具，全部是 `srv:` 前缀——保守当作本地服务端处理。
-        _ => Location::Server,
-    }
-}
-
-fn reversibility_of(tool: &str) -> Reversibility {
-    match tool {
-        "srv:fs/read"
-        | "srv:fs/list"
-        | "read_file"
-        | "list_files"
-        | "search_files"
-        | "rg_search"
-        | "find_test_lint_commands"
-        | "git_diff_review"
-        | "ask_user_question" => Reversibility::Pure,
-        // spawn 的补偿动作是 `despawn_child`（028 已经实现，019 三约束逐条走完）
-        // ——**有明确且可靠的补偿动作**正是 `Reversible` 的定义。
-        //
-        // 「可子 agent 会去干不可逆的事啊」：那些事各自带自己的屏障位——子 agent
-        // 跑 `shell/exec` 时，记录那条结果的 entry 就是 `barrier: true`，而它跟
-        // 父的 spawn 那条 entry 在**同一条日志、同一个 turn_id** 上（决策 5）。
-        // undo 往回走会先撞上子 agent 那条屏障停下来问，轮不到 spawn 这条。
-        // 组合因此天然成立，不需要 spawn 自己保守成 `Irreversible`——那样反而会
-        // 让「拆了任务的那一轮」一律撤不掉，哪怕子 agent 只读了两个文件。
-        SPAWN_TOOL => Reversibility::Reversible,
-        // skill 激活/停用的补偿动作就是彼此（`srv:skill/deactivate` / re-activate），
-        // 而且激活走 command 层、journaled——**有明确且可靠的补偿动作** = `Reversible`
-        // 的定义。它们走 dispatch 截获、不进 `mark_irreversible`，所以不在日志上留
-        // 屏障位：`/undo` 连激活一起退掉是白拿的。
-        SKILL_ACTIVATE | SKILL_DEACTIVATE => Reversibility::Reversible,
-        _ => Reversibility::Irreversible,
     }
 }
 
@@ -199,96 +243,8 @@ fn standard_local_specs() -> Vec<ToolSpec> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn builtin_specs_are_exposed_in_order() {
-        let table = ToolTable::builtin();
-        let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
-        assert_eq!(names, vec!["srv:fs/read", "srv:fs/list"]);
-    }
-
-    #[test]
-    fn known_builtin_tools_are_pure_reads() {
-        let table = ToolTable::builtin();
-        let snap = table.snapshot("srv:fs/read", Arc::new(Value::Null));
-        assert_eq!(snap.location, Location::Server);
-        assert_eq!(snap.reversibility, Reversibility::Pure);
-    }
-
-    /// 拿不准的工具名：位置按前缀猜，可逆性保守落 `Irreversible`——
-    /// 判错成 `Pure` 的代价（重复扣款）比判错成 `Irreversible`（多问一次）大。
-    #[test]
-    fn unknown_tool_defaults_to_irreversible() {
-        let table = ToolTable::builtin();
-        let snap = table.snapshot("web:browser/click", Arc::new(Value::Null));
-        assert_eq!(snap.location, Location::Web);
-        assert_eq!(snap.reversibility, Reversibility::Irreversible);
-    }
-
-    /// 027 开闸：`with_shell()` 在内置只读集后面追加 `srv:shell/exec`，
-    /// 且它落 `Irreversible`（走的是保守默认分支，不需要额外列进
-    /// `reversibility_of` 的已知表——`unknown_tool_defaults_to_irreversible`
-    /// 已经证明这条分支的判据，这里只需确认它真的在表里）。
-    #[test]
-    fn with_shell_appends_shell_exec_after_the_read_only_builtins_and_it_is_irreversible() {
-        let table = ToolTable::with_shell();
-        let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
-        assert_eq!(names, vec!["srv:fs/read", "srv:fs/list", "srv:shell/exec"]);
-
-        let snap = table.snapshot("srv:shell/exec", Arc::new(Value::Null));
-        assert_eq!(snap.location, Location::Server);
-        assert_eq!(snap.reversibility, Reversibility::Irreversible);
-    }
-
-    /// 029 开闸：`with_spawn` 同样只追加在末尾，且 spawn 是 `Reversible`
-    /// （补偿 = `despawn_child`，理由见 `reversibility_of` 的注释）——它**不是**
-    /// 那个保守默认分支的产物，所以这里两件事都得断言。
-    #[test]
-    fn with_spawn_appends_the_spawn_tool_and_it_is_reversible() {
-        let table = ToolTable::with_shell().with_spawn(AgentLimits::default());
-        let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
-        assert_eq!(
-            names,
-            vec![
-                "srv:fs/read",
-                "srv:fs/list",
-                "srv:shell/exec",
-                "srv:agent/spawn"
-            ]
-        );
-
-        let snap = table.snapshot(SPAWN_TOOL, Arc::new(Value::Null));
-        assert_eq!(snap.location, Location::Server);
-        assert_eq!(snap.reversibility, Reversibility::Reversible);
-    }
-
-    /// 截获闸的输入端：宿主没开子 agent，这个名字就跟别的不存在的工具一样。
-    #[test]
-    fn a_table_without_spawn_does_not_declare_it() {
-        assert!(!ToolTable::builtin().declares(SPAWN_TOOL));
-        assert!(
-            ToolTable::builtin()
-                .with_spawn(AgentLimits::default())
-                .declares(SPAWN_TOOL)
-        );
-    }
-
-    /// 上限进描述是给模型看的（029：「描述写给模型看」），换一组数就该换一份
-    /// 描述——不然模型读到的上限跟真正拦它的那两道闸对不上。
-    #[test]
-    fn the_declared_limits_follow_the_limits_that_are_actually_enforced() {
-        let default = ToolTable::builtin().with_spawn(AgentLimits::default());
-        let tighter = ToolTable::builtin().with_spawn(AgentLimits {
-            max_depth: 1,
-            max_children: 2,
-        });
-        let text = |t: &ToolTable| t.specs().last().unwrap().description.to_string();
-        assert!(text(&default).contains('8'));
-        assert!(text(&tighter).contains('2') && !text(&tighter).contains('8'));
-    }
-}
+#[path = "tool_table_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "standard_local_tests.rs"]

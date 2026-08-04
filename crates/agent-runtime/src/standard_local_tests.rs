@@ -1,3 +1,4 @@
+use agent_core::Location; // 076：名字规则搬进 `tool_table_names.rs` 之后不再白拿。
 use super::*;
 
 #[test]

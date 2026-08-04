@@ -12,6 +12,11 @@ export type { Granularity } from "./generated/Granularity";
 export type { Frame } from "./generated/Frame";
 export type { PollFrame } from "./generated/PollFrame";
 export type { PollResponse } from "./generated/PollResponse";
+// 072：`GET /sessions/{id}/pending_tools` 的响应体——此刻还欠着宿主回传的远端
+// 调用。宿主执行一次 `web:` 工具之前拿它求证（帧只是触发器，服务端的等待槽才是
+// 判据），每次连上再拉一次把欠的活补掉。`Frame`/`SessionEvent` 一个字节没动。
+export type { PendingTool } from "./generated/PendingTool";
+export type { PendingToolsResponse } from "./generated/PendingToolsResponse";
 export type { AgentId } from "./generated/AgentId";
 
 // 033：`packages/web` 的渲染层按帧分发时，直接点名了这几个嵌套在
@@ -26,3 +31,26 @@ export type { Notice } from "./generated/Notice";
 export type { TokenUsage } from "./generated/TokenUsage";
 export type { ToolCallId } from "./generated/ToolCallId";
 export type { ToolCallRequest } from "./generated/ToolCallRequest";
+// 054：轮末孤儿告警（`SessionEvent::orphaned_child`）的 `fate` 载荷——
+// `render/notice.ts` 直接按它的三个变体组措辞，同上一条注释的道理收拢一份。
+export type { OrphanFate } from "./generated/OrphanFate";
+
+// 049：web 活树面板（`render/agent_tree.ts`）直接点名了 `AgentTree` 本身
+// （`GET /sessions/:id/agents` 的响应体、也是 `SessionEvent::agent_tree` 变体
+// 的 `data`）以及它内层的 `AgentNode`/`AgentActivity`——同上一条注释的道理，
+// 收拢到这个入口，不绕去 `generated/` 内部找。
+export type { AgentTree } from "./generated/AgentTree";
+export type { AgentNode } from "./generated/AgentNode";
+export type { AgentActivity } from "./generated/AgentActivity";
+
+// 061：上行的另一半——`POST /sessions` 请求体里 `capabilities` 那一段（宿主
+// 声明自己有哪些 tool/skill，docs/HOST-CAPABILITIES.md §四）。这是目前唯一从
+// 这个入口出去的**请求体**类型：下行的 `Frame`/`SessionEvent` 之外，前端拼
+// 声明时也该用生成的形状，不手写一份会漂移的镜像（065）。
+// `CapabilityReversibility` 是**小写** union（`"pure"|…`），跟下行
+// `ToolCallRequest.reversibility` 那个大写的 `Reversibility` 不是同一套拼法——
+// 一个是宿主报进来的，一个是 core 落盘/推事件用的，别混。
+export type { Capabilities } from "./generated/Capabilities";
+export type { CapabilityTool } from "./generated/CapabilityTool";
+export type { CapabilitySkill } from "./generated/CapabilitySkill";
+export type { CapabilityReversibility } from "./generated/CapabilityReversibility";

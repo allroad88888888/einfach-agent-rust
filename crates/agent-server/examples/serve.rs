@@ -28,6 +28,7 @@
 //! 这份示例不设——联调场景一贯是内存会话，改这个行为不是这次改动的目的，
 //! 要落盘会话文件联调用 `agent-server-bin --sessions-dir`。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
@@ -58,7 +59,17 @@ async fn main() {
 
     let provider_name = assembled.provider_name.clone();
     let model = assembled.template.model.clone();
-    let bound = AgentServer::new(ServerConfig::new(assembled.template))
+    // `AGENT_STATIC_DIR` 指向 `packages/web` 的 `dist/` 时，前端由这个 server 自己
+    // 托管（036 的 `with_static_dir`，tower-http `ServeDir`）——于是**同源**，不需要
+    // vite 的 dev 代理。本机的 dev 代理历来对 SSE 发飘（M7/M8 两次真机验收都撞上、
+    // 502），同源托管把那个变量整个拿掉：验的是 server 本身，不是代理。
+    // 不设这个变量时行为一字不变（`None` = 不托管静态文件）。
+    let mut config = ServerConfig::new(assembled.template);
+    let static_dir = std::env::var("AGENT_STATIC_DIR").ok().map(PathBuf::from);
+    if let Some(dir) = static_dir.clone() {
+        config = config.with_static_dir(dir);
+    }
+    let bound = AgentServer::new(config)
         .bind(addr)
         .await
         .unwrap_or_else(|e| fail(&format!("绑定 {addr} 失败: {e}")));

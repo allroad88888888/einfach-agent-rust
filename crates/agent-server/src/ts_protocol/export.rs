@@ -3,14 +3,15 @@
 //! 导出 `Frame`（agent 归属信封）而不再单独导出 `SessionEvent`——`Frame` 是
 //! 现在真正的下行 SSE wire 形状，`SessionEvent` 是它内层的 `event` 字段类型，
 //! ts-rs 的 `export_all` 会把它当依赖递归导出，`SessionEvent.ts` 照样存在，
-//! 不用再单独点名一次。
+//! 不用再单独点名一次。061：再加一个 `Capabilities`——`POST /sessions` 请求体里
+//! 宿主声明的 tool/skill，是上行协议的一半。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use ts_rs::TS;
 
-use crate::http::PollResponse;
+use crate::http::{Capabilities, PendingToolsResponse, PollResponse};
 use crate::{Command, Frame};
 
 /// 每个生成文件顶部多加的一行。**不是**替换 ts-rs 自己那行
@@ -43,6 +44,12 @@ pub fn export_protocol_types(dir: &Path) -> Result<(), ts_rs::ExportError> {
     Command::export_all(&cfg)?;
     Frame::export_all(&cfg)?;
     PollResponse::export_all(&cfg)?;
+    // 072：待办投影的响应体。`Frame`/`SessionEvent` 一个字节没动，这是新增的
+    // **第三条下行**（推：SSE 帧；拉：poll；求证：这一份）。
+    PendingToolsResponse::export_all(&cfg)?;
+    // 061：上行的另一半——`POST /sessions` 请求体里的 `capabilities`。前端
+    // （065）照这份生成的类型拼声明，不手写一份会跟 Rust 侧漂移的镜像。
+    Capabilities::export_all(&cfg)?;
 
     prepend_regen_banner(dir)
 }

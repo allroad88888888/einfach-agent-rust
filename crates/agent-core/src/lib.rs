@@ -26,6 +26,7 @@ pub mod engine;
 pub mod graph;
 pub mod ids;
 pub mod limits;
+pub mod observe;
 pub mod seam;
 pub mod value;
 
@@ -46,7 +47,9 @@ pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, Tur
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
 pub use ids::{AGENT_PATH_SEP, AgentId, MessageId, SkillId, ToolCallId};
 pub use limits::{DEFAULT_TOOL_OUTPUT_BYTES, truncate_tool_output, truncated_content_bytes};
+pub use observe::{AgentActivity, AgentNode, AgentTree};
 pub use value::atom_value::AgentValue;
+pub use value::host_skills::HostSkill;
 pub use seam::{
     Adjustment, ErrorClass, PrefixImage, RequestIntent, Segment, SegmentImage, SystemChunk,
 };

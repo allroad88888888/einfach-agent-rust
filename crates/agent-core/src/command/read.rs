@@ -127,7 +127,14 @@ impl Session {
 
     /// 本轮的工具槽，**顺序就是模型请求的顺序**。
     pub fn tool_slots(&self) -> Arc<Vec<ToolSlot>> {
-        self.read(Slot::ToolSlots)
+        self.tool_slots_of(&self.agent.clone())
+    }
+
+    /// 这个 agent 自己的工具槽（组它自己的 `Ingredients` 用，同 `tool_slots()`
+    /// 对 root 的语义）。046 的 `agent_tree()` 拼 `AgentActivity::Working.tools`
+    /// 时读它——在飞工具名是这个槽 `SlotState::Pending` 的那些条目的投影，不是新槽。
+    pub fn tool_slots_of(&self, agent: &AgentId) -> Arc<Vec<ToolSlot>> {
+        self.slot_of(agent, Slot::ToolSlots)
             .as_slots()
             .expect("ToolSlots 槽位持 Slots")
             .clone()

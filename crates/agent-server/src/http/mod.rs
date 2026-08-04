@@ -9,6 +9,7 @@
 //! | 模块 | 管什么 |
 //! |---|---|
 //! | [`config`] | `ServerConfig`/`SessionTemplate`：`AgentServer::new` 的输入 |
+//! | [`capabilities`] | issue 061：`POST /sessions` 里宿主声明的 tool/skill——协议形状 + 名字校验（纯数据，零 IO） |
 //! | [`state`] | `AppState`：路由共享的东西，`AGENT_BIND` 无关，纯请求处理状态 |
 //! | [`hub`] | SSE 环形缓冲 + 断开取消的引用计数与宽限计时 |
 //! | [`routes`] | 六个端点 + 会话创建/查询的处理函数 |
@@ -22,10 +23,12 @@
 //! `TcpListener::bind`，默认值从哪来是调用方的选择（生产代码该用
 //! `agent_server::default_bind_addr`，`crate::bind` 模块文档有理由）。
 
+mod capabilities;
 mod config;
 mod error;
 mod hub;
 mod json;
+mod pending;
 mod poll_protocol;
 mod routes;
 mod sessions_handle;
@@ -45,6 +48,14 @@ use state::AppState;
 
 #[cfg(feature = "ts")]
 pub(crate) use poll_protocol::PollResponse;
+/// 072：`GET /sessions/{id}/pending_tools` 的响应体——宿主执行一次远端工具之前
+/// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
+#[cfg(feature = "ts")]
+pub(crate) use pending::PendingToolsResponse;
+/// 061：`POST /sessions` 请求体里的 `capabilities`——上行协议的一半，跟下行的
+/// `Frame`/`PollResponse` 一起导出给前端（065 直接用生成的类型，不手写镜像）。
+#[cfg(feature = "ts")]
+pub(crate) use capabilities::Capabilities;
 
 /// `AgentServer::new(config)` 之后拿到的东西：路由已经装好，还没绑端口。
 pub struct AgentServer {

@@ -52,6 +52,11 @@ impl FakeUpstream {
                 }
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // 见 `tests/support/server.rs` 同一处的注释（issue 077）：
+                        // BSD/macOS 上 accept 出来的 socket 继承 listener 的
+                        // O_NONBLOCK，不清掉就会把「请求字节还在路上」误判成
+                        // 「没带请求」。
+                        let _ = stream.set_nonblocking(false);
                         let bodies = Arc::clone(&bodies_bg);
                         let scripts = Arc::clone(&scripts);
                         thread::spawn(move || handle_one(stream, &bodies, &scripts));
@@ -89,7 +94,8 @@ impl Drop for FakeUpstream {
 }
 
 fn handle_one(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
-    let body = read_request_body(&mut stream);
+    // 没带请求的连接不记账、也不消耗脚本槽位（issue 077）。
+    let Some(body) = read_request_body(&mut stream) else { return };
     let idx = {
         let mut guard = bodies.lock().unwrap();
         guard.push(body);
@@ -116,13 +122,14 @@ fn text_reply(text: &str) -> String {
     format!("data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n")
 }
 
-fn read_request_body(stream: &mut TcpStream) -> String {
+/// 读不到请求返回 `None`——跟 `tests/support/server.rs` 同款（issue 077）。
+fn read_request_body(stream: &mut TcpStream) -> Option<String> {
     let mut reader = BufReader::new(stream.try_clone().expect("clone stream for reading"));
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return String::new();
+            return None;
         }
         if line == "\r\n" || line.is_empty() {
             break;
@@ -133,7 +140,7 @@ fn read_request_body(stream: &mut TcpStream) -> String {
     }
     let mut body = vec![0u8; content_length];
     let _ = reader.read_exact(&mut body);
-    String::from_utf8_lossy(&body).into_owned()
+    Some(String::from_utf8_lossy(&body).into_owned())
 }
 
 fn write_headers_only(stream: &mut TcpStream) {

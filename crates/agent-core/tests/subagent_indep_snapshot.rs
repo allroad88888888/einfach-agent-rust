@@ -31,7 +31,7 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     assert!(agents_present.contains(&root));
     assert!(agents_present.contains(&a1));
     assert!(agents_present.contains(&a2));
-    assert_eq!(snap.len(), 33, "root + a1 + a2，每个 agent 十一个槽位");
+    assert_eq!(snap.len(), 42, "root + a1 + a2，每个 agent 十四个槽位（073 加了 HostTools、064 加了 HostSkills、076 加了 DisabledBuiltins）");
 }
 
 #[test]

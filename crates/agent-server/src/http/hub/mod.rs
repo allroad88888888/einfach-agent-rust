@@ -39,6 +39,34 @@
 //! （`crate::http::routes::sse`）在真正会被 axum drop 的那个 `Stream`（`.map`
 //! 闭包）里持有它。
 //!
+//! # hub 为什么只留 [`CancelHandle`]，不留整个 `SessionHandle`（059 实测的真泄漏）
+//!
+//! drain 任务的退出条件是 `sub.recv()` 返回 `None`，而
+//! [`crate::handle::Subscription::recv`] 返回 `None` 的**唯一**条件是所有
+//! `broadcast::Sender<Frame>` 都被 drop 了。`SseHub` 一度整个存着
+//! `SessionHandle`（内含一个 `events` 发送端），而 drain 任务又持有
+//! `Arc<SseHub>`——于是它在等的条件被它自己拿着的东西挡住：
+//!
+//! ```text
+//! drain task ──> Arc<SseHub> ──> SessionHandle ──> broadcast::Sender<Frame>
+//!      ▲                                                   │
+//!      └──── 等 sub.recv() 返回 None（要求所有 Sender 都 drop）◀┘
+//! ```
+//!
+//! session actor 线程早就退出了，drain 任务照样不退出，末尾那句
+//! `hubs.remove(&id)`（**全 crate 唯一的 hub 清理点**）永远执行不到：每个死
+//! 会话泄漏一个 hub（ring + broadcast channel）和一条永久挂起的任务，
+//! `AppState` 的 hub 表只增不减。这不是推测——`crate::http::state` 的独测
+//! （`closing_every_session_empties_the_hub_table`）在修之前稳定复现：三个
+//! session 全部 `close` 之后等五秒，三项一个不少。
+//!
+//! 修法是**把 hub 需要的东西缩到刚好够用**：hub 要的只是「宽限到点能取消」
+//! （[`guard`]），那就只存 [`CancelHandle`]（命令发送端 + 取消标志，不含
+//! `events`）。`SseHub::spawn` 收下的那份 `SessionHandle` 在订阅完之后当场
+//! 走出作用域被 drop，hub 这条引用链上从此没有任何 `Sender<Frame>`。
+//! **不要因为「顺手」把 `SessionHandle` 再塞回 `SseHub`**——它会静默地把这条
+//! 泄漏原样带回来（表面上一切正常，只是表永远不空）。
+//!
 //! # 补发和直播的接缝为什么不会漏一帧
 //!
 //! [`SseHub::spawn_forwarder`] 在**同一次持锁**里做两件事：读 `ring` 算 backlog、
@@ -61,6 +89,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task::JoinHandle;
 
 use crate::SessionHandle;
+use crate::handle::CancelHandle;
 use crate::registry::SessionId;
 
 pub(super) use guard::SubscriberGuard;
@@ -73,7 +102,9 @@ use ring::RingState;
 const FORWARD_CHANNEL_CAPACITY: usize = 64;
 
 pub(super) struct SseHub {
-    handle: SessionHandle,
+    /// **只有取消能力，没有 `events` 发送端**——本模块文档「hub 为什么只留
+    /// `CancelHandle`」，改回 `SessionHandle` 会原样带回 059 的泄漏。
+    canceller: CancelHandle,
     ring: Mutex<RingState>,
     live: broadcast::Sender<BufferedFrame>,
     subscribers: AtomicUsize,
@@ -100,8 +131,16 @@ impl SseHub {
         // 就意味着某条转发任务自己太慢，跟环形缓冲的补发能力无关（见
         // `forward_live` 文档）。
         let (live_tx, _keep_channel_alive) = broadcast::channel(ring_capacity.max(16));
+
+        // 订阅必须在 spawn 前同步完成。否则首个 HTTP 请求紧跟 SSE 握手时，
+        // actor 可能在 drain 任务第一次被调度前发布事件，从而永久漏掉首帧。
+        let mut sub = handle.subscribe();
         let hub = Arc::new(SseHub {
-            handle: handle.clone(),
+            // 059：只取「能取消」那一半。`handle` 本身在这个函数返回时就被
+            // drop 掉——hub 这条引用链上不留任何 `broadcast::Sender<Frame>`，
+            // 不然下面这条 drain 任务永远等不到自己的退出条件（本模块文档
+            // 「hub 为什么只留 `CancelHandle`」）。
+            canceller: handle.canceller(),
             ring: Mutex::new(RingState::new(ring_capacity)),
             live: live_tx,
             subscribers: AtomicUsize::new(0),
@@ -109,9 +148,6 @@ impl SseHub {
             grace_task: Mutex::new(None),
         });
 
-        // 订阅必须在 spawn 前同步完成。否则首个 HTTP 请求紧跟 SSE 握手时，
-        // actor 可能在 drain 任务第一次被调度前发布事件，从而永久漏掉首帧。
-        let mut sub = handle.subscribe();
         let drain_hub = Arc::clone(&hub);
         tokio::spawn(async move {
             // 034：`sub.recv()` 给的是 `Frame`（agent + event 信封），不再是裸
@@ -152,17 +188,18 @@ impl SseHub {
 
         (rx, guard)
     }
+
     /// 在同一把 ring 锁下拍 replay 快照并订阅直播，供 SSE 和长轮询共同使用。
-    pub(super) fn replay_and_subscribe(
-        &self,
-        last_event_id: Option<u64>,
-    ) -> (Vec<BufferedFrame>, broadcast::Receiver<BufferedFrame>) {
+    ///
+    /// 先订阅再释放锁保证 drain 任务不会在「快照已读、订阅还没建」之间塞进一
+    /// 帧，因而两种传输都不会漏掉快照之后紧跟到达的事件。
+    pub(super) fn replay_and_subscribe(&self, last_event_id: Option<u64>) -> (Vec<BufferedFrame>, broadcast::Receiver<BufferedFrame>) {
         let ring = self.ring.lock().unwrap();
         let live_rx = self.live.subscribe();
         (frames(ring.replay(last_event_id)), live_rx)
     }
 
-    /// 只读当前 ring 快照，供长轮询在 live 通知后补齐同批帧。
+    /// 只读当前 ring 快照。长轮询被一条 live 帧唤醒后用它拿到同批其余帧。
     pub(super) fn replay_frames(&self, last_event_id: Option<u64>) -> Vec<BufferedFrame> {
         frames(self.ring.lock().unwrap().replay(last_event_id))
     }

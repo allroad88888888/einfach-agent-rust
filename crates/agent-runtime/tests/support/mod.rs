@@ -8,6 +8,7 @@
 //! `HangAfterHeaders`）——跟 `agent-tools/tests/support/mod.rs` 同一个取舍。
 #![allow(dead_code)]
 
+pub mod mcp;
 pub mod routed;
 
 use std::cell::RefCell;
@@ -130,7 +131,34 @@ pub fn build_ctx_agent_aware(
     (ctx, events)
 }
 
-fn build_ctx_with(
+/// DeepSeek wire：一条工具调用响应（hop1）。`wire_name` 是**转义后**的工具名
+/// （`web:nope/x` → `web_3Anope_2Fx`，见 `agent_providers::wire_name`），
+/// `arguments` 是模型写进 `function.arguments` 那个**字符串**的原文
+/// （里面的引号要按 JSON 字符串再转义一次）。
+pub fn sse_tool_call(call_id: &str, wire_name: &str, arguments: &str) -> ScriptedResponse {
+    let line = format!(
+        r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":null,"tool_calls":[{{"index":0,"id":"{call_id}","type":"function","function":{{"name":"{wire_name}","arguments":"{arguments}"}}}}]}}}}]}}"#
+    );
+    ScriptedResponse::Sse(vec![
+        Box::leak(line.into_boxed_str()),
+        r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":100,"completion_tokens":20,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":100}}"#,
+        "data: [DONE]",
+    ])
+}
+
+/// DeepSeek wire：一条普通 `EndTurn` 文本响应（工具结果回来之后模型收敛）。
+pub fn sse_text(text: &str) -> ScriptedResponse {
+    let line = format!(
+        r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{text}"}},"finish_reason":null}}]}}"#
+    );
+    ScriptedResponse::Sse(vec![
+        Box::leak(line.into_boxed_str()),
+        r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":150,"completion_tokens":10,"prompt_cache_hit_tokens":64,"prompt_cache_miss_tokens":86}}"#,
+        "data: [DONE]",
+    ])
+}
+
+pub fn build_ctx_with(
     port: u16,
     root: &std::path::Path,
     tools: ToolTable,

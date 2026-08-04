@@ -43,6 +43,9 @@ cargo run -p agent-cli
 
 ## 状态
 
-M1–M4 全部完成并真实验收（2026-08）。未排期（等真实使用反馈）：skills 装载、
-agent-mcp、前端/桌面工具闭环、多租户。上游血缘：状态引擎 fork 自
+M1–M5 全部完成并真实验收（2026-08）。M6（MCP 接入）与插队的 M7（子 agent 可观测，
+[ROADMAP §二](docs/ROADMAP.md)）进行中：M7 四个 issue（core 派生读 / CLI `/agents` /
+SSE 快照事件 / web 活树面板）代码均已交、typecheck + build 前台跑绿，**真浏览器终验**
+（spawn 子 agent 实时长树、`/undo` 回退、断线重连恢复）待做。未排期（等真实使用
+反馈）：前后端工具闭环收尾、多租户。上游血缘：状态引擎 fork 自
 [einfach](https://github.com/allroad88888888/einfach) 的 Rust 原子引擎，独立演进。

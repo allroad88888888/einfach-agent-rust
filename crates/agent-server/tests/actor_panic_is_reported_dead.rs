@@ -55,6 +55,10 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
         history_cap: None,
         snapshot_every: Some(0),
         provider_timeout: Some(Duration::from_secs(5)),
+        remote_tool_timeout: None,
+        host_tools: Vec::new(),
+        host_skills: Vec::new(),
+        disable_builtin: Vec::new(),
     };
 
     let registry = agent_server::SessionRegistry::new();

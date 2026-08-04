@@ -120,6 +120,20 @@ pub(super) fn handle_remote_tool_result(
     }
 }
 
+/// 远端等待到点了（060）：让 runtime 把过期的槽翻成 `is_error` 的工具结果并恢复
+/// 事件泵。**不是**一条 `Command`——它没有来源，是「等命令等超了」这件事本身
+/// （`super::body::next_command`）。
+///
+/// `None`（这一刻其实没有槽过期）就什么都不做。跟 `handle_input` 同款收尾：轮次
+/// 万一落在 `Failed(Cancelled)`（比如超时恢复的那一圈里用户正好按了取消）照样走
+/// 自动擦除，不为超时新造一条策略。
+pub(super) fn handle_remote_tool_timeout(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
+    let Some(status) = agent_runtime::sweep_remote_tool_deadlines(session, ctx) else { return };
+    if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
+        erase_cancelled_turn(session, ctx, events);
+    }
+}
+
 /// 取消轮结束时的自动策略（027 已裁决，本文件模块文档）：非 force 的
 /// `undo_turn`。结果照样走 [`SessionEvent::Undo`]——对客户端来说，「这一轮被
 /// 取消后自动擦除」和「用户主动 `/undo`」产出的是同一种事件，语义也确实相同

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::{AgentLimits, SystemChunk};
+use agent_core::{AgentLimits, HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
 use agent_transport::Client;
 
@@ -44,6 +44,56 @@ pub struct OpenSpec {
     pub snapshot_every: Option<u64>,
     /// `None` → `agent_runtime` 的默认 provider 超时（120s）。
     pub provider_timeout: Option<Duration>,
+    /// `None` → `agent_runtime` 的默认远端工具超时（060，10 分钟）：`web:`/`desk:`
+    /// 工具派给宿主之后，等 `POST /tool_result` 等多久算等不到了。
+    pub remote_tool_timeout: Option<Duration>,
+    /// 宿主这一次建会话时声明的工具（062，`POST /sessions` 的 `capabilities.tools`
+    /// 经 `crate::http::capabilities::host_tools` 翻译而来）。
+    ///
+    /// **这是本 issue 作用域那一条的落点**：`OpenSpec` 本来就是**每个 session 一
+    /// 份**的东西（`SessionRegistry::open` 收的就是它），注入的工具因此只进这一个
+    /// 会话在 actor 线程里现造的那张 `ToolTable`
+    /// （`crate::actor::body` 调 `ToolTable::with_host_tools`）——不进全局表、别的
+    /// chatid 看不见、会话结束就没了（docs/HOST-CAPABILITIES.md §二）。空 = 这次
+    /// 没有声明，工具表跟 062 之前逐字节相同。
+    ///
+    /// 可逆性跟着走一份而不进 `ToolSpec`：后者进 prompt，加字段要重算红线 11 的账
+    /// （§五，形状照 `ToolTable::with_mcp` 的既有先例）。
+    ///
+    /// **这个字段是「一份声明」，不是「一次 HTTP 请求」**：类型是纯 `agent_core`
+    /// 数据，跟 `POST /sessions` 的请求体没有任何耦合。073 会把声明挪进 store
+    /// （建会话时 journaled、恢复时回放，宿主不必重连时重报一遍），那时往这里填的
+    /// 人从「路由层翻译请求体」换成「从回放出来的会话状态里取」——**装配这一侧
+    /// （这个字段往下的每一行）一行都不用改**。
+    pub host_tools: Vec<(ToolSpec, Reversibility)>,
+    /// 宿主这一次建会话时声明的 skill（064，`POST /sessions` 的 `capabilities.skills`
+    /// 经 `crate::http::capabilities::host_skills` 翻译而来）。
+    ///
+    /// 跟 [`host_tools`](OpenSpec::host_tools) 一档、同一个作用域论证：`OpenSpec` 每
+    /// 个 session 一份，声明因此只进这一个会话在 actor 线程里现造的那个
+    /// `SkillRegistry`（`crate::actor::body` 调 `SkillRegistry::from_host_skills`），
+    /// 别的 chatid 看不见。空 = 这次没有声明 skill，registry 为空 → 工具表**不接**
+    /// `.with_skills(..)`、常驻索引是空文本，会话跟 064 之前逐字节相同。
+    ///
+    /// 类型是纯 `agent_core` 数据（`HostSkill` 就是它落进 `Slot::HostSkills` 再回放
+    /// 出来的同一个形状），跟 `POST /sessions` 的请求体没有任何耦合——「新建」看这次
+    /// 请求、「恢复」看回放，往这里填的人不同，装配那一侧一行都不用改。
+    pub host_skills: Vec<HostSkill>,
+    /// 宿主这一次建会话时**关掉**的内置工具名（076，`POST /sessions` 的
+    /// `capabilities.disable_builtin` 经 `crate::http::capabilities::disabled_builtins`
+    /// 翻译而来）。
+    ///
+    /// 跟上面两个字段同一个 per-session 作用域论证，但**方向相反**：那两个是宿主
+    /// 往这个会话里加，这一个是从部署方给的那张表里减。列出来的工具**连名字带描述
+    /// 都不进 prompt**（`ToolTable::without_builtins`），模型压根不知道有它。
+    ///
+    /// 名字必须在 [`tools`](OpenSpec::tools) 这一档装配出来的表里——**只能减不能
+    /// 加**，那道闸在 HTTP 路由上（`capabilities::check_builtin_switch`，400 且点名）。
+    /// 到了这里已经校验过；装配那一侧对认不出的名字静默跳过，因为它每次开会话都跑、
+    /// 那时作者早不在场了。
+    ///
+    /// 空 = 这次什么都没关，工具表跟 076 之前逐字节相同。
+    pub disable_builtin: Vec<Arc<str>>,
 }
 
 /// 工具表的五档，跟 `agent_runtime::ToolTable::builtin`/`standard_local`/`standard`/
@@ -63,7 +113,8 @@ pub enum ToolTableSpec {
     Standard,
     /// 内置只读集 + `srv:shell/exec`（020/027 开闸）。
     WithShell,
-    /// 034 开闸：内置只读集 + `srv:shell/exec` + `srv:agent/spawn`
+    /// 034 开闸：内置只读集 + `srv:shell/exec` + `srv:agent/spawn` +
+    /// `srv:agent/status`（051）+ `srv:agent/collect`（053，054 接上）
     /// （029 给 runtime 的多 agent 能力，经这一档接满到 HTTP 协议面）。
     /// `spawn_limits` 走 server 配置（`SessionTemplate::tools`——`ServerConfig`
     /// 的一部分），默认 = [`AgentLimits::default`]（029 的默认）；`examples/
@@ -83,9 +134,16 @@ impl ToolTableSpec {
             ToolTableSpec::StandardLocal => agent_runtime::ToolTable::standard_local(),
             ToolTableSpec::Standard => agent_runtime::ToolTable::standard(),
             ToolTableSpec::WithShell => agent_runtime::ToolTable::with_shell(),
-            ToolTableSpec::Full { spawn_limits } => {
-                agent_runtime::ToolTable::with_shell().with_spawn(spawn_limits)
-            }
+            // `with_status`（051）/ `with_collect`（053）跟 spawn 同一档：这一档的
+            // 整个意思就是「开子 agent」，status 是模型观测自己子树的那一半、
+            // collect 是领后台子结果的那一半（docs/ORCHESTRATION.md §三）。
+            // **开了 `background` 却不开 `collect` 是陷阱**——模型能发后台子，却
+            // 领不回结果，只能等轮末被当孤儿拆掉（`agent_runtime::orphan`）。
+            // 054 之前这一档漏了 collect，CLI（`agent-cli::main`）那边一直是全的。
+            ToolTableSpec::Full { spawn_limits } => agent_runtime::ToolTable::with_shell()
+                .with_spawn(spawn_limits)
+                .with_status()
+                .with_collect(),
         }
     }
 
@@ -98,6 +156,42 @@ impl ToolTableSpec {
             ToolTableSpec::Full { spawn_limits } => Some(spawn_limits),
             ToolTableSpec::Builtin | ToolTableSpec::StandardLocal | ToolTableSpec::Standard | ToolTableSpec::WithShell => {
                 None
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 054：`Full` 这一档的意思就是「开子 agent」，编排三件套必须**同时**在
+    /// （ORCHESTRATION §三）。**开了 `background` 却不开 `collect` 是陷阱**：
+    /// 模型能发后台子却领不回结果，只能眼看它在轮末被当孤儿拆掉。这条断言就是
+    /// 那个陷阱的看门狗——照 051 给 `with_status` 加的那条同款。
+    #[test]
+    fn the_full_table_declares_spawn_status_and_collect_together() {
+        let table = ToolTableSpec::Full { spawn_limits: AgentLimits::default() }.build();
+        assert!(table.declares(agent_runtime::SPAWN_TOOL), "Full 该有 spawn");
+        assert!(table.declares(agent_runtime::STATUS_TOOL), "Full 该有 status");
+        assert!(table.declares(agent_runtime::COLLECT_TOOL), "Full 该有 collect");
+    }
+
+    /// 反面：别的档一个都不该有——`Full` 是唯一开子 agent 的那一档，
+    /// 上面那条断言不能靠「反正每一档都有」蒙混过去。
+    #[test]
+    fn no_other_tier_declares_the_orchestration_trio() {
+        for spec in [
+            ToolTableSpec::Builtin,
+            ToolTableSpec::StandardLocal,
+            ToolTableSpec::Standard,
+            ToolTableSpec::WithShell,
+        ] {
+            let table = spec.build();
+            for tool in
+                [agent_runtime::SPAWN_TOOL, agent_runtime::STATUS_TOOL, agent_runtime::COLLECT_TOOL]
+            {
+                assert!(!table.declares(tool), "{spec:?} 不该声明 {tool}");
             }
         }
     }

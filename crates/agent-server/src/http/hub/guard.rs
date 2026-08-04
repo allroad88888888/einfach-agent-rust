@@ -5,7 +5,11 @@
 //! 宽限计时器——这就是「重连取消计时」的全部实现：不需要另开一条「是不是在
 //! 重连」的判断，任何新连接到来都天然满足「有人回来了，不该再倒数」。
 //! `Drop` 时 `-1`，归零才真正起一个新的宽限计时器；到点一看计数还是零，才调
-//! [`SessionHandle::cancel`]——不白烧 token（ARCHITECTURE.md §传输「取消传播」）。
+//! [`CancelHandle::cancel`](crate::handle::CancelHandle::cancel)——不白烧 token
+//! （ARCHITECTURE.md §传输「取消传播」）。059 之后 hub 存的是
+//! `CancelHandle` 而不是整个 `SessionHandle`（`super` 模块文档），取消这条路
+//! 一步没变：`CancelHandle::cancel` 就是 `SessionHandle::send(Command::Cancel)`
+//! 内部走的同一条实现。
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -38,7 +42,7 @@ impl Drop for SubscriberGuard {
             // 宽限期内可能又连回来了（`Self::attach` 已经 abort 过这个任务的话
             // 根本不会跑到这里；这里读到的是真的一直没人回来的情况）。
             if hub.subscribers.load(Ordering::SeqCst) == 0 {
-                let _ = hub.handle.cancel();
+                let _ = hub.canceller.cancel();
             }
         });
         *self.hub.grace_task.lock().unwrap() = Some(task);
@@ -53,19 +57,24 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
     use std::sync::mpsc;
-    use std::sync::atomic::Ordering::Relaxed;
     use std::time::Duration;
     use tokio::sync::broadcast;
 
     /// 一个不背后跑真 actor 的 hub——`SessionHandle::subscribe` 只是订阅一个
-    /// `broadcast::Sender`，不需要真的有人往里发；`SseHub::spawn` 起的后台 drain
-    /// 任务会在 `sub.recv().await` 上无限期挂着（发送端跟着 `handle` 活到测试
-    /// 结束），这对断言宽限计时器的行为无害。
+    /// `broadcast::Sender`，不需要真的有人往里发。
+    ///
+    /// 059 之后这个假 handle 在 `SseHub::spawn` 返回时就被 drop 了（hub 只留
+    /// `CancelHandle`），于是那条 drain 任务当场收到 `None`、把
+    /// `SessionId("guard-test")` 从这张一次性的表里摘掉然后退出——对下面三条
+    /// 断言无害：宽限计时器读写的是测试自己手上这份 `Arc<SseHub>`（订阅计数、
+    /// `grace_task`、`canceller`），跟 drain 任务和那张表没有关系。
     fn fake_hub(grace: Duration) -> Arc<SseHub> {
         let (tx, _rx) = mpsc::channel::<crate::Command>();
         let (events, _keep_alive) = broadcast::channel(4);
         let tree = Arc::new(Mutex::new(agent_core::AgentTree { nodes: Vec::new() }));
-        let handle = crate::SessionHandle { tx, cancel: Arc::new(AtomicBool::new(false)), events, tree };
+        let canceller = crate::handle::CancelHandle::new(tx, Arc::new(AtomicBool::new(false)));
+        let pending_tools = Arc::new(Mutex::new(Vec::new()));
+        let handle = crate::SessionHandle { canceller, events, tree, pending_tools };
         let hubs = Arc::new(Mutex::new(HashMap::new()));
         SseHub::spawn(handle, 8, grace, SessionId::from("guard-test"), hubs)
     }
@@ -75,9 +84,9 @@ mod tests {
         let hub = fake_hub(Duration::from_millis(30));
         let guard = SubscriberGuard::attach(Arc::clone(&hub));
         drop(guard);
-        assert!(!hub.handle.cancel.load(Relaxed), "宽限期还没过，不该提前取消");
+        assert!(!hub.canceller.is_cancelled(), "宽限期还没过，不该提前取消");
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(hub.handle.cancel.load(Relaxed), "宽限期过了、始终没人回来，该取消了");
+        assert!(hub.canceller.is_cancelled(), "宽限期过了、始终没人回来，该取消了");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -88,7 +97,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(15)).await;
         let second = SubscriberGuard::attach(Arc::clone(&hub)); // 该 abort 掉上面那次倒计时
         tokio::time::sleep(Duration::from_millis(120)).await; // 远超原本的宽限期
-        assert!(!hub.handle.cancel.load(Relaxed), "宽限期内回来了，不该被取消");
+        assert!(!hub.canceller.is_cancelled(), "宽限期内回来了，不该被取消");
         drop(second);
     }
 
@@ -99,7 +108,7 @@ mod tests {
         let second = SubscriberGuard::attach(Arc::clone(&hub));
         drop(first); // 还剩一个订阅者，不该起计时器
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert!(!hub.handle.cancel.load(Relaxed), "断开的只是两个订阅者中的一个");
+        assert!(!hub.canceller.is_cancelled(), "断开的只是两个订阅者中的一个");
         drop(second);
     }
 }

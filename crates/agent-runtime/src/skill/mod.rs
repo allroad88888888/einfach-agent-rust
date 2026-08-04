@@ -54,8 +54,18 @@ pub struct SkillRegistry {
 }
 
 impl SkillRegistry {
-    /// 从若干来源目录装载（内置 + 项目 `./skills/`……）。**合并**：后一个目录里
-    /// 同名 skill 覆盖前一个（跟工具表「后来居上」一套规则，TOOLS.md §多来源）。
+    /// 从若干来源目录装载（内置 + 项目 `./skills/`……）。**合并：后一个目录里同名
+    /// skill 整体覆盖前一个**——069 拍板的**有意例外**（docs/TOOLS.md §撞名）：目录
+    /// 顺序是部署者显式排的（内置 → 项目 → 用户），「后面盖前面」正是覆盖机制本身
+    /// 的用途，不是没想清楚该要哪个。它跟 `capabilities` 的「重名一律拒绝」不矛盾：
+    /// 那边两个候选出自同一份声明、同一个作者，没有先后可言，server 替它选一个就是
+    /// 把问题推到运行时；这边先后本身就是作者给的信息。
+    ///
+    /// 覆盖是**整体替换**不是字段级 merge（没有「一半 A 一半 B」的混血），所以合并完
+    /// 每个 id 恰好一份——069 那条红线「撞名不许留到 prompt 里」在这条路上是白拿的。
+    /// **工具表不是这套规则**（它今天压根不检测重名，069 §拍板 D 定的修法是「后来的
+    /// 整条不进表」，实现排在 062 之后）。
+    ///
     /// 不存在的目录**跳过、不报错**——宿主指向一个还没建的 `./skills/` 是常态。
     pub fn load(dirs: &[PathBuf]) -> Result<Self, SkillLoadError> {
         let mut skills = BTreeMap::new();
@@ -68,6 +78,41 @@ impl SkillRegistry {
     /// 空 registry（宿主没开 skill 时的占位；`ToolTable` 的默认值）。
     pub fn empty() -> Self {
         SkillRegistry { skills: BTreeMap::new() }
+    }
+
+    /// 064：**宿主建会话时声明的 skill** 进这一个会话的 registry
+    /// （`docs/HOST-CAPABILITIES.md` §八）。声明经 `agent_core::HostSkill` 进来——
+    /// 那是它落进 store（`Slot::HostSkills`，journaled）再回放出来的同一个形状，
+    /// 所以「新建」和「恢复」两条路喂给 registry 的是**同一份数据**。
+    ///
+    /// # 为什么是构造器，不是能接在 [`load`](SkillRegistry::load) 后面的 builder
+    ///
+    /// 069 §拍板「顺带定死 064 第 3 条」：**server 形态不从磁盘 `./skills/` 装载**。
+    /// 两个来源合流会造出「同一份请求在不同部署上行为不同」的面，而且 073 之后
+    /// 宿主声明是**会话状态**（恢复时逐字节复刻），磁盘上那份不是——部署者改一下
+    /// `./skills/` 就能悄悄改写一段历史对话该长什么样，正好是 073 刚堵上的那个洞。
+    ///
+    /// 写成构造器而不是 `self` builder，是把这条决定钉进类型：想合流的人必须**显式**
+    /// 加一条合并路径，那时才轮得到 064 §6 那条闸（宿主声明的 id 撞上磁盘已装载的
+    /// id → 400，跟 061 同一处，那一刻客户端还在线）。**绝不能**让 `BTreeMap::insert`
+    /// 顺手把它变成静默的后来居上——那是本条最坏的结局。
+    ///
+    /// id 在一份声明内部的唯一性由 061 的校验保证（`DuplicateSkill` → 400），
+    /// 所以这里不会真的撞键。
+    pub fn from_host_skills(skills: Vec<agent_core::HostSkill>) -> Self {
+        let skills = skills
+            .into_iter()
+            .map(|declared| {
+                let skill = Skill {
+                    id: declared.id,
+                    description: declared.description,
+                    body: declared.body,
+                    tools: declared.tools,
+                };
+                (Arc::clone(&skill.id.0), skill)
+            })
+            .collect();
+        SkillRegistry { skills }
     }
 
     pub fn is_empty(&self) -> bool {

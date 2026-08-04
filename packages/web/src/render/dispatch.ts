@@ -13,6 +13,11 @@
 // `createRenderer` 每次调用起一份独立的 `StreamCursor` 状态（不是模块级
 // 单例）——一个 session 一份,不同 session 互不干扰,也方便测试用一个新实例
 // 而不用担心残留状态。
+//
+// 049：`agent_tree` 是唯一不写进时间线的变体——它标的是 `AgentId::root()`
+// （会话级快照,不是某个具体 agent 的活动,`event/frame.rs` 的既有约定），
+// `event.data`（`AgentTree`）整个甩给 `renderAgentTree`（`./agent_tree`）
+// 重画独立的树面板,不经 `frame.agent`/`appendToTimeline` 那条路。
 import type { Frame } from "@agent/protocol";
 
 import { StreamCursor } from "./stream";
@@ -20,6 +25,7 @@ import * as tool from "./tool";
 import * as notice from "./notice";
 import { renderUndoOutcome } from "./undo";
 import { turnGuard } from "./guard";
+import { renderAgentTree } from "./agent_tree";
 
 export function createRenderer(sessionId: string): (frame: Frame) => void {
   const stream = new StreamCursor();
@@ -81,6 +87,21 @@ export function createRenderer(sessionId: string): (frame: Frame) => void {
       case "gap":
         stream.interrupt();
         notice.renderGap(event.data.skipped, agent);
+        return;
+      case "orphaned_child":
+        // 054：轮末孤儿告警。帧的 `agent` 是**父**（没 collect 是父的编排失误），
+        // 出事的子在 `event.data.child` 里——所以这一行进的是父的时间线,树面板
+        // 那边它已经消失了（被 `despawn_child` 拆掉 → 不在 `live_agents` 里 →
+        // 下一帧 `agent_tree` 快照自然没有它，哑渲染不需要为这件事写一行代码）。
+        stream.interrupt();
+        notice.renderOrphanedChild(event.data.child, event.data.fate, agent);
+        return;
+      case "agent_tree":
+        // 049：树面板跟时间线是两块独立 DOM（`#agent-tree` vs `#timeline`），
+        // 不写进时间线,因此不打断 `stream` 的连续增量气泡——树变化和文本流是
+        // 两件事,互不打断彼此的连续性。哑渲染：拿到快照就整棵重画
+        // （`renderAgentTree`），不在这一层做任何增量判断。
+        renderAgentTree(event.data);
         return;
     }
   };

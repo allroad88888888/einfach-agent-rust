@@ -50,6 +50,14 @@ impl FakeServer {
                 }
                 match listener.accept() {
                     Ok((stream, _)) => {
+                        // **必须清掉 O_NONBLOCK**（issue 077）：BSD/macOS 上 accept
+                        // 出来的 socket 继承 listener 的非阻塞标志（Linux 不继承）。
+                        // 不清的话，下面那个连接线程里的「阻塞式」读会在请求字节还
+                        // 没落地时立刻拿到 `WouldBlock`，被 `read_request_body` 当成
+                        // 「对面没发请求」——于是记一条空请求、照样把脚本应答写完再
+                        // 关连接，客户端那条真请求原地撞 RST。
+                        // 先例：`agent-transport/tests/fake_sse.rs` 早就这么写了。
+                        let _ = stream.set_nonblocking(false);
                         let bodies = Arc::clone(&bodies_bg);
                         let scripts = Arc::clone(&scripts);
                         thread::spawn(move || handle_connection(stream, &bodies, &scripts));
@@ -90,7 +98,9 @@ impl Drop for FakeServer {
 }
 
 fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
-    let body = read_request_body(&mut stream);
+    // 没带请求的连接**不记账、也不消耗脚本槽位**：`request_count()` 数的是
+    // HTTP 请求，不是 TCP 连接（issue 077）。
+    let Some(body) = read_request_body(&mut stream) else { return };
     let idx = {
         let mut guard = bodies.lock().unwrap();
         guard.push(body);
@@ -109,13 +119,15 @@ fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts
     }
 }
 
-fn read_request_body(stream: &mut TcpStream) -> String {
+/// 读一个完整的 HTTP 请求。**读不到请求返回 `None`**——「对面没发请求」和
+/// 「请求体是空串」是两件事，混成同一个返回值就是 issue 077 那条假红的另一半。
+fn read_request_body(stream: &mut TcpStream) -> Option<String> {
     let mut reader = BufReader::new(stream.try_clone().expect("clone stream for reading"));
     let mut content_length = 0usize;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return String::new();
+            return None;
         }
         if line == "\r\n" || line.is_empty() {
             break;
@@ -127,7 +139,7 @@ fn read_request_body(stream: &mut TcpStream) -> String {
     }
     let mut body = vec![0u8; content_length];
     let _ = reader.read_exact(&mut body);
-    String::from_utf8_lossy(&body).into_owned()
+    Some(String::from_utf8_lossy(&body).into_owned())
 }
 
 fn write_sse_headers(stream: &mut TcpStream) {

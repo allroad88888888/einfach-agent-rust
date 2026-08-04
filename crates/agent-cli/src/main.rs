@@ -35,7 +35,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agent_cli::{print, provider, repl, session_path};
+use agent_cli::{mcp, print, provider, repl, session_path};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
 use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
 use agent_tools::ToolExecutor;
@@ -56,7 +56,9 @@ fn main() {
         Err(e) => fail(&e),
     };
     let Some(api_key) = provider_cfg.resolve_key() else {
-        fail("provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量");
+        fail(
+            "provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量",
+        );
     };
 
     // 内置工具（013）锁在启动时的当前工作目录之内——CLI 从哪启动，工具就只能
@@ -67,7 +69,12 @@ fn main() {
     };
     let fs = match ToolExecutor::new(&tool_root) {
         Ok(fs) => fs,
-        Err(e) => fail(&format!("内置工具初始化失败（root={}）: [{}] {}", tool_root.display(), e.code, e.message)),
+        Err(e) => fail(&format!(
+            "内置工具初始化失败（root={}）: [{}] {}",
+            tool_root.display(),
+            e.code,
+            e.message
+        )),
     };
 
     // 只打长度/状态，永远不打 key 本身；provider 打的是配置里的名字，不是
@@ -85,7 +92,9 @@ fn main() {
     if let Some(path) = &session_file {
         eprintln!("会话文件={}", path.display());
     } else {
-        eprintln!("会话文件=（未指定，临时会话，进程退出即丢——用 --session <path> 或 AGENT_SESSION_PATH 落盘）");
+        eprintln!(
+            "会话文件=（未指定，临时会话，进程退出即丢——用 --session <path> 或 AGENT_SESSION_PATH 落盘）"
+        );
     }
     // 039：从项目 `./skills/`（相对启动目录）装载 skill。装载失败不致命——退回
     // 空 registry，CLI 照跑，只是没有 skill 可激活。索引常驻进 system 前缀（跟
@@ -95,13 +104,34 @@ fn main() {
         SkillRegistry::empty()
     });
     let skill_index = skills.skill_index_chunk();
-    eprintln!("skills={}", if skills.is_empty() { "（无）".to_string() } else { skills.listing().len().to_string() });
+    eprintln!(
+        "skills={}",
+        if skills.is_empty() {
+            "（无）".to_string()
+        } else {
+            skills.listing().len().to_string()
+        }
+    );
+
+    // 045：从 `.mcp.json`（默认启动目录，`--mcp-config <path>` 可覆盖）装载 MCP server。
+    // 缺失 / 坏配置不致命——退回零 MCP 工具，CLI 照跑（跟上面 skill 装载失败同一个精神）。
+    // 活句柄进 `registry`（红线 3，store 外），工具批追加进下面的 `ToolTable`（红线 11，
+    // 只加不改），装载状态给 `/mcp` 命令。**每次启动都跑**——kill-9 重启后 server 从这里
+    // 重新 spawn，不从快照复活（docs/MCP.md §「活句柄住 store 外」）。
+    let (mcp_config_path, mcp_explicit) = mcp::resolve_config_path(&args);
+    let mcp = mcp::bootstrap(&mcp_config_path, mcp_explicit, &mut |m| eprintln!("[mcp] {m}"));
+    eprintln!("mcp={}", mcp.summary());
 
     let store = agent_runtime::open_backend(session_file, |e| eprintln!("[会话文件] {e}"));
 
-    let mut session = match agent_runtime::recover(store.as_ref(), AgentId::root(), agent_core::DEFAULT_HISTORY_CAP, &mut |key| {
-        eprintln!("[会话文件] 快照里有一个这一版不认识的键，已忽略：{key:?}");
-    }) {
+    let mut session = match agent_runtime::recover(
+        store.as_ref(),
+        AgentId::root(),
+        agent_core::DEFAULT_HISTORY_CAP,
+        &mut |key| {
+            eprintln!("[会话文件] 快照里有一个这一版不认识的键，已忽略：{key:?}");
+        },
+    ) {
         Ok(Some(session)) => {
             print::session_recovered(session.turn_id());
             if agent_runtime::has_unresolved_tool_calls(&session) {
@@ -120,10 +150,25 @@ fn main() {
         provider_cfg.endpoint(),
         api_key,
         fs,
-        // 029 开闸：内置只读集 + `shell/exec` + `srv:agent/spawn`。上限传的是
+        // 本地标准工具集含受版本保护、可显式撤回的文件事务；不会把浏览器/桌面
+        // 交互伪装成本地工具。随后保留既有 spawn 开关，上限传的是
         // `session.agent_limits()`——工具描述里告诉模型的数字，必须跟真正拦它的
         // 那两道闸是同一组（`ToolTable::with_spawn` 的文档记了这个耦合）。
-        ToolTable::with_shell().with_spawn(session.agent_limits()).with_skills(skills),
+        // MCP 工具追加在最后（红线 11：builtin/shell/spawn/skills 的顺序是既有契约，
+        // 只加不改；server 之间按 id、server 内按 tools/list，已在 `mcp::bootstrap` 排好）。
+        // `with_status`（051）/ `with_collect`（053）紧跟在 `with_spawn` 之后、
+        // skills/MCP 之前：这样「静态的那一段工具表」在所有会话里逐字节相同，
+        // 不随装了几个 skill / 几个 MCP 工具而移位（红线 11）。
+        //
+        // 三个一起开：`background=true` 的 spawn 没有 collect 就是个陷阱——模型
+        // 看得见后台这条路，却没有任何办法把结果拿回来，发出去的子全部在轮末被
+        // 拆掉（`ToolTable::with_collect` 的文档记着这条）。
+        ToolTable::standard_local()
+            .with_spawn(session.agent_limits())
+            .with_status()
+            .with_collect()
+            .with_skills(skills)
+            .with_mcp(mcp.tools),
         vec![
             SystemChunk {
                 label: Arc::from("base"),
@@ -145,7 +190,10 @@ fn main() {
         // 后设的替换先设的，不存在「两条都在发」。
         Box::new(|_| {}),
     )
-    .with_agent_events(Box::new(move |ev| printer.handle(ev)));
+    .with_agent_events(Box::new(move |ev| printer.handle(ev)))
+    // 活句柄表进 ctx（红线 3，store 外）：dispatch 的第四路（`mcp:` 前缀且工具表声明）
+    // 拿它 + server id 查 client 起异步 `tools/call`。没连上任何 server 就是空表。
+    .with_mcp(mcp.registry);
     // 恢复之后必调——`persisted_seq` 这个同步水位不对齐，`persist::sync` 会把
     // `Session::restore` 灌回来的旧条目当新条目重新 append 一遍，连续几次
     // 「重启」之后 seq 会在文件中段跌回 0，下一次启动直接撞
@@ -163,16 +211,21 @@ fn main() {
 
     println!(
         "输入一句话开始对话。命令：/quit 退出，/model <name> 切换 provider（可选：{}），\
-         /undo 撤销上一轮，/redo 重做，/undo! 越过不可逆操作强制撤销，/skills 看已装载的技能。",
+         /undo 撤销上一轮，/redo 重做，/undo! 越过不可逆操作强制撤销，/skills 看已装载的技能，\
+         /mcp 看 MCP server 状态。",
         provider_names(&root)
     );
-    repl::run(&mut session, &mut ctx, &root);
+    repl::run(&mut session, &mut ctx, &root, &mcp.status);
 }
 
 /// 启动横幅里报「可选哪些」，直接读已加载的 `providers.toml`——跟
 /// `/model` 未知名字时报的可选值同一个数据源，不是另写一份写死的列表。
 fn provider_names(root: &config::RootConfig) -> String {
-    root.providers.keys().cloned().collect::<Vec<_>>().join(" / ")
+    root.providers
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" / ")
 }
 
 fn fail(message: &str) -> ! {

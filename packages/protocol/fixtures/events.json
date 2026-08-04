@@ -168,5 +168,55 @@
         "skipped": 3
       }
     }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "agent_tree",
+      "data": {
+        "nodes": [
+          {
+            "id": "root",
+            "parent": null,
+            "depth": 0,
+            "task": "帮我查一下今天的天气",
+            "activity": {
+              "Working": {
+                "tools": [
+                  "srv:agent/spawn"
+                ]
+              }
+            }
+          },
+          {
+            "id": "root/a1",
+            "parent": "root",
+            "depth": 1,
+            "task": "查天气",
+            "activity": {
+              "Done": {
+                "truncated": false
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "orphaned_child",
+      "data": {
+        "child": "root/a1",
+        "fate": {
+          "type": "discarded",
+          "data": {
+            "bytes": 128,
+            "is_error": false
+          }
+        }
+      }
+    }
   }
 ]

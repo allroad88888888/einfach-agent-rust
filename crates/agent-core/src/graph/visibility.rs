@@ -70,6 +70,23 @@ impl Slot {
             // 「子干活要的上下文」，站队要按语义、不按当下有没有用到（模块文档：
             // 开放一个方向要有理由，而 STATE-MODEL 已经给了理由）。
             Slot::SkillsActive => Visibility::Upward,
+            // `HostTools`（073）跟 `SkillsActive` **同一类**：宿主注入的声明是这个
+            // 会话的上下文资产，只写在 root 头上（`Session::declare_host_tools`），
+            // 子 agent 要知道「这个会话里宿主给了哪些工具」就得往根的方向读。
+            // 站队按语义、不按当下有没有读者（模块文档：开放一个方向要有理由）——
+            // 而理由跟 skill 是同一条：注入的能力对整棵树可见，它属于这个会话，
+            // 不属于某一个 agent 的内部账本。
+            Slot::HostTools => Visibility::Upward,
+            // `HostSkills`（064）跟上面两条同一类，而且它比 `HostTools` 更贴
+            // `SkillsActive`：注入的 skill 就是「这个会话有哪些 skill 可用」，
+            // 而激活集本来就是往上读的。两者站在同一边，子 agent 要么两样都读得到、
+            // 要么两样都读不到——分开站队会造出「知道它被激活了、却查不到它是谁」。
+            Slot::HostSkills => Visibility::Upward,
+            // `DisabledBuiltins`（076）跟上面三条**同一边**，而且它必须是同一边：
+            // 子 agent 不单独配这个开关，整棵树共用会话级的那一份（076 用户拍板，
+            // `spawn` 一行没改）。让它 `Private` 就等于说「这是某一个 agent 的内部
+            // 账本」——而它决定的是整棵树看得见哪些内置工具，那是会话级的事实。
+            Slot::DisabledBuiltins => Visibility::Upward,
 
             // —— 往下：父 agent 要知道子干完了没 ————————————————
             //
@@ -140,10 +157,17 @@ mod tests {
     #[test]
     fn the_current_assignment_is_pinned() {
         // 顺序 = `Slot::ALL` 里的相对次序（`slots_with` 保序过滤）：Messages 在最前，
-        // 039 追加的 SkillsActive 在末尾。两者都是「子干活要的上下文」（往上读）。
+        // 039 追加的 SkillsActive、073 追加的 HostTools、064 追加的 HostSkills、
+        // 076 追加的 DisabledBuiltins 在末尾。五者都是「子干活要的上下文」（往上读）。
         assert_eq!(
             slots_with(Visibility::Upward),
-            vec![Slot::Messages, Slot::SkillsActive]
+            vec![
+                Slot::Messages,
+                Slot::SkillsActive,
+                Slot::HostTools,
+                Slot::HostSkills,
+                Slot::DisabledBuiltins,
+            ]
         );
         assert_eq!(
             slots_with(Visibility::Downward),

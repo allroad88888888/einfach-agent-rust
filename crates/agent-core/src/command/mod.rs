@@ -27,6 +27,9 @@
 //! | [`spawn`] | 028：`spawn_child` + 结构性硬限（决策 20） |
 //! | [`despawn`] | 028：`despawn_child`——019 三条硬约束的第一次真实执行 |
 //! | [`skill`] | 039：`activate_skill` / `deactivate_skill` / `active_skills`——`SkillsActive` 槽位的 journaled 读写（决策 21） |
+//! | [`host_tools`] | 073：`declare_host_tools` / `host_tools`——`HostTools` 槽位的 journaled 读写（宿主注入的声明是会话状态，恢复时原样复刻） |
+//! | [`host_skills`] | 064：`declare_host_skills` / `host_skills`——`HostSkills` 槽位的同款读写（skill 的索引行也进 prompt，同一条理由） |
+//! | [`disabled_builtins`] | 076：`disable_builtins` / `disabled_builtins`——`DisabledBuiltins` 槽位的同款读写，方向相反（**减法**：这个会话把部署方给的哪几件藏起来不给模型看） |
 //! | [`cross_read`] | 028：跨 agent 读的两个口，没有第三个（红线 10） |
 //!
 //! ## 一个 `Session` = 整棵树
@@ -41,6 +44,9 @@ pub mod barrier;
 pub mod commit;
 pub mod cross_read;
 pub mod despawn;
+pub mod disabled_builtins;
+pub mod host_skills;
+pub mod host_tools;
 pub mod meta;
 pub mod read;
 mod restore;

@@ -32,7 +32,13 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 028 新增：spawn 时快照的工具子集，同时是活名单。
             | Slot::ToolsAllowed
             // 039 新增：激活的 skill id 集。
-            | Slot::SkillsActive => {}
+            | Slot::SkillsActive
+            // 073 新增：宿主建会话时声明的工具。
+            | Slot::HostTools
+            // 064 新增：宿主建会话时声明的 skill。
+            | Slot::HostSkills
+            // 076 新增：这个会话关掉了哪些内置工具（唯一一个减法槽位）。
+            | Slot::DisabledBuiltins => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

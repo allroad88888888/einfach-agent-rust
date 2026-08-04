@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>agent-server 最小客户端（M3）</title>
+    <title>agent-server 最小客户端（M3 + M7 活树面板）</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -16,7 +16,13 @@
         <button id="cancel" type="button">Cancel</button>
       </div>
     </header>
-    <main id="timeline"></main>
+    <div class="workspace">
+      <main id="timeline"></main>
+      <aside class="tree-panel" aria-label="活 agent 树">
+        <h2 class="tree-panel-title">Agent 树</h2>
+        <div id="agent-tree"></div>
+      </aside>
+    </div>
     <form id="composer">
       <textarea id="input" placeholder="说点什么…" rows="2"></textarea>
       <button type="submit">发送</button>

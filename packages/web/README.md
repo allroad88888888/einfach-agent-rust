@@ -1,4 +1,4 @@
-# @agent/web —— M3 最小客户端
+# @agent/web —— M3 最小客户端 + M7 活树面板
 
 vite + vanilla TS（零框架——组件化是 `packages/ui` 的事，未排期，M3 要的是
 验收面不是 UI 资产）。连 `agent-server` 的 HTTP/SSE 面看流、看子 agent、
@@ -47,8 +47,25 @@ AGENT_SERVER=http://127.0.0.1:51234 pnpm --filter web dev
 不给就是内存会话（进程 / 页面刷新即丢，但注意：内存会话是绑在 server
 进程上的，不是绑在浏览器标签页上——只要 server 没重启，刷新页面靠
 `Last-Event-ID` 补发照样能接上历史）。**这一版最小 UI 没有暴露这个字段**——
-`src/api.ts` 的 `createSession()` 固定发 `{}`。要接落盘，改那个函数传
-`{ session_path: "..." }`，server 那边不用动。
+`src/api.ts` 的 `createSession()` 只发 `capabilities`（见下一节），不发
+`session_path`。要接落盘，改那个函数多带一个 `{ session_path: "..." }`，
+server 那边不用动。
+
+### 能力声明（065，`src/capabilities/`）
+
+`POST /sessions` 还带一段 `capabilities`——**本前端把「我有哪些工具」交给
+模型用**（接缝 `docs/HOST-CAPABILITIES.md` §四；只对这个会话生效、只在建会话
+那一次生效）。声明源是 `src/capabilities/`：`demo-tools.ts` 是两个只有浏览器
+干得了的示例工具（`web:demo/page-title` 读 `document.title`、`web:demo/viewport`
+读视口尺寸，都是 `"pure"`），`index.ts` 汇总成 `webCapabilities()` 给 `main.ts`
+在建会话那一行传进去。
+
+- 类型是 **061 生成的**（`@agent/protocol` 的 `Capabilities`/`CapabilityTool`），
+  前端不手写协议形状。
+- 名字必须 `web:` 前缀（位置从前缀推 → `Location::Web` → 走既有的 remote 工具
+  通道），不合规 server 一律 400、不改写。
+- **不传 `capabilities` 时行为一字不变**：`createSession()` 不带参数就还是发 `{}`。
+- 声明**不等于**会执行——把模型点名的 `web:` 工具真跑起来并回传是 066 的事。
 
 ## 设计判断
 
@@ -82,6 +99,15 @@ AGENT_SERVER=http://127.0.0.1:51234 pnpm --filter web dev
   撞屏障）。
 - **spawn**：`examples/serve.rs` 用 `ToolTableSpec::Full`（034 补的第三档）
   开满档，模型拿得到 `srv:agent/spawn`，子 agent 真的会经 HTTP 跑起来。
+- **活树面板（049，M7 终点）**：跟归属分栏帧流并存的一块独立面板
+  （`index.html` 的 `<aside class="tree-panel">`），答「谁在干啥、树长啥样」
+  而不是「说了什么」。**哑渲染器**——`src/render/agent_tree.ts` 收到
+  `SessionEvent::agent_tree` 帧（标 `AgentId::root()`，不写进时间线）或
+  `GET /sessions/:id/agents`（`src/api.ts` 的 `fetchAgentTree`）的返回，
+  整棵清空重画，不维护自己的 agent 状态机、不从零散事件推断父子关系——跟
+  CLI `/agents`（047）共用同一份 `agent_tree()` 数据，两个壳的树不该在任何
+  状态上分叉。`src/main.ts` 在连接状态变 `"open"`（含每次自动重连）时补一次
+  GET 做种，之后全靠 SSE 帧增量；`renderAgentTree` 幂等，重复调用无副作用。
 
 ## 已知限制（033 上报的三条缺口，034 已全部补上）
 

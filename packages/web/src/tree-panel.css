@@ -1,0 +1,123 @@
+/* 唯一职责：活 agent 树面板（`.tree-panel`，issue 049 M7 终点）自己的样式——
+   跟 `style.css` 里页面骨架/时间线帧样式分开物理文件：树面板是一整块独立的
+   DOM 子树（`index.html` 的 `<aside class="tree-panel">`），跟 `.bubble`/
+   `.tool-card`/`.notice-line` 那些时间线帧样式服务的是完全不同的一坨 DOM，
+   放一个文件里会通不过引用聚类测试（`one-file-one-thing` skill）。
+
+   由 `style.css` 顶部 `@import` 引入——Vite 处理 CSS `@import` 是构建期内联,
+   不额外发一次请求,`index.html` 不需要加第二个 `<link>`。 */
+
+/* `render/agent_tree.ts` 整棵重画的挂载点是 `#agent-tree`（`.tree-panel`
+   内层那个可滚动 `div`），标题 `h2` 是静态的,不受 `replaceChildren` 影响。
+   固定宽度栏,跟 `#timeline` 左右并排（`.workspace`，见 `style.css`）。 */
+.tree-panel {
+  width: 280px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tree-panel-title {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+#agent-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+/* 一行 = 一个 `AgentNode`：状态灯 + 短 id + activity + task，缩进由
+   `agent_tree.ts` 按 `depth` 内联算（`padding-left`），不是靠 CSS 选择器
+   猜层级。 */
+.tree-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid transparent;
+}
+.tree-row:not(:last-child) {
+  border-bottom-color: var(--border);
+}
+
+.tree-dot {
+  flex: none;
+  align-self: center;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+/* 状态灯四档——跟 `AgentActivity` 的判别标签一一对应（issue 049「状态灯
+   Idle/Thinking/ToolsPending/终态」）。`thinking`/`working` 是中间态,用同一个
+   呼吸动画标出「正在发生」，跟 `done`/`failed` 那种钉死的终态颜色区分开。 */
+.tree-dot--idle {
+  background: var(--muted);
+}
+.tree-dot--thinking,
+.tree-dot--working {
+  background: var(--accent);
+  animation: tree-dot-pulse 1.4s ease-in-out infinite;
+}
+.tree-dot--done {
+  background: var(--ok);
+}
+.tree-dot--failed {
+  background: var(--error);
+}
+
+@keyframes tree-dot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.tree-id {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
+}
+
+.tree-activity {
+  flex: none;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.tree-task {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* 窄屏：树面板从右侧栏改叠到时间线下方,不然 280px 固定宽栏在手机宽度下会把
+   时间线挤没。 */
+@media (max-width: 720px) {
+  .workspace {
+    flex-direction: column;
+  }
+  .tree-panel {
+    width: auto;
+    max-height: 35vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+}

@@ -108,3 +108,81 @@ impl AppState {
         Ok(hub)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::time::Instant;
+
+    use agent_providers::deepseek::DeepSeek;
+    use agent_transport::Client;
+
+    use crate::http::config::SessionTemplate;
+    use crate::registry::ToolTableSpec;
+
+    /// 不连任何上游的模板：这条测试只开/关 session，一次 `Input` 都不发，
+    /// `endpoint` 永远不会被真的拨号（跟 `tests/http_sessions_handle_closes_
+    /// all_open_sessions.rs` 用 `http://127.0.0.1:1/unused` 同一个取舍）。
+    fn template() -> SessionTemplate {
+        SessionTemplate {
+            provider: Arc::new(DeepSeek),
+            endpoint: "http://127.0.0.1:1/unused".to_string(),
+            api_key: "fake-key".to_string(),
+            model: Arc::from("deepseek-v4-pro"),
+            tools: ToolTableSpec::Builtin,
+            tools_root: std::env::temp_dir().join(format!("agent-server-hub-reclaim-{}", std::process::id())),
+            system: Vec::new(),
+            client: Arc::new(Client::new()),
+            history_cap: None,
+            snapshot_every: None,
+            provider_timeout: None,
+            remote_tool_timeout: None,
+            default_sessions_dir: None,
+        }
+    }
+
+    fn hub_ids(state: &AppState) -> Vec<SessionId> {
+        let mut ids: Vec<SessionId> = state.0.hubs.lock().unwrap().keys().cloned().collect();
+        ids.sort();
+        ids
+    }
+
+    /// issue 059：session 死了，它的 hub 必须从这张表里**摘掉**——不是「少一点」，
+    /// 是精确归零。清理动作只有一处（`SseHub::spawn` 的 drain 任务跑完
+    /// `sub.recv()` 之后那句 `hubs.remove`），所以这条测试同时钉住两件事：
+    /// drain 任务真的会在 session 死后退出，且退出时真的摘表。
+    ///
+    /// 关的路径是 `SessionRegistry::close`——`SessionsHandle::close_all`
+    /// （宿主 Ctrl-C 优雅退出）和 `tests/close_then_reopen_recovers.rs` 走的
+    /// 都是它，这里不另造一条关闭路。
+    #[tokio::test(flavor = "multi_thread")]
+    async fn closing_every_session_empties_the_hub_table() {
+        let state = AppState::new(ServerConfig::new(template()));
+
+        let mut ids = Vec::new();
+        for _ in 0..3 {
+            let id = state.generate_id();
+            let spec = state.template().open_spec(id.clone(), None, Vec::new(), Vec::new(), Vec::new()).expect("工具根目录该建得起来");
+            state.registry().open(spec).expect("开一个干净的新 session 不该失败");
+            // 跟 `POST /sessions` 同一条路：开完立刻现造 hub，然后把这次请求
+            // 拿到的那份 `Arc` 丢掉（路由层也是 `let _ = state.hub_for(&id)`）。
+            drop(state.hub_for(&id).expect("刚 open 成功，hub 该造得出来"));
+            ids.push(id);
+        }
+        assert_eq!(hub_ids(&state).len(), 3, "三个 session 各自该有一个 hub 挂在表上");
+
+        for id in &ids {
+            state.registry().close(id).expect("三个都是干净的活会话，优雅关闭不该报错");
+        }
+
+        // drain 任务的退出是异步的（它得先被调度到、发现广播端没了），给它一段
+        // 远超实际需要的窗口——真修好了通常几毫秒内就空了，这里的上限只是为了
+        // 在没修好时给出一个确定的失败，而不是挂死。
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && !hub_ids(&state).is_empty() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert_eq!(hub_ids(&state), Vec::<SessionId>::new(), "全部 close 之后 hub 表该精确归零（issue 059）");
+    }
+}

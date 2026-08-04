@@ -21,6 +21,16 @@
 | [docs/INVARIANTS.md](docs/INVARIANTS.md) | **红线**——违反了整套机制就是漏的 |
 | [probes/PROVIDERS.md](probes/PROVIDERS.md) | 三家模型的实测差异（adapter 内部消化，主线别引用细节） |
 
+M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全读：
+
+| 文档 | 接缝管什么 | 里程碑 |
+|---|---|---|
+| [docs/MCP.md](docs/MCP.md) | 外部工具来源的差异在哪消化 | M6 |
+| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) | 子 agent 状态**给人看** | M7 |
+| [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) | 子 agent 状态**给模型看** | M8 |
+| [docs/INTEGRATION.md](docs/INTEGRATION.md) | 给**企业宿主**看：chatid 身份 / 拉取式传输 / 进程生命周期 | M9 |
+| [docs/HOST-CAPABILITIES.md](docs/HOST-CAPABILITIES.md) | 宿主声明自己的 tool / skill / MCP | M10 |
+
 新会话先读 `ROADMAP.md`（知道在哪）、`docs/issues/`（知道下一步做什么）、
 `INVARIANTS.md`（知道什么不能碰）。
 其余按需。
@@ -49,17 +59,24 @@
 
 ## 当前状态
 
-**M1–M4 全部完成**（2026-08-01/02）：九个 crate + 双 workspace + Tauri 桌面、
-954 测试。同一个核心库的四种形态全部真实验收：CLI（undo/恢复/屏障）、
-浏览器（SSE/多 agent 并行/断开取消）、独立 server bin、桌面 app（内嵌同库同前端）。
-Java 参考网关随仓（examples/，本机未构建验证，README 有诚实声明）。`cargo run -p agent-cli
--- --session s.jsonl`：与三家模型对话、模型调工具（含 `shell/exec`）、`/undo` 是
-prompt 级真回滚、越过不可逆操作停下问、连续 kill -9 重启会话都在。终局验收：
-[014](docs/issues/014-cli-shell.md)（M1）、[027](docs/issues/027-cli-undo.md)（M2）。
+**M1–M9 全部完成**（2026-08-01 ~ 08-04），**M10 宿主能力注入进行中**。
+
+同一个核心库的四种形态都真实验收过：CLI（undo/恢复/屏障）、浏览器（SSE/多 agent 并行/
+断开取消）、独立 server bin、桌面 app（内嵌同库同前端）。M5 skills 装载、M6 MCP、
+M7 子 agent 可观测、M8 模型侧异步编排、M9 企业集成**各有真机 dogfood 验收**（真 provider，
+不是 mock），逐条兑现记录在 `docs/ROADMAP.md` §二和各 issue 的实做记录里。
+
+两条最容易过期的事实：**Java 参考网关已构建验证**（OpenJDK 21 + Maven 3.9.15，037 那句
+「本机无 JDK」已被 M9 推翻），M9 起它是**拉取式**——网关 poll Rust、自己产生 SSE 给浏览器，
+并用 `ProcessBuilder` + `--ready-file` 拉起 Rust 子进程（[docs/INTEGRATION.md](docs/INTEGRATION.md)）。
+
+M10 在做「前端/网关声明自己的 tool、skill、MCP」，接缝见 `docs/HOST-CAPABILITIES.md`。
+核心判断：**不需要新机制，只缺一个声明入口**——注入的能力跟自有的走完全相同的路。
 
 动手前仍然先 `ls crates/` + `cargo test` 确认现状，别信文档对「已完成」的描述——
-[docs/WORKFLOW.md](docs/WORKFLOW.md) §四第 0 步。未排期项见 issues/README §M4 尾注（skills 装载 / agent-mcp / 多租户 / RedisRegistry）——
-都等真实使用反馈再定，别提前猜。
+[docs/WORKFLOW.md](docs/WORKFLOW.md) §四第 0 步（这也是这段不写测试数的原因：它必然过期）。
+明确未排期的：多租户、多副本 `RedisRegistry`（ARCHITECTURE §多副本是**草案，未实现**）、
+MCP 的 OAuth / resources / prompts——都等真实使用反馈再定，别提前猜。
 
 ## 上游血缘
 
@@ -72,9 +89,10 @@ fork 时移除的 Excel 血统：`ArrayData`（rows×cols 矩形块）、`Lambda
 
 ## Workspace
 
-Cargo workspace 在 `crates/`（六个 crate），pnpm workspace 在 `packages/` + `apps/`（M3 建）。
-`probes/api` 是**独立 workspace**，不进主依赖图。
-TS 侧的协议类型由 Rust 生成，**不手写**——见 ARCHITECTURE.md §「协议类型」。
+主 Cargo workspace 在 `crates/`（**十个 crate**，`Cargo.toml` 的 members 是权威），
+pnpm workspace 在 `packages/`（`protocol` + `web`）+ `apps/`（`desktop`，M3 建）。
+另有两个**独立 workspace**，不进主依赖图：`probes/api` 与 `apps/desktop/src-tauri`。
+TS 侧的协议类型由 Rust 用 **ts-rs** 生成，**不手写**——见 ARCHITECTURE.md §「协议类型」。
 
 ## 自动检查
 

@@ -1,6 +1,8 @@
 package com.example.agentgateway.proxy;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -15,10 +17,14 @@ import reactor.core.publisher.Flux;
 @RestController
 public class AgentSseController {
 
-    private final AgentSessionClient sessions;
+    private static final Logger log = LoggerFactory.getLogger(AgentSseController.class);
 
-    public AgentSseController(AgentSessionClient sessions) {
+    private final AgentSessionClient sessions;
+    private final ChatSubscribers subscribers;
+
+    public AgentSseController(AgentSessionClient sessions, ChatSubscribers subscribers) {
         this.sessions = sessions;
+        this.subscribers = subscribers;
     }
 
     @GetMapping(value = "/agent/sessions/{chatid}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -27,11 +33,30 @@ public class AgentSseController {
             @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
             ServerHttpRequest request) {
         Long browserCursor = parseCursor(lastEventId);
+        HttpHeaders browserHeaders = request.getHeaders();
         // POST 是幂等 getOrCreate：活会话接上、磁盘有历史就恢复、都没有才新建。
         // 每一条浏览器 SSE 连接各自 poll；不要在网关把多个观察者 share 成一条
         // 上游 poll，否则 cursor 与取消语义会混在一起。
-        return sessions.getOrCreate(chatid, request.getHeaders())
-                .thenMany(Flux.defer(() -> pollForever(chatid, new PollCursor(browserCursor), request.getHeaders())));
+        return sessions.getOrCreate(chatid, browserHeaders)
+                .thenMany(Flux.defer(() -> pollForever(chatid, new PollCursor(browserCursor), browserHeaders)))
+                .doOnSubscribe(subscription -> subscribers.attach(chatid))
+                .doFinally(signal -> cancelWhenNoViewerLeft(chatid, browserHeaders));
+    }
+
+    /**
+     * 浏览器这一条流结束（关 tab = CANCEL、上游报错 = ON_ERROR）时的显式出路。
+     * 本网关在这个 chatid 上还有别的连接就什么都不做——Rust 的引用计数还没归零，
+     * 取消会误伤别的 tab。真的一个不剩才发 cancel，把「不白烧 token」变成主动
+     * 动作；Rust 侧的宽限继续兜「网关自己崩了没人发」那一路。
+     */
+    private void cancelWhenNoViewerLeft(String chatid, HttpHeaders browserHeaders) {
+        if (!subscribers.detachIsLast(chatid)) {
+            return;
+        }
+        sessions.cancel(chatid, browserHeaders)
+                .subscribe(
+                        ignored -> {},
+                        error -> log.debug("显式 cancel {} 没成功，交给 Rust 侧宽限兜底", chatid, error));
     }
 
     private Flux<ServerSentEvent<String>> pollForever(

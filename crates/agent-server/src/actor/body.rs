@@ -5,18 +5,19 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use tokio::sync::broadcast;
 
 use agent_core::{AgentId, AgentTree, Session, SessionConfig};
-use agent_runtime::{AgentEvent, RunnerCtx};
+use agent_runtime::{AgentEvent, RemoteToolWaiting, RunnerCtx};
 use agent_tools::ToolExecutor;
 
 use crate::command::Command;
 use crate::event::{Frame, SessionEvent};
 use crate::registry::OpenSpec;
 
-use super::commands;
+use super::{capabilities, commands};
 
 /// 握手消息：`Ok(cancel)` = 起好了，`cancel` 是 [`RunnerCtx::cancel_flag`]
 /// （[`crate::handle::SessionHandle::cancel`] 直接旁路写的那个原子标志）；
@@ -36,6 +37,7 @@ pub(super) fn run(
     events_tx: broadcast::Sender<Frame>,
     ready_tx: mpsc::Sender<ReadyMsg>,
     tree: Arc<Mutex<AgentTree>>,
+    pending_tools: Arc<Mutex<Vec<RemoteToolWaiting>>>,
 ) {
     let agent = AgentId::root();
     let history_cap = spec.history_cap.unwrap_or(agent_core::DEFAULT_HISTORY_CAP);
@@ -53,6 +55,9 @@ pub(super) fn run(
         unknown_keys.push(format!("{key:?}"));
     });
 
+    // `restored` = 这个会话是从日志里回放出来的（不是全新建的）。073 用它分辨
+    // 「注入的声明从哪来」——**新建看这次请求，恢复看回放出来的状态**。
+    let restored = matches!(recovered, Ok(Some(_)));
     let mut session = match recovered {
         Ok(Some(session)) => session,
         Ok(None) => {
@@ -104,6 +109,18 @@ pub(super) fn run(
         );
     }
 
+    // 宿主注入的能力（062/064/073）：声明从哪来、怎么变成这个会话的工具表与 system
+    // 段、恢复出来的会话为什么不接受新声明——整件事在 `super::capabilities`，那个
+    // 文件的模块文档是三条 issue 结论的落点。`Err` = 第二道闸拦下了（第一道是路由层
+    // 的 400 `session_has_history`）。
+    let assembled = match capabilities::assemble(&spec, &session, restored) {
+        Ok(assembled) => assembled,
+        Err(reason) => {
+            let _ = ready_tx.send(Err(reason));
+            return;
+        }
+    };
+
     let fs = match ToolExecutor::new(&spec.tools_root) {
         Ok(fs) => fs,
         Err(e) => {
@@ -126,8 +143,12 @@ pub(super) fn run(
         spec.endpoint.clone(),
         spec.api_key.clone(),
         fs,
-        spec.tools.build(),
-        spec.system.clone(),
+        // 部署期五档 + 这个会话专属的注入（工具排表尾、skill 两件在它之前），以及
+        // 部署期的 system 段 + 常驻 skill 索引。两段都 per-session：跟着这个 actor
+        // 线程生灭，别的 chatid 看不见（docs/HOST-CAPABILITIES.md §二）。什么都没
+        // 声明时两者都是空操作，跟 062/064 之前逐字节相同。
+        assembled.tools,
+        assembled.system,
         SessionConfig { model: Arc::clone(&spec.model), temperature: None, max_tokens: None, context_window: None },
         store,
         // `new` 收的这条不带归属的回调不用——034 换 `with_agent_events`（下面），
@@ -149,9 +170,20 @@ pub(super) fn run(
     .with_tree_events(Box::new(move |snapshot: AgentTree| {
         *tree_for_callback.lock().unwrap() = snapshot.clone();
         emit_root(&events_for_tree, SessionEvent::AgentTree(snapshot));
+    }))
+    // 072：远端等待槽变了——只重写共享单元格（`GET .../pending_tools` 的数据源），
+    // **不广播帧**：这份投影是给「要不要执行」当判据的，不是时间线上的一件事；
+    // `tool_executing` 那一帧已经在派活的同一行发过了（`dispatch` 的远端第五路）。
+    // 回调在**槽变化的那一刻**被调（那一行的下一行就是广播），所以客户端拿着帧
+    // 立刻来问，问到的必然已经是含这条调用的新投影——见 `SessionHandle::pending_tools`。
+    .with_pending_remote_tools(Box::new(move |waiting: Vec<RemoteToolWaiting>| {
+        *pending_tools.lock().unwrap() = waiting;
     }));
     if let Some(timeout) = spec.provider_timeout {
         ctx = ctx.with_provider_timeout(timeout);
+    }
+    if let Some(timeout) = spec.remote_tool_timeout {
+        ctx = ctx.with_remote_tool_timeout(timeout);
     }
     if let Some(every) = spec.snapshot_every {
         ctx = ctx.with_snapshot_every(every);
@@ -162,6 +194,12 @@ pub(super) fn run(
     // 文档「真 bug」一节）。对全新会话是无害的空操作，不需要在这里分支判断。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
 
+    // 073/064：全新会话把这一次的声明**journaled 地写一次**（`Slot::HostTools` /
+    // `Slot::HostSkills`），恢复时跟别的 primitive 一样自动回来。**必须排在
+    // `seed_after_recover` 之后**，而且声明自成一轮——两条顺序的理由（都是踩出来的）
+    // 见 `capabilities::record`。
+    capabilities::record(&mut ctx, &mut session, &spec, restored);
+
     let cancel = ctx.cancel_flag();
     if ready_tx.send(Ok(cancel)).is_err() {
         // opener 那边已经不要这个握手结果了（比如它自己被取消/超时放弃了）——
@@ -170,7 +208,8 @@ pub(super) fn run(
     }
     drop(ready_tx);
 
-    for cmd in rx.iter() {
+    loop {
+        let Some(cmd) = next_command(&rx, &mut session, &mut ctx, &events_tx) else { return };
         match cmd {
             Command::Input(text) => commands::handle_input(&mut session, &mut ctx, &events_tx, &text),
             Command::Undo { granularity, force } => commands::handle_undo(&mut session, &mut ctx, &events_tx, granularity, force),
@@ -180,6 +219,39 @@ pub(super) fn run(
                 commands::handle_remote_tool_result(&mut session, &mut ctx, &events_tx, agent, call_id, content, is_error)
             }
             Command::Shutdown => break,
+        }
+    }
+}
+
+/// 等下一条命令，**但不许无限期地等**（060）。
+///
+/// 远端工具（`web:`/`desk:`）派出去之后 `run_turn` 就返回 `ToolsPending`，控制权
+/// 回到这条循环：正常路径靠 `POST /tool_result` 送一条 `Command::RemoteToolResult`
+/// 进来，异常路径靠用户 `Cancel`。可「前端崩了 / 网关挂了 / 客户端根本没实现这个
+/// 工具」这三种情况下**两条都不会来**——裸 `rx.recv()` 于是永远阻塞，会话永久停在
+/// `ToolsPending` 且不报错。所以：有等待槽时至多等到最早的那条截止线，到点让
+/// runtime 把它判失败（模型收到 `is_error` 自己收敛），回来接着等。
+///
+/// 没有等待槽时（绝大多数会话的绝大多数时间）走的还是裸 `recv()`——不轮询、不
+/// 起定时器、一分钱开销不多付。`None` = 命令队列的发送端全没了，线程该退出了。
+fn next_command(
+    rx: &mpsc::Receiver<Command>,
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    events_tx: &broadcast::Sender<Frame>,
+) -> Option<Command> {
+    loop {
+        let Some(deadline) = ctx.next_remote_deadline() else {
+            return rx.recv().ok();
+        };
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok(cmd) => return Some(cmd),
+            // 到点了：扫过期槽（`deadline` 那一条必然在里面，所以每一圈都有进展，
+            // 不会空转），再回来等剩下的。
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                commands::handle_remote_tool_timeout(session, ctx, events_tx)
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return None,
         }
     }
 }

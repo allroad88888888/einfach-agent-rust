@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:mcp": "node --import ./scripts/ts-resolve.mjs ./scripts/verify-mcp.ts",
+    "verify:tool-exec": "node --import ./scripts/ts-resolve.mjs ./scripts/verify-tool-exec.ts"
   },
   "dependencies": {
     "@agent/protocol": "workspace:*"

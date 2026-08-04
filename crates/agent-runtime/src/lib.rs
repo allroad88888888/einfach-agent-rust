@@ -34,7 +34,7 @@
 //! | effect | 谁执行 | 怎么执行 |
 //! |---|---|---|
 //! | `CallProvider` | [`provider_call::start`] | actor 线程取料 → `encode` → 发前 `check_drift` → 起 IO 线程跑 `post_stream`。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
-//! | `ExecuteTool` | [`tool_exec::execute`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn` 在分派处被截获，落到 `Session::spawn_child` |
+//! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
 //! | `CancelInFlight` | [`dispatch`] | 置共享的取消标志 + 斩断队列里还没喂进去的待办 |
 //! | `Emit(Notice)` | [`dispatch`] | 带上「出自谁的 `step`」转给 [`RunnerCtx`] 的事件回调 |
 //!
@@ -45,19 +45,45 @@
 //! 它的最后一段文本作为 `tool_result` 回到父那个 spawn 槽（决策 20，不需要
 //! `ChildFinished` 事件也不需要汇聚 derived）。整轮共用一个 `turn_id`（root 铸，
 //! 决策 5），所以 `/undo` 一轮连带整棵子树。
+//!
+//! # 后台子 agent（052）
+//!
+//! `spawn(background=true)` 把上面那条路拆成两半：建子之后**立刻**回一条只装
+//! `agent_id` 的 `tool_result` 收敛父的槽（父不被挡，同一 turn 里接着干活），子
+//! 记进 [`subtree`] 的 detached 名单；它落终态时结果进「已完成未领取」的 stash
+//! 而**不回写父**（那槽早收敛了，再回写就是幽灵结果）。子 agent 依旧**不跨
+//! turn**：root 落终态时还没人领的活后台子由 [`orphan`] 定点 `despawn_child`
+//! 拆掉（不走会话级取消——那会把答成功的一轮判成 `Failed(Cancelled)`）。
+//!
+//! # 领结果：`srv:agent/collect`（053）
+//!
+//! 后台那半边的另一头。`collect(id)` 要么当场端走 stash 里那份结果（领取即消费），
+//! 要么给还在跑的子**补一个槽**——从补上那一刻起它跟前台 spawn 出来的子逐字同一条
+//! 收割路（父 `ToolsPending`、泵驱动子、终态回写）。于是「前台 spawn ≡ spawn(bg) +
+//! 紧跟 collect」在代码上是真的：两者共用 [`subtree`] 的同一张槽位表，
+//! 差别只在模型什么时候把那一笔记上。绑了 collect 的子**不是孤儿**，[`orphan`]
+//! 的轮末清算认这条。
 
+mod child_outcome;
+mod collect_tool;
+mod deadline;
 mod dispatch;
 mod guard;
 mod ctx_remote_tools;
 mod io_thread;
+mod mcp_call;
+mod orphan;
 mod provider_call;
 mod remote_tool;
+mod reply;
 mod runner;
 mod skill;
 mod spawn_tool;
+mod status_tool;
 mod subagent;
 mod subtree;
 mod tool_exec;
+mod tool_name;
 mod tool_table;
 
 pub mod ctx;
@@ -65,12 +91,20 @@ pub mod event;
 pub mod jsonl;
 pub mod persist;
 
+pub use agent_mcp::McpRegistry;
+pub use collect_tool::{COLLECT_TOOL, collect_spec};
 pub use ctx::RunnerCtx;
-pub use event::{AgentEvent, RunnerEvent};
+/// 072：远端等待槽的只读投影形状。`ctx_remote_tools` 本身是私有模块（等待槽只能
+/// 由 actor 线程改），但**投影是要跨层出去的**——`agent-server` 拿它填
+/// `GET /sessions/{id}/pending_tools` 的响应体。
+pub use ctx_remote_tools::RemoteToolWaiting;
+pub use deadline::sweep_remote_tool_deadlines;
+pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover};
 pub use remote_tool::{RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool};
 pub use runner::run_turn;
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_tool::{SPAWN_TOOL, spawn_spec};
+pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::ToolTable;

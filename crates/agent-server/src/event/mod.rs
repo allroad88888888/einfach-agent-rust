@@ -47,25 +47,30 @@
 //! （discriminated union）两种标签风格都能落地，邻接标签更省心。
 //! [`UndoOutcome`] 用的是同一套约定。
 //!
-//! # 三个子模块，各管一件事
+//! # 四个子模块，各管一件事
 //!
 //! | 模块 | 职责 |
 //! |------|------|
 //! | 本文件 | `SessionEvent` 本体 + `From<RunnerEvent>` 翻译线 |
 //! | [`undo_outcome`] | `UndoOutcome`：undo/redo 结果的可序列化姊妹类型，034 起带 `Blocked` 富化 |
+//! | [`orphan_fate`] | 054：`OrphanFate`——轮末孤儿收场的可序列化姊妹类型（`agent_runtime::OrphanFate`） |
 //! | [`frame`] | 034：`Frame { agent, event }`——SSE 帧 data 的信封 |
 
 mod frame;
+mod orphan_fate;
 mod undo_outcome;
 
 pub use frame::Frame;
+pub use orphan_fate::OrphanFate;
 pub use undo_outcome::UndoOutcome;
 
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use agent_core::{Adjustment, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest};
+use agent_core::{
+    Adjustment, AgentId, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest,
+};
 use agent_runtime::RunnerEvent;
 
 /// 一个 session 广播的一件事。`Clone + Send + 'static`（`broadcast` 的硬要求）
@@ -128,6 +133,16 @@ pub enum SessionEvent {
     /// event::frame` 模块文档同一条判据：树是会话级事实，不属于某一个具体
     /// agent 的 `step`）。**不经过 [`From<RunnerEvent>`]**——见该 impl 文档。
     AgentTree(AgentTree),
+    /// 054：轮末孤儿告警——模型开了后台子 agent（`spawn(background=true)`），
+    /// 父这一轮收尾时却没有 `srv:agent/collect` 去领它。
+    /// [`agent_runtime::RunnerEvent::OrphanedChild`] 的可序列化翻译。
+    ///
+    /// 052 落地时它借的是 [`SessionEvent::TransportTrouble`]，并诚实标注了那个
+    /// 名字对不上语义（这不是传输故障，是编排失误）；054 收掉那笔账。
+    ///
+    /// 帧的 `agent`（[`Frame::agent`]）是**父**——没领是父的编排失误；出事的那个
+    /// 子在 `child` 字段里。载荷是事实不是句子（[`OrphanFate`]），措辞归呈现层。
+    OrphanedChild { child: AgentId, fate: OrphanFate },
 }
 
 impl From<RunnerEvent> for SessionEvent {
@@ -144,6 +159,9 @@ impl From<RunnerEvent> for SessionEvent {
             }
             RunnerEvent::TurnGuard { usage, report, adjustments } => SessionEvent::TurnGuard { usage, report, adjustments },
             RunnerEvent::Notice(notice) => SessionEvent::Notice(notice),
+            RunnerEvent::OrphanedChild { child, fate } => {
+                SessionEvent::OrphanedChild { child, fate: fate.into() }
+            }
         }
     }
 }
@@ -152,7 +170,7 @@ impl From<RunnerEvent> for SessionEvent {
 mod tests {
     use super::*;
 
-    /// `RunnerEvent` 的九个变体逐一对应，穷举 `match` 已经在编译期保证不漏——
+    /// `RunnerEvent` 的十个变体逐一对应，穷举 `match` 已经在编译期保证不漏——
     /// 这里额外钉一个运行期样本，防止哪天有人把某个变体的字段悄悄改错映射。
     #[test]
     fn from_runner_event_maps_text_delta() {
@@ -166,6 +184,23 @@ mod tests {
         assert_eq!(
             SessionEvent::from(ev),
             SessionEvent::Notice(Notice::TurnStatusChanged { status: agent_core::TurnStatus::Idle })
+        );
+    }
+
+    /// 054：孤儿告警是唯一一条**载荷本身还要再翻一层**的翻译线
+    /// （`agent_runtime::OrphanFate` → [`OrphanFate`]），`child` 顺带原样过来。
+    #[test]
+    fn from_runner_event_maps_orphaned_child_and_its_fate() {
+        let ev = RunnerEvent::OrphanedChild {
+            child: AgentId::new("root/a1"),
+            fate: agent_runtime::OrphanFate::Discarded { bytes: 15, is_error: false },
+        };
+        assert_eq!(
+            SessionEvent::from(ev),
+            SessionEvent::OrphanedChild {
+                child: AgentId::new("root/a1"),
+                fate: OrphanFate::Discarded { bytes: 15, is_error: false },
+            }
         );
     }
 

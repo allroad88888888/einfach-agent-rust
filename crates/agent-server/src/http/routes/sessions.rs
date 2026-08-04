@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use agent_core::AgentTree;
 
+use crate::http::capabilities::{self, Capabilities};
 use crate::http::error::ApiError;
 use crate::http::json::ApiJson;
 use crate::http::state::AppState;
@@ -29,6 +30,11 @@ pub(in crate::http) struct CreateSessionRequest {
     /// 临时会话。
     #[serde(default)]
     session_path: Option<PathBuf>,
+    /// 宿主这一次要声明的 tool/skill（061，形状见
+    /// [`crate::http::capabilities`]）。省略 → `None`，行为跟 061 之前**逐字节
+    /// 一致**：既有调用方一个字都不用改。
+    #[serde(default)]
+    capabilities: Option<Capabilities>,
 }
 
 #[derive(Serialize)]
@@ -81,8 +87,80 @@ enum CreateSessionOutcome {
 /// （`user → chatid` 授权，或让 chatid 含 uuid 这种不可猜的部分）。裸奔的
 /// server + 可猜的 chatid = 越权读别人的对话。这里的 `id` 不是租户隔离边界，
 /// 本 issue 也不做多租户鉴权（`X-Agent-Tenant-Id` 是未排期项）。
+///
+/// # 061/062：`capabilities` 先校验，再装进**这一个**会话
+///
+/// 请求体带 `capabilities` 时，在**任何文件系统副作用之前**过一遍
+/// [`crate::http::capabilities::validate`]（工具名前缀/字符集、skill id、重名），
+/// 不合规一律 400 且这一次的会话根本不会被 `open`——跟上面 chatid 那条同一处、
+/// 同一套「白名单 + 拒绝，绝不 sanitize」。
+///
+/// 校验通过之后（062）翻成 `(ToolSpec, Reversibility)`
+/// （[`crate::http::capabilities::host_tools`]）当参数交给
+/// [`SessionTemplate::open_spec`](crate::http::config::SessionTemplate::open_spec)：
+/// 它只落进这一次的 `OpenSpec`，最终进的是这个会话在自己 actor 线程里现造的那张
+/// `ToolTable`。**全局的 `SessionTemplate` 一个字节不动**，别的 chatid 看不见
+/// （docs/HOST-CAPABILITIES.md §二）。
+///
+/// `existing` 那一支（会话还活在 registry 里、且没有会话文件）压根不 `open_spec`，
+/// 所以这次的声明被忽略——会话中途换工具表 = 前缀缓存那一刻全断（红线 11），而
+/// 「运行时增删」HOST-CAPABILITIES §三 明确不做。
+///
+/// # 073：有历史的会话**不接受再声明**（用户 2026-08-04 拍板）
+///
+/// 注入的声明**是会话状态，不是部署配置**：它在建会话那一次被 journaled 地写进
+/// 会话状态（`agent_core::Session::declare_host_tools` → `Slot::HostTools`），恢复时
+/// 跟别的 primitive 一样**从日志回放自动回来**，宿主**不必也不该**在重连时再声明
+/// 一遍——历史对话是在**那一份**工具表下产生的，用今天的新清单重建就自相矛盾
+/// （模型当初说「我调了 `web:crm/lookup`」，而今天的清单里可能没有它了），而且
+/// 工具表在 prompt 最前面，换一份 = 恢复出来的第一轮前缀全断。
+///
+/// 所以「这个 chatid 在磁盘上已经有会话文件」+「这次又带了 `capabilities`」=
+/// **400 `session_has_history`**，不忽略、不比对、不合并：
+///
+/// - **忽略**会制造本仓最讨厌的那种 bug——前端以为登记上了、其实没有，没有任何
+///   报错，症状是「模型死活不用某个工具」，离现场十万八千里；
+/// - **不一致才报错**要先定义「一致」（逐字节？名字集合？描述算不算？），每一种
+///   定义都有人踩到边界，而且它默认了「一致时可以重复声明」，等于给「恢复时重新
+///   注入」留了个后门。
+///
+/// **客户端契约（先查再建）**：`GET /sessions/{id}` → 404 就带声明建、200
+/// （`alive`/`dormant`/`dead`）就不带。[`status`] 因此认识 `dormant`——不然「磁盘
+/// 上有历史但此刻没活着」这个**恰恰就是恢复**的情况会被答成 404，契约当场作废。
+/// 完整说明见 `docs/INTEGRATION.md` §chatid 与 `docs/issues/065-frontend-inject.md`。
+///
+/// # 064：skill 那一半走完全相同的路
+///
+/// `capabilities.skills` 经 [`crate::http::capabilities::host_skills`] 翻成
+/// `Vec<HostSkill>`，跟工具一样当参数交给 `open_spec` → `OpenSpec` → 这个会话在自己
+/// actor 线程里现造的 `SkillRegistry`。上面那条 073 的闸对它一视同仁：`capabilities`
+/// 是整体判断的，带 skill 的声明撞上有历史的会话同样 **400 `session_has_history`**。
+///
+/// **server 不从磁盘 `./skills/` 装载**（069 §拍板「顺带定死 064 第 3 条」）：宿主
+/// 已经有声明入口，两个来源合流会造出「同一份请求在不同部署上行为不同」的面；而且
+/// 073 之后宿主声明是**会话状态**（恢复时逐字节复刻），磁盘上那份不是——部署者改一下
+/// `./skills/` 就能悄悄改写一段历史对话该长什么样。
+///
+/// # 076：`capabilities.disable_builtin` 是同一条路上的**减法**
+///
+/// 前两样是「宿主往这个会话里加什么」，这一样是「这个会话不启用部署方给的哪几件
+/// 内置工具」——列出来的**连名字带描述都不进 prompt**，模型压根不知道有它。
+///
+/// **只能减不能加**：名字必须在 `template().tools` 这一档装配出来的表里，不认识的
+/// 一律 **400 且点名**（`capabilities::check_builtin_switch`）。反过来（客户端说
+/// 「给我开 `srv:shell/exec`」）意味着前端一句 JSON 就能突破部署方的决定，而
+/// `capabilities` 这条路上的客户端是浏览器。
+///
+/// **为什么必须报错而不是静默忽略**：拼错一个名字被忽略 → 客户端以为关掉了、其实
+/// 没关 → 模型照样调得到 `srv:shell/exec`，**没有任何报错**。这一刻客户端还在线、
+/// 能改，所以该在这里失败（对比 064 的 `skill_injection` 过滤：每轮都跑、作者早不
+/// 在场，那里绝不能报错）。
+///
+/// 上面 073 那条闸对它同样一视同仁：`capabilities` 是整体判断的，只带
+/// `disable_builtin` 的请求撞上有历史的会话照样 **400 `session_has_history`**——
+/// 开关跟声明一样是会话状态，那段历史就是在**那一份减过的表**下产生的。
 pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body): ApiJson<CreateSessionRequest>) -> Result<Response, ApiError> {
-    let CreateSessionRequest { id: requested_id, session_path } = body;
+    let CreateSessionRequest { id: requested_id, session_path, capabilities } = body;
     let (id, client_supplied_id) = match requested_id {
         Some(id) => {
             if !is_valid_client_session_id(&id) {
@@ -99,12 +177,41 @@ pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body)
             .clone()
             .or_else(|| state.template().default_session_path(&id))
             .is_some_and(|path| path.is_file());
+    // 073：有历史 + 又带声明 → **直接拒绝**（用户拍板），排在名字校验**前面**：
+    // 这一次的声明无论写得多正确都不会被采纳，先报「你根本不该带它」比先报
+    // 「你第三个工具的名字不合规」有用（后者会让调用方以为改个名字重发就行）。
+    if has_persisted_history && capabilities.is_some() {
+        return Err(ApiError::session_has_history(format!(
+            "session \"{id}\" 已经有历史了：它的能力从历史来（建会话那一次已经写进会话状态），这次请求不要再带 capabilities。\
+             判断办法：先 GET /sessions/{id}——404 才是新会话、才带声明；200（alive/dormant/dead）一律不带"
+        )));
+    }
+    // 061：拒绝发生在 `open_spec`/`open` **之前**——坏声明不留下会话，也不留下
+    // 工具监狱目录/会话文件（跟上面 chatid 那条拒在同一段）。
+    if let Some(declared) = &capabilities {
+        capabilities::validate(declared).map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
+        // 076：关闭列表里的名字必须在**这个部署实际装配出来的表**里。判据是
+        // `template().tools` 这一档（部署方定的天花板），不是装配完的最终表——
+        // 理由（以及为什么这一条必须报错而不是静默忽略）见
+        // `capabilities::builtin_switch` 的模块文档。
+        capabilities::check_builtin_switch(declared, state.template().tools)
+            .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
+    }
+    // 062：校验过了才翻译。翻译是纯数据（`Vec<(ToolSpec, Reversibility)>`），
+    // 没声明就是空 `Vec`——下游一路空操作，老调用方的工具表逐字节不变。
+    let host_tools = capabilities::host_tools(capabilities.as_ref());
+    // 064：skill 那一半，同一条路——翻译也是纯数据（`Vec<HostSkill>`），没声明就是
+    // 空 `Vec`，下游 registry 为空、工具表不接 `.with_skills(..)`、常驻索引空文本。
+    let host_skills = capabilities::host_skills(capabilities.as_ref());
+    // 076：减法那一半，同一条路——翻译也是纯数据（`Vec<Arc<str>>`），没带就是空
+    // `Vec`，下游 `without_builtins` 是空操作、工具表逐字节不变。
+    let disable_builtin = capabilities::disabled_builtins(capabilities.as_ref());
     let outcome = match state.registry().get(&id) {
         Some(SessionQuery::Alive(_)) => CreateSessionOutcome::Existing,
         Some(SessionQuery::Dead { .. }) | None => {
             let spec = state
                 .template()
-                .open_spec(id.clone(), session_path)
+                .open_spec(id.clone(), session_path, host_tools, host_skills, disable_builtin)
                 .map_err(|e| ApiError::conflict(format!("session \"{id}\" 的工具根目录建不起来：{e}")))?;
             state.registry().open(spec).map_err(|e| ApiError::conflict(e.to_string()))?;
             if has_persisted_history { CreateSessionOutcome::Recovered } else { CreateSessionOutcome::Created }
@@ -139,14 +246,39 @@ fn is_valid_client_session_id(id: &str) -> bool {
 pub(in crate::http) enum SessionStatusResponse {
     Alive,
     Dead { reason: String },
+    /// 073：registry 里没有它，但**磁盘上有它的会话文件**——`POST /sessions` 会走
+    /// 恢复那条路（`outcome: "recovered"`）。
+    ///
+    /// 这一态是「先查再建」契约的地基：没有它，「有历史但此刻没活着」——也就是
+    /// **恰恰是恢复**的那种情况——会被答成 404，客户端据此判定「新会话」于是带上
+    /// 声明，然后被 `session_has_history` 顶回来，契约当场作废。
+    Dormant,
 }
 
+/// `GET /sessions/:id`：这个 chatid 现在是什么状态。
+///
+/// | 情况 | 状态码 | `status` |
+/// |---|---|---|
+/// | registry 里活着 | 200 | `alive` |
+/// | registry 里有、但 actor 已经死了 | 200 | `dead` + 死因 |
+/// | registry 里没有、但磁盘上有它的会话文件 | 200 | `dormant`（073） |
+/// | 都没有 | 404 | — |
+///
+/// **404 的含义因此是「这个 chatid 没有任何历史」**，客户端可以直接拿它当
+/// 「该不该带 `capabilities`」的判据（[`create`] 文档「客户端契约」）。
+///
+/// `dormant` 只认默认会话目录下的 `<chatid>.jsonl`——调用方在 `POST /sessions` 里
+/// 显式给 `session_path` 的那种用法这里看不见（GET 没有请求体）。那条用法本来就
+/// 是「调用方自己管着文件在哪」，它自己知道有没有历史。
 pub(in crate::http) async fn status(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<SessionStatusResponse>, ApiError> {
     let id = SessionId::from(id);
     match state.registry().get(&id) {
-        None => Err(ApiError::not_found(format!("session \"{id}\" 不存在（从没 open 过，或者已经被 close 摘表）"))),
         Some(SessionQuery::Alive(_)) => Ok(Json(SessionStatusResponse::Alive)),
         Some(SessionQuery::Dead { reason }) => Ok(Json(SessionStatusResponse::Dead { reason })),
+        None if state.template().default_session_path(&id).is_some_and(|path| path.is_file()) => {
+            Ok(Json(SessionStatusResponse::Dormant))
+        }
+        None => Err(ApiError::not_found(format!("session \"{id}\" 不存在（从没 open 过，也没有留下会话文件）"))),
     }
 }
 

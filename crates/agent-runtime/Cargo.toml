@@ -12,6 +12,7 @@ publish = false
 
 [dependencies]
 agent-core = { path = "../agent-core" }
+agent-mcp = { path = "../agent-mcp" }
 agent-providers = { path = "../agent-providers" }
 agent-store = { path = "../agent-store" }
 agent-tools = { path = "../agent-tools" }

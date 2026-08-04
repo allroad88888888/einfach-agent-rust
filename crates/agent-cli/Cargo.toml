@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 agent-core = { path = "../agent-core" }
+agent-mcp = { path = "../agent-mcp" }
 agent-providers = { path = "../agent-providers" }
 agent-runtime = { path = "../agent-runtime" }
 agent-tools = { path = "../agent-tools" }

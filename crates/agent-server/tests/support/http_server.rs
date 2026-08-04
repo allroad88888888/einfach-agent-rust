@@ -76,6 +76,7 @@ pub fn session_template(endpoint: String) -> SessionTemplate {
         history_cap: None,
         snapshot_every: Some(0),
         provider_timeout: Some(Duration::from_secs(5)),
+        remote_tool_timeout: None,
         default_sessions_dir: None,
     }
 }

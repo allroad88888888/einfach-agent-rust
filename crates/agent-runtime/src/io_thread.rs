@@ -31,13 +31,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::SyncSender;
 use std::thread;
 
-use agent_core::{AgentId, ContentBlock, StopReason, TokenUsage};
+use agent_core::{AgentId, ContentBlock, StopReason, TokenUsage, ToolCallId};
 use agent_providers::{Provider, StreamEvent};
 use agent_transport::{Client, StreamOutcome, TransportError};
 
 use crate::event::{AgentEvent, RunnerEvent};
 
-/// 这些线程往泵里发的东西。
+/// 这些线程往泵里发的东西。**两类生产者共用这一条泵 channel**：provider 调用的
+/// IO 线程（本文件）和 MCP `tools/call` 的背景线程（`crate::mcp_call`），泵按各自
+/// 的键认领在飞 credential 再落地（029 起就是「所有 IO 线程发同一个
+/// `sync_channel(0)`，消息自带谁是谁」这一形状）。
 pub(crate) enum IoMsg {
     /// 中途的增量，已经带好归属（`AgentEvent`）。
     Delta(AgentEvent),
@@ -56,6 +59,12 @@ pub(crate) enum IoMsg {
     /// 手里，那个信号消失了，只能显式补一条——否则一个 panic 掉的 IO 线程会让
     /// 它那个 agent 一直挂到超时预算耗尽，把一个即刻可判的 bug 拖成 120 秒。
     Gone { agent: AgentId },
+    /// 一次在飞的 MCP `tools/call` 报回结果（043）。`content`/`is_error` 已由
+    /// `agent-mcp::flatten_tool_result` 从 wire 拍平——泵这边只按 `(agent, call_id)`
+    /// 认领 `crate::mcp_call::McpCall` credential，epoch 由 credential 提供、回写前
+    /// 过 `Session::step` 的 epoch 闸（红线 6）。跟 provider 的 `Done` 是两类东西
+    /// （一个工具结果、一个模型响应），所以是独立变体、按不同键落地。
+    McpDone { agent: AgentId, call_id: ToolCallId, content: Arc<str>, is_error: bool },
 }
 
 /// 起线程发一次请求。**不返回 `JoinHandle`**——超时路径要能放弃这个线程而不

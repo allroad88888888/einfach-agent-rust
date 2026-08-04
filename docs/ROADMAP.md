@@ -32,7 +32,10 @@
 | 21 | **skill 激活 = 模型经工具 + 常驻索引，宿主可显式预激活，否决自动触发** | 鸡生蛋靠索引解：system 常驻每 skill 一行「名字+描述」（前缀稳定近零成本），模型按需调 `srv:skill/activate` 拉全量。与决策 20 同一条开山原则：AI 决定用哪个能力。关键词/向量自动触发否决——prompt 被看不见的机制改动是静默行为，缓存后果还最大。中途激活的注入位置**待 038 探针实测**（消息级 system 注入三家收不收、保不保前缀），不猜 |
 | 20 | **子 agent 由模型经内置工具 spawn**（006 拍板）：`spawn_agent` 是 Server 工具，spawn 即 tool call 进日志，「等子树完成」= 该槽位收敛，结果以 tool_result 回父 | ①undo/审计免费——走既有 ToolCall 机制，turn_id 继承让「撤一轮连带子树」天然成立；B 路要为编排动作另发明记账路（第二真值来源）②与开山原则一致：AI 决定调用哪个工具，分解只是又一个工具 ③A 不封死 B（编排层=另一个会调 spawn 的调用方），反向不成立。成本兜底：深度≤3/子数≤8/子树轮预算全是参数，超限 = is_error 的 tool_result 让模型自己收敛 |
 | 19 | **工具结果上限：默认 32 KiB、只留头部、core 边界截断、标记确定可见** | ≈8k 英文 token，一次调用最多吃 128k 窗口的 ~8%；`fs/read` 有行范围可分次拿。executor 不知道 prompt 预算所以在 core 截；标记进 prompt 必须逐字节确定（红线 11），写明原始大小与「缩小范围重调」指引。头尾各半到 020（shell）再议 |
+| 22 | **MCP 当 adapter 接**：新 crate `agent-mcp`（做 IO，不在红线 7 内）；可逆性从 `readOnlyHint` 翻译成 per-tool 元数据（**不从名字推**——`ToolTable` 携带映射）；`tools/call` 走**异步在飞路**（`provider_call` 同款，不同步阻塞 actor）；活句柄住 store 外的 `McpRegistry`（红线 3）；MVP = **stdio + tools**，`.mcp.json` 跟 Claude Code 对齐，http/resources/prompts 延后 | MCP 是外部来源差异合法存在的地方，和 provider 同类接缝，只是要做 IO。可逆性是 per-tool（同前缀不同 `readOnlyHint`），机械按名字判会把数据事故开关交给第三方——默认落 `Irreversible`。异步执行因 MCP 慢无上限、且红线 6 的 epoch 回写天然在异步路上。接缝完整定义见 [MCP.md](MCP.md) |
+| 23 | **子 agent 可观测 = 派生读，不新增状态**：`Session::agent_tree()` 是对现有 atom 的一次纯派生读（往下读，红线 10 方向）；**不为「当前动作」加 primitive**（那是第二真值源，undo 破）；树由 core 权威算、UI 哑渲染（不让 UI 从事件流重建状态机）；M7 范围 = **活树**（当前快照 + 变化推 SSE），可回放时间线（任意 epoch 快照）延后 | 子 agent 的状态早就是 atom（整棵树共用一个 store），"看它在干啥"是把已有状态摆出来，不是造监控。派生读 → undo/恢复/回放一致性白拿（第五个投影）。UI 重建状态机脆且 reconnect 断，快照做真值最省。接缝完整定义见 [OBSERVABILITY.md](OBSERVABILITY.md) |
 | 25 | **企业集成三条**（M9）：①**拉取式是 ring 的第二个投影**——`GET /events/poll` 复用 `RingState::replay` 与 **`Last-Event-ID` 同一个游标 header**（仓库 axum 没开 `query` feature，且「没有查询参数协议」是既有约定），SSE 端点保留不动；②**会话身份 = 业务侧 chatid**，`POST /sessions` 幂等三态（活着接上 / 磁盘有则恢复 / 都没有才建），id 走白名单**拒绝不 sanitize**；③**生命周期归 Java**——`ProcessBuilder` 起子进程（`--port 0` + `--ready-file` 原子握手 + SIGTERM 优雅落盘）；Rust 提供最小启动协议而不进入 JVM | SSE 的复杂度只该出现在「**产生** SSE」那一跳（Spring 标准做法），不该出现在「**代理** SSE」那一跳（四个坑全在这里 + 强制 WebFlux，而企业存量多是 MVC）。拉取式的断开检测**整套复用 `SubscriberGuard`**（每次 poll 期间持有 → 计数/宽限/取消路一行新逻辑都不用写），比自造 last-poll 时间戳少一个真值源。JNI/FFI 真嵌入**否决**：流式跨 FFI 难做好、Rust panic 会杀 JVM、进程隔离全丢。接缝完整定义见 [INTEGRATION.md](INTEGRATION.md) |
+| 24 | **模型侧异步编排 = turn 内**（M8）：给模型三个工具（`spawn` 加 `background`、`status` 非阻塞下读子树、`collect` 领后台子结果），让它**中途观测子 agent 并改变编排**（不是加并行——并行 spawn 早有）；但**子 agent 仍不跨 turn**——后台子在父这一次 `run_turn` 内必须 collect 完或被孤儿取消。前台 spawn（决策 20）≡ `spawn(bg)+collect` 融进一槽，一行不改 | 决策 20 的干净全靠「子在父同一 turn 内生死」（`turn_id` 继承、undo 连带子树、`Subtree` 局部绑定、pump 静止条件 `calls.is_empty()` 把「root 终态+子树跑」列为无定义）。跨 turn 后台子要 store 落地的跨-`run_turn` 映射 + 重写 undo 语义 + per-child 取消——收益未证，延后。turn 内已给全「观测+反应」能力且红线全不破。接缝完整定义见 [ORCHESTRATION.md](ORCHESTRATION.md) |
 
 ## 二、现状
 
@@ -50,13 +53,133 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M7 子 agent 可观测（2026-08-03，插在 M6 中间；真机验收全过）
+
+「子 agent 不该是黑盒，界面要显示它在干啥」——真实使用反馈驱动的插入项。定性：可观测性
+是对现有 atom 的一次**派生读**，不是新机制（决策 23、[OBSERVABILITY.md](OBSERVABILITY.md)）。
+插在 M6 中间做，是因为 043 起 MCP 调用异步在飞，有了活树面板，M6 真机验收时能直接看到
+MCP 调用挂在哪个 agent、在飞多久。四个 issue：046 core 派生读 / 047 CLI `/agents` / 048
+SSE 快照事件 / 049 web 树面板。范围 = 活树（当前快照 + 变化推送），可回放时间线延后。
+
+**真机验收**（主会话 playwright + curl 直打，deepseek 真实上游）：模型 `srv:agent/spawn`
+起两子 agent → 活树面板 / `GET /agents` **实时**从 1 节点长到 3（`['root','root/a1',
+'root/a2']`）、状态灯随 `Thinking→Working→Done` 变（点 1、2）；`POST /undo` → 树**回退到
+1 节点**（`['root']`，点 3）。dogfood 逮到一个漏投影：undo/redo 走 actor 命令处理、不经
+pump，原本不发树快照——[048](issues/048-tree-sse.md) 补 `RunnerCtx::emit_tree_snapshot`
+＋三处调用修掉，`cargo test -p agent-runtime -p agent-server` 全绿后真机复验通过。「测试绿、
+世界不对」的又一例：046 单测 + 048 emit 测试都绿，只有真机现形。另捞一条 adapter/spawn 的
+工具名编码摩擦，单列 [050](issues/050-tool-name-encoding.md)（模型自纠有效、非阻塞）
+——**已拍板并落地**（2026-08-04）：转义规则三家共用一份（不是厂商差异），归一化放在
+宿主侧（`agent-runtime::tool_name`），core 与命名约定都不动。理由与被否的三个方向见
+该 issue §拍板。
+真机彩蛋：模型第一次 spawn 传错工具名被 `is_error` 拒后**自我纠正重试**（决策 20 重演）。
+
+### 已完成：M6 MCP 接入（2026-08-03，真机 dogfood 收官）
+
+原始蓝图「前后端都可以 tool+skills+mcp」的最后一块。定性早在第一天钉好（TOOLS.md §MCP
+「当 adapter 不是核心抽象」、红线 3 点名「MCP 子进程句柄」、`source:Mcp` 地基）。接缝定义
+见 [MCP.md](MCP.md)、决策 22。MVP = stdio + tools，照 022「先打通一家」的先例，最小「能用」
+终点：`.mcp.json` 配真 server → 模型自己发现并调 MCP 工具 → `/undo` 尊重可逆性。
+六个 issue：040 决策 / 041 协议+翻译 / 042 stdio 握手 / 043 执行路由+epoch / 044 配置装载 /
+045 CLI 终点。http/resources/prompts/OAuth 延后（等真实反馈）。
+
+**已完成**：040（决策，见决策 22）、041（协议+翻译层，62 测试全绿）、042（stdio 传输+握手，
+`StdioTransport`+`McpClient`+`McpRegistry`，真 npx `server-everything` 拉 14 工具译成
+`mcp:everything/<t>`，握手**记录不断言**协商版本——实测该包已改成「回显客户端提的版本」，正是
+不断言的理由；红线 3 结构性证明 client 句柄住 store 外、agent-core/store 不依赖 agent-mcp）。
+**已完成**：043（执行路由+可逆性映射+epoch 回写，opus，碰红线 6）：dispatch 第四路
+`Dispatched::McpCall`（`mcp:` 前缀 + `declares` 截获，`mcp_call` 模块仿 `provider_call`，
+credential 键 `(agent,call_id)`）；`ToolTable` 携 `mcp:` 名→可逆性映射，未命中落保守
+`Irreversible`、location 恒 `Server`；红线 6 回写点在 `Session::step` 的 epoch 闸（在飞子 bump
+epoch → 幽灵结果被丢）——`tests/mcp_epoch_writeback.rs` 对抗断言（结果确回来了 + 消息历史无它）。
+impl agent 收尾自旋（clippy 那道门跳过没确认、恰是红的：`too_many_arguments`），主会话代收：
+掐自旋、修 clippy（house-style `#[allow]`）、前台重跑三门禁全绿。
+044（`.mcp.json` 装载+多 server+失败隔离，sonnet，**无自旋**——单 crate 快门禁前台跑完）：
+`config.rs`(275) 纯解析（streaming `visit_map` 逮撞名，不走 `serde_json::Value` 的 dedup-to-last）/
+`loader.rs`(161) 多 server 装载 + 失败隔离（`Availability = Connected|Unavailable|Unsupported`，
+一个 server 挂只标自己那行、会话照起）/ `availability.rs`(66) host×transport 门 / `status.rs`(69)
+可序列化状态；`env`/`headers` 用 `BTreeMap`（红线 11）。主会话从磁盘复验（行数/无 HashMap/
+`cargo test -p agent-mcp` 57+ 绿/clippy 净）。
+045（CLI bootstrap 接线 + `/mcp` 状态 + kill-9 重连，sonnet）：`mcp.rs`(206) 读 `.mcp.json`
+（默认启动目录，`--mcp-config` 覆盖）→ 跑 044 loader → 工具经既有 `with_mcp` 追加进表尾
+（红线 11：跨 server 按 id 排、server 内按 `tools/list` 序）、registry 进 `RunnerCtx`；
+`print/mcp.rs`(96) 纯 `/mcp` 渲染。impl agent **无自旋**（第一次 `cargo test` 过 120s 被自动
+后台化，它诚实地前台重跑 + 抓真输出）。**主会话真机 dogfood 收官**（deepseek + npx
+`server-everything` 13 工具）：`/mcp` 列 connected；模型自发 `mcp:everything/echo`
+（`reversibility=Pure`，从 `readOnlyHint` 翻译不按名字猜）→ 拿真结果 `Echo: ...` 组织回答；
+第 2 轮缓存 `预测=实际 7040`（红线 11 稳定前缀）；`/undo` 干净越过 Pure 调用；kill-9 全新进程
+`会话已恢复` + MCP 从 `.mcp.json` 重 spawn 重连；无孤儿 npx。**M6 由真实运行验收，收官。**
+延后（等真实反馈）：http/sse 远端传输（浏览器 host）、resources/prompts、OAuth。
+
+### 已完成：M9 企业集成（2026-08-04，真机全链收官）
+
+真机验收（OpenJDK 21.0.11 + Spring Boot 3.3.4 + 真 deepseek，**全程没手工起 Rust**）：
+Java 网关自己 `ProcessBuilder` 拉起 Rust 子进程 → 经 **ready-file** 拿到 OS 分配的端口
+（`--port 0` → 49611，**不解析 stderr**，实现用 `hard_link` 而非 `rename`：要求目标不存在，
+陈旧文件不会被误认为本次启动）→ chatid 幂等（201 `created` / 200 `existing` / 重启后 200
+`recovered`）→ `GET .../events` 67 帧、**`id:` 游标保留**、`thinking_delta` 逐帧不缓冲 →
+停 Java **Rust 一起干净退出、无孤儿**、会话落盘。
+
+「产生 SSE 而非代理 SSE」的判断兑现：那四个坑（不缓冲/不压缩/超时/取消传播）在这条链上
+**结构上不存在**，MVC 也扛得住。五个 issue：059 hub 泄漏（静态分析怀疑 → **实测坐实**
+5.02s FAILED → 0.03s ok）/ 055 chatid 幂等（变异测试发现穿越断言**假绿**，加固后抓到真实
+战果 `a/etc/passwd.jsonl`）/ 056 拉取端点 / 057 断开检测（整套复用 `SubscriberGuard`，
+零新取消逻辑）/ 058 网关+生命周期。
+
+**一条要记住的观察**：跨进程重启后拉 SSE 拿不到旧帧——恢复的是**消息历史**（store，随
+`.jsonl` 落盘），不是**事件流**（ring 是内存重放缓冲，从不持久化）。`Last-Event-ID` 补发
+只在同一进程生命周期内有效。这不是缺陷，但极易被误读成缺陷。
+
+### 旧计划段（历史，勿删——排期依据）
+
+真实提问驱动的三条（「java 直接调用哪个库」→「这样启停不受 java 控制？」→「sse 再加一种
+输出，何必一定要 sse」→「java 跟客户端是 sse 的」）。定性：**SSE 保留在 Java→浏览器那一跳**
+（产生 SSE 是标准做法），**Java→Rust 换拉取式**（代理 SSE 才有那四个坑 + 强制 WebFlux）。
+接缝见 [INTEGRATION.md](INTEGRATION.md)、决策 25。五个 issue：**059 hub 泄漏（排最前，被
+chatid 放大）** / 055 chatid 幂等 getOrCreate / 056 拉取式端点 / 057 拉取式断开检测 /
+058 Java 网关升级 + 真机 dogfood（终点）。
+
+设计期勘查捞到一条**既存缺陷**单列 059：`SseHub` 自持有 `handle`（内含 `broadcast::Sender`）
+而 drain 任务持有 `Arc<SseHub>`——它等的 `recv() == None` 被它自己拿着的 Sender 挡住，于是
+session 死后 drain 不退出、全 crate 唯一的 `hubs.remove(&id)` 永远执行不到，每个死会话泄漏
+一个 hub + 一个挂起的 task。**静态分析结论、尚未实测**，所以 059 第一步是「先写会红的测试」，
+查明不存在也算有效产出。
+
+### 已完成：M8 模型侧异步编排（2026-08-04，真机 dogfood 收官）
+
+真机验收（deepseek 真实上游 + curl 直打，不经浏览器）：模型自发 `spawn(background)`×3 →
+`status` 观测 → `collect`×3 → 汇总。**决定性证据是树快照第 141 帧：`root:Thinking` + 三个子
+同时 `Thinking`**——阻塞 spawn 下 root 必然卡在 `ToolsPending` 直到子收敛，这一帧结构上不可能，
+它就是 M8 相对 M7 的全部增量。含后台子的 turn `/undo` → 21 条 entry 连带整棵子树退干净
+（`turn_id` 继承 + `ToolsAllowed→Null` 对后台子同样成立，**一行新代码都没写**——决策 24
+「子 agent 不跨 turn」换来的正是这个）。
+
+四个 issue：051 `status`（红线 11 字节确定，删 `sort_by` 就红）/ 052 `spawn(background)` +
+孤儿收尾（三条闸各做突变验证；**静止条件一个字没改**——后台子的 provider 调用本就住 `calls` 里）/
+053 `collect`（前置重构量出三刀：`dispatch.rs` 293→181、抽 `reply.rs`、拆 `child_outcome.rs`；
+逮到 052 留的真 bug：领了还报「没人领」；红线 6 对抗测试用**诱饵子 agent** 推世代，
+排除「没落地」的第二种解释）/ 054 专属 `OrphanedChild` 变体 + 面板**零代码**（活树是纯派生读，
+后台子在 store 里跟别的 agent 没区别）+ 真机。
+
+### 已完成：M8 的旧计划段（历史，勿删——排期依据）
+
+真实反馈驱动：「子 agent 不该是黑盒」——M7 给了**人看**的活树；用户追问「模型自己要不要
+工具去获取子 agent」——这是**模型看**的对偶。选**大版本**：给模型 `spawn(background)` /
+`status` / `collect` 三个工具，让它**中途观测子 agent 并改变编排**（不是加并行——并行 spawn
+早有；多出的是「看得到、反应得了」）。**关键决策 24：子 agent 仍不跨 turn**（turn 内异步），
+避开跨-`run_turn` 映射/undo 重写/per-child 取消三座大山，红线全不破，决策 20 前台 spawn 一行
+不改。接缝见 [ORCHESTRATION.md](ORCHESTRATION.md)。四个 issue：051 `status`（独立可先发）/
+052 `spawn(background)`+孤儿取消（opus，碰 pump 不变量+红线 6）/ 053 `collect`（opus，红线 6）/
+054 面板呈现+真机 dogfood。「能用」终点：真机上模型自发 spawn 后台子→status 观测→collect，
+面板同时显示多个后台子在跑。
+
 ### 已完成：M5 skills 装载（2026-08-03）
 
 放 skill 进 ./skills/ → 模型经常驻索引自己发现并激活 → 用上它带的工具 → undo 连
 激活一起退（journaled 白拿）。三家注入分策由 038 探针实测钉死（Kimi/GLM 消息级免费、
 DeepSeek 改 system 段尾保 91%——插新消息 120x 归零）。真机 dogfood：模型激活
 commit-cn skill 给 039 自己写了提交信息。你最初「前后端都可以 tool+skills+mcp」
-里的 skills 补齐；剩 mcp（source:Mcp 地基早留）。
+里的 skills 补齐；mcp 见上（M6 进行中）。
 
 ### 已完成：M4 全部 3 个 issue（2026-08-02）——四里程碑收官
 
@@ -147,6 +270,24 @@ M1 从零开始，十四个 issue。**第一个能停下来说「能用了」的
 - **缓存兜底第 2 层只跟上一次比——已真实撞上**（M1 验收：工具跳背靠背请求命中
   旧镜像的取整值，真阳性告警一条，PROVIDERS.md「缓存写入是异步的」）。缓解：留最近
   N 个镜像，把「恰等于旧镜像取整」判为写入延迟。M2 里做还是随 024 补丁做，开 M2 时定。
+- **工具「索引 + 详情按需拿」**（用户 2026-08-04 提出，M10 之后择机）。今天所有工具的
+  **完整 schema 从第一轮就全在 prompt 里**；提议改成先给索引，模型要用哪个再来要详情——
+  也就是把 skill 的延迟加载（068 已真机验过：模型说不出没激活那个 skill 的口令）**推广到
+  所有工具**。
+  - **抽象本身已经是本仓的模型**（TOOLS.md §「模型看到的是一张扁平表」）：内置 / MCP /
+    宿主注入在模型眼里就是一张表里的名字，`location` 与 `reversibility` 是宿主按名字现算的、
+    不进那张表。所以「agent 能调用的能力都看作 tools」不是新抽象，是既有抽象。
+  - **障碍是 038 探针的实测数字**：工具表在 prompt 最前面，而「中途改工具数组」在
+    **DeepSeek 上归零 120x**（前面每字节都命中也照样清零；Kimi/GLM ~100% 保住）。
+    「拿到详情再把工具加进表」正好是最贵的那个方向——红线 11 就是为这个数字存在的。
+  - **一个能同时活过三家的形状**：**名字全留在表里**（表一个字节不变、前缀永不断），
+    描述压成一行；详情用一个 `describe` 工具按需取，而**详情作为「工具结果」回来**——
+    工具结果是**消息尾部追加**，那是每一轮本来就在做的事、是缓存专门为之设计的方向，
+    不是 system 插入。省的是每一轮那一大坨 schema 的钱。
+  - **代价**：模型可能不 describe 就直接调（靠一行描述引导，不是硬保证）。
+  - **什么时候值得做**：工具少时是噪音（10 个工具，索引和全量差不了多少钱）。它是个
+    **规模功能**——宿主注入 50、200 个业务工具时才是「prompt 能不能用」的差别，
+    而那恰恰是 M10 的前提。要做就单开一个里程碑，它动的是 prompt 组装的核心。
 
 ## 五、这份文档怎么维护
 

@@ -52,6 +52,19 @@ final class AgentSessionClient {
                 .bodyToMono(PollResponse.class);
     }
 
+    /**
+     * 显式出路：本网关不再有观察者时主动取消在飞轮次，不等 Rust 侧的宽限倒计时。
+     * 宽限兜的是「网关自己崩了、没人发这一条」的情况，不是主路。
+     */
+    Mono<Void> cancel(String chatId, HttpHeaders browserHeaders) {
+        return webClient.post()
+                .uri(sessionPath(chatId) + "/cancel")
+                .headers(headers -> headers.addAll(HopByHopHeaders.strip(browserHeaders)))
+                .retrieve()
+                .toBodilessEntity()
+                .then();
+    }
+
     private URI sessionPath(String chatId) {
         String encodedId = UriUtils.encodePathSegment(chatId, StandardCharsets.UTF_8);
         return agentServer.resolve("/sessions/" + encodedId);

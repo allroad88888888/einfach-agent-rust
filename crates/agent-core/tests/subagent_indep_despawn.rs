@@ -107,13 +107,16 @@ fn the_teardown_entry_records_every_live_value_as_prev_and_the_default_as_next()
 fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone() {
     let mut session = new_session();
     let child = spawn_and_drive_child(&mut session);
-    assert_eq!(child_key_count(&session, &child), 11);
+    // 槽位数 = `Slot::ALL.len()`（每个 agent 一份，`build_agent` 不给 root 开小灶）：
+    // 028 是 10、039 加 `SkillsActive` 是 11、073 加 `HostTools` 是 12、
+    // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14。
+    assert_eq!(child_key_count(&session, &child), 14);
 
     let report = session.despawn_child(&child).expect("despawn should not panic or refuse");
 
     assert_eq!(report.agents, vec![child.clone()]);
-    assert_eq!(report.atoms_evicted, 10, "十一个槽位里只留 ToolsAllowed 一个墓碑");
-    assert_eq!(child_key_count(&session, &child), 1, "其余十个 atom 该被物理逐出");
+    assert_eq!(report.atoms_evicted, 13, "十四个槽位里只留 ToolsAllowed 一个墓碑");
+    assert_eq!(child_key_count(&session, &child), 1, "其余十三个 atom 该被物理逐出");
     assert!(!session.is_live(&child));
     assert_eq!(value_of(&session, &child, Slot::ToolsAllowed), AgentValue::Null);
 }
@@ -136,7 +139,7 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
 
     assert!(session.is_live(&child), "undo 一次 despawn 之后子该重新活着");
     assert_eq!(session.children_of(&root), vec![child.clone()]);
-    assert_eq!(child_key_count(&session, &child), 11, "全部十一个槽位都该被按需重建");
+    assert_eq!(child_key_count(&session, &child), 14, "全部十四个槽位都该被按需重建");
     assert_eq!(value_of(&session, &child, Slot::Status), AgentValue::Status(TurnStatus::ToolsPending));
 
     // 子接着工作：喂它那条挂起工具调用的结果，让它收敛。注意这里不能拿

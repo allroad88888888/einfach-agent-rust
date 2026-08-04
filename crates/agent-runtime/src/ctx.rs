@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use agent_core::cache::TurnHit;
 use agent_core::{AgentId, AgentTree, Session, SessionConfig, SystemChunk};
+use agent_mcp::McpRegistry;
 use agent_providers::Provider;
 use agent_tools::ToolExecutor;
 use agent_transport::Client;
@@ -28,6 +29,33 @@ use crate::tool_table::ToolTable;
 pub const DEFAULT_PROVIDER_TIMEOUT: Duration = Duration::from_secs(120);
 /// 快照节奏默认值（027 决策 3）：每 10 个 turn 落一张。
 pub const DEFAULT_SNAPSHOT_EVERY: u64 = 10;
+/// 远端工具（`web:` / `desk:`）等待宿主回传的截止线（060）。**十分钟**。
+///
+/// 这个数不是「一次远端调用该花多久」的 UX 预算，而是**活性兜底**：它唯一的
+/// 职责是保证会话不可能永久停在 `ToolsPending`。所以选值只按两侧代价算，不按
+/// 「典型耗时」算：
+///
+/// - **误杀的代价高且发生在健康会话上**。`ask_user_question` 就在标准工具表里
+///   （`ToolTable::standard`），它天生要等一个真人：读完问题、切个标签页、回来
+///   作答，几分钟是常态。到点注入 `is_error` 会让模型对一个**正在正常等人**的
+///   调用道歉/重问，用户看得见。
+/// - **迟到的代价低且发生在已经坏掉的会话上**。真到了这条线，说明宿主永远不会
+///   回传（前端崩了 / 网关挂了 / 客户端压根没实现这个工具），会话已经废了；
+///   而且更快的逃生舱**本来就有**：用户 `POST /cancel`（立刻），以及 M9 的宽限
+///   取消（最后一个订阅者断开 5s 后）已经覆盖「页面崩了/标签页关了」那一类。
+///   这条线只兜最后一格——**客户端还连着，但永远不说话**。
+///
+/// 于是取「一个真人跟一次提问打交道绝不会超过、而人又绝不愿意再多等」的量级：
+/// 10 分钟。同时它是 provider 超时（120s）的 5 倍——「人比模型慢」这件事写进
+/// 数字里，而不是写成无限期。
+///
+/// **不按工具分类给不同默认**：位置与可逆性目前都由**名字**经自由函数推
+/// （`tool_table::location_of` / `reversibility_of`），`ToolSpec` 里没有任何
+/// per-tool 元数据的位置可挂；在这里现造一套分类会跟 050（工具名编码）撞车，
+/// 也会抢掉 HOST-CAPABILITIES.md §四 的地盘——宿主声明自己的能力时把截止线
+/// 一起带进来才是它的正位。现在给的是**一个宽松默认 + 一个可配置的口**
+/// （[`RunnerCtx::with_remote_tool_timeout`]），等声明入口落地再细分。
+pub const DEFAULT_REMOTE_TOOL_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub struct RunnerCtx {
     pub(crate) provider: Arc<dyn Provider>,
@@ -36,10 +64,19 @@ pub struct RunnerCtx {
     pub(crate) api_key: String,
     pub(crate) fs: ToolExecutor,
     pub(crate) tools: ToolTable,
+    /// MCP server 的活句柄表（store 外的进程内 registry，红线 3）。dispatch 的第四路
+    /// 只拿它 + server id 去查 client 起一次异步 `tools/call`（`crate::mcp_call`），
+    /// client 句柄从不进任何 command/atom。默认空表——没接 MCP 的宿主永远查不到。
+    pub(crate) mcp: Arc<McpRegistry>,
     pub(crate) system: Vec<SystemChunk>,
     pub(crate) session_config: SessionConfig,
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) provider_timeout: Duration,
+    /// 单次 MCP `tools/call` 的往返超时（`crate::mcp_call` 传给背景线程）。
+    pub(crate) mcp_timeout: Duration,
+    /// 远端工具等待宿主回传的截止线预算（060）。登记等待槽时按它算出
+    /// `PendingRemoteTool::deadline`，之后这个槽的命运只看那个绝对时刻。
+    pub(crate) remote_tool_timeout: Duration,
     pub(crate) guard_history: Vec<TurnHit>,
     pub(crate) pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools,
     /// 011 的端口，027 上岗：`persist::sync` 每条命令之后转发进它，
@@ -63,6 +100,11 @@ pub struct RunnerCtx {
     /// 条款 1）。`None` = 没设（`with_tree_events` 也没调）——CLI 就是这个默认值，
     /// 它的 `/agents` 是按需读 `Session::agent_tree()`，不需要 pump 每步都算一遍。
     on_tree_change: Option<Box<dyn FnMut(AgentTree)>>,
+    /// 072：远端等待槽的投影变化回调，跟 `on_tree_change` 同款独立字段。写点在
+    /// **槽变化的那一刻**（`crate::ctx_remote_tools` 的四个变更点各通知一次），
+    /// 不是宿主的命令边界——登记就在 `run_turn` 内部、下一行就广播
+    /// `tool_executing` 了。设/不设与语义全在那个文件的模块文档里。
+    pub(crate) on_pending_remote_tools: Option<Box<dyn FnMut(Vec<crate::ctx_remote_tools::RemoteToolWaiting>)>>,
 }
 
 impl RunnerCtx {
@@ -87,10 +129,13 @@ impl RunnerCtx {
             api_key,
             fs,
             tools,
+            mcp: Arc::new(McpRegistry::new()),
             system,
             session_config,
             cancel: Arc::new(AtomicBool::new(false)),
             provider_timeout: DEFAULT_PROVIDER_TIMEOUT,
+            mcp_timeout: agent_mcp::DEFAULT_CALL_TIMEOUT,
+            remote_tool_timeout: DEFAULT_REMOTE_TOOL_TIMEOUT,
             guard_history: Vec::new(),
             pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools::default(),
             session_store,
@@ -99,6 +144,7 @@ impl RunnerCtx {
             last_snapshotted_turn: None,
             on_event,
             on_tree_change: None,
+            on_pending_remote_tools: None,
         }
     }
 
@@ -182,6 +228,35 @@ impl RunnerCtx {
         self
     }
 
+    /// 装上宿主持有的 [`McpRegistry`]（store 外的活句柄表，红线 3）。默认是空表——
+    /// 没配 MCP server 的宿主（CLI 尚未接 044/045、浏览器 host 只有 http）dispatch
+    /// 查不到任何 server，`mcp:` 工具压根不会进工具表，这个空表也就永远不被查到。
+    pub fn with_mcp(mut self, registry: Arc<McpRegistry>) -> Self {
+        self.mcp = registry;
+        self
+    }
+
+    /// 覆盖 MCP `tools/call` 的往返超时——测试用短超时把「server 挂住不回」压到
+    /// 毫秒级（跟 [`RunnerCtx::with_provider_timeout`] 同款）。
+    pub fn with_mcp_timeout(mut self, timeout: Duration) -> Self {
+        self.mcp_timeout = timeout;
+        self
+    }
+
+    /// 覆盖远端工具等待宿主回传的截止线（060，默认
+    /// [`DEFAULT_REMOTE_TOOL_TIMEOUT`] = 10 分钟）。
+    ///
+    /// 跟 [`RunnerCtx::with_provider_timeout`] / [`RunnerCtx::with_mcp_timeout`]
+    /// 同款：测试把「客户端永不回传」压到毫秒级；宿主也可以按自己的交互形态调
+    /// （纯机器执行的注入能力可以调短，含真人问答的该留够）。
+    ///
+    /// **只影响此后新登记的等待槽**：已经在等的槽握的是登记那一刻算好的绝对
+    /// 时刻，不会被中途改配置追溯。
+    pub fn with_remote_tool_timeout(mut self, timeout: Duration) -> Self {
+        self.remote_tool_timeout = timeout;
+        self
+    }
+
     /// 运行时切 provider（014 `/model <name>`）：换 adapter + endpoint + key +
     /// model，并清空第 3 层滚动窗口——`guard_history` 记的是「最近几轮的缓存
     /// 命中观测」，换家之后旧家的观测对新家的命中率毫无意义，留着只会把两家
@@ -216,85 +291,5 @@ impl RunnerCtx {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_core::TokenUsage;
-    use agent_core::cache::TurnHit;
-    use agent_providers::deepseek::DeepSeek;
-    use agent_providers::kimi::Kimi;
-
-    use crate::tool_table::ToolTable;
-
-    fn build(model: &str) -> RunnerCtx {
-        let fs = ToolExecutor::new(std::env::temp_dir()).unwrap();
-        RunnerCtx::new(
-            Arc::new(DeepSeek),
-            Arc::new(Client::new()),
-            "https://api.deepseek.com/chat/completions".to_string(),
-            "deepseek-key".to_string(),
-            fs,
-            ToolTable::builtin(),
-            Vec::new(),
-            SessionConfig {
-                model: Arc::from(model),
-                temperature: None,
-                max_tokens: None,
-                context_window: None,
-            },
-            crate::persist::open_backend(None, |_| {}),
-            Box::new(|_| {}),
-        )
-    }
-
-    #[test]
-    fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window() {
-        let mut ctx = build("deepseek-v4-pro");
-        ctx.guard_history.push(TurnHit::from_usage(&TokenUsage { prompt: 100, completion: 10, cached: Some(64) }));
-        assert!(!ctx.guard_history.is_empty());
-
-        ctx.switch_provider(
-            Arc::new(Kimi),
-            "https://api.moonshot.cn/v1/chat/completions".to_string(),
-            "kimi-key".to_string(),
-            Arc::from("kimi-k3"),
-        );
-
-        assert_eq!(ctx.endpoint, "https://api.moonshot.cn/v1/chat/completions");
-        assert_eq!(ctx.api_key, "kimi-key");
-        assert_eq!(&*ctx.session_config.model, "kimi-k3");
-        assert!(ctx.guard_history.is_empty(), "跨家滚动窗口该清空，不能把 deepseek 的观测带进 kimi 的命中率");
-    }
-
-    /// 014 验收原文点名的断言：切到 kimi 之后，真的 `encode` 一次，产出的
-    /// body 得是 kimi 的形状——带上新 model 名、不残留旧家的 model 名。只测
-    /// `switch_provider` 换掉的三个字段（`provider`/`endpoint`/`session_config.
-    /// model`）互相独立地对不上是不够的：万一 `provider` 换了但
-    /// `session_config.model` 没跟着换（或者反过来），字段级断言会各自通过，
-    /// 只有真的 encode 一次才会暴露「adapter 用的是新家，却拿旧家的 model
-    /// 名去发请求」这种组合错误。
-    #[test]
-    fn switch_provider_encode_reflects_the_new_family_not_the_old() {
-        let mut ctx = build("deepseek-v4-pro");
-        ctx.switch_provider(
-            Arc::new(Kimi),
-            "https://api.moonshot.cn/v1/chat/completions".to_string(),
-            "kimi-key".to_string(),
-            Arc::from("kimi-k3"),
-        );
-
-        let encoded = ctx.provider.encode(&agent_providers::Ingredients {
-            system: &[],
-            messages: &[],
-            tools: &[],
-            late_tools: &[],
-            late_system: &[],
-            config: &ctx.session_config,
-            intent: agent_core::RequestIntent::Free,
-            prev_prefix: None,
-        });
-
-        let body = String::from_utf8(encoded.body).unwrap();
-        assert!(body.contains("kimi-k3"), "encode 该带上切换后的 model 名: {body}");
-        assert!(!body.contains("deepseek-v4-pro"), "encode 出的 body 不该残留切换前那家的 model 名: {body}");
-    }
-}
+#[path = "ctx_tests.rs"]
+mod tests;
