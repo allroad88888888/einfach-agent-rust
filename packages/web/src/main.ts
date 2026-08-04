@@ -9,8 +9,24 @@ import { connect, type ConnectionState } from "./connection";
 import { createRenderer } from "./render/dispatch";
 import { createToolExecutor } from "./tool-exec";
 import { renderAgentTree } from "./render/agent_tree";
+import { connectMcpServers, describeStatus, registerMcpTools } from "./mcp";
+import { parseMcpServers } from "./mcp-config";
 
 async function main(): Promise<void> {
+  // 067 + 068：**先连 MCP、再建会话**。这个顺序不是风格问题——注入只有建会话
+  // 那一次机会（接缝 §三：不做运行时增删），晚一行这些工具就赶不上这个会话了。
+  // 配置从地址栏来（`?mcp=<id>=<url>`，见 `./mcp-config`）；不带参数就一条都不连，
+  // `webCapabilities()` 与 067 之前逐字节相同。
+  const mcpConfigs = parseMcpServers(window.location.search);
+  if (mcpConfigs.length > 0) {
+    statusEl.textContent = `连接 ${mcpConfigs.length} 个 MCP server…`;
+    const mcp = await connectMcpServers(mcpConfigs);
+    // 连不上的不致命：`connectMcpServers` 逐个报状态、失败的那个不贡献工具，
+    // 会话照常建（跟 044 的「失败隔离」同精神）。状态打进控制台，人看得见。
+    for (const server of mcp.servers) console.info(`[mcp] ${describeStatus(server)}`);
+    registerMcpTools(mcp);
+  }
+
   statusEl.textContent = "创建会话…";
   // 065：建会话这一次把本前端的能力声明一起发出去（`./capabilities`）——只有
   // 这一次机会（接缝 §三：不做运行时增删）。067 接 MCP 后要在这一行**之前**

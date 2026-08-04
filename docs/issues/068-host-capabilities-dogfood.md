@@ -100,10 +100,56 @@ M6/M8 都验过这个形式，注入是新变量，要重新确认一次。
   **新调**了 `web:demo/lookup_order`，副作用 `1 → 2`，且无前缀漂移告警。
 - **一**：最终回答里含只有工具才知道的校验码；**二**：不带声明的会话里那个工具泄漏×0。
 
-### 第四条（前端 MCP 形态 B）**没做**，如实标注
+### 第四条（前端 MCP 形态 B）· 真浏览器跑通，**后半句另开 078**
 
-要真浏览器 + 一个 **HTTP 传输的 MCP server**（`packages/web/src/mcp/` 的 `McpServerConfig`
-只有 `{id,url,headers?,timeouts?}`，连不了 stdio）。本轮没跑，**M10 不据此宣布收官**。
+**跑法**：自写一个最小 **Streamable HTTP** MCP server（`scratchpad/mcp-http-server.mjs`，
+60 行，2025-03-26 单端点）——`packages/web/src/mcp/transport.ts` 明确只说 Streamable HTTP，
+而本机的 `server-everything` 是 stdio 形态，所以造一个可控的对手，并在返回值里埋一个
+**只有它知道的编号**，「模型是不是真的走通了这条路」才判定得了。
+前端由 `crates/agent-server/examples/serve.rs` 的 `AGENT_STATIC_DIR` **同源托管**
+（不经 vite 代理，省掉一个变量），playwright 驱动真浏览器。
+
+**067 留下的接线由本 issue 补上**（067 §七原话：「配置从哪来本模块不管……那是 068 真机
+接入时的判断」）：新增 `packages/web/src/mcp-config.ts`（72 行），MCP server 列表从
+**地址栏**来——`?mcp=<id>=<url>`。取向与理由写在那个文件的头注释里：形态 B 的要点就是
+**浏览器自己连**，配置放在浏览器自己的地址栏最短；写死要重新 build、localStorage 看不见
+清不掉。**不带参数一条都不连**，`webCapabilities()` 与 067 之前逐字节相同。
+`main.ts` 加了「先连 MCP、再建会话」的 11 行（顺序不是风格问题：注入只有建会话那一次机会）。
+
+**真机证据**（浏览器里逐条可见）：
+
+```
+⋯ 准备调用 web:mcp-stamp/stamp_document
+⚙ web:mcp-stamp/stamp_document
+Web · Irreversible · {"doc_id":"HT-2024-001"}
+✓ web:mcp-stamp/stamp_document · 输出 56 字节
+骑缝章编号：**MCPBC3A685-2**
+usage prompt=2280 completion=39 cached=2048 · drift=Clean
+       · reconcile=Match{"predicted":2048,"actual":2048} · window=Healthy{turns:2,hit_percent:87}
+```
+
+对应的 MCP server 端日志：`initialize → ok` / `tools/list → ok` / `tools/call → ok`。
+
+逐条对上验收：**名字**是接缝定的 `web:mcp-<server>/<tool>`；**位置与可逆性**推对了
+（`Web · Irreversible`——server 声明 `readOnlyHint: false`）；**结果真的回来了**并被模型
+用进回答（`MCPBC3A685-2` 只有那个 MCP server 知道）；**红线 11 白拿**——第 2 轮
+`predicted == actual == 2048`，注入的 MCP 工具进了表也没炸前缀（第五条在浏览器里又验了一次）。
+
+顺带证明了**两类注入共存**：模型的思考里先想 `web:demo/page-title`（065 的演示工具）
+再改用 MCP 那个——宿主自己声明的和 MCP 翻译进来的在同一张表里，互不干扰。
+
+### 第四条的后半句跑不出来 → **078**
+
+验收原文还要求「同一会话里同时有 `mcp:everything/echo`（`.mcp.json` 配的，**服务端连**）
+和 `web:mcp-<x>/<t>`（前端连的）」。**做不到，而且不是环境问题**：
+
+`ToolTable::with_mcp` 在 `crates/agent-server/` 里**一次都没被调用过**（只剩两处注释提到它），
+`agent-server-bin` 也不读 `.mcp.json`——**只有 `agent-cli` 装 MCP**。所以经 HTTP 起的会话里
+根本没有任何 `mcp:` 工具。**跟 064 发现的「server 形态下 skill 是休眠的」是同一个形状。**
+
+单列 [078](078-server-form-mcp-is-dormant.md)（照本 issue §注意「真机若捞到新问题 → 单列新
+issue，不塞进本 issue 硬修」）。**M10 因此是「六条兑现 + 第四条前半句兑现」**，
+后半句随 078 补。
 
 ### 驱动脚本自己错了两次，记一笔（都不是产品问题）
 
