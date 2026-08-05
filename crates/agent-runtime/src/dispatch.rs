@@ -127,7 +127,20 @@ pub(crate) fn run_effect(
             // 跑到一半崩溃时，恢复出来的日志里压根没有这次调用「不可逆」的痕迹
             // （`mark_irreversible` 本身不落日志，落的是它让随后那条 `tool_result`
             // entry 带上的 `barrier` 位——见 `Session::mark_irreversible` 文档）。
-            let request = ctx.tools.snapshot(&tool, Arc::clone(&input));
+            // 084：部署期 ToolTable 仍是第一优先级；只有表里没有这个名字时，才按
+            // **当前 agent** 的激活集解析 host skill 自带的远端工具。解析不到就继续
+            // 走既有 unknown_tool 路径，不能因为 `web:` / `desk:` 前缀凭空挂起。
+            let table_declared = ctx.tools.declares(&tool);
+            let active_skill_request = if table_declared {
+                None
+            } else {
+                let active = session.active_skills_of(&agent);
+                ctx.tools
+                    .active_host_tool_request(&active, &tool, Arc::clone(&input))
+            };
+            let remotely_declared = table_declared || active_skill_request.is_some();
+            let request = active_skill_request
+                .unwrap_or_else(|| ctx.tools.snapshot(&tool, Arc::clone(&input)));
             if matches!(request.reversibility, Reversibility::Irreversible) {
                 session.mark_irreversible(call_id.clone());
             }
@@ -138,11 +151,11 @@ pub(crate) fn run_effect(
             // provider 分支）。snapshot + mark_irreversible 已在上面做过——readOnly 的
             // MCP 工具落 `Pure` 无屏障，非 readOnly 落 `Irreversible` 带屏障，复用
             // 020/027 的既有屏障机制，MCP 不新造。
-            if tool.starts_with("mcp:") && ctx.tools.declares(&tool) {
+            if tool.starts_with("mcp:") && table_declared {
                 return start_mcp(ctx, tx, agent, call_id, request, epoch);
             }
             // 远端第五路（`web:` / `desk:`）：登记等待槽、把调用推给宿主，**挂起**
-            // 不产事件。`declares` 把关跟上面五条逐字同一条判据（060）——`location`
+            // 不产事件。部署期声明或当前 agent 已激活的 host skill 声明才放行；`location`
             // 是**纯按名字**推的（`tool_table::location_of`：`web:` 前缀就是
             // `Location::Web`），没有这道闸的话，模型只要吐一个工具表里根本没有的
             // `web:whatever/x` 就能给自己开一个永远等不到回传的槽：泵撞「在飞表空」
@@ -150,7 +163,7 @@ pub(crate) fn run_effect(
             // /tool_result`，会话**永久挂死且不报错**。没声明就落进下面那条既有的
             // 未知工具路（`ctx.fs.execute` 的 `unknown_tool`），模型看到 `is_error`
             // 自纠——跟同样被编造出来的 `srv:` 名字待遇一致（决策 20 的兜底）。
-            if request.location.is_remote() && ctx.tools.declares(&tool) {
+            if request.location.is_remote() && remotely_declared {
                 ctx.register_remote_tool(agent.clone(), call_id.clone(), epoch, request.clone());
                 ctx.emit(&agent, RunnerEvent::ToolExecuting { call_id, request });
                 return Dispatched::Nothing;

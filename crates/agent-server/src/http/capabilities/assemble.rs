@@ -36,14 +36,12 @@
 //! `late_tools` 进这一轮（skill 的既有形状，HOST-CAPABILITIES §一），所以它们跟着
 //! [`HostSkill`] 走，不出现在 [`host_tools`] 的产物里。
 //!
-//! # skill 自带工具的 `reversibility` 这一步**丢掉**（064，如实记一笔）
+//! # skill 自带工具的 `reversibility` 旁挂保存
 //!
-//! 061 的协议形状里 skill 自带的工具跟顶层工具是同一个类型，所以它也能写
-//! `reversibility`；但 `late_tools` 今天**连 `ToolTable::declares` 都不进**（069
-//! §另记一笔 记的那个可执行性洞——skill 自带的 `web:`/`desk:` 工具今天根本执行不
-//! 了），没有任何一处会去查它的可逆性。翻译成一个没有读者的字段、再存进会话历史，
-//! 只会给将来一个「它一直是对的」的错觉。**这不是漏了**：真要把 `late_tools` 接上
-//! 执行，那时该定的是「激活时它进不进表」这个更大的问题（进表就改前缀，红线 11）。
+//! skill 工具仍不进常驻工具表；这一步只把执行元数据按名字写进
+//! [`HostSkill::tool_reversibility`]，供激活后的 dispatch 查询。它不进入 `ToolSpec`，
+//! 因而不改变 skill index、正文或 late tool schema 的 prompt 字节。跟顶层工具一样，
+//! 宿主省略可逆性时保守落 `Irreversible`。
 
 use std::sync::Arc;
 
@@ -66,11 +64,7 @@ pub(in crate::http) fn host_tools(
         .iter()
         .map(|tool| {
             let spec = tool_spec(tool);
-            (
-                spec,
-                tool.reversibility
-                    .map_or(Reversibility::Irreversible, Reversibility::from),
-            )
+            (spec, reversibility(tool))
         })
         .collect()
 }
@@ -80,9 +74,8 @@ pub(in crate::http) fn host_tools(
 /// 没带 `capabilities` 或者一个 skill 都没声明 → 空 `Vec`，下游 registry 为空、
 /// 工具表不接 `.with_skills(..)`、常驻索引是空文本，这个会话跟 064 之前逐字节相同。
 ///
-/// **四个字段原样搬**：`id`/`description`/`body` 直接进（前两个进常驻索引与 prompt，
-/// 第三个等激活才进 `late_system`），自带的工具只搬**进 prompt 的那三个字段**，
-/// 可逆性丢掉（理由见模块文档）。
+/// `id`/`description`/`body` 直接进（前两个进常驻索引与 prompt，第三个等激活才进
+/// `late_system`）；自带工具的三个 prompt 字段仍原样搬，可逆性按名字旁挂保存。
 pub(in crate::http) fn host_skills(capabilities: Option<&Capabilities>) -> Vec<HostSkill> {
     let Some(capabilities) = capabilities else {
         return Vec::new();
@@ -90,13 +83,29 @@ pub(in crate::http) fn host_skills(capabilities: Option<&Capabilities>) -> Vec<H
     capabilities
         .skills
         .iter()
-        .map(|skill| HostSkill {
-            id: SkillId::new(skill.id.as_str()),
-            description: Arc::from(skill.description.as_str()),
-            body: Arc::from(skill.body.as_str()),
-            tools: skill.tools.iter().map(tool_spec).collect(),
+        .map(|skill| {
+            let mut tools: Vec<ToolSpec> = skill.tools.iter().map(tool_spec).collect();
+            tools.sort_by(|a, b| a.name.cmp(&b.name));
+            let tool_reversibility = skill
+                .tools
+                .iter()
+                .map(|tool| (Arc::from(tool.name.as_str()), reversibility(tool)))
+                .collect();
+            HostSkill {
+                id: SkillId::new(skill.id.as_str()),
+                description: Arc::from(skill.description.as_str()),
+                body: Arc::from(skill.body.as_str()),
+                tools,
+                tool_reversibility,
+            }
         })
         .collect()
+}
+
+/// 宿主省略可逆性时落保守值；顶层工具与 skill 工具共用同一条解释。
+fn reversibility(tool: &CapabilityTool) -> Reversibility {
+    tool.reversibility
+        .map_or(Reversibility::Irreversible, Reversibility::from)
 }
 
 /// 一条工具声明 → `ToolSpec`：三个**进 prompt** 的字段原样搬。顶层的和 skill 自带
@@ -210,6 +219,43 @@ mod tests {
         assert_eq!(&*skills[0].body, "第一步……第二步……");
         assert_eq!(&*skills[0].tools[0].name, "web:crm/close-ticket");
         assert_eq!(*skills[0].tools[0].schema, schema);
+        assert_eq!(
+            skills[0].tool_reversibility["web:crm/close-ticket"],
+            Reversibility::Irreversible
+        );
+    }
+
+    /// skill 工具显式值原样保存；省略值跟顶层工具一样保守落 `Irreversible`。
+    #[test]
+    fn skill_tool_reversibility_is_preserved_and_missing_is_conservative() {
+        let declared = caps(json!({
+            "skills": [ {
+                "id": "source-code",
+                "tools": [
+                    { "name": "web:source/search", "reversibility": "pure" },
+                    { "name": "web:source/cache", "reversibility": "reversible" },
+                    { "name": "web:source/pull", "reversibility": "irreversible" },
+                    { "name": "web:source/read" }
+                ]
+            } ]
+        }));
+
+        let skills = host_skills(Some(&declared));
+        let levels = &skills[0].tool_reversibility;
+        let names: Vec<&str> = skills[0].tools.iter().map(|tool| &*tool.name).collect();
+        assert_eq!(
+            names,
+            vec![
+                "web:source/cache",
+                "web:source/pull",
+                "web:source/read",
+                "web:source/search"
+            ]
+        );
+        assert_eq!(levels["web:source/search"], Reversibility::Pure);
+        assert_eq!(levels["web:source/cache"], Reversibility::Reversible);
+        assert_eq!(levels["web:source/pull"], Reversibility::Irreversible);
+        assert_eq!(levels["web:source/read"], Reversibility::Irreversible);
     }
 
     /// 没带 `capabilities`、空声明、只声明了工具——三种情况下 skill 那一侧都是空，

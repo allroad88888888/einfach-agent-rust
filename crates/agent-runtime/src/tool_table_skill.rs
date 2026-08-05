@@ -40,7 +40,10 @@
 //! **滤的是工具，不是 skill**：`late_system` 里那个 skill 的正文一个字节不少。撞名
 //! 是工具名的事，跟这个 skill 该不该被激活、正文该不该注入没有关系。
 
-use agent_core::{SkillId, SystemChunk, ToolSpec};
+use std::sync::Arc;
+
+use agent_core::{SkillId, SystemChunk, ToolCallRequest, ToolSpec};
+use serde_json::Value;
 
 use crate::skill::{SkillRegistry, activate_spec, deactivate_spec};
 
@@ -82,6 +85,20 @@ impl ToolTable {
         let (late_system, mut late_tools) = self.registry.injection(active);
         late_tools.retain(|spec| !self.declares(&spec.name));
         (late_system, late_tools)
+    }
+
+    /// 只解析当前 agent 已激活的 host skill 工具。表里的同名声明永远优先走既有路径；
+    /// registry 内部再负责来源、远端前缀、唯一性与 reversibility 的 fail-closed 判定。
+    pub(crate) fn active_host_tool_request(
+        &self,
+        active: &[SkillId],
+        name: &str,
+        input: Arc<Value>,
+    ) -> Option<ToolCallRequest> {
+        if self.declares(name) {
+            return None;
+        }
+        self.registry.active_host_tool_request(active, name, input)
     }
 }
 

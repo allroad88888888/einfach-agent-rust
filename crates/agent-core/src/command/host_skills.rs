@@ -38,8 +38,8 @@ impl Session {
     /// 记下宿主为这个会话声明的 skill：一条 `Entry`（label `"declare_host_skills"`）。
     ///
     /// 落在 **root** 头上（会话级命令，同 [`Session::declare_host_tools`]）——声明属于
-    /// 这个会话，不属于树上某一个 agent。值经 `host_skills::to_value` **按 id 排序**
-    /// 再落盘（红线 11，理由见那个模块）。
+    /// 这个会话，不属于树上某一个 agent。值经 `host_skills::to_value` **按 skill id
+    /// 与 tool name 排序**再落盘（红线 11，理由见那个模块）。
     ///
     /// 传空 `Vec` 是一次真正的空操作：值跟默认值相等，`record_set` 不产生 `Change`，
     /// `History::append` 不落条目——「没声明的会话」因此连一条幽灵 entry 都没有。
@@ -49,7 +49,7 @@ impl Session {
         self.commit("declare_host_skills", |txn| txn.set_key(key, value));
     }
 
-    /// 这个会话被声明过的 skill（**按 id 排序**——写入时排过，读回就是有序的）。
+    /// 这个会话被声明过的 skill（skill 与各自 tools 都在写入时排过序）。
     ///
     /// 宿主（`agent-server` 的 actor）在建 `SkillRegistry` 时读它。空 = 没有任何注入，
     /// registry 为空 → 工具表不接 `.with_skills(..)`、索引段为空文本，这个会话跟
@@ -88,6 +88,7 @@ mod tests {
                 description: Arc::from("说明"),
                 schema: Arc::new(serde_json::json!({ "type": "object" })),
             }],
+            tool_reversibility: Default::default(),
         }
     }
 

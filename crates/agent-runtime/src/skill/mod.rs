@@ -22,11 +22,12 @@ mod load;
 mod tool;
 mod yaml;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent_core::{SkillId, SystemChunk, ToolSpec};
+use agent_core::{Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec};
+use serde_json::Value;
 
 pub use load::SkillLoadError;
 pub(crate) use tool::intercept;
@@ -42,6 +43,18 @@ struct Skill {
     description: Arc<str>,
     body: Arc<str>,
     tools: Vec<ToolSpec>,
+    source: SkillSource,
+}
+
+/// skill 的来源同时也是执行授权边界：磁盘 skill 只能注入说明/schema，永远不能
+/// 借一个 `web:`/`desk:` 名字取得宿主远端执行权。
+enum SkillSource {
+    Disk,
+    Host {
+        tool_reversibility: BTreeMap<Arc<str>, Reversibility>,
+    },
+    /// 恢复数据绕过 HTTP 校验时，正文/schema 仍照旧展开，但任何工具都不执行。
+    InvalidHost,
 }
 
 /// 宿主持有的 skill 目录索引。**用 `BTreeMap` 不是 `HashMap`（红线 11）**：索引和
@@ -102,18 +115,23 @@ impl SkillRegistry {
     /// id 在一份声明内部的唯一性由 061 的校验保证（`DuplicateSkill` → 400），
     /// 所以这里不会真的撞键。
     pub fn from_host_skills(skills: Vec<agent_core::HostSkill>) -> Self {
-        let skills = skills
-            .into_iter()
-            .map(|declared| {
-                let skill = Skill {
-                    id: declared.id,
-                    description: declared.description,
-                    body: declared.body,
-                    tools: declared.tools,
-                };
-                (Arc::clone(&skill.id.0), skill)
-            })
-            .collect();
+        let mut registry = BTreeMap::new();
+        for declared in skills {
+            let source = host_source(&declared.tools, declared.tool_reversibility);
+            let mut skill = Skill {
+                id: declared.id,
+                description: declared.description,
+                body: declared.body,
+                tools: declared.tools,
+                source,
+            };
+            let key = Arc::clone(&skill.id.0);
+            if registry.contains_key(&key) {
+                skill.source = SkillSource::InvalidHost;
+            }
+            registry.insert(key, skill);
+        }
+        let skills = registry;
         SkillRegistry { skills }
     }
 
@@ -185,5 +203,80 @@ impl SkillRegistry {
             late_tools.extend(skill.tools.iter().cloned());
         }
         (late_system, late_tools)
+    }
+
+    /// 整个 registry 里恰好一个 host 来源声明、且它有效并已激活时才解析；损坏的
+    /// `InvalidHost` 也参与计数，歧义不能因 agent 只激活其中一个而变成执行授权。
+    pub(crate) fn active_host_tool_request(
+        &self,
+        active: &[SkillId],
+        name: &str,
+        input: Arc<Value>,
+    ) -> Option<ToolCallRequest> {
+        let location = host_tool_location(name)?;
+        let mut resolved = None;
+        for skill in self.skills.values() {
+            let reversibility = match &skill.source {
+                SkillSource::Disk => continue,
+                SkillSource::Host { tool_reversibility } => Some(
+                    tool_reversibility
+                        .get(name)
+                        .copied()
+                        .unwrap_or(Reversibility::Irreversible),
+                ),
+                SkillSource::InvalidHost => None,
+            };
+            for tool in &skill.tools {
+                if &*tool.name != name {
+                    continue;
+                }
+                if resolved.is_some() {
+                    return None;
+                }
+                resolved = Some((&skill.id, reversibility));
+            }
+        }
+        let (owner, reversibility) = resolved?;
+        let reversibility = reversibility?;
+        active.iter().any(|id| id == owner).then_some(())?;
+        Some(ToolCallRequest {
+            tool: Arc::from(name),
+            input,
+            location,
+            reversibility,
+        })
+    }
+}
+
+/// 跟 HTTP capabilities 边界相同的名字约束；这里再验一次以防旧 journal/损坏值。
+fn host_tool_location(name: &str) -> Option<Location> {
+    let (location, rest) = match name {
+        name if name.starts_with("web:") => (Location::Web, &name[4..]),
+        name if name.starts_with("desk:") => (Location::Desktop, &name[5..]),
+        _ => return None,
+    };
+    let shape_ok = !rest.is_empty()
+        && name.len() <= 128
+        && rest
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/'));
+    shape_ok.then_some(location)
+}
+
+fn host_source(
+    tools: &[ToolSpec],
+    tool_reversibility: BTreeMap<Arc<str>, Reversibility>,
+) -> SkillSource {
+    let mut names = BTreeSet::new();
+    let tools_valid = tools
+        .iter()
+        .all(|tool| host_tool_location(&tool.name).is_some() && names.insert(&*tool.name));
+    let metadata_valid = tool_reversibility
+        .keys()
+        .all(|name| names.contains(&**name));
+    if tools_valid && metadata_valid {
+        SkillSource::Host { tool_reversibility }
+    } else {
+        SkillSource::InvalidHost
     }
 }
