@@ -1,0 +1,66 @@
+//! 本 crate 集成测试的单一 harness：所有用例编进一个二进制。
+//! 为什么合并：267 个单文件测试 = 267 个链接产物 + 267 次进程启动，
+//! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
+//! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
+
+mod atom_value;
+mod cache_guard_preflight;
+mod cache_guard_reconcile;
+mod cache_guard_report;
+mod cache_guard_window;
+mod call_provider_thin;
+mod disabled_builtins_indep_restore;
+mod event_epoch_extractor;
+mod guard_indep_drift;
+mod guard_indep_meta;
+mod guard_indep_reconcile;
+mod guard_indep_report;
+mod guard_indep_window;
+mod host_skills_indep_restore;
+mod host_tools_indep_restore;
+mod image_user_input;
+mod no_clock_meta_test;
+mod observe_046;
+mod serde_roundtrip;
+mod session_cancel;
+mod session_epoch_gate;
+mod session_flow;
+mod session_history;
+mod session_indep_accounting;
+mod session_indep_barrier;
+mod session_indep_begin_turn;
+mod session_indep_cap;
+mod session_indep_epoch_gate;
+mod session_indep_epoch_turn_id;
+mod session_indep_meta_invariants;
+mod session_indep_snapshot_shape;
+mod session_indep_undo_step;
+mod session_indep_undo_turn;
+mod session_max_turns;
+mod session_provider_done;
+mod session_provider_failed;
+mod session_state;
+mod session_subagent_despawn;
+mod session_subagent_read_boundary;
+mod session_subagent_restore;
+mod session_subagent_spawn;
+mod session_subagent_step_routing;
+mod session_subagent_undo;
+mod session_timeout;
+mod session_tool_convergence;
+mod session_tool_outcome;
+mod session_transitions_grid;
+mod session_undo_redo;
+mod skill_indep_activation_journaled;
+mod skill_indep_active_ordered;
+mod skill_indep_restore;
+mod subagent_indep_accounting;
+mod subagent_indep_despawn;
+mod subagent_indep_limits;
+mod subagent_indep_path_algebra;
+mod subagent_indep_snapshot;
+mod subagent_indep_tombstone;
+mod subagent_indep_undo_spawn;
+mod subagent_indep_visibility;
+mod support;
+mod turn_status_terminal;

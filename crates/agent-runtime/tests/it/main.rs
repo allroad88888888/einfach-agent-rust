@@ -1,0 +1,64 @@
+//! 本 crate 集成测试的单一 harness：所有用例编进一个二进制。
+//! 为什么合并：267 个单文件测试 = 267 个链接产物 + 267 次进程启动，
+//! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
+//! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
+
+mod cancel;
+mod collect_child_failure;
+mod collect_matches_blocking_spawn;
+mod collect_refusals;
+mod collect_three_out_of_order;
+mod collect_waits_for_a_running_child;
+mod disabled_builtins_never_reach_the_prompt;
+mod happy_two_hop;
+mod host_skills_index_is_byte_deterministic;
+mod host_tools_bytes_support;
+mod host_tools_prefix_head_never_moves;
+mod host_tools_prefix_is_byte_deterministic;
+mod image_user_input_jsonl;
+mod jsonl_restart_continues;
+mod jsonl_three_restart_cycles_keep_seq_increasing;
+mod mcp_epoch_writeback;
+mod mcp_execution;
+mod mcp_undo_barrier;
+mod remote_tool_deadline_epoch_writeback;
+mod remote_tool_deadline_fails_the_call;
+mod remote_undeclared_tool_is_not_a_hang;
+mod session_store_backend_choice;
+mod session_store_jsonl_cap_crosses_snapshot;
+mod session_store_jsonl_corrupt_files;
+mod session_store_jsonl_crash_recovery;
+mod session_store_jsonl_io_failure;
+mod session_store_jsonl_roundtrip;
+mod session_store_support;
+mod shell_exec_undo_barrier;
+mod skill_indep_registry_and_activation_e2e;
+mod skill_late_tools_never_shadow_the_table;
+mod spawn_bg_epoch_writeback;
+mod spawn_bg_orphan_reaped;
+mod spawn_bg_support;
+mod spawn_bg_tail_cut;
+mod spawn_bg_two_children_no_block;
+mod spawn_indep_cancel_tree;
+mod spawn_indep_depth_chain;
+mod spawn_indep_failure_propagation;
+mod spawn_indep_no_ghost_events;
+mod spawn_indep_parallel3;
+mod spawn_indep_privilege_refusal;
+mod spawn_indep_sibling_prefix;
+mod spawn_indep_support;
+mod spawn_indep_undeclared_tool;
+mod spawn_indep_undo_subtree;
+mod status_indep_lists_descendants;
+mod status_indep_only_descendants;
+mod status_indep_rejects_non_descendant_id;
+mod status_indep_support;
+mod subagent_failures;
+mod subagent_ingredients;
+mod subagent_parallel;
+mod support;
+mod timeout;
+mod tool_table_names_are_unique;
+mod tree_snapshot_background_children;
+mod tree_snapshot_emits_on_change;
+mod undo_after_turns;

@@ -1,0 +1,57 @@
+//! 本 crate 集成测试的单一 harness：所有用例编进一个二进制。
+//! 为什么合并：267 个单文件测试 = 267 个链接产物 + 267 次进程启动，
+//! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
+//! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
+
+mod actor_panic_is_reported_dead;
+mod cancel_mid_turn_fails_the_turn;
+mod close_then_reopen_recovers;
+mod concurrent_open_of_the_same_id_only_one_wins;
+mod http_agent_tree_get_matches_sse;
+mod http_bind_defaults_to_loopback;
+mod http_capabilities_declaration;
+mod http_capabilities_disable_builtin;
+mod http_capabilities_disable_builtin_survive_restart;
+mod http_capabilities_scoped_to_one_session;
+mod http_capabilities_skills;
+mod http_capabilities_skills_survive_restart;
+mod http_capabilities_survive_restart;
+mod http_chatid_sessions;
+mod http_disconnecting_all_subscribers_cancels_after_grace;
+mod http_host_skill_tool_result_resumes_turn;
+mod http_image_input;
+mod http_image_input_errors;
+mod http_image_upload_concurrency;
+mod http_indep_bind_defaults_to_loopback;
+mod http_indep_dual_clients;
+mod http_indep_error_matrix;
+mod http_indep_frame_format;
+mod http_indep_grace_cancel;
+mod http_indep_input_before_sse;
+mod http_indep_poll;
+mod http_indep_replay;
+mod http_indep_support;
+mod http_indep_undo_redo_wire;
+mod http_pending_remote_tools_projection;
+mod http_post_input_streams_deltas_then_terminal;
+mod http_reconnect_past_buffer_gets_a_gap_frame;
+mod http_reconnect_with_last_event_id_replays_missed_frames;
+mod http_session_status_lifecycle;
+mod http_session_template;
+mod http_sessions_handle_closes_all_open_sessions;
+mod http_sse_headers_are_always_present;
+mod http_static_dir_serves_spa_alongside_api;
+mod http_tool_result_is_not_implemented_not_missing;
+mod http_two_sse_clients_are_independent;
+mod http_undo_redo_cancel_endpoints;
+mod image_upload_upstream;
+mod nonvisual_image_input;
+mod queued_input_is_processed_in_order;
+mod registry_ids_lists_open_sessions;
+mod same_session_two_subscribers_see_the_same_sequence;
+mod spawn_over_http_interleaves_child_agent_frames;
+mod support;
+mod two_sessions_dont_cross;
+mod undo_blocked_frame_carries_tool_and_call_id;
+mod web_tool_never_answered_times_out;
+mod web_tool_result_resumes_turn;
