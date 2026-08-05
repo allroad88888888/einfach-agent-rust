@@ -45,7 +45,7 @@
 crates/                   六个 crate（M1 产物，见下）
 probes/                   两个探针 + PROVIDERS.md（三家差异的唯一结论文档）+ 原始观测
 docs/                     决策、状态模型、工具模型、适配层接缝、红线 12 条、issues
-scripts/                  check-invariants.sh（PostToolUse hook + CI）
+scripts/                  check-invariants.sh（PostToolUse hook + 本地收工检查）
 providers.example.toml    key 模板（providers.toml 已 gitignore）
 ```
 

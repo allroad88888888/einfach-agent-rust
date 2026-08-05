@@ -500,8 +500,8 @@ ORCHESTRATION / INTEGRATION / HOST-CAPABILITIES）。
 `BootstrapOptions` 加，不提前造。`。`"desk:` 字面量只出现在转义测试、M10 注入校验及其 fixture 里。
 
 **S9 · `typeshare` 从未被使用**（`ARCHITECTURE.md:215`）。`Cargo.toml:48` 只有 `ts-rs`。
-后半句（生成步骤进 CI、不一致则构建失败）是**真的**：`.github/workflows/ci.yml:30-32`
-`# ts feature 打开 ts-rs，跑协议一致性测试——忘了重新生成 TS 就在这里红。`
+协议生成一致性现在由本地收工命令验证：
+`cargo test -p agent-server --features ts`。仓库不再配置托管 CI。
 
 **S10 · 事件环形缓冲不在 actor 里**。`ARCHITECTURE.md:94` 说"**actor 内**保留一个有界事件环形
 缓冲"；ring 在 HTTP 层的 per-session hub（`crates/agent-server/src/http/hub/ring.rs`，默认 256 帧，
@@ -1011,8 +1011,8 @@ provider 的 HTTP stream、MCP 子进程）已随进程消失。**这个 session
 
 **ARCHITECTURE**：`AgentServer::new(config).serve(addr)` 是唯一入口（`crates/agent-server/src/lib.rs:36`
 明确引用本文档）· `main.rs` 二十行 · 两个 SSE header 都发且 `routes/sse.rs:21-23` 引用本节作为依据 ·
-`agent-server` 是库不是二进制 · `agent-store` 不认识 agent/消息/工具 · 协议类型由 Rust 生成且 CI
-卡一致性 · `probes/api` 与 `apps/desktop/src-tauri` 是独立 workspace（`Cargo.toml:16-21`）。
+`agent-server` 是库不是二进制 · `agent-store` 不认识 agent/消息/工具 · 协议类型由 Rust 生成且
+本地收工测试卡一致性 · `probes/api` 与 `apps/desktop/src-tauri` 是独立 workspace（`Cargo.toml:16-21`）。
 
 **ADAPTER**：`Provider` trait 四个方法逐字对上（`crates/agent-providers/src/lib.rs:90-105`）·
 `Encoded` 五字段全对 · `Decoded` 三字段 · `Ingredients: Send` 结构性挡住 store 句柄 ·

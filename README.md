@@ -39,7 +39,7 @@ cargo run -p agent-cli
 [STATE-MODEL](docs/STATE-MODEL.md) · [ADAPTER](docs/ADAPTER.md) ·
 [issues/](docs/issues/README.md)（37 个已完成 issue，每个带实做与合并记录）。
 
-红线由 `scripts/check-invariants.sh` 在编辑钩子与 CI 上强制执行。
+红线由 `scripts/check-invariants.sh` 在编辑钩子与本地收工检查中执行。
 
 ## 状态
 

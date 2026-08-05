@@ -6,7 +6,7 @@
 每条给出：规则、为什么、违反后会怎样、怎么检查。
 
 **检查方式分两类。** 能被 grep 判定的挂在 `scripts/check-invariants.sh` 上
-（Edit/Write 的 PostToolUse hook + CI）；需要判断的走 skill `agent-state-design`，
+（Edit/Write 的 PostToolUse hook + 本地收工检查）；需要判断的走 skill `agent-state-design`，
 在设计 atom、定 reversibility 等级、决定值类型时读。写在文档里但没人检查的规则，半年后就是废纸。
 
 ---
