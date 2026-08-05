@@ -1,22 +1,22 @@
-//! 会话生命周期的两个端点（issue 031「会话创建」）：`POST /sessions` 取用一个
-//! session（055 起是**幂等 getOrCreate**，见 [`create`]），`GET /sessions/:id`
-//! 查它现在是活着还是死了。
+//! `POST /sessions`：校验宿主声明并原子地 get-or-create 一个会话。
+
+mod query;
+
+pub(in crate::http) use query::{agents, status};
 
 use std::path::PathBuf;
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
-
-use agent_core::AgentTree;
 
 use crate::http::capabilities::{self, Capabilities};
 use crate::http::error::ApiError;
 use crate::http::json::ApiJson;
 use crate::http::state::AppState;
-use crate::registry::{SessionId, SessionQuery};
+use crate::registry::{OpenOrGet, OpenOrGetError, SessionId};
 
 const MAX_CLIENT_SESSION_ID_LEN: usize = 128;
 
@@ -102,7 +102,7 @@ enum CreateSessionOutcome {
 /// `ToolTable`。**全局的 `SessionTemplate` 一个字节不动**，别的 chatid 看不见
 /// （docs/HOST-CAPABILITIES.md §二）。
 ///
-/// `existing` 那一支（会话还活在 registry 里、且没有会话文件）压根不 `open_spec`，
+/// `existing` 那一支（会话已经活在 registry 里，或刚由并发请求打开）压根不 `open_spec`，
 /// 所以这次的声明被忽略——会话中途换工具表 = 前缀缓存那一刻全断（红线 11），而
 /// 「运行时增删」HOST-CAPABILITIES §三 明确不做。
 ///
@@ -179,46 +179,32 @@ pub(in crate::http) async fn create(
         }
         None => (state.generate_id(), false),
     };
-    // `agent_runtime::recover` 会在 `registry.open` 之后读取该文件。先在这里
-    // 判断是否已有文件，才可把「新建」和「恢复」准确地映射为 HTTP 201/200。
-    let has_persisted_history = client_supplied_id
-        && session_path
-            .clone()
-            .or_else(|| state.template().default_session_path(&id))
-            .is_some_and(|path| path.is_file());
-    // 073：有历史 + 又带声明 → **直接拒绝**（用户拍板），排在名字校验**前面**：
-    // 这一次的声明无论写得多正确都不会被采纳，先报「你根本不该带它」比先报
-    // 「你第三个工具的名字不合规」有用（后者会让调用方以为改个名字重发就行）。
-    if has_persisted_history && capabilities.is_some() {
-        return Err(ApiError::session_has_history(format!(
-            "session \"{id}\" 已经有历史了：它的能力从历史来（建会话那一次已经写进会话状态），这次请求不要再带 capabilities。\
-             判断办法：先 GET /sessions/{id}——404 才是新会话、才带声明；200（alive/dormant/dead）一律不带"
-        )));
-    }
-    // 061：拒绝发生在 `open_spec`/`open` **之前**——坏声明不留下会话，也不留下
-    // 工具监狱目录/会话文件（跟上面 chatid 那条拒在同一段）。
-    if let Some(declared) = &capabilities {
-        capabilities::validate(declared)
-            .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
-        // 076：关闭列表里的名字必须在**这个部署实际装配出来的表**里。判据是
-        // `template().tools` 这一档（部署方定的天花板），不是装配完的最终表——
-        // 理由（以及为什么这一条必须报错而不是静默忽略）见
-        // `capabilities::builtin_switch` 的模块文档。
-        capabilities::check_builtin_switch(declared, state.template().tools)
-            .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
-    }
-    // 062：校验过了才翻译。翻译是纯数据（`Vec<(ToolSpec, Reversibility)>`），
-    // 没声明就是空 `Vec`——下游一路空操作，老调用方的工具表逐字节不变。
-    let host_tools = capabilities::host_tools(capabilities.as_ref());
-    // 064：skill 那一半，同一条路——翻译也是纯数据（`Vec<HostSkill>`），没声明就是
-    // 空 `Vec`，下游 registry 为空、工具表不接 `.with_skills(..)`、常驻索引空文本。
-    let host_skills = capabilities::host_skills(capabilities.as_ref());
-    // 076：减法那一半，同一条路——翻译也是纯数据（`Vec<Arc<str>>`），没带就是空
-    // `Vec`，下游 `without_builtins` 是空操作、工具表逐字节不变。
-    let disable_builtin = capabilities::disabled_builtins(capabilities.as_ref());
-    let outcome = match state.registry().get(&id) {
-        Some(SessionQuery::Alive(_)) => CreateSessionOutcome::Existing,
-        Some(SessionQuery::Dead { .. }) | None => {
+    let outcome = match state
+        .registry()
+        .open_or_get_with(id.clone(), || {
+            // 只有原子占住 chatid 的赢家检查历史。并发输家等赢家启动完直接复用，
+            // 不能把赢家刚创建的 jsonl 误判成一次“带声明恢复历史”的新请求。
+            let has_persisted_history = client_supplied_id
+                && session_path
+                    .clone()
+                    .or_else(|| state.template().default_session_path(&id))
+                    .is_some_and(|path| path.is_file());
+            if has_persisted_history && capabilities.is_some() {
+                return Err(ApiError::session_has_history(format!(
+                    "session \"{id}\" 已经有历史了：它的能力从历史来（建会话那一次已经写进会话状态），这次请求不要再带 capabilities。\
+                     判断办法：先 GET /sessions/{id}——404 才是新会话、才带声明；200（alive/dormant/dead）一律不带"
+                )));
+            }
+            // 只有真正创建者校验并翻译声明；并发等待者和既有会话都不会中途换表。
+            if let Some(declared) = &capabilities {
+                capabilities::validate(declared)
+                    .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
+                capabilities::check_builtin_switch(declared, state.template().tools)
+                    .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
+            }
+            let host_tools = capabilities::host_tools(capabilities.as_ref());
+            let host_skills = capabilities::host_skills(capabilities.as_ref());
+            let disable_builtin = capabilities::disabled_builtins(capabilities.as_ref());
             let spec = state
                 .template()
                 .open_spec(
@@ -228,19 +214,21 @@ pub(in crate::http) async fn create(
                     host_skills,
                     disable_builtin,
                 )
-                .map_err(|e| {
-                    ApiError::conflict(format!("session \"{id}\" 的工具根目录建不起来：{e}"))
+                .map_err(|error| {
+                    ApiError::conflict(format!(
+                        "session \"{id}\" 的工具根目录建不起来：{error}"
+                    ))
                 })?;
-            state
-                .registry()
-                .open(spec)
-                .map_err(|e| ApiError::conflict(e.to_string()))?;
-            if has_persisted_history {
-                CreateSessionOutcome::Recovered
-            } else {
-                CreateSessionOutcome::Created
-            }
-        }
+            Ok((spec, has_persisted_history))
+        })
+        .map_err(|error| match error {
+            OpenOrGetError::Build(error) => error,
+            OpenOrGetError::Open(error) => ApiError::conflict(error.to_string()),
+        })?
+    {
+        OpenOrGet::Existing => CreateSessionOutcome::Existing,
+        OpenOrGet::Opened(true) => CreateSessionOutcome::Recovered,
+        OpenOrGet::Opened(false) => CreateSessionOutcome::Created,
     };
     // 立刻把 SSE hub 造出来（不等第一次 `GET /events` 才现造）——不然「先
     // `POST /input` 好几轮，稍后才第一次连 SSE」这种顺序会在 hub 存在之前的
@@ -277,75 +265,4 @@ fn is_valid_client_session_id(id: &str) -> bool {
         && id
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case", tag = "status")]
-pub(in crate::http) enum SessionStatusResponse {
-    Alive,
-    Dead {
-        reason: String,
-    },
-    /// 073：registry 里没有它，但**磁盘上有它的会话文件**——`POST /sessions` 会走
-    /// 恢复那条路（`outcome: "recovered"`）。
-    ///
-    /// 这一态是「先查再建」契约的地基：没有它，「有历史但此刻没活着」——也就是
-    /// **恰恰是恢复**的那种情况——会被答成 404，客户端据此判定「新会话」于是带上
-    /// 声明，然后被 `session_has_history` 顶回来，契约当场作废。
-    Dormant,
-}
-
-/// `GET /sessions/:id`：这个 chatid 现在是什么状态。
-///
-/// | 情况 | 状态码 | `status` |
-/// |---|---|---|
-/// | registry 里活着 | 200 | `alive` |
-/// | registry 里有、但 actor 已经死了 | 200 | `dead` + 死因 |
-/// | registry 里没有、但磁盘上有它的会话文件 | 200 | `dormant`（073） |
-/// | 都没有 | 404 | — |
-///
-/// **404 的含义因此是「这个 chatid 没有任何历史」**，客户端可以直接拿它当
-/// 「该不该带 `capabilities`」的判据（[`create`] 文档「客户端契约」）。
-///
-/// `dormant` 只认默认会话目录下的 `<chatid>.jsonl`——调用方在 `POST /sessions` 里
-/// 显式给 `session_path` 的那种用法这里看不见（GET 没有请求体）。那条用法本来就
-/// 是「调用方自己管着文件在哪」，它自己知道有没有历史。
-pub(in crate::http) async fn status(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<SessionStatusResponse>, ApiError> {
-    let id = SessionId::from(id);
-    match state.registry().get(&id) {
-        Some(SessionQuery::Alive(_)) => Ok(Json(SessionStatusResponse::Alive)),
-        Some(SessionQuery::Dead { reason }) => Ok(Json(SessionStatusResponse::Dead { reason })),
-        None if state
-            .template()
-            .default_session_path(&id)
-            .is_some_and(|path| path.is_file()) =>
-        {
-            Ok(Json(SessionStatusResponse::Dormant))
-        }
-        None => Err(ApiError::not_found(format!(
-            "session \"{id}\" 不存在（从没 open 过，也没有留下会话文件）"
-        ))),
-    }
-}
-
-/// `GET /sessions/:id/agents`（048）：整棵活 agent 树此刻的快照——
-/// [`crate::handle::SessionHandle::agent_tree`] 直接读共享单元格,**不走
-/// actor 的 `mpsc` 命令队列**（048 issue 范围条款 4：一轮跑到一半也能立刻
-/// 拿到当下的活树,不用排在 in-flight 的 `Command::Input` 后面）。开页/
-/// reconnect 用它做种,之后靠 `GET /sessions/:id/events` 的 `agent_tree`
-/// 帧增量更新（同一份 `Session::agent_tree()`,推和拉两条路给出同一棵树）。
-///
-/// 死会话报 410（跟 `input`/`undo`/`redo`/`cancel` 同一条判据,`state.
-/// session_handle` 这一个函数——见该方法文档），不像 [`status`] 那样把
-/// `dead` 当成 200 的一种正常结果：那是「问问这个 id 现在死没死」,这里
-/// 问的是「给我看现在的活树」,树只在活着的 actor 手上才有意义。
-pub(in crate::http) async fn agents(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> Result<Json<AgentTree>, ApiError> {
-    let handle = state.session_handle(&SessionId::from(id))?;
-    Ok(Json(handle.agent_tree()))
 }
