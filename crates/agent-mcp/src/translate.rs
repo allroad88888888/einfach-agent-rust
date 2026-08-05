@@ -86,10 +86,25 @@ mod tests {
     #[test]
     fn reversibility_exhaustive_over_read_only_hint() {
         let cases: [(Option<Annotations>, Reversibility); 4] = [
-            (Some(Annotations { read_only_hint: Some(true) }), Reversibility::Pure),
-            (Some(Annotations { read_only_hint: Some(false) }), Reversibility::Irreversible),
+            (
+                Some(Annotations {
+                    read_only_hint: Some(true),
+                }),
+                Reversibility::Pure,
+            ),
+            (
+                Some(Annotations {
+                    read_only_hint: Some(false),
+                }),
+                Reversibility::Irreversible,
+            ),
             (None, Reversibility::Irreversible),
-            (Some(Annotations { read_only_hint: None }), Reversibility::Irreversible),
+            (
+                Some(Annotations {
+                    read_only_hint: None,
+                }),
+                Reversibility::Irreversible,
+            ),
         ];
         for (annotations, expected) in cases {
             let (_, reversibility) = translate(&tool("t", annotations.clone()), "srv");
@@ -100,10 +115,18 @@ mod tests {
     /// 红线 11：同一个工具翻译两次，`ToolSpec` 序列化逐字节相同。
     #[test]
     fn translate_twice_serializes_byte_identical() {
-        let t = tool("echo", Some(Annotations { read_only_hint: Some(true) }));
+        let t = tool(
+            "echo",
+            Some(Annotations {
+                read_only_hint: Some(true),
+            }),
+        );
         let (spec_a, _) = translate(&t, "everything");
         let (spec_b, _) = translate(&t, "everything");
-        assert_eq!(serde_json::to_vec(&spec_a).unwrap(), serde_json::to_vec(&spec_b).unwrap());
+        assert_eq!(
+            serde_json::to_vec(&spec_a).unwrap(),
+            serde_json::to_vec(&spec_b).unwrap()
+        );
     }
 
     /// 红线 11：`inputSchema` key 集合相同、插入顺序不同的两份，翻译出的 `schema`
@@ -125,7 +148,10 @@ mod tests {
 
         let (spec_a, _) = translate(&t_a, "everything");
         let (spec_b, _) = translate(&t_b, "everything");
-        assert_eq!(serde_json::to_vec(&spec_a).unwrap(), serde_json::to_vec(&spec_b).unwrap());
+        assert_eq!(
+            serde_json::to_vec(&spec_a).unwrap(),
+            serde_json::to_vec(&spec_b).unwrap()
+        );
     }
 
     /// `tools/list` 顺序原样保留：翻译一个 `Vec<McpTool>` 得到的 `Vec<ToolSpec>` 顺序不变。
@@ -136,6 +162,9 @@ mod tests {
             .iter()
             .map(|t| translate(t, "srv").0.name.to_string())
             .collect();
-        assert_eq!(names, vec!["mcp:srv/b_tool".to_string(), "mcp:srv/a_tool".to_string()]);
+        assert_eq!(
+            names,
+            vec!["mcp:srv/b_tool".to_string(), "mcp:srv/a_tool".to_string()]
+        );
     }
 }

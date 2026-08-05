@@ -19,7 +19,10 @@ use support::wire::text_reply;
 /// （`{"agent":...,"event":{...}}`），解析目标从 `SessionEvent` 换成 `Frame`。
 fn is_terminal(data: &str) -> bool {
     match serde_json::from_str::<Frame>(data) {
-        Ok(Frame { event: SessionEvent::Notice(Notice::TurnStatusChanged { status }), .. }) => status.is_terminal(),
+        Ok(Frame {
+            event: SessionEvent::Notice(Notice::TurnStatusChanged { status }),
+            ..
+        }) => status.is_terminal(),
         _ => false,
     }
 }
@@ -28,14 +31,22 @@ fn is_terminal(data: &str) -> bool {
 async fn reconnecting_with_last_event_id_replays_exactly_the_missed_frames_byte_for_byte() {
     // 长一点的回复，好凑出好几帧 text_delta——只有一帧就没有「中间断开、还有
     // 剩下的帧要补」这回事。
-    let upstream = FakeServer::start(vec![Script::Immediate(text_reply("one two three four five"))]);
+    let upstream = FakeServer::start(vec![Script::Immediate(text_reply(
+        "one two three four five",
+    ))]);
     let server = support::http_server::start(upstream.endpoint()).await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let (_, _, mut first) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let (_, _, mut first) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     // 先首播全部：这是「首播」的基准序列，重连之后要跟这里剩下的部分逐字节对上。
@@ -47,7 +58,11 @@ async fn reconnecting_with_last_event_id_replays_exactly_the_missed_frames_byte_
             break;
         }
     }
-    assert!(first_seen.len() >= 2, "至少要有几帧才能测『断在中间、补剩下的』：{}", first_seen.len());
+    assert!(
+        first_seen.len() >= 2,
+        "至少要有几帧才能测『断在中间、补剩下的』：{}",
+        first_seen.len()
+    );
 
     // 断开首播连接（不再读它），假装从中间某一帧开始重连——只保留前一半，
     // 用它的最后一个 id 当 Last-Event-ID。
@@ -56,14 +71,23 @@ async fn reconnecting_with_last_event_id_replays_exactly_the_missed_frames_byte_
     let last_seen_id = first_seen[split - 1].id.expect("每一帧都带 id");
     let expected_replay = &first_seen[split..];
 
-    let (status, _, mut reconnected) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), Some(last_seen_id));
+    let (status, _, mut reconnected) = http_client::connect_sse(
+        server.addr,
+        &format!("/sessions/{id}/events"),
+        Some(last_seen_id),
+    );
     assert_eq!(status, 200);
 
     let mut replayed = Vec::new();
     for _ in 0..expected_replay.len() {
-        let Some(frame) = reconnected.next_event(Duration::from_secs(5)) else { break };
+        let Some(frame) = reconnected.next_event(Duration::from_secs(5)) else {
+            break;
+        };
         replayed.push(frame);
     }
 
-    assert_eq!(replayed, expected_replay, "重连补发的帧该跟首播剩下的部分逐字节相同（id 和 data 都要对上）");
+    assert_eq!(
+        replayed, expected_replay,
+        "重连补发的帧该跟首播剩下的部分逐字节相同（id 和 data 都要对上）"
+    );
 }

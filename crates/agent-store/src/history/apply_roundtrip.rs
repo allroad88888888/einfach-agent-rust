@@ -42,7 +42,11 @@ struct Meta {
 }
 
 fn meta(turn: u32, label: &'static str) -> Meta {
-    Meta { turn, label, irreversible: false }
+    Meta {
+        turn,
+        label,
+        irreversible: false,
+    }
 }
 
 fn same_turn(a: &Meta, b: &Meta) -> bool {
@@ -77,10 +81,17 @@ fn build(store: &Store<TestValue>) -> Graph {
     let total = store.create_derived_ctx(move |args| {
         n(as_num(&args.get(a)) + as_num(&args.get(b)) + as_num(&args.get(c)))
     });
-    let banner =
-        store.create_derived_ctx(move |args| TestValue::Text(format!("total={}", as_num(&args.get(total)))));
+    let banner = store.create_derived_ctx(move |args| {
+        TestValue::Text(format!("total={}", as_num(&args.get(total))))
+    });
     assert_eq!(store.get(banner), TestValue::Text("total=6".into())); // 建立反向依赖边
-    Graph { a, b, c, total, banner }
+    Graph {
+        a,
+        b,
+        c,
+        total,
+        banner,
+    }
 }
 
 /// 逻辑键 → 进程内句柄。真实实现是 `AtomFamily::get_or_create(AtomKey)`，日志里存的
@@ -105,7 +116,12 @@ fn command(
     let mut changes: Vec<Change<String, TestValue>> = Vec::new();
     store.batch(|s| {
         for (key, next) in writes {
-            changes.extend(record_set(s, (*key).to_string(), resolve(g, key), next.clone()));
+            changes.extend(record_set(
+                s,
+                (*key).to_string(),
+                resolve(g, key),
+                next.clone(),
+            ));
         }
     });
     log.append(m, changes);
@@ -165,7 +181,13 @@ fn undo_turn_then_redo_turn_restores_every_primitive_and_derived() {
 
     // turn 2：又两条，其中一条一次改两个 primitive。
     command(&store, &mut log, &g, meta(2, "set_c"), &[("c", n(100))]);
-    command(&store, &mut log, &g, meta(2, "set_ab"), &[("a", n(1000)), ("b", n(2000))]);
+    command(
+        &store,
+        &mut log,
+        &g,
+        meta(2, "set_ab"),
+        &[("a", n(1000)), ("b", n(2000))],
+    );
     let after_turn_2 = snapshot(&store, &g);
     assert_eq!(after_turn_2[3], n(3100));
     assert_eq!(after_turn_2[4], TestValue::Text("total=3100".into()));
@@ -174,7 +196,10 @@ fn undo_turn_then_redo_turn_restores_every_primitive_and_derived() {
     // —— undo 一整个 turn ——
     let recomputes_before = store.debug_recompute_count();
     let outcome = log.undo_turn(same_turn, open);
-    assert_eq!(applied(&outcome).iter().map(|e| e.seq).collect::<Vec<_>>(), vec![3, 2]);
+    assert_eq!(
+        applied(&outcome).iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![3, 2]
+    );
     apply_undo(&store, &g, &outcome);
 
     assert_eq!(log.cursor(), 2);
@@ -184,7 +209,10 @@ fn undo_turn_then_redo_turn_restores_every_primitive_and_derived() {
 
     // —— redo 同一粒度，恰好反演 ——
     let outcome = log.redo_turn(same_turn);
-    assert_eq!(applied(&outcome).iter().map(|e| e.seq).collect::<Vec<_>>(), vec![2, 3]);
+    assert_eq!(
+        applied(&outcome).iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![2, 3]
+    );
     apply_redo(&store, &g, &outcome);
 
     assert_eq!(log.cursor(), 4);
@@ -195,7 +223,10 @@ fn undo_turn_then_redo_turn_restores_every_primitive_and_derived() {
     apply_undo(&store, &g, &log.undo_turn(same_turn, open));
     apply_undo(&store, &g, &log.undo_turn(same_turn, open));
     assert_eq!(log.cursor(), 0);
-    assert_eq!(snapshot(&store, &g), vec![n(1), n(2), n(3), n(6), TestValue::Text("total=6".into())]);
+    assert_eq!(
+        snapshot(&store, &g),
+        vec![n(1), n(2), n(3), n(6), TestValue::Text("total=6".into())]
+    );
 }
 
 #[test]
@@ -204,7 +235,13 @@ fn a_batch_that_wrote_one_atom_twice_only_unwinds_in_reverse() {
     let store: Store<TestValue> = Store::new();
     let g = build(&store);
     let mut log = Log::new();
-    command(&store, &mut log, &g, meta(1, "twice"), &[("a", n(2)), ("a", n(3))]);
+    command(
+        &store,
+        &mut log,
+        &g,
+        meta(1, "twice"),
+        &[("a", n(2)), ("a", n(3))],
+    );
     assert_eq!(store.get(g.a), n(3));
 
     let outcome = log.undo_one(open);
@@ -230,12 +267,19 @@ fn blocked_undo_applies_what_it_popped_and_stops_at_the_barrier() {
     let mut log = Log::new();
 
     command(&store, &mut log, &g, meta(1, "set_a"), &[("a", n(10))]);
-    let sent_mail = Meta { turn: 1, label: "send_mail", irreversible: true };
+    let sent_mail = Meta {
+        turn: 1,
+        label: "send_mail",
+        irreversible: true,
+    };
     command(&store, &mut log, &g, sent_mail, &[("b", n(20))]);
     command(&store, &mut log, &g, meta(1, "set_c"), &[("c", n(30))]);
 
     let outcome = log.undo_turn(same_turn, barrier);
-    assert!(matches!(outcome, UndoOutcome::Blocked { barrier_seq: 1, .. }));
+    assert!(matches!(
+        outcome,
+        UndoOutcome::Blocked { barrier_seq: 1, .. }
+    ));
     apply_undo(&store, &g, &outcome);
 
     // 屏障之后的那一条回滚了，屏障本身与它之前的都还在。

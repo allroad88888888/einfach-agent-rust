@@ -31,8 +31,11 @@ impl SseClient {
     /// 连接并发 `GET /sessions/:id/events`，`last_event_id` 非空时带上
     /// `Last-Event-ID` 请求头（031 补发协议）。阻塞到读完响应头为止。
     pub fn connect(addr: SocketAddr, session_id: &str, last_event_id: Option<u64>) -> Self {
-        let mut stream = TcpStream::connect(addr).unwrap_or_else(|e| panic!("connect {addr} 失败：{e}"));
-        let mut req = format!("GET /sessions/{session_id}/events HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n");
+        let mut stream =
+            TcpStream::connect(addr).unwrap_or_else(|e| panic!("connect {addr} 失败：{e}"));
+        let mut req = format!(
+            "GET /sessions/{session_id}/events HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n"
+        );
         if let Some(id) = last_event_id {
             req.push_str(&format!("Last-Event-ID: {id}\r\n"));
         }
@@ -43,7 +46,12 @@ impl SseClient {
         let mut decoder = ChunkedDecoder::new();
         decoder.feed(&leftover);
         let text_buf = decoder.take_decoded();
-        SseClient { stream, decoder, text_buf, head }
+        SseClient {
+            stream,
+            decoder,
+            text_buf,
+            head,
+        }
     }
 
     pub fn status(&self) -> u16 {

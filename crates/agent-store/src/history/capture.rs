@@ -142,7 +142,10 @@ mod tests {
 
     fn snap(pairs: &[(&str, i64)]) -> Snapshot<String, Cell> {
         Snapshot {
-            values: pairs.iter().map(|(k, v)| ((*k).to_string(), Cell(*v))).collect(),
+            values: pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), Cell(*v)))
+                .collect(),
         }
     }
 
@@ -164,7 +167,11 @@ mod tests {
 
         let s = capture(
             &w.store,
-            [("b".to_string(), slot(&w, "b")), ("a".to_string(), slot(&w, "a"))].into_iter(),
+            [
+                ("b".to_string(), slot(&w, "b")),
+                ("a".to_string(), slot(&w, "a")),
+            ]
+            .into_iter(),
         );
         assert_eq!(s.values, vec![("b".into(), Cell(6)), ("a".into(), Cell(5))]);
     }
@@ -173,7 +180,11 @@ mod tests {
     fn an_empty_iterator_captures_nothing_and_an_empty_snapshot_restores_nothing() {
         let w = build(&["a", "b"]);
         w.store.set(slot(&w, "a"), Cell(5));
-        assert!(capture(&w.store, std::iter::empty::<(String, AtomId)>()).values.is_empty());
+        assert!(
+            capture(&w.store, std::iter::empty::<(String, AtomId)>())
+                .values
+                .is_empty()
+        );
 
         let before = w.store.debug_recompute_count();
         assert!(restore_into(&w, &snap(&[])).is_empty());

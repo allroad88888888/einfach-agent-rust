@@ -29,7 +29,11 @@ pub struct HarnessConfig {
 
 impl Default for HarnessConfig {
     fn default() -> Self {
-        HarnessConfig { ring_capacity: 256, cancel_grace: Duration::from_secs(5), sse_keep_alive: Duration::from_secs(30) }
+        HarnessConfig {
+            ring_capacity: 256,
+            cancel_grace: Duration::from_secs(5),
+            sse_keep_alive: Duration::from_secs(30),
+        }
     }
 }
 
@@ -37,7 +41,10 @@ fn template(endpoint: String, tools_root: std::path::PathBuf) -> SessionTemplate
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     SessionTemplate {
         provider: Arc::new(DeepSeek),
@@ -46,7 +53,10 @@ fn template(endpoint: String, tools_root: std::path::PathBuf) -> SessionTemplate
         model: Arc::from("deepseek-v4-pro"),
         tools: ToolTableSpec::Builtin,
         tools_root,
-        system: vec![SystemChunk { label: Arc::from("base"), text: Arc::from("independent http test") }],
+        system: vec![SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("independent http test"),
+        }],
         client: Arc::new(client),
         history_cap: None,
         snapshot_every: Some(0),
@@ -59,14 +69,21 @@ fn template(endpoint: String, tools_root: std::path::PathBuf) -> SessionTemplate
 /// 起一个绑定在给定 `bind_addr` 上的服务器（红线 8 测试要控制绑哪个 IP，
 /// 其余测试固定用 `127.0.0.1:0`——见 `start_on`）。`serve()` 在后台
 /// `tokio::spawn` 掉，函数返回时监听已就绪（`bind` 完成）。
-pub async fn start_on(bind_addr: SocketAddr, endpoint: String, config: HarnessConfig) -> TestServer {
+pub async fn start_on(
+    bind_addr: SocketAddr,
+    endpoint: String,
+    config: HarnessConfig,
+) -> TestServer {
     let tools_root = super::temp_dir("tools");
     let server_config = ServerConfig::new(template(endpoint, tools_root))
         .with_ring_capacity(config.ring_capacity)
         .with_cancel_grace(config.cancel_grace)
         .with_sse_keep_alive(config.sse_keep_alive);
     let server = AgentServer::new(server_config);
-    let bound = server.bind(bind_addr).await.unwrap_or_else(|e| panic!("bind {bind_addr} 失败：{e}"));
+    let bound = server
+        .bind(bind_addr)
+        .await
+        .unwrap_or_else(|e| panic!("bind {bind_addr} 失败：{e}"));
     let addr = bound.local_addr();
     tokio::spawn(bound.serve());
     // 给 accept 循环一点时间真正开始监听读写（bind 本身已经完成，这里只是
@@ -82,15 +99,31 @@ pub async fn start(endpoint: String, config: HarnessConfig) -> TestServer {
 impl TestServer {
     pub fn create_session(&self) -> String {
         let resp = post_json(self.addr, "/sessions", "{}");
-        assert_eq!(resp.status, 201, "POST /sessions 该 201，body={}", resp.body_str());
-        resp.json()["id"].as_str().expect("响应体没有 id 字段").to_string()
+        assert_eq!(
+            resp.status,
+            201,
+            "POST /sessions 该 201，body={}",
+            resp.body_str()
+        );
+        resp.json()["id"]
+            .as_str()
+            .expect("响应体没有 id 字段")
+            .to_string()
     }
 
     pub fn create_session_with_store_path(&self, path: &str) -> String {
         let body = format!("{{\"session_path\":\"{path}\"}}");
         let resp = post_json(self.addr, "/sessions", &body);
-        assert_eq!(resp.status, 201, "POST /sessions 该 201，body={}", resp.body_str());
-        resp.json()["id"].as_str().expect("响应体没有 id 字段").to_string()
+        assert_eq!(
+            resp.status,
+            201,
+            "POST /sessions 该 201，body={}",
+            resp.body_str()
+        );
+        resp.json()["id"]
+            .as_str()
+            .expect("响应体没有 id 字段")
+            .to_string()
     }
 
     pub fn post_input(&self, id: &str, text: &str) -> Response {

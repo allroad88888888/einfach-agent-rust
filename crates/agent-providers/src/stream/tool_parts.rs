@@ -109,14 +109,26 @@ mod tests {
             "function": {"name": "get_weather", "arguments": ""}
         }));
         let a = a.expect("拿到 id + name 就该宣告");
-        assert_eq!((a.index, a.id.as_str(), a.name.as_str()), (0, "call_1", "get_weather"));
+        assert_eq!(
+            (a.index, a.id.as_str(), a.name.as_str()),
+            (0, "call_1", "get_weather")
+        );
 
-        assert!(parts.absorb(&json!({"index": 0, "function": {"arguments": "{\"ci"}}))
-            .is_none());
-        assert!(parts.absorb(&json!({"index": 0, "function": {"arguments": "ty\": \"北"}}))
-            .is_none());
-        assert!(parts.absorb(&json!({"index": 0, "function": {"arguments": "京\"}"}}))
-            .is_none());
+        assert!(
+            parts
+                .absorb(&json!({"index": 0, "function": {"arguments": "{\"ci"}}))
+                .is_none()
+        );
+        assert!(
+            parts
+                .absorb(&json!({"index": 0, "function": {"arguments": "ty\": \"北"}}))
+                .is_none()
+        );
+        assert!(
+            parts
+                .absorb(&json!({"index": 0, "function": {"arguments": "京\"}"}}))
+                .is_none()
+        );
 
         let blocks = parts.into_blocks(identity);
         assert_eq!(blocks.len(), 1);
@@ -134,8 +146,12 @@ mod tests {
     #[test]
     fn parallel_calls_keep_index_order() {
         let mut parts = ToolParts::default();
-        parts.absorb(&json!({"index": 1, "id": "b", "function": {"name": "get_time", "arguments": "{}"}}));
-        parts.absorb(&json!({"index": 0, "id": "a", "function": {"name": "get_weather", "arguments": "{}"}}));
+        parts.absorb(
+            &json!({"index": 1, "id": "b", "function": {"name": "get_time", "arguments": "{}"}}),
+        );
+        parts.absorb(
+            &json!({"index": 0, "id": "a", "function": {"name": "get_weather", "arguments": "{}"}}),
+        );
         let names: Vec<Arc<str>> = parts
             .into_blocks(identity)
             .iter()
@@ -144,7 +160,10 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect();
-        assert_eq!(names, vec![Arc::from("get_weather"), Arc::<str>::from("get_time")]);
+        assert_eq!(
+            names,
+            vec![Arc::from("get_weather"), Arc::<str>::from("get_time")]
+        );
     }
 
     #[test]

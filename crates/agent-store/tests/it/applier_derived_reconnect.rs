@@ -12,8 +12,8 @@ mod common;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{apply_prev, record_set, AtomFamily, AtomId, Entry, Store};
-use common::{num, TestValue as V};
+use agent_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
+use common::{TestValue as V, num};
 
 #[test]
 fn recreated_primitive_feeds_a_freshly_built_derived_the_old_one_does_not_survive() {

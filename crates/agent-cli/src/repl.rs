@@ -115,8 +115,11 @@ fn print_skills(session: &Session, ctx: &RunnerCtx) {
         println!("（没有装载任何 skill。把 <name>/SKILL.md 放进启动目录的 ./skills/ 下。）");
         return;
     }
-    let active: std::collections::BTreeSet<String> =
-        session.active_skills().into_iter().map(|s| s.as_str().to_string()).collect();
+    let active: std::collections::BTreeSet<String> = session
+        .active_skills()
+        .into_iter()
+        .map(|s| s.as_str().to_string())
+        .collect();
     println!("skills（[*] = 已激活）:");
     for (id, description) in available {
         let mark = if active.contains(&*id) { "*" } else { " " };

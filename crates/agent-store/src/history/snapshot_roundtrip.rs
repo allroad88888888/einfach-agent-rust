@@ -71,7 +71,12 @@ fn build(keys: &'static [&'static str]) -> World {
             .sum::<i64>()
     });
     let doubled = store.create_derived_ctx(move |args| args.get(total) * 2);
-    let w = World { store, fam, total, doubled };
+    let w = World {
+        store,
+        fam,
+        total,
+        doubled,
+    };
     let _ = w.store.get(w.doubled); // 建立两层反向依赖边
     w
 }
@@ -91,8 +96,12 @@ fn command(w: &World, log: &mut Log, turn: u32, writes: &[(&str, i64)]) {
 /// 上层的采集口：family 全遍历（键序不定 —— family 内部是 `HashMap`），排序后交给
 /// `capture`，于是落盘字节逐字节确定。
 fn capture_all(w: &World) -> Snapshot<String, i64> {
-    let mut pairs: Vec<(String, AtomId)> =
-        w.fam.borrow().iter().map(|(k, id)| (k.clone(), id)).collect();
+    let mut pairs: Vec<(String, AtomId)> = w
+        .fam
+        .borrow()
+        .iter()
+        .map(|(k, id)| (k.clone(), id))
+        .collect();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     capture(&w.store, pairs.into_iter())
 }
@@ -192,7 +201,17 @@ fn replaying_after_restore_is_literally_the_redo_path() {
     assert_eq!(values(&via_redo), after);
     assert_eq!(log.cursor(), 4);
     // 续铸不重号：接着写下一步是 seq 4，不是从 entries.len() 反推。
-    assert_eq!(log.append(3, vec![crate::history::Change { key: "a".into(), prev: 100, next: 1 }]), Some(4));
+    assert_eq!(
+        log.append(
+            3,
+            vec![crate::history::Change {
+                key: "a".into(),
+                prev: 100,
+                next: 1
+            }]
+        ),
+        Some(4)
+    );
 }
 
 #[test]

@@ -44,12 +44,18 @@ fn tool_call_arguments_accumulate_across_three_chunks_and_start_fires_once() {
     // 后续两片只是参数片段，不该再发 ToolCallStarted。
     let events2 = acc.push_line(chunk2);
     assert!(
-        !events2.iter().any(|e| matches!(e, StreamEvent::ToolCallStarted { .. })),
+        !events2
+            .iter()
+            .any(|e| matches!(e, StreamEvent::ToolCallStarted { .. })),
         "id+name 已经报过一次，第二片不该重复发 ToolCallStarted"
     );
 
     let events3 = acc.push_line(chunk3);
-    assert!(!events3.iter().any(|e| matches!(e, StreamEvent::ToolCallStarted { .. })));
+    assert!(
+        !events3
+            .iter()
+            .any(|e| matches!(e, StreamEvent::ToolCallStarted { .. }))
+    );
 
     let (blocks, _, _) = acc.finish();
     let tool_use = blocks
@@ -62,5 +68,9 @@ fn tool_call_arguments_accumulate_across_three_chunks_and_start_fires_once() {
 
     assert_eq!(tool_use.0.0.as_ref(), "call_00_tsdA0CxopR9nvmG8nbrq3971");
     assert_eq!(tool_use.1.as_ref(), "get_weather");
-    assert_eq!(*tool_use.2, json!({"city": "北京"}), "三片 arguments 拼接后必须是合法且完整的 JSON");
+    assert_eq!(
+        *tool_use.2,
+        json!({"city": "北京"}),
+        "三片 arguments 拼接后必须是合法且完整的 JSON"
+    );
 }

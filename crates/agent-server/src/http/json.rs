@@ -27,7 +27,9 @@ where
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         match Json::<T>::from_request(req, state).await {
             Ok(Json(value)) => Ok(ApiJson(value)),
-            Err(_rejection) => Err(ApiError::bad_request("请求体不是合法 JSON，或者字段形状跟期望的不符".to_string())),
+            Err(_rejection) => Err(ApiError::bad_request(
+                "请求体不是合法 JSON，或者字段形状跟期望的不符".to_string(),
+            )),
         }
     }
 }

@@ -174,9 +174,9 @@ impl<V: AtomValue> Inner<V> {
         }
         match &rec.deps {
             None => true,
-            Some(deps) => deps
-                .iter()
-                .all(|(dep, generation)|  self.has(*dep) && self.record(*dep).generation == *generation),
+            Some(deps) => deps.iter().all(|(dep, generation)| {
+                self.has(*dep) && self.record(*dep).generation == *generation
+            }),
         }
     }
 

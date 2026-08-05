@@ -48,7 +48,10 @@ fn build_ctx_with_shell(port: u16, root: &std::path::Path) -> RunnerCtx {
     let client = Client::with_config(
         std::time::Duration::from_secs(5),
         std::time::Duration::from_millis(50),
-        agent_transport::Backoff { base: std::time::Duration::from_millis(10), max_attempts: 1 },
+        agent_transport::Backoff {
+            base: std::time::Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     RunnerCtx::new(
@@ -59,7 +62,12 @@ fn build_ctx_with_shell(port: u16, root: &std::path::Path) -> RunnerCtx {
         fs,
         ToolTable::with_shell(),
         Vec::new(),
-        SessionConfig { model: Arc::from("deepseek-v4-pro"), temperature: None, max_tokens: None, context_window: None },
+        SessionConfig {
+            model: Arc::from("deepseek-v4-pro"),
+            temperature: None,
+            max_tokens: None,
+            context_window: None,
+        },
         agent_runtime::open_backend(None, |_| {}),
         Box::new(|_ev| {}),
     )
@@ -70,7 +78,10 @@ fn undo_stops_at_the_shell_barrier_and_undo_force_crosses_it() {
     let dir = support::temp_dir("shell-undo-barrier");
     let marker = dir.join("ran.marker");
 
-    let port = support::spawn_scripted_server(vec![hop1_shell_call(marker.to_str().unwrap()), hop2_end_turn()]);
+    let port = support::spawn_scripted_server(vec![
+        hop1_shell_call(marker.to_str().unwrap()),
+        hop2_end_turn(),
+    ]);
     let mut ctx = build_ctx_with_shell(port, &dir);
     let mut session = Session::new(AgentId::root());
 
@@ -86,10 +97,16 @@ fn undo_stops_at_the_shell_barrier_and_undo_force_crosses_it() {
     };
 
     // 屏障没被越过：那条 entry 记录的正是这次 shell 调用的结果。
-    let barrier_entry = session.history().entries().find(|e| e.seq == barrier_seq).unwrap();
+    let barrier_entry = session
+        .history()
+        .entries()
+        .find(|e| e.seq == barrier_seq)
+        .unwrap();
     assert!(barrier_entry.meta.barrier);
     let describes_the_shell_call = barrier_entry.changes.iter().any(|c| {
-        let (Some(prev), Some(next)) = (c.prev.as_slots(), c.next.as_slots()) else { return false };
+        let (Some(prev), Some(next)) = (c.prev.as_slots(), c.next.as_slots()) else {
+            return false;
+        };
         prev.iter().zip(next.iter()).any(|(p, n)| {
             matches!(p.state, agent_core::SlotState::Pending)
                 && matches!(n.state, agent_core::SlotState::Finished { .. })

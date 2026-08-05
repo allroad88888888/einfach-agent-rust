@@ -35,7 +35,9 @@ impl FakeServer {
     pub fn start(scripts: Vec<Script>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake server");
         let port = listener.local_addr().unwrap().port();
-        listener.set_nonblocking(true).expect("nonblocking accept loop");
+        listener
+            .set_nonblocking(true)
+            .expect("nonblocking accept loop");
 
         let bodies = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -100,7 +102,9 @@ impl Drop for FakeServer {
 fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
     // 没带请求的连接**不记账、也不消耗脚本槽位**：`request_count()` 数的是
     // HTTP 请求，不是 TCP 连接（issue 077）。
-    let Some(body) = read_request_body(&mut stream) else { return };
+    let Some(body) = read_request_body(&mut stream) else {
+        return;
+    };
     let idx = {
         let mut guard = bodies.lock().unwrap();
         guard.push(body);
@@ -143,7 +147,9 @@ fn read_request_body(stream: &mut TcpStream) -> Option<String> {
 }
 
 fn write_sse_headers(stream: &mut TcpStream) {
-    let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+    );
     let _ = stream.flush();
 }
 

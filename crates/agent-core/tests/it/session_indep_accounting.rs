@@ -12,9 +12,13 @@ mod support;
 use std::sync::Arc;
 
 use agent_core::command::meta::{AgentChange, AgentEntry};
-use agent_core::{AtomKey, ContentBlock, Role, Slot, SlotState, ToolCallId, ToolCallSlot, TurnStatus};
+use agent_core::{
+    AtomKey, ContentBlock, Role, Slot, SlotState, ToolCallId, ToolCallSlot, TurnStatus,
+};
 use support::session::new_session;
-use support::{provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event};
+use support::{
+    provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
+};
 
 /// 只有落在这个集合里的键才是「已知的 primitive」。
 fn assert_known_primitive_key(key: &AtomKey) {
@@ -51,7 +55,12 @@ fn find<'a>(entry: &'a AgentEntry, key: &AtomKey) -> &'a AgentChange {
         .changes
         .iter()
         .find(|c| &c.key == key)
-        .unwrap_or_else(|| panic!("entry (label={}) 里没找到键 {key:?}，changes={:?}", entry.meta.label, entry.changes))
+        .unwrap_or_else(|| {
+            panic!(
+                "entry (label={}) 里没找到键 {key:?}，changes={:?}",
+                entry.meta.label, entry.changes
+            )
+        })
 }
 
 #[test]
@@ -60,12 +69,19 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
 
     let _ = session.step(user_input_event("你好"));
     let epoch = session.epoch();
-    let _ = session.step(provider_done_tool_use(epoch, &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")]));
+    let _ = session.step(provider_done_tool_use(
+        epoch,
+        &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")],
+    ));
     let _ = session.step(tool_result_event(epoch, "call_1", "first content"));
     let _ = session.step(tool_result_event(epoch, "call_2", "second content"));
     let _ = session.step(provider_done_end_turn(epoch, "final answer"));
 
-    assert_eq!(session.history_len(), 5, "五次真实转移，每次都该恰好落一条 entry（batch 语义）");
+    assert_eq!(
+        session.history_len(),
+        5,
+        "五次真实转移，每次都该恰好落一条 entry（batch 语义）"
+    );
     let entries: Vec<&AgentEntry> = session.history().entries().collect();
     assert_eq!(entries.len(), 5);
 
@@ -80,9 +96,18 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
     }
 
     // label 可辨：不同种类的事件触发的转移，label 不同。
-    assert_ne!(entries[0].meta.label, entries[1].meta.label, "UserInput 与 ProviderDone 的 label 应能区分");
-    assert_ne!(entries[0].meta.label, entries[2].meta.label, "UserInput 与 ToolResult 的 label 应能区分");
-    assert_ne!(entries[1].meta.label, entries[2].meta.label, "ProviderDone 与 ToolResult 的 label 应能区分");
+    assert_ne!(
+        entries[0].meta.label, entries[1].meta.label,
+        "UserInput 与 ProviderDone 的 label 应能区分"
+    );
+    assert_ne!(
+        entries[0].meta.label, entries[2].meta.label,
+        "UserInput 与 ToolResult 的 label 应能区分"
+    );
+    assert_ne!(
+        entries[1].meta.label, entries[2].meta.label,
+        "ProviderDone 与 ToolResult 的 label 应能区分"
+    );
 
     let status_key = AtomKey::Agent(agent.clone(), Slot::Status);
     let turns_key = AtomKey::Agent(agent.clone(), Slot::TurnsUsed);
@@ -103,7 +128,10 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
     let next_messages = c.next.as_messages().unwrap();
     assert_eq!(next_messages.len(), 1);
     assert_eq!(next_messages[0].role, Role::User);
-    assert_eq!(next_messages[0].blocks, vec![ContentBlock::Text(Arc::from("你好"))]);
+    assert_eq!(
+        next_messages[0].blocks,
+        vec![ContentBlock::Text(Arc::from("你好"))]
+    );
     let c = find(entries[0], &next_id_key);
     assert_eq!(c.prev.as_u64(), Some(1));
     assert_eq!(c.next.as_u64(), Some(2));
@@ -122,7 +150,11 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
     assert!(c.next.as_prefix().is_some());
 
     // entry 2：ToolResult(call_1)，call_2 还 Pending，不收敛，只改 ToolSlots 一处。
-    assert_eq!(entries[2].changes.len(), 1, "非收敛的 ToolResult 只该动 ToolSlots 一个槽位");
+    assert_eq!(
+        entries[2].changes.len(),
+        1,
+        "非收敛的 ToolResult 只该动 ToolSlots 一个槽位"
+    );
     let c = find(entries[2], &tool_slots_key);
     let prev = c.prev.as_slots().unwrap();
     let next = c.next.as_slots().unwrap();
@@ -135,7 +167,10 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
         }
         SlotState::Pending => panic!("call_1 应该已经落地"),
     }
-    assert!(matches!(next[1].state, SlotState::Pending), "call_2 还没回来");
+    assert!(
+        matches!(next[1].state, SlotState::Pending),
+        "call_2 还没回来"
+    );
 
     // entry 3：ToolResult(call_2)，最后一个槽落地：清槽、拼消息、状态回 Thinking、轮数+1。
     let c = find(entries[3], &status_key);
@@ -144,25 +179,47 @@ fn one_full_turn_leaves_one_entry_per_transition_with_matching_prev_next() {
     let c = find(entries[3], &turns_key);
     assert_eq!(c.prev.as_u64(), Some(1));
     assert_eq!(c.next.as_u64(), Some(2));
-    let tool_slot_changes: Vec<&AgentChange> = entries[3].changes.iter().filter(|c| c.key == tool_slots_key).collect();
-    assert_eq!(tool_slot_changes.len(), 2, "先落地 call_2、再清槽，是同一条 entry 里对同一个 atom 的两次写");
+    let tool_slot_changes: Vec<&AgentChange> = entries[3]
+        .changes
+        .iter()
+        .filter(|c| c.key == tool_slots_key)
+        .collect();
+    assert_eq!(
+        tool_slot_changes.len(),
+        2,
+        "先落地 call_2、再清槽，是同一条 entry 里对同一个 atom 的两次写"
+    );
     let cleared = tool_slot_changes.last().unwrap();
-    assert!(cleared.next.as_slots().unwrap().is_empty(), "收敛之后槽位清空");
+    assert!(
+        cleared.next.as_slots().unwrap().is_empty(),
+        "收敛之后槽位清空"
+    );
     let c = find(entries[3], &messages_key);
     let msgs = c.next.as_messages().unwrap();
     assert_eq!(msgs.len(), 3);
     assert_eq!(
         msgs[2].blocks,
         vec![
-            ContentBlock::ToolResult { id: ToolCallId::new("call_1"), content: Arc::from("first content"), is_error: false },
-            ContentBlock::ToolResult { id: ToolCallId::new("call_2"), content: Arc::from("second content"), is_error: false },
+            ContentBlock::ToolResult {
+                id: ToolCallId::new("call_1"),
+                content: Arc::from("first content"),
+                is_error: false
+            },
+            ContentBlock::ToolResult {
+                id: ToolCallId::new("call_2"),
+                content: Arc::from("second content"),
+                is_error: false
+            },
         ]
     );
 
     // entry 4：ProviderDone(EndTurn)，Thinking -> Done{truncated:false}。
     let c = find(entries[4], &status_key);
     assert_eq!(c.prev.as_status(), Some(&TurnStatus::Thinking));
-    assert_eq!(c.next.as_status(), Some(&TurnStatus::Done { truncated: false }));
+    assert_eq!(
+        c.next.as_status(),
+        Some(&TurnStatus::Done { truncated: false })
+    );
     let c = find(entries[4], &messages_key);
     assert_eq!(c.next.as_messages().unwrap().len(), 4);
 }

@@ -51,10 +51,17 @@ fn full_turn_with_two_parallel_tools_converges_to_done() {
     let effects = s.step(support::tool_result_event(s.epoch(), "call_1", "a 的内容"));
     assert!(matches!(effects.last(), Some(Effect::CallProvider { .. })));
     assert_eq!(s.turns_used(), 2);
-    assert_eq!(s.messages().len(), 3, "第二次请求时历史里是 user + tool_use + results");
+    assert_eq!(
+        s.messages().len(),
+        3,
+        "第二次请求时历史里是 user + tool_use + results"
+    );
 
     // 4. 模型答完 → Done。
-    let effects = s.step(support::provider_done_end_turn(s.epoch(), "两个文件都读完了"));
+    let effects = s.step(support::provider_done_end_turn(
+        s.epoch(),
+        "两个文件都读完了",
+    ));
     assert_eq!(s.status(), TurnStatus::Done { truncated: false });
     assert!(s.status().is_terminal());
     assert_eq!(
@@ -70,8 +77,17 @@ fn full_turn_with_two_parallel_tools_converges_to_done() {
     // 那个槽、没收敛，照样是一次可回滚的状态变更），全部属于 turn 1。
     assert_eq!(s.history_len(), 5);
     assert_eq!(
-        s.history().entries().map(|e| e.meta.label).collect::<Vec<_>>(),
-        vec!["user_input", "provider_done", "tool_result", "tool_result", "provider_done"]
+        s.history()
+            .entries()
+            .map(|e| e.meta.label)
+            .collect::<Vec<_>>(),
+        vec![
+            "user_input",
+            "provider_done",
+            "tool_result",
+            "tool_result",
+            "provider_done"
+        ]
     );
     assert!(s.history().entries().all(|e| e.meta.turn_id == 1));
 }
@@ -132,7 +148,10 @@ fn cancel_while_tools_in_flight_gates_the_late_results() {
 
     let effects = s.step(support::cancel_event());
     assert_eq!(effects[0], Effect::CancelInFlight { epoch: in_flight });
-    assert_eq!(s.status(), TurnStatus::Failed(agent_core::Failure::Cancelled));
+    assert_eq!(
+        s.status(),
+        TurnStatus::Failed(agent_core::Failure::Cancelled)
+    );
     assert!(s.tool_slots().is_empty(), "槽全弃");
     assert_eq!(s.epoch(), in_flight.next());
 

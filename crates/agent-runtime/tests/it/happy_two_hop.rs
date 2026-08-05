@@ -45,9 +45,14 @@ fn two_hop_tool_call_then_end_turn() {
     let messages = session.messages();
     assert_eq!(messages.len(), 4, "{messages:#?}");
     assert!(matches!(messages[0].blocks[0], ContentBlock::Text(_)));
-    assert!(matches!(messages[1].blocks[0], ContentBlock::ToolUse { .. }));
+    assert!(matches!(
+        messages[1].blocks[0],
+        ContentBlock::ToolUse { .. }
+    ));
     match &messages[2].blocks[0] {
-        ContentBlock::ToolResult { content, is_error, .. } => {
+        ContentBlock::ToolResult {
+            content, is_error, ..
+        } => {
             assert!(!is_error);
             assert_eq!(&**content, "hello world");
         }
@@ -63,11 +68,24 @@ fn two_hop_tool_call_then_end_turn() {
         "该有一条 ToolExecuting：{events:#?}"
     );
     assert!(
-        events.iter().any(|e| matches!(e, RunnerEvent::ToolExecuted { is_error: false, output_len: 11, .. })),
+        events.iter().any(|e| matches!(
+            e,
+            RunnerEvent::ToolExecuted {
+                is_error: false,
+                output_len: 11,
+                ..
+            }
+        )),
         "该有一条 ToolExecuted，output_len=11（\"hello world\" 的字节数）：{events:#?}"
     );
 
     // 两跳各自产出一份 GuardReport（024 第一次在真实 loop 里工作）。
-    let guard_reports = events.iter().filter(|e| matches!(e, RunnerEvent::TurnGuard { .. })).count();
-    assert_eq!(guard_reports, 2, "两次成功的 CallProvider 各自一份 GuardReport：{events:#?}");
+    let guard_reports = events
+        .iter()
+        .filter(|e| matches!(e, RunnerEvent::TurnGuard { .. }))
+        .count();
+    assert_eq!(
+        guard_reports, 2,
+        "两次成功的 CallProvider 各自一份 GuardReport：{events:#?}"
+    );
 }

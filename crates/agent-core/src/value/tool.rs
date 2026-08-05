@@ -119,9 +119,7 @@ mod tests {
         let spec = ToolSpec {
             name: Arc::from("srv:fs/read"),
             description: Arc::from("read a file"),
-            schema: Arc::new(
-                json!({"type": "object", "properties": {"path": {"type": "string"}}}),
-            ),
+            schema: Arc::new(json!({"type": "object", "properties": {"path": {"type": "string"}}})),
         };
         let s = serde_json::to_string(&spec).unwrap();
         assert_eq!(serde_json::from_str::<ToolSpec>(&s).unwrap(), spec);

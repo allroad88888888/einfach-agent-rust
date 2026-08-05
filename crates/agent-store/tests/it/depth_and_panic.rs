@@ -13,7 +13,10 @@ use agent_store::Store;
 /// Helper: build a chain of `depth` derived atoms, each incrementing by 1.
 /// The tail reads via args.get, and chains past the recursion budget will
 /// cross the FAULT path where to-be-computed values read back as null.
-fn build_chain(store: &Store<TestValue>, depth: usize) -> (agent_store::AtomId, agent_store::AtomId) {
+fn build_chain(
+    store: &Store<TestValue>,
+    depth: usize,
+) -> (agent_store::AtomId, agent_store::AtomId) {
     let head = store.create_atom(num(0.0));
     let mut prev = head;
     for _ in 0..depth {
@@ -162,7 +165,10 @@ fn large_fan_in_recompute_is_linear() {
         .collect();
     let members_for_sum = members.clone();
     let sum = store.create_derived_ctx(move |args| {
-        let s: f64 = members_for_sum.iter().map(|&m| args.get(m).as_number().unwrap()).sum();
+        let s: f64 = members_for_sum
+            .iter()
+            .map(|&m| args.get(m).as_number().unwrap())
+            .sum();
         num(s)
     });
     let expected: f64 = (0..20_000).map(|i| i as f64).sum();
@@ -180,10 +186,15 @@ fn large_fan_in_recompute_is_linear() {
 #[test]
 fn settled_memo_bulk_write_into_shared_dependent() {
     let store = Store::new();
-    let members: Vec<_> = (0..1000).map(|i| store.create_atom(num(i as f64))).collect();
+    let members: Vec<_> = (0..1000)
+        .map(|i| store.create_atom(num(i as f64)))
+        .collect();
     let members_for_sum = members.clone();
     let sum = store.create_derived_ctx(move |args| {
-        let s: f64 = members_for_sum.iter().map(|&m| args.get(m).as_number().unwrap()).sum();
+        let s: f64 = members_for_sum
+            .iter()
+            .map(|&m| args.get(m).as_number().unwrap())
+            .sum();
         num(s)
     });
     let _ = store.get(sum);

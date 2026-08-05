@@ -78,7 +78,10 @@ use super::record::Record;
 pub(super) enum Msg<K, V, M> {
     Append(Entry<K, V, M>),
     DropOldest(usize),
-    DropAfter { first_seq: u64, count: usize },
+    DropAfter {
+        first_seq: u64,
+        count: usize,
+    },
     SetCursor(usize),
     Snapshot(Snapshot<K, V>),
     /// 排干信号：处理到这条消息时，前面的写入必然都已经落盘（`mpsc` 是 FIFO）——
@@ -97,7 +100,9 @@ where
     let mut file = match OpenOptions::new().create(true).append(true).open(&path) {
         Ok(f) => Some(f),
         Err(e) => {
-            on_error(SessionStoreError::Io { detail: e.kind().to_string() });
+            on_error(SessionStoreError::Io {
+                detail: e.kind().to_string(),
+            });
             None
         }
     };
@@ -121,7 +126,11 @@ where
             }
             Msg::DropAfter { first_seq, count } => {
                 mirror.record_drop_after(first_seq, count);
-                write_line::<K, V, M>(&mut file, &Record::DropAfter { first_seq, count }, &on_error);
+                write_line::<K, V, M>(
+                    &mut file,
+                    &Record::DropAfter { first_seq, count },
+                    &on_error,
+                );
             }
             Msg::SetCursor(cursor) => {
                 mirror.record_cursor(cursor);
@@ -152,10 +161,14 @@ fn write_line<K: Serialize, V: Serialize, M: Serialize>(
     // 不当成「文件坏了」处理——不吞掉这条消息对应的记账（`mirror` 已经更新过了），
     // 只是这一行没能落盘，等下一条消息再写的时候文件就会跟内存对不上；这是
     // fire-and-forget 明确接受的风险，不在这里升级成更重的处理。
-    let Ok(mut bytes) = serde_json::to_vec(record) else { return };
+    let Ok(mut bytes) = serde_json::to_vec(record) else {
+        return;
+    };
     bytes.push(b'\n');
     if let Err(e) = f.write_all(&bytes) {
-        on_error(SessionStoreError::Io { detail: e.kind().to_string() });
+        on_error(SessionStoreError::Io {
+            detail: e.kind().to_string(),
+        });
         *file = None;
     }
 }
@@ -170,7 +183,9 @@ fn compact<K: Serialize, V: Serialize, M: Serialize>(
 ) {
     let Some(f) = file.as_mut() else { return };
     if let Err(e) = f.set_len(0) {
-        on_error(SessionStoreError::Io { detail: e.kind().to_string() });
+        on_error(SessionStoreError::Io {
+            detail: e.kind().to_string(),
+        });
         *file = None;
         return;
     }

@@ -17,7 +17,8 @@ async fn collect_all(sse: &mut http_client::SseReader, budget: Duration) -> Vec<
     let mut out = Vec::new();
     let deadline = std::time::Instant::now() + budget;
     while let Some(frame) = sse.next_event(Duration::from_secs(5)) {
-        let envelope: Frame = serde_json::from_str(&frame.data).expect("每一帧都该是合法的 Frame JSON");
+        let envelope: Frame =
+            serde_json::from_str(&frame.data).expect("每一帧都该是合法的 Frame JSON");
         let terminal = matches!(&envelope.event, SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status }) if status.is_terminal());
         out.push(envelope);
         if terminal || std::time::Instant::now() >= deadline {
@@ -35,12 +36,19 @@ async fn two_sse_clients_of_the_same_session_see_the_same_sequence() {
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let (status1, _, mut sse1) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    let (status2, _, mut sse2) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status1, _, mut sse1) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status2, _, mut sse2) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
     assert_eq!(status1, 200);
     assert_eq!(status2, 200);
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     let events1 = collect_all(&mut sse1, Duration::from_secs(5)).await;
@@ -58,12 +66,19 @@ async fn one_client_disconnecting_does_not_affect_the_other() {
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let (_, _, sse1) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    let (_, _, mut sse2) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (_, _, sse1) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (_, _, mut sse2) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
 
     drop(sse1); // 断开第一个（还剩 sse2 一个订阅者，宽限计时不该起）
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     let events2 = collect_all(&mut sse2, Duration::from_secs(5)).await;

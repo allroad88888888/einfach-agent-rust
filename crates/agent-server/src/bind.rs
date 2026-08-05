@@ -65,24 +65,36 @@ mod tests {
 
     #[test]
     fn unset_defaults_to_loopback() {
-        assert_eq!(resolve_bind_ip(None).unwrap(), IpAddr::V4(Ipv4Addr::LOCALHOST));
+        assert_eq!(
+            resolve_bind_ip(None).unwrap(),
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        );
     }
 
     #[test]
     fn empty_string_is_treated_like_unset() {
-        assert_eq!(resolve_bind_ip(Some("")).unwrap(), IpAddr::V4(Ipv4Addr::LOCALHOST));
+        assert_eq!(
+            resolve_bind_ip(Some("")).unwrap(),
+            IpAddr::V4(Ipv4Addr::LOCALHOST)
+        );
     }
 
     #[test]
     fn explicit_override_is_honored() {
         // 用常量算出字符串，源码里不写这个地址的字面量（本文件模块文档）。
         let wildcard = Ipv4Addr::UNSPECIFIED.to_string();
-        assert_eq!(resolve_bind_ip(Some(&wildcard)).unwrap(), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(
+            resolve_bind_ip(Some(&wildcard)).unwrap(),
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED)
+        );
     }
 
     #[test]
     fn explicit_override_can_be_a_non_loopback_host() {
-        assert_eq!(resolve_bind_ip(Some("10.0.0.5")).unwrap(), IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5)));
+        assert_eq!(
+            resolve_bind_ip(Some("10.0.0.5")).unwrap(),
+            IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))
+        );
     }
 
     #[test]

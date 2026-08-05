@@ -86,9 +86,21 @@ fn cancel_mid_flight_cuts_every_child_and_the_server_sees_no_further_connections
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
     let hop1 = sse_tool_calls(&[
-        ("call_x", &spawn_wire, r#"{"task":"HANGX first hanging child"}"#),
-        ("call_y", &spawn_wire, r#"{"task":"HANGY second hanging child"}"#),
-        ("call_z", &spawn_wire, r#"{"task":"HANGZ third hanging child"}"#),
+        (
+            "call_x",
+            &spawn_wire,
+            r#"{"task":"HANGX first hanging child"}"#,
+        ),
+        (
+            "call_y",
+            &spawn_wire,
+            r#"{"task":"HANGY second hanging child"}"#,
+        ),
+        (
+            "call_z",
+            &spawn_wire,
+            r#"{"task":"HANGZ third hanging child"}"#,
+        ),
     ]);
     let (port, accepted) = spawn_accept_counting_server(hop1);
 
@@ -106,7 +118,11 @@ fn cancel_mid_flight_cuts_every_child_and_the_server_sees_no_further_connections
 
     let mut session = Session::new(AgentId::root());
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "cancelkick spawn three hanging workers");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "cancelkick spawn three hanging workers",
+    );
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));
@@ -114,15 +130,25 @@ fn cancel_mid_flight_cuts_every_child_and_the_server_sees_no_further_connections
         elapsed < Duration::from_secs(2) && elapsed >= Duration::from_millis(200),
         "该在置位之后的几个 poll 间隔内收尾，不该等到 10s 的超时预算或 20s 的挂住时长，实际 {elapsed:?}"
     );
-    assert!(session.tool_slots().is_empty(), "取消要把 root 的工具槽全部弃掉");
+    assert!(
+        session.tool_slots().is_empty(),
+        "取消要把 root 的工具槽全部弃掉"
+    );
 
     // root 首跳 + 三个子，四条连接该都已经接进来了（它们是取消发生*之前*
     // 就已经在飞的，取消斩断的是它们的结果，不是不让它们发生）。
     let accepted_at_return = accepted.load(Ordering::SeqCst);
-    assert_eq!(accepted_at_return, 4, "取消发生前该已经有 1 个 root 首跳 + 3 个子连接");
+    assert_eq!(
+        accepted_at_return, 4,
+        "取消发生前该已经有 1 个 root 首跳 + 3 个子连接"
+    );
 
     // 收工后再等一段：不该有第五条连接进来——没有重试，没有孤儿线程继续
     // 敲服务器。
     thread::sleep(Duration::from_millis(500));
-    assert_eq!(accepted.load(Ordering::SeqCst), accepted_at_return, "取消之后不该再有任何新连接");
+    assert_eq!(
+        accepted.load(Ordering::SeqCst),
+        accepted_at_return,
+        "取消之后不该再有任何新连接"
+    );
 }

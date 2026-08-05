@@ -42,12 +42,20 @@ pub(super) enum Replay {
     /// 分歧 2 的裁决）：跟 `gap_frame_id` 自洽，恰好是 `replay(Some(gap_frame_id))`
     /// 会给出的那份 backlog，调用方发完 gap 帧之后原样接着发这份 `tail`，再
     /// 续上直播。
-    Gap { skipped: u64, gap_frame_id: u64, tail: Vec<BufferedFrame> },
+    Gap {
+        skipped: u64,
+        gap_frame_id: u64,
+        tail: Vec<BufferedFrame>,
+    },
 }
 
 impl RingState {
     pub(super) fn new(capacity: usize) -> Self {
-        RingState { frames: VecDeque::with_capacity(capacity.min(1024)), capacity: capacity.max(1), next_id: 1 }
+        RingState {
+            frames: VecDeque::with_capacity(capacity.min(1024)),
+            capacity: capacity.max(1),
+            next_id: 1,
+        }
     }
 
     /// 追加一帧（034：`event` 是 [`Frame`] 信封，agent + event）、分配它的 id；
@@ -94,7 +102,13 @@ impl RingState {
                 gap_frame_id: oldest.id - 1,
                 tail: self.frames.iter().cloned().collect(),
             },
-            _ => Replay::Backlog(self.frames.iter().filter(|f| f.id > effective_last).cloned().collect()),
+            _ => Replay::Backlog(
+                self.frames
+                    .iter()
+                    .filter(|f| f.id > effective_last)
+                    .cloned()
+                    .collect(),
+            ),
         }
     }
 }
@@ -109,7 +123,10 @@ mod tests {
     use crate::event::SessionEvent;
 
     fn ev(text: &str) -> Frame {
-        Frame { agent: AgentId::root(), event: SessionEvent::TextDelta(Arc::from(text)) }
+        Frame {
+            agent: AgentId::root(),
+            event: SessionEvent::TextDelta(Arc::from(text)),
+        }
     }
 
     #[test]
@@ -129,7 +146,9 @@ mod tests {
         // last_event_id = 1（不是 0）：`1 + 1 == oldest.id(2)`，落进 backlog 分支
         // 而不是 gap 分支——见 `last_event_id_older_than_the_buffer_reports_an_
         // exact_gap` 那条测试专门覆盖 `0` 这个确实该判 gap 的情况。
-        let Replay::Backlog(frames) = ring.replay(Some(1)) else { panic!("该是 Backlog") };
+        let Replay::Backlog(frames) = ring.replay(Some(1)) else {
+            panic!("该是 Backlog")
+        };
         assert_eq!(frames.iter().map(|f| f.id).collect::<Vec<_>>(), vec![2, 3]);
     }
 
@@ -140,14 +159,19 @@ mod tests {
         let mut ring = RingState::new(4);
         let first = ring.push(ev("a"));
         let second = ring.push(ev("b"));
-        let Replay::Backlog(frames) = ring.replay(None) else { panic!("该是 Backlog：等价于带了 oldest-1") };
+        let Replay::Backlog(frames) = ring.replay(None) else {
+            panic!("该是 Backlog：等价于带了 oldest-1")
+        };
         assert_eq!(frames, vec![first, second]);
     }
 
     #[test]
     fn no_last_event_id_with_an_empty_ring_is_live() {
         let ring = RingState::new(4);
-        assert!(matches!(ring.replay(None), Replay::Live), "从没广播过任何一帧，没什么好补的");
+        assert!(
+            matches!(ring.replay(None), Replay::Live),
+            "从没广播过任何一帧，没什么好补的"
+        );
     }
 
     #[test]
@@ -162,7 +186,9 @@ mod tests {
         ring.push(ev("a"));
         let second = ring.push(ev("b"));
         let third = ring.push(ev("c"));
-        let Replay::Backlog(frames) = ring.replay(Some(1)) else { panic!("该是 Backlog") };
+        let Replay::Backlog(frames) = ring.replay(Some(1)) else {
+            panic!("该是 Backlog")
+        };
         assert_eq!(frames, vec![second, third]);
     }
 
@@ -180,7 +206,14 @@ mod tests {
         ring.push(ev("b")); // id 2, 被挤掉
         ring.push(ev("c")); // id 3, 缓冲区最旧
         ring.push(ev("d")); // id 4, 缓冲区最新
-        let Replay::Gap { skipped, gap_frame_id, tail } = ring.replay(Some(1)) else { panic!("该是 Gap") };
+        let Replay::Gap {
+            skipped,
+            gap_frame_id,
+            tail,
+        } = ring.replay(Some(1))
+        else {
+            panic!("该是 Gap")
+        };
         assert_eq!(skipped, 1, "id 2 被挤掉了，缺口大小是 1");
         assert_eq!(gap_frame_id, 2);
         // 031 独测分歧 2 的裁决：gap 只代表被冲掉的那一段，缓冲区仍然保留的
@@ -195,9 +228,13 @@ mod tests {
         ring.push(ev("b"));
         ring.push(ev("c"));
         ring.push(ev("d"));
-        let Replay::Gap { gap_frame_id, .. } = ring.replay(Some(1)) else { panic!("该是 Gap") };
+        let Replay::Gap { gap_frame_id, .. } = ring.replay(Some(1)) else {
+            panic!("该是 Gap")
+        };
         // 用 gap 帧自己的 id 重连——见本文件 `replay` 文档「自洽」那句。
-        let Replay::Backlog(frames) = ring.replay(Some(gap_frame_id)) else { panic!("该是 Backlog，不是又一次 Gap") };
+        let Replay::Backlog(frames) = ring.replay(Some(gap_frame_id)) else {
+            panic!("该是 Backlog，不是又一次 Gap")
+        };
         assert_eq!(frames.iter().map(|f| f.id).collect::<Vec<_>>(), vec![3, 4]);
     }
 }

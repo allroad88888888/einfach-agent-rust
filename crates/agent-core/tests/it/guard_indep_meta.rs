@@ -12,7 +12,7 @@ fn cache_module_has_no_clock_or_random_outside_comments() {
 
     let violations = grep_pattern_excluding_comment_lines(
         &cache_dir,
-        r"Instant::now|SystemTime::now|rand::|thread_rng"
+        r"Instant::now|SystemTime::now|rand::|thread_rng",
     );
 
     assert!(
@@ -26,22 +26,19 @@ fn cache_module_has_no_clock_or_random_outside_comments() {
 /// 必须抓到它，抓不到就说明检查本身是摆设。
 #[test]
 fn the_grep_mechanism_actually_detects_a_planted_violation() {
-    let dir = std::env::temp_dir().join(format!(
-        "guard_indep_meta_probe_{}",
-        std::process::id()
-    ));
+    let dir = std::env::temp_dir().join(format!("guard_indep_meta_probe_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create temp probe dir");
     let probe_file = dir.join("planted.rs");
     std::fs::write(
         &probe_file,
-        "// 上面这行是注释，不该被算作命中\nlet _t = std::time::Instant::now();\n"
+        "// 上面这行是注释，不该被算作命中\nlet _t = std::time::Instant::now();\n",
     )
     .expect("write probe file");
 
     let dir_str = format!("{}/", dir.display());
     let violations = grep_pattern_excluding_comment_lines(
         &dir_str,
-        r"Instant::now|SystemTime::now|rand::|thread_rng"
+        r"Instant::now|SystemTime::now|rand::|thread_rng",
     );
 
     std::fs::remove_dir_all(&dir).ok();

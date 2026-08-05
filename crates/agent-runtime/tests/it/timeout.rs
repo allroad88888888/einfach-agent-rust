@@ -30,7 +30,10 @@ fn provider_call_timeout_retries_then_fails() {
     let status = run_turn(&mut session, &mut ctx, "你好");
     let elapsed = start.elapsed();
 
-    assert_eq!(status, TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable)));
+    assert_eq!(
+        status,
+        TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable))
+    );
     assert!(
         elapsed < Duration::from_secs(3),
         "两次 150ms 超时该在秒级内收尾，实际 {elapsed:?}——像是没真的放弃挂住的连接"
@@ -45,11 +48,18 @@ fn provider_call_timeout_retries_then_fails() {
     assert!(
         events.iter().any(|e| matches!(
             e,
-            RunnerEvent::Notice(Notice::Retrying { attempt: 1, max_retries: 1 })
+            RunnerEvent::Notice(Notice::Retrying {
+                attempt: 1,
+                max_retries: 1
+            })
         )),
         "{events:#?}"
     );
 
     // 超时路径不产出 GuardReport——那一轮压根没收到响应，没有 usage 可对账。
-    assert!(!events.iter().any(|e| matches!(e, RunnerEvent::TurnGuard { .. })));
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, RunnerEvent::TurnGuard { .. }))
+    );
 }

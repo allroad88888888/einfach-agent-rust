@@ -56,7 +56,10 @@ fn activating_a_skill_appends_one_history_entry_and_shows_up_in_active_skills() 
 fn undo_turn_reverts_activation_and_active_skills_no_longer_contains_it() {
     let mut session = Session::new(root());
     let _ = session.activate_skill(&root(), SkillId::new("testskill"));
-    assert!(!session.active_skills().is_empty(), "激活该先生效,不然下面这条 undo 断言没有意义");
+    assert!(
+        !session.active_skills().is_empty(),
+        "激活该先生效,不然下面这条 undo 断言没有意义"
+    );
 
     let report = session.undo_turn();
     assert!(
@@ -78,7 +81,10 @@ fn redo_turn_reapplies_the_activation() {
     assert!(session.active_skills().is_empty(), "undo 后应该已经不活跃");
 
     let report = session.redo_turn();
-    assert!(matches!(report, UndoReport::Applied { .. }), "redo 该把激活重放回来: {report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "redo 该把激活重放回来: {report:?}"
+    );
     assert!(
         session.active_skills().contains(&SkillId::new("testskill")),
         "redo 之后该重新含它,实际: {:?}",
@@ -96,7 +102,11 @@ fn deactivating_an_active_skill_also_journals_and_undo_restores_it() {
     let before = session.history_len();
 
     let _ = session.deactivate_skill(&root(), SkillId::new("alpha"));
-    assert_eq!(session.history_len(), before + 1, "停用同样要留下一条 Entry");
+    assert_eq!(
+        session.history_len(),
+        before + 1,
+        "停用同样要留下一条 Entry"
+    );
     assert!(
         !session.active_skills().contains(&SkillId::new("alpha")),
         "停用之后不该再活跃,实际: {:?}",
@@ -124,6 +134,12 @@ fn undo_only_reverts_the_activation_in_the_turn_being_undone() {
     let _ = session.undo_turn();
 
     let active = session.active_skills();
-    assert!(active.contains(&SkillId::new("alpha")), "更早那轮的激活不该被这次 undo 波及: {active:?}");
-    assert!(!active.contains(&SkillId::new("beta")), "最近那轮的激活该被退掉: {active:?}");
+    assert!(
+        active.contains(&SkillId::new("alpha")),
+        "更早那轮的激活不该被这次 undo 波及: {active:?}"
+    );
+    assert!(
+        !active.contains(&SkillId::new("beta")),
+        "最近那轮的激活该被退掉: {active:?}"
+    );
 }

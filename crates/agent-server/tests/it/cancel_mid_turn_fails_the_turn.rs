@@ -19,10 +19,14 @@ use support::server::{FakeServer, Script};
 async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_of_ms() {
     let server = FakeServer::start(vec![Script::HangAfterHeaders]);
     let registry = agent_server::SessionRegistry::new();
-    let handle = registry.open(support::open_spec("cancel-me", server.endpoint(), None)).unwrap();
+    let handle = registry
+        .open(support::open_spec("cancel-me", server.endpoint(), None))
+        .unwrap();
 
     let mut sub = handle.subscribe();
-    handle.send(Command::Input("say something slow".to_string())).unwrap();
+    handle
+        .send(Command::Input("say something slow".to_string()))
+        .unwrap();
 
     let cancel_handle = handle.clone();
     tokio::spawn(async move {
@@ -34,7 +38,10 @@ async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_
     let events = support::collect_until_terminal(&mut sub, Duration::from_secs(3)).await;
     let elapsed = start.elapsed();
 
-    assert_eq!(support::terminal_status(&events), Some(TurnStatus::Failed(Failure::Cancelled)));
+    assert_eq!(
+        support::terminal_status(&events),
+        Some(TurnStatus::Failed(Failure::Cancelled))
+    );
     assert!(
         elapsed >= Duration::from_millis(200) && elapsed < Duration::from_secs(2),
         "该在置位之后的几个 poll 间隔内收尾，不该等到 5s 的超时预算，实际 {elapsed:?}"
@@ -46,6 +53,16 @@ async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_
         .await
         .expect("该收到取消轮自动擦除的 Undo 事件")
         .expect("事件流不该在这里结束");
-    assert_eq!(follow_up.agent.as_str(), "root", "自动擦除是会话级动作，该标 root");
-    assert!(matches!(follow_up.event, SessionEvent::Undo(UndoOutcome::Applied { .. })), "{follow_up:?}");
+    assert_eq!(
+        follow_up.agent.as_str(),
+        "root",
+        "自动擦除是会话级动作，该标 root"
+    );
+    assert!(
+        matches!(
+            follow_up.event,
+            SessionEvent::Undo(UndoOutcome::Applied { .. })
+        ),
+        "{follow_up:?}"
+    );
 }

@@ -20,11 +20,16 @@ pub struct ToolCallOutput {
 /// ——原样搬 `content` 的 JSON，保守不丢信息；`content` 整个缺失（不合规）则搬整个
 /// result。这一步不判可逆性、不判成功失败之外的语义，只做「wire → 文本」。
 pub fn flatten_tool_result(result: &Value) -> ToolCallOutput {
-    let is_error = result.get("isError").and_then(Value::as_bool).unwrap_or(false);
+    let is_error = result
+        .get("isError")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
     let text = match result.get("content").and_then(Value::as_array) {
         Some(blocks) => {
-            let texts: Vec<&str> =
-                blocks.iter().filter_map(|b| b.get("text").and_then(Value::as_str)).collect();
+            let texts: Vec<&str> = blocks
+                .iter()
+                .filter_map(|b| b.get("text").and_then(Value::as_str))
+                .collect();
             if texts.is_empty() {
                 Value::Array(blocks.clone()).to_string()
             } else {
@@ -47,13 +52,25 @@ mod tests {
         let ok = flatten_tool_result(&json!({
             "content": [{"type": "text", "text": "line 1"}, {"type": "text", "text": "line 2"}],
         }));
-        assert_eq!(ok, ToolCallOutput { text: "line 1\nline 2".to_string(), is_error: false });
+        assert_eq!(
+            ok,
+            ToolCallOutput {
+                text: "line 1\nline 2".to_string(),
+                is_error: false
+            }
+        );
 
         let err = flatten_tool_result(&json!({
             "content": [{"type": "text", "text": "boom"}],
             "isError": true,
         }));
-        assert_eq!(err, ToolCallOutput { text: "boom".to_string(), is_error: true });
+        assert_eq!(
+            err,
+            ToolCallOutput {
+                text: "boom".to_string(),
+                is_error: true
+            }
+        );
     }
 
     /// `isError` 缺省成功；未知字段忽略。
@@ -72,6 +89,10 @@ mod tests {
     fn without_text_blocks_falls_back_to_content_json() {
         let out = flatten_tool_result(&json!({"content": [{"type": "image", "data": "..."}]}));
         assert!(!out.is_error);
-        assert!(out.text.contains("image"), "该保留 content 原样：{}", out.text);
+        assert!(
+            out.text.contains("image"),
+            "该保留 content 原样：{}",
+            out.text
+        );
     }
 }

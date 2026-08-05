@@ -48,7 +48,9 @@ pub fn drain_request(stream: &mut TcpStream) {
 
 pub fn write_sse_headers(stream: &mut TcpStream) {
     stream
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+        )
         .unwrap();
     stream.flush().unwrap();
 }
@@ -73,7 +75,9 @@ pub fn spawn_scripted_server(responses: Vec<ScriptedResponse>) -> u16 {
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
         for resp in responses {
-            let Ok((mut stream, _)) = listener.accept() else { return };
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
             drain_request(&mut stream);
             write_sse_headers(&mut stream);
             match resp {
@@ -99,7 +103,10 @@ pub fn spawn_scripted_server(responses: Vec<ScriptedResponse>) -> u16 {
 pub fn temp_dir(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("agent-runtime-it-{name}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "agent-runtime-it-{name}-{}-{n}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -169,7 +176,10 @@ pub fn build_ctx_with(
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     let session_config = SessionConfig {

@@ -105,7 +105,10 @@ fn finish_slot(
         .map(|slot| {
             if &slot.call_id == call_id && matches!(slot.state, SlotState::Pending) {
                 ToolSlot {
-                    state: SlotState::Finished { content: content.clone(), is_error },
+                    state: SlotState::Finished {
+                        content: content.clone(),
+                        is_error,
+                    },
                     ..slot.clone()
                 }
             } else {

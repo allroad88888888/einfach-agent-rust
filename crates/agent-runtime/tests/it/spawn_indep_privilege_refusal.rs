@@ -16,7 +16,9 @@ mod spawn_indep_support;
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name};
+use spawn_indep_support::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+};
 
 #[test]
 fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
@@ -24,8 +26,18 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_child1", delay: Default::default(), status: 200, lines: sse_text("root received child1's report") },
-        Route { needle: "call_grandchild_attempt", delay: Default::default(), status: 200, lines: sse_text("child1 done despite the refusal") },
+        Route {
+            needle: "call_child1",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("root received child1's report"),
+        },
+        Route {
+            needle: "call_grandchild_attempt",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("child1 done despite the refusal"),
+        },
         Route {
             needle: "CHILD1TASK",
             delay: Default::default(),
@@ -53,7 +65,11 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff4 delegate with a deliberately narrow tool set");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff4 delegate with a deliberately narrow tool set",
+    );
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();
@@ -67,10 +83,15 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
     assert_eq!(live, expected, "被拒绝的孙子不该真的被建出来");
 
     // child1 自己被授予的子集该恰好是 root 给的那两个，顺序去重后。
-    let granted = session.tools_allowed_of(&child1).expect("child1 是被 spawn 出来的，该有 ToolsAllowed");
+    let granted = session
+        .tools_allowed_of(&child1)
+        .expect("child1 是被 spawn 出来的，该有 ToolsAllowed");
     let granted_names: Vec<&str> = granted.iter().map(|s| &**s).collect();
     assert!(granted_names.contains(&"srv:fs/read") && granted_names.contains(&"srv:agent/spawn"));
-    assert!(!granted_names.contains(&"srv:fs/list"), "child1 不该被授予它自己都没有的 fs/list");
+    assert!(
+        !granted_names.contains(&"srv:fs/list"),
+        "child1 不该被授予它自己都没有的 fs/list"
+    );
 
     // child1 尝试提权的那次 spawn 该是显式拒绝：is_error，且不是静默改写
     // 成别的调用——child1 自己的消息历史里只有这一条 tool_result。
@@ -79,12 +100,21 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
         .iter()
         .flat_map(|m| m.blocks.iter())
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { content, is_error, .. } => Some((content.clone(), *is_error)),
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => Some((content.clone(), *is_error)),
             _ => None,
         })
         .collect();
-    assert_eq!(child1_tool_results.len(), 1, "child1 只发起过一次（被拒的）spawn: {child1_messages:#?}");
-    assert!(child1_tool_results[0].1, "提权该被显式拒绝，落 is_error: {child1_tool_results:#?}");
+    assert_eq!(
+        child1_tool_results.len(),
+        1,
+        "child1 只发起过一次（被拒的）spawn: {child1_messages:#?}"
+    );
+    assert!(
+        child1_tool_results[0].1,
+        "提权该被显式拒绝，落 is_error: {child1_tool_results:#?}"
+    );
 
     // child1 照常收尾（003 哲学），root 也收到了汇总。
     let root_text: Vec<_> = session
@@ -96,5 +126,9 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
             _ => None,
         })
         .collect();
-    assert!(root_text.iter().any(|t| t.contains("received child1's report")));
+    assert!(
+        root_text
+            .iter()
+            .any(|t| t.contains("received child1's report"))
+    );
 }

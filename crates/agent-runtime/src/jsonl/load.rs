@@ -75,7 +75,9 @@ where
     match replay(path, on_error) {
         Replayed::NotFound => LoadOutcome::Absent,
         Replayed::Refused(reason) => LoadOutcome::Refused { reason },
-        Replayed::Ok(log) => log.to_loaded().map_or(LoadOutcome::Absent, LoadOutcome::Loaded),
+        Replayed::Ok(log) => log
+            .to_loaded()
+            .map_or(LoadOutcome::Absent, LoadOutcome::Loaded),
     }
 }
 
@@ -94,7 +96,10 @@ where
     }
 }
 
-fn replay<K, V, M>(path: &Path, on_error: &(dyn Fn(SessionStoreError) + Send + Sync)) -> Replayed<K, V, M>
+fn replay<K, V, M>(
+    path: &Path,
+    on_error: &(dyn Fn(SessionStoreError) + Send + Sync),
+) -> Replayed<K, V, M>
 where
     K: Clone + DeserializeOwned,
     V: Clone + DeserializeOwned,
@@ -107,7 +112,9 @@ where
             // 读不出来（权限/其它 IO 错误），但不是「文件不存在」——不知道底下
             // 有没有真数据，按「有会话但拒绝加载」处理才安全：`Absent` 会诱使
             // 宿主开一个新会话，下一次写入就可能把打不开的原文件盖掉。
-            let err = SessionStoreError::Io { detail: e.kind().to_string() };
+            let err = SessionStoreError::Io {
+                detail: e.kind().to_string(),
+            };
             let reason = err.to_string();
             on_error(err);
             return Replayed::Refused(reason);

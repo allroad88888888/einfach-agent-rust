@@ -49,7 +49,10 @@ fn everything_server_handshake_and_tools_list() {
         .expect("tools/list 应当成功");
 
     assert!(!translated.is_empty(), "everything server 至少要有一个工具");
-    assert!(warnings.is_empty(), "真实 everything server 不该有重复工具名: {warnings:?}");
+    assert!(
+        warnings.is_empty(),
+        "真实 everything server 不该有重复工具名: {warnings:?}"
+    );
     for (spec, _reversibility) in &translated {
         assert!(
             spec.name.starts_with("mcp:everything/"),
@@ -59,7 +62,10 @@ fn everything_server_handshake_and_tools_list() {
     }
     eprintln!(
         "翻译出的工具名: {:?}",
-        translated.iter().map(|(s, _)| s.name.to_string()).collect::<Vec<_>>()
+        translated
+            .iter()
+            .map(|(s, _)| s.name.to_string())
+            .collect::<Vec<_>>()
     );
 }
 

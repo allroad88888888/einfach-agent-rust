@@ -47,12 +47,7 @@ fn the_complete_state_is_exactly_the_source_slot_table() {
     let expected: Vec<(AtomKey, AgentValue)> = {
         let mut v: Vec<_> = Slot::ALL
             .iter()
-            .map(|slot| {
-                (
-                    AtomKey::Agent(agent.clone(), *slot),
-                    slot.default_value(),
-                )
-            })
+            .map(|slot| (AtomKey::Agent(agent.clone(), *slot), slot.default_value()))
             .collect();
         v.sort_by(|a, b| a.0.cmp(&b.0));
         v
@@ -65,7 +60,11 @@ fn the_complete_state_is_exactly_the_source_slot_table() {
     assert_eq!(primitives.len(), 14);
 
     // derived 一个都不在里面——它们的键是另一张表。
-    assert!(primitives.iter().all(|(key, _)| matches!(key, AtomKey::Agent(_, _))));
+    assert!(
+        primitives
+            .iter()
+            .all(|(key, _)| matches!(key, AtomKey::Agent(_, _)))
+    );
 }
 
 /// 快照可 serde 往返（红线 3：primitive 的值必须**全部**可序列化）。这是 010 的

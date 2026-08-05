@@ -64,7 +64,12 @@ pub(crate) enum IoMsg {
     /// 认领 `crate::mcp_call::McpCall` credential，epoch 由 credential 提供、回写前
     /// 过 `Session::step` 的 epoch 闸（红线 6）。跟 provider 的 `Done` 是两类东西
     /// （一个工具结果、一个模型响应），所以是独立变体、按不同键落地。
-    McpDone { agent: AgentId, call_id: ToolCallId, content: Arc<str>, is_error: bool },
+    McpDone {
+        agent: AgentId,
+        call_id: ToolCallId,
+        content: Arc<str>,
+        is_error: bool,
+    },
 }
 
 /// 起线程发一次请求。**不返回 `JoinHandle`**——超时路径要能放弃这个线程而不
@@ -85,13 +90,20 @@ pub(crate) fn spawn(
         // 线程从这一刻起欠泵一条终态消息。正常路径由 `settle` 还上；panic 路径
         // 由 `Drop` 还上（`IoMsg::Gone`）——两条路都还，泵因此永远不会为一个
         // 已经死掉的线程干等。
-        let mut debt = DoneDebt { agent: agent.clone(), tx: tx.clone(), settled: false };
+        let mut debt = DoneDebt {
+            agent: agent.clone(),
+            tx: tx.clone(),
+            settled: false,
+        };
 
         let mut acc = provider.accumulator();
         let result = client.post_stream(&endpoint, &api_key, &body, &cancel, |line| {
             for ev in acc.push_line(line) {
                 let Some(event) = translate(ev) else { continue };
-                let delta = IoMsg::Delta(AgentEvent { agent: agent.clone(), event });
+                let delta = IoMsg::Delta(AgentEvent {
+                    agent: agent.clone(),
+                    event,
+                });
                 if tx.send(delta).is_err() {
                     // 接收端没了：泵已经收工（或者已经放弃这次调用），没有理由
                     // 继续读下去。
@@ -101,7 +113,13 @@ pub(crate) fn spawn(
             ControlFlow::Continue(())
         });
         let (blocks, stop, usage) = acc.finish();
-        debt.settle(IoMsg::Done { agent: agent.clone(), result, blocks, stop, usage });
+        debt.settle(IoMsg::Done {
+            agent: agent.clone(),
+            result,
+            blocks,
+            stop,
+            usage,
+        });
     });
 }
 
@@ -122,7 +140,9 @@ impl DoneDebt {
 impl Drop for DoneDebt {
     fn drop(&mut self) {
         if !self.settled {
-            let _ = self.tx.send(IoMsg::Gone { agent: self.agent.clone() });
+            let _ = self.tx.send(IoMsg::Gone {
+                agent: self.agent.clone(),
+            });
         }
     }
 }

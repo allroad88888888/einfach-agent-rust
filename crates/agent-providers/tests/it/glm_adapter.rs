@@ -33,7 +33,11 @@ fn glm_config(temperature: Option<f32>) -> SessionConfig {
 fn must_use_named_tool_is_native_no_adjustments() {
     let sys = [sys_chunk("base", "sys")];
     let messages = [user_text(1, "read the file")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let late_tools: [ToolSpec; 0] = [];
     let config = glm_config(None);
 
@@ -49,12 +53,16 @@ fn must_use_named_tool_is_native_no_adjustments() {
 
     let out = Glm.encode(&ing);
     assert!(
-        !out.adjustments.iter().any(|a| matches!(a, Adjustment::ToolChoiceDowngraded { .. })),
+        !out.adjustments
+            .iter()
+            .any(|a| matches!(a, Adjustment::ToolChoiceDowngraded { .. })),
         "GLM 原生支持指定函数，不该降级：{:?}",
         out.adjustments
     );
     assert!(
-        !out.adjustments.iter().any(|a| matches!(a, Adjustment::ThinkingDisabledForToolChoice)),
+        !out.adjustments
+            .iter()
+            .any(|a| matches!(a, Adjustment::ThinkingDisabledForToolChoice)),
         "GLM 思考可开关，不需要为满足 tool_choice 关掉：{:?}",
         out.adjustments
     );
@@ -68,15 +76,33 @@ fn must_use_named_tool_is_native_no_adjustments() {
 fn late_tools_force_full_prefix_rebuild_at_2x() {
     let sys = [sys_chunk("base", "sys")];
     let messages = [user_text(1, "hi")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
-    let late = [tool_spec("srv:fs/write", "write a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
+    let late = [tool_spec(
+        "srv:fs/write",
+        "write a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let config = glm_config(None);
 
-    let ing = ingredients(&sys, &messages, &tools, &late, &config, RequestIntent::Free, None);
+    let ing = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late,
+        &config,
+        RequestIntent::Free,
+        None,
+    );
 
     let out = Glm.encode(&ing);
     let est_cost_multiple = out.adjustments.iter().find_map(|a| match a {
-        Adjustment::LateToolsForcedIntoPrefix { est_cost_multiple, .. } => Some(*est_cost_multiple),
+        Adjustment::LateToolsForcedIntoPrefix {
+            est_cost_multiple, ..
+        } => Some(*est_cost_multiple),
         _ => None,
     });
     assert_eq!(
@@ -95,14 +121,20 @@ fn late_tools_force_full_prefix_rebuild_at_2x() {
 #[test]
 fn stream_usage_cached_zero_is_some_zero_not_none() {
     let mut acc = Glm.accumulator();
-    acc.push_line(r#"data: {"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}"#);
+    acc.push_line(
+        r#"data: {"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}"#,
+    );
     acc.push_line(
         r#"data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":900,"completion_tokens":10,"prompt_tokens_details":{"cached_tokens":0}}}"#,
     );
     acc.push_line("data: [DONE]");
 
     let (_, _, usage) = acc.finish();
-    assert_eq!(usage.cached, Some(0), "cached_tokens: 0 必须解析成 Some(0)，不是 None");
+    assert_eq!(
+        usage.cached,
+        Some(0),
+        "cached_tokens: 0 必须解析成 Some(0)，不是 None"
+    );
 }
 
 // ---------------------------------------------------------------------
@@ -141,11 +173,21 @@ fn temperature_is_free_no_override() {
     let late_tools: [ToolSpec; 0] = [];
     let config = glm_config(Some(0.7));
 
-    let ing = ingredients(&sys, &messages, &tools, &late_tools, &config, RequestIntent::Free, None);
+    let ing = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &config,
+        RequestIntent::Free,
+        None,
+    );
 
     let out = Glm.encode(&ing);
     assert!(
-        !out.adjustments.iter().any(|a| matches!(a, Adjustment::TemperatureOverridden { .. })),
+        !out.adjustments
+            .iter()
+            .any(|a| matches!(a, Adjustment::TemperatureOverridden { .. })),
         "GLM 温度自由，传什么就是什么，不该覆盖：{:?}",
         out.adjustments
     );

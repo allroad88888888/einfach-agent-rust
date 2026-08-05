@@ -66,10 +66,10 @@
 
 mod child_outcome;
 mod collect_tool;
+mod ctx_remote_tools;
 mod deadline;
 mod dispatch;
 mod guard;
-mod ctx_remote_tools;
 mod io_thread;
 mod mcp_call;
 mod orphan;
@@ -101,8 +101,12 @@ pub use ctx_remote_tools::RemoteToolWaiting;
 pub use deadline::sweep_remote_tool_deadlines;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use jsonl::{Jsonl, SessionStoreError};
-pub use persist::{PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover};
-pub use remote_tool::{RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool};
+pub use persist::{
+    PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
+};
+pub use remote_tool::{
+    RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool,
+};
 pub use runner::run_turn;
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_tool::{SPAWN_TOOL, spawn_spec};

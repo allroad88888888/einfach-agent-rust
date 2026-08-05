@@ -53,7 +53,7 @@ fn missing_server_info_falls_back_to_none_not_error() {
     let frame =
         br#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{}}}"#;
     let result = recorded_result(frame);
-    let parsed = parse_initialize_result(&result)
-        .expect("serverInfo 整体缺失不应报错，server_name 落 None");
+    let parsed =
+        parse_initialize_result(&result).expect("serverInfo 整体缺失不应报错，server_name 落 None");
     assert_eq!(parsed.server_name, None);
 }

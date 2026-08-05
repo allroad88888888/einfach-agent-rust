@@ -45,15 +45,33 @@ fn two_background_children_run_while_the_parent_keeps_going_and_never_write_back
             status: 200,
             lines: sse_text("我不等它们，先答了"),
         },
-        Route { needle: "TASKBGA", delay: CHILD, status: 200, lines: sse_text("ANSWERBGA 子甲的答案") },
-        Route { needle: "TASKBGB", delay: CHILD, status: 200, lines: sse_text("ANSWERBGB 子乙的答案") },
+        Route {
+            needle: "TASKBGA",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("ANSWERBGA 子甲的答案"),
+        },
+        Route {
+            needle: "TASKBGB",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("ANSWERBGB 子乙的答案"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_bg_a", &spawn_wire, r#"{"task":"TASKBGA 后台干活甲","background":true}"#),
-                ("call_bg_b", &spawn_wire, r#"{"task":"TASKBGB 后台干活乙","background":true}"#),
+                (
+                    "call_bg_a",
+                    &spawn_wire,
+                    r#"{"task":"TASKBGA 后台干活甲","background":true}"#,
+                ),
+                (
+                    "call_bg_b",
+                    &spawn_wire,
+                    r#"{"task":"TASKBGB 后台干活乙","background":true}"#,
+                ),
             ]),
         },
     ]);
@@ -77,24 +95,46 @@ fn two_background_children_run_while_the_parent_keeps_going_and_never_write_back
         a.end,
         b.end,
     );
-    assert!(server.overlapped("TASKBGA", "TASKBGB"), "两个后台子该并发跑");
+    assert!(
+        server.overlapped("TASKBGA", "TASKBGB"),
+        "两个后台子该并发跑"
+    );
 
     // --- 父那两个槽收敛成了 agent_id，不是子的回答 ---
     let root = AgentId::root();
     let results = tool_results(&session, &root);
-    assert_eq!(results.len(), 2, "父该正好有两条 tool_result（两次 spawn），一条不多：{results:#?}");
-    let children: Vec<AgentId> =
-        session.live_agents().into_iter().filter(|a| a != &root).collect();
-    assert_eq!(children.len(), 2, "两个后台子都该还在活名单上：{children:?}");
+    assert_eq!(
+        results.len(),
+        2,
+        "父该正好有两条 tool_result（两次 spawn），一条不多：{results:#?}"
+    );
+    let children: Vec<AgentId> = session
+        .live_agents()
+        .into_iter()
+        .filter(|a| a != &root)
+        .collect();
+    assert_eq!(
+        children.len(),
+        2,
+        "两个后台子都该还在活名单上：{children:?}"
+    );
     for (call_id, content, is_error) in &results {
         assert!(!is_error, "后台 spawn 该立刻成功收敛：{call_id} {content}");
-        assert!(content.contains("agent_id"), "正文该是 {{\"agent_id\":...}}：{content}");
         assert!(
-            children.iter().any(|child| content.contains(child.as_str())),
+            content.contains("agent_id"),
+            "正文该是 {{\"agent_id\":...}}：{content}"
+        );
+        assert!(
+            children
+                .iter()
+                .any(|child| content.contains(child.as_str())),
             "正文该点名一个真实存在的子 agent：{content}，活的是 {children:?}"
         );
     }
-    assert_ne!(results[0].1, results[1].1, "两次 spawn 该拿到两个不同的 agent_id");
+    assert_ne!(
+        results[0].1, results[1].1,
+        "两次 spawn 该拿到两个不同的 agent_id"
+    );
 
     // --- 子落终态时**没有**回写父（结果进了 stash） ---
     assert!(
@@ -109,14 +149,25 @@ fn two_background_children_run_while_the_parent_keeps_going_and_never_write_back
     );
     // 而子自己那边确实答完了 —— 上面那两条不是因为「子根本没跑」而绿的。
     for child in &children {
-        assert_eq!(session.status_of(child), TurnStatus::Done { truncated: false });
+        assert_eq!(
+            session.status_of(child),
+            TurnStatus::Done { truncated: false }
+        );
     }
     assert!(
-        children.iter().any(|c| any_message_mentions(&session, std::slice::from_ref(c), "ANSWERBGA")),
+        children.iter().any(|c| any_message_mentions(
+            &session,
+            std::slice::from_ref(c),
+            "ANSWERBGA"
+        )),
         "子甲的回答该落在它自己的历史里"
     );
     assert!(
-        children.iter().any(|c| any_message_mentions(&session, std::slice::from_ref(c), "ANSWERBGB")),
+        children.iter().any(|c| any_message_mentions(
+            &session,
+            std::slice::from_ref(c),
+            "ANSWERBGB"
+        )),
         "子乙的回答该落在它自己的历史里"
     );
 

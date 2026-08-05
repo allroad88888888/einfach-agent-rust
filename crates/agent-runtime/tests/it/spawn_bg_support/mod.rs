@@ -28,9 +28,11 @@ pub fn tool_results(session: &Session, agent: &AgentId) -> Vec<(String, String, 
         .iter()
         .flat_map(|m| m.blocks.iter())
         .filter_map(|block| match block {
-            ContentBlock::ToolResult { id, content, is_error } => {
-                Some((id.0.to_string(), content.to_string(), *is_error))
-            }
+            ContentBlock::ToolResult {
+                id,
+                content,
+                is_error,
+            } => Some((id.0.to_string(), content.to_string(), *is_error)),
             _ => None,
         })
         .collect()

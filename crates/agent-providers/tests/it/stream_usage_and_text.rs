@@ -29,7 +29,9 @@ fn tail_usage_in_separate_empty_choices_frame_is_captured() {
 
     let finish_events = acc.push_line(finish_frame);
     assert!(
-        finish_events.iter().any(|e| matches!(e, StreamEvent::Finished(StopReason::EndTurn))),
+        finish_events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::Finished(StopReason::EndTurn))),
         "finish 帧要产出 Finished(EndTurn)，实际: {finish_events:?}"
     );
 
@@ -126,7 +128,10 @@ fn non_data_lines_are_ignored_without_error() {
 
     for line in [": keep-alive", "", ": keep-alive"] {
         let events = acc.push_line(line);
-        assert!(events.is_empty(), "非 data: 行必须返回空事件，实际: {events:?}");
+        assert!(
+            events.is_empty(),
+            "非 data: 行必须返回空事件，实际: {events:?}"
+        );
     }
     assert!(!acc.is_done());
 }

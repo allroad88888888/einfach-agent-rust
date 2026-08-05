@@ -26,9 +26,9 @@ mod fixtures;
 mod consistency;
 
 pub use export::export_protocol_types;
-pub use fixtures::write_fixtures;
 #[cfg(test)]
 pub(crate) use fixtures::sample_session_events;
+pub use fixtures::write_fixtures;
 
 use std::path::{Path, PathBuf};
 

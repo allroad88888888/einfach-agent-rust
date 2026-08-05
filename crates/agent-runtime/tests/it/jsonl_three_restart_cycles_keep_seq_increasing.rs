@@ -75,17 +75,20 @@ fn entry_seqs_in_file(path: &Path) -> Vec<u64> {
 }
 
 fn build_ctx(port: u16, root: &Path, backend: Box<agent_runtime::SessionBackend>) -> RunnerCtx {
-    use std::sync::Arc;
     use agent_core::SessionConfig;
     use agent_providers::deepseek::DeepSeek;
     use agent_runtime::ToolTable;
     use agent_tools::ToolExecutor;
     use agent_transport::Client;
+    use std::sync::Arc;
 
     let client = Client::with_config(
         std::time::Duration::from_secs(5),
         std::time::Duration::from_millis(50),
-        agent_transport::Backoff { base: std::time::Duration::from_millis(10), max_attempts: 1 },
+        agent_transport::Backoff {
+            base: std::time::Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     RunnerCtx::new(
@@ -96,7 +99,12 @@ fn build_ctx(port: u16, root: &Path, backend: Box<agent_runtime::SessionBackend>
         fs,
         ToolTable::builtin(),
         Vec::new(),
-        SessionConfig { model: Arc::from("deepseek-v4-pro"), temperature: None, max_tokens: None, context_window: None },
+        SessionConfig {
+            model: Arc::from("deepseek-v4-pro"),
+            temperature: None,
+            max_tokens: None,
+            context_window: None,
+        },
         backend,
         Box::new(|_ev| {}),
     )
@@ -110,7 +118,9 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
     // ---- 周期 1：全新会话，写一轮，drop 掉 ctx（连同它的 Jsonl）。----
     {
         let port = support::spawn_scripted_server(vec![plain_turn("cycle one reply")]);
-        let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| panic!("周期 1 不该有加载错误：{e}"));
+        let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| {
+            panic!("周期 1 不该有加载错误：{e}")
+        });
         let mut ctx = build_ctx(port, &dir, backend);
         let mut session = Session::new(AgentId::root());
         let status = agent_runtime::run_turn(&mut session, &mut ctx, "cycle one");
@@ -120,12 +130,24 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
 
     // ---- 周期 2、3：各自「重启」——recover 载回、seed_after_recover 对齐水位、
     // 写一轮、drop。----
-    for (turn_text, reply_text) in [("cycle two", "cycle two reply"), ("cycle three", "cycle three reply")] {
-        let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| panic!("恢复不该有加载错误：{e}"));
-        let mut session = agent_runtime::recover(backend.as_ref(), AgentId::root(), agent_core::DEFAULT_HISTORY_CAP, &mut |k| {
-            panic!("不该有不认识的键：{k:?}")
+    for (turn_text, reply_text) in [
+        ("cycle two", "cycle two reply"),
+        ("cycle three", "cycle three reply"),
+    ] {
+        let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| {
+            panic!("恢复不该有加载错误：{e}")
+        });
+        let mut session = agent_runtime::recover(
+            backend.as_ref(),
+            AgentId::root(),
+            agent_core::DEFAULT_HISTORY_CAP,
+            &mut |k| panic!("不该有不认识的键：{k:?}"),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "恢复失败——这正是 bug 1 的症状（seq 在文件中段跌回 0 之后撞 SeqNotIncreasing）：{e}"
+            )
         })
-        .unwrap_or_else(|e| panic!("恢复失败——这正是 bug 1 的症状（seq 在文件中段跌回 0 之后撞 SeqNotIncreasing）：{e}"))
         .expect("前面写过东西，该恢复出 Some");
 
         let port = support::spawn_scripted_server(vec![plain_turn(reply_text)]);
@@ -152,15 +174,28 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
     let mut uniq = seqs.clone();
     uniq.sort_unstable();
     uniq.dedup();
-    assert_eq!(uniq.len(), seqs.len(), "每条 entry 应该恰好出现一次，不该被重复 append：{seqs:?}");
+    assert_eq!(
+        uniq.len(),
+        seqs.len(),
+        "每条 entry 应该恰好出现一次，不该被重复 append：{seqs:?}"
+    );
 
     // ---- 第三次「重启」也必须照常工作，不是只看文件形状——真的重放一遍。----
-    let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| panic!("第三次恢复不该有加载错误：{e}"));
-    let recovered = agent_runtime::recover(backend.as_ref(), AgentId::root(), agent_core::DEFAULT_HISTORY_CAP, &mut |k| {
-        panic!("不该有不认识的键：{k:?}")
-    })
+    let backend = agent_runtime::open_backend(Some(session_path.clone()), |e| {
+        panic!("第三次恢复不该有加载错误：{e}")
+    });
+    let recovered = agent_runtime::recover(
+        backend.as_ref(),
+        AgentId::root(),
+        agent_core::DEFAULT_HISTORY_CAP,
+        &mut |k| panic!("不该有不认识的键：{k:?}"),
+    )
     .expect("第三周期该能正常恢复，不该撞 SeqNotIncreasing 搁浅")
     .expect("写过东西该恢复出 Some");
     assert_eq!(recovered.status(), TurnStatus::Done { truncated: false });
-    assert_eq!(recovered.messages().len(), 6, "三轮各一问一答，共 6 条——不多不少，没有任何一轮被静默冲掉");
+    assert_eq!(
+        recovered.messages().len(),
+        6,
+        "三轮各一问一答，共 6 条——不多不少，没有任何一轮被静默冲掉"
+    );
 }

@@ -17,8 +17,10 @@ use agent_store::Store;
 fn listener_setting_other_atom_keeps_world_consistent() {
     let store = Store::new();
     let count = store.create_atom(num(0.0));
-    let double = store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
-    let triple = store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 3.0));
+    let double =
+        store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
+    let triple =
+        store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 3.0));
     let secondary = store.create_atom(num(10.0));
 
     let secondary_calls = Rc::new(Cell::new(0u32));
@@ -74,7 +76,8 @@ fn listener_setting_other_atom_keeps_world_consistent() {
 fn listener_setting_dep_updates_derived_once() {
     let store = Store::new();
     let base = store.create_atom(num(1.0));
-    let derived = store.create_derived_ctx(move |args| num(args.get(base).as_number().unwrap() * 10.0));
+    let derived =
+        store.create_derived_ctx(move |args| num(args.get(base).as_number().unwrap() * 10.0));
     let control = store.create_atom(num(0.0));
 
     let base_calls = Rc::new(Cell::new(0u32));
@@ -125,11 +128,16 @@ fn listener_setting_dep_updates_derived_once() {
 #[test]
 fn batched_write_of_1000_atoms_publishes_merged_derive_once() {
     let store = Store::new();
-    let options: Vec<_> = (0..1000).map(|i| store.create_atom(num(i as f64))).collect();
+    let options: Vec<_> = (0..1000)
+        .map(|i| store.create_atom(num(i as f64)))
+        .collect();
 
     let options_for_merge = options.clone();
     let merged = store.create_derived_ctx(move |args| {
-        let sum: f64 = options_for_merge.iter().map(|&o| args.get(o).as_number().unwrap()).sum();
+        let sum: f64 = options_for_merge
+            .iter()
+            .map(|&o| args.get(o).as_number().unwrap())
+            .sum();
         num(sum)
     });
     let initial: f64 = (0..1000).map(|i| i as f64).sum();

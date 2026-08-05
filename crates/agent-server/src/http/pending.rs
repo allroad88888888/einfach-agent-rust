@@ -40,6 +40,10 @@ pub(crate) struct PendingToolsResponse {
 
 impl From<RemoteToolWaiting> for PendingTool {
     fn from(waiting: RemoteToolWaiting) -> Self {
-        PendingTool { agent: waiting.agent, call_id: waiting.call_id, request: waiting.request }
+        PendingTool {
+            agent: waiting.agent,
+            call_id: waiting.call_id,
+            request: waiting.request,
+        }
     }
 }

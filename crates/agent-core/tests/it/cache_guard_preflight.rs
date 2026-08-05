@@ -57,14 +57,22 @@ fn key_order_flip_in_tools_is_caught_and_named() {
 
     let run1 = r#"[{"name":"fs/read","description":"读文件"}]"#;
     let run2 = r#"[{"description":"读文件","name":"fs/read"}]"#;
-    assert_ne!(run1, run2, "构造的两次序列化必须真的不同，否则这条测试什么也没测");
+    assert_ne!(
+        run1, run2,
+        "构造的两次序列化必须真的不同，否则这条测试什么也没测"
+    );
 
     let prev = image(run1, system, history);
     let next = image(run2, system, history);
 
     // 本轮没打算改前缀（M1 恒如此）——所以这是事故，不是预期。
     let verdict = check_drift(first_drift(&prev, &next), PrefixIntent::Reuse);
-    assert_eq!(verdict, DriftVerdict::Unexpected { segment: Segment::Tools });
+    assert_eq!(
+        verdict,
+        DriftVerdict::Unexpected {
+            segment: Segment::Tools
+        }
+    );
 
     // 「只报前缀变了等于没报」：措辞里必须说得出是哪一段。
     let text = verdict.to_string();
@@ -88,13 +96,17 @@ fn each_segment_is_named_individually() {
     let sys_changed = image("[tools]", "system v2", "history");
     assert_eq!(
         check_drift(first_drift(&base, &sys_changed), PrefixIntent::Reuse),
-        DriftVerdict::Unexpected { segment: Segment::System }
+        DriftVerdict::Unexpected {
+            segment: Segment::System
+        }
     );
 
     let hist_changed = image("[tools]", "system", "history 被中途改写了");
     assert_eq!(
         check_drift(first_drift(&base, &hist_changed), PrefixIntent::Reuse),
-        DriftVerdict::Unexpected { segment: Segment::History }
+        DriftVerdict::Unexpected {
+            segment: Segment::History
+        }
     );
 }
 
@@ -108,11 +120,15 @@ fn intentional_change_is_expected_not_an_accident() {
 
     assert_eq!(
         check_drift(drift, PrefixIntent::Reuse),
-        DriftVerdict::Unexpected { segment: Segment::History }
+        DriftVerdict::Unexpected {
+            segment: Segment::History
+        }
     );
     assert_eq!(
         check_drift(drift, PrefixIntent::Intentional),
-        DriftVerdict::Expected { segment: Segment::History }
+        DriftVerdict::Expected {
+            segment: Segment::History
+        }
     );
 }
 
@@ -120,7 +136,12 @@ fn intentional_change_is_expected_not_an_accident() {
 /// 没有隐藏状态可言。零网络那一半由下面的元测试直接查源码。
 #[test]
 fn layer1_is_pure() {
-    let inputs = [None, Some(Segment::Tools), Some(Segment::System), Some(Segment::History)];
+    let inputs = [
+        None,
+        Some(Segment::Tools),
+        Some(Segment::System),
+        Some(Segment::History),
+    ];
     for intent in [PrefixIntent::Reuse, PrefixIntent::Intentional] {
         for drift in inputs {
             let first = check_drift(drift, intent);
@@ -159,5 +180,9 @@ fn cache_module_has_no_clock_no_random_no_network() {
         })
         .collect();
 
-    assert!(offending.is_empty(), "cache/ 下不许出现时钟/随机/网络：\n{}", offending.join("\n"));
+    assert!(
+        offending.is_empty(),
+        "cache/ 下不许出现时钟/随机/网络：\n{}",
+        offending.join("\n")
+    );
 }

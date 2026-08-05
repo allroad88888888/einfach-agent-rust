@@ -33,7 +33,9 @@ pub fn build_ctx(
     let table = ToolTable::builtin().with_mcp(entries);
     let (ctx, events) = super::build_ctx_agent_aware(port, dir, table);
     let registry = registry_with_fake_server(server, script);
-    let ctx = ctx.with_mcp(registry).with_mcp_timeout(Duration::from_secs(5));
+    let ctx = ctx
+        .with_mcp(registry)
+        .with_mcp_timeout(Duration::from_secs(5));
     (ctx, events)
 }
 
@@ -61,7 +63,9 @@ pub fn tool_entry(server_id: &str, name: &str, read_only: bool) -> (ToolSpec, Re
         name: name.to_string(),
         description: Some(format!("{name} tool")),
         input_schema: json!({"type": "object", "properties": {"message": {"type": "string"}}}),
-        annotations: Some(Annotations { read_only_hint: Some(read_only) }),
+        annotations: Some(Annotations {
+            read_only_hint: Some(read_only),
+        }),
     };
     translate(&tool, server_id)
 }

@@ -22,7 +22,11 @@ pub(in crate::http) struct InputRequest {
     text: String,
 }
 
-pub(in crate::http) async fn input(State(state): State<AppState>, Path(id): Path<String>, ApiJson(body): ApiJson<InputRequest>) -> Result<StatusCode, ApiError> {
+pub(in crate::http) async fn input(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    ApiJson(body): ApiJson<InputRequest>,
+) -> Result<StatusCode, ApiError> {
     state.dispatch(&SessionId::from(id), Command::Input(body.text))?;
     Ok(StatusCode::ACCEPTED)
 }

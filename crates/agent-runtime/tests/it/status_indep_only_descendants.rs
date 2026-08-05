@@ -41,35 +41,73 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
     let server = RoutedServer::start(vec![
         // 按「越具体越靠前」排：root/a1 的第二跳请求体里同时有 call_a2、TASKA1、
         // TASKALEFT 三个 needle，靠这条排在最前面认领。
-        Route { needle: "call_a2", delay: Duration::ZERO, status: 200, lines: sse_text("left branch reported") },
-        Route { needle: "call_r1", delay: Duration::ZERO, status: 200, lines: sse_text("all done") },
-        Route { needle: "TASKA1", delay: Duration::ZERO, status: 200, lines: sse_text("grandchild answer") },
+        Route {
+            needle: "call_a2",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("left branch reported"),
+        },
+        Route {
+            needle: "call_r1",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("all done"),
+        },
+        Route {
+            needle: "TASKA1",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("grandchild answer"),
+        },
         Route {
             needle: "TASKALEFT",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_a1", &spawn_wire, r#"{"task":"TASKA1 dig one level deeper"}"#),
+                (
+                    "call_a1",
+                    &spawn_wire,
+                    r#"{"task":"TASKA1 dig one level deeper"}"#,
+                ),
                 ("call_a2", &status_wire, "{}"),
             ]),
         },
-        Route { needle: "TASKBRIGHT", delay: SIBLING_DELAY, status: 200, lines: sse_text("right branch answer") },
+        Route {
+            needle: "TASKBRIGHT",
+            delay: SIBLING_DELAY,
+            status: 200,
+            lines: sse_text("right branch answer"),
+        },
         Route {
             needle: "kickoff-scope",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_r1", &spawn_wire, r#"{"task":"TASKALEFT work the left branch"}"#),
-                ("call_r2", &spawn_wire, r#"{"task":"TASKBRIGHT work the right branch"}"#),
+                (
+                    "call_r1",
+                    &spawn_wire,
+                    r#"{"task":"TASKALEFT work the left branch"}"#,
+                ),
+                (
+                    "call_r2",
+                    &spawn_wire,
+                    r#"{"task":"TASKBRIGHT work the right branch"}"#,
+                ),
             ]),
         },
     ]);
 
-    let tools = agent_runtime::ToolTable::builtin().with_spawn(AgentLimits::default()).with_status();
+    let tools = agent_runtime::ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status();
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff-scope two branches, the left one goes deeper");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff-scope two branches, the left one goes deeper",
+    );
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();
@@ -80,7 +118,15 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
     // 四个 agent 全在树上——「兄弟没出现」不能是因为它压根不存在。
     let mut live = session.live_agents();
     live.sort();
-    assert_eq!(live, vec![root.clone(), left.clone(), grandchild.clone(), right.clone()]);
+    assert_eq!(
+        live,
+        vec![
+            root.clone(),
+            left.clone(),
+            grandchild.clone(),
+            right.clone()
+        ]
+    );
 
     // --- 红线 10：只下读 ---
     let (body, is_error) = tool_result(&session, &left, "call_a2");
@@ -104,8 +150,14 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
     );
 
     // --- 兄弟的任何痕迹都不该漏进来 ---
-    assert!(!body.contains("TASKBRIGHT"), "兄弟的任务文本不该出现：{body}");
-    assert!(!body.contains("right branch"), "兄弟的正文更不该出现：{body}");
+    assert!(
+        !body.contains("TASKBRIGHT"),
+        "兄弟的任务文本不该出现：{body}"
+    );
+    assert!(
+        !body.contains("right branch"),
+        "兄弟的正文更不该出现：{body}"
+    );
 
     let root_text: Vec<_> = session
         .messages()
@@ -116,5 +168,8 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
             _ => None,
         })
         .collect();
-    assert!(root_text.iter().any(|t| t.contains("all done")), "整棵树该正常收工：{root_text:#?}");
+    assert!(
+        root_text.iter().any(|t| t.contains("all done")),
+        "整棵树该正常收工：{root_text:#?}"
+    );
 }

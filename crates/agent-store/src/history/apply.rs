@@ -102,7 +102,9 @@ mod tests {
     const TOKENS: &str = "agent/a1/tokens";
     const STEPS: &str = "agent/a1/steps";
 
-    fn n(v: i64) -> Tv { Tv::Num(v) }
+    fn n(v: i64) -> Tv {
+        Tv::Num(v)
+    }
     fn as_num(v: &Tv) -> i64 {
         match v {
             Tv::Num(x) => *x,
@@ -155,9 +157,9 @@ mod tests {
             for agent in live_agents(&args.get(roster)) {
                 for name in ["tokens", "steps"] {
                     let key = format!("agent/{agent}/{name}");
-                    let id = fm.borrow_mut().get_or_create(key.clone(), || {
-                        st.create_atom(default_for(&key))
-                    });
+                    let id = fm
+                        .borrow_mut()
+                        .get_or_create(key.clone(), || st.create_atom(default_for(&key)));
                     sum += as_num(&args.get(id));
                 }
             }
@@ -187,8 +189,12 @@ mod tests {
         }
     }
 
-    fn same_turn(a: &u32, b: &u32) -> bool { a == b }
-    fn open(_: &u32) -> bool { false }
+    fn same_turn(a: &u32, b: &u32) -> bool {
+        a == b
+    }
+    fn open(_: &u32) -> bool {
+        false
+    }
 
     #[test]
     fn an_evicted_subgraph_is_rebuilt_by_undo_and_the_derived_recomputes() {
@@ -196,14 +202,28 @@ mod tests {
         let mut log = Log::new();
 
         // turn 1 spawn：子 agent 的槽位在这一步才被创建。turn 2 干活。
-        command(&w, &mut log, 1, &[(ROSTER, Tv::Roster(vec!["a1"])), (TOKENS, n(3)), (STEPS, n(1))]);
+        command(
+            &w,
+            &mut log,
+            1,
+            &[
+                (ROSTER, Tv::Roster(vec!["a1"])),
+                (TOKENS, n(3)),
+                (STEPS, n(1)),
+            ],
+        );
         command(&w, &mut log, 2, &[(TOKENS, n(12)), (STEPS, n(4))]);
         assert_eq!(w.store.get(w.total), n(16));
         let old = (slot(&w, TOKENS), slot(&w, STEPS));
 
         // turn 3 收尾：清空槽位（prev 当场捕获的是活值 12 / 4）、移出名单，然后逐出。
         // 逐出必须自叶向根：名单里还有它时 derived 持着边，store 会拒绝。
-        command(&w, &mut log, 3, &[(TOKENS, n(0)), (STEPS, n(0)), (ROSTER, Tv::Roster(vec![]))]);
+        command(
+            &w,
+            &mut log,
+            3,
+            &[(TOKENS, n(0)), (STEPS, n(0)), (ROSTER, Tv::Roster(vec![]))],
+        );
         assert!(w.fam.borrow_mut().evict(&w.store, &TOKENS.to_string()));
         assert!(w.fam.borrow_mut().evict(&w.store, &STEPS.to_string()));
         assert!(!w.store.has_atom(old.0) && !w.store.has_atom(old.1));
@@ -231,7 +251,16 @@ mod tests {
     fn apply_next_rebuilds_what_redo_needs_too() {
         let w = build();
         let mut log = Log::new();
-        command(&w, &mut log, 1, &[(ROSTER, Tv::Roster(vec!["a1"])), (TOKENS, n(3)), (STEPS, n(1))]);
+        command(
+            &w,
+            &mut log,
+            1,
+            &[
+                (ROSTER, Tv::Roster(vec!["a1"])),
+                (TOKENS, n(3)),
+                (STEPS, n(1)),
+            ],
+        );
         assert_eq!(w.store.get(w.total), n(4));
 
         // 退回子 agent 出生之前（名单空了 → 槽位没人依赖），再把这个子图整个逐出。
@@ -256,7 +285,12 @@ mod tests {
         // 不成立 —— 带边的 derived 根本活不到重建那一刻。
         let w = build();
         let mut log = Log::new();
-        command(&w, &mut log, 1, &[(ROSTER, Tv::Roster(vec!["a1"])), (TOKENS, n(3))]);
+        command(
+            &w,
+            &mut log,
+            1,
+            &[(ROSTER, Tv::Roster(vec!["a1"])), (TOKENS, n(3))],
+        );
         assert!(w.store.has_dependents(slot(&w, TOKENS)));
         assert!(!w.fam.borrow_mut().evict(&w.store, &TOKENS.to_string()));
 
@@ -283,7 +317,16 @@ mod tests {
         // 一次 batch 里同一个槽位写两次（0→2→5），prev 链是 0→2：倒序才回得到 0。
         let w = build();
         let mut log = Log::new();
-        command(&w, &mut log, 1, &[(ROSTER, Tv::Roster(vec!["a1"])), (TOKENS, n(2)), (TOKENS, n(5))]);
+        command(
+            &w,
+            &mut log,
+            1,
+            &[
+                (ROSTER, Tv::Roster(vec!["a1"])),
+                (TOKENS, n(2)),
+                (TOKENS, n(5)),
+            ],
+        );
         assert_eq!(w.store.get(w.total), n(5));
 
         let outcome = log.undo_one(open);

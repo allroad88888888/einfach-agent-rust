@@ -50,6 +50,12 @@ impl SessionsHandle {
     /// 「一个失败就放弃剩下的」，失败原因随每个 id 一起报回去，宿主决定要不要
     /// 打印。
     pub fn close_all(&self) -> Vec<(SessionId, Result<(), CloseError>)> {
-        self.ids().into_iter().map(|id| { let outcome = self.0.registry().close(&id); (id, outcome) }).collect()
+        self.ids()
+            .into_iter()
+            .map(|id| {
+                let outcome = self.0.registry().close(&id);
+                (id, outcome)
+            })
+            .collect()
     }
 }

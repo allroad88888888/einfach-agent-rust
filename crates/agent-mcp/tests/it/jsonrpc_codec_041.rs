@@ -8,7 +8,9 @@
 
 mod common;
 
-use agent_mcp::{RpcResponse, encode_notification, encode_request, parse_response, tools_call_params};
+use agent_mcp::{
+    RpcResponse, encode_notification, encode_request, parse_response, tools_call_params,
+};
 use common::recorded_result;
 use serde_json::{Value, json};
 
@@ -27,7 +29,8 @@ fn parse_response_happy_path_result() {
 
 #[test]
 fn parse_response_happy_path_error() {
-    let bytes = br#"{"jsonrpc":"2.0","id":42,"error":{"code":-32601,"message":"Method not found"}}"#;
+    let bytes =
+        br#"{"jsonrpc":"2.0","id":42,"error":{"code":-32601,"message":"Method not found"}}"#;
     let response = parse_response(bytes).expect("合法 error 响应应当解析成功");
     match response {
         RpcResponse::Error { id, error } => {

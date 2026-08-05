@@ -17,7 +17,10 @@ mod support;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ContentBlock, Session, ToolCallId, TurnStatus};
-use agent_runtime::{RemoteToolOutput, RunnerEvent, ToolTable, resolve_remote_tool, run_turn, sweep_remote_tool_deadlines};
+use agent_runtime::{
+    RemoteToolOutput, RunnerEvent, ToolTable, resolve_remote_tool, run_turn,
+    sweep_remote_tool_deadlines,
+};
 
 use support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
 
@@ -29,7 +32,11 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
     // 两跳：hop1 调一个**真在表里**的远端工具，hop2 是超时结果回到模型之后它的
     // 收敛发言。没有任何东西会回传 hop1 那次调用——这正是本测试模拟的世界。
     let port = spawn_scripted_server(vec![
-        sse_tool_call("call_card", "browser_action", r#"{\"action\": \"render_card\"}"#),
+        sse_tool_call(
+            "call_card",
+            "browser_action",
+            r#"{\"action\": \"render_card\"}"#,
+        ),
         sse_text("宿主没响应，我改用文字说明。"),
     ]);
     let (ctx, events) = build_ctx_with(port, &dir, ToolTable::standard());
@@ -38,17 +45,30 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
 
     // 第一步：轮次派出远端调用就地停住（既有行为，不变）。
     let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片");
-    assert_eq!(parked, TurnStatus::ToolsPending, "远端调用派出后本轮该在这里停住等回传");
+    assert_eq!(
+        parked,
+        TurnStatus::ToolsPending,
+        "远端调用派出后本轮该在这里停住等回传"
+    );
     assert_eq!(ctx.pending_remote_tool_count(), 1);
 
     // 第二步：宿主空闲等命令——等到截止线，没等到任何回传。
     let deadline = ctx.next_remote_deadline().expect("060：等待槽必须带截止线");
-    assert!(deadline <= Instant::now() + BUDGET, "截止线该是登记那一刻 + 预算，不是别的什么时刻");
-    std::thread::sleep(deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(20));
+    assert!(
+        deadline <= Instant::now() + BUDGET,
+        "截止线该是登记那一刻 + 预算，不是别的什么时刻"
+    );
+    std::thread::sleep(
+        deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(20),
+    );
 
     // 第三步：到点扫一次 —— 槽被判失败，事件泵接着把这一轮跑完。
     let status = sweep_remote_tool_deadlines(&mut session, &mut ctx).expect("到点该有槽过期");
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "超时该让轮次收尾，不是永久 ToolsPending");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "超时该让轮次收尾，不是永久 ToolsPending"
+    );
     assert_eq!(ctx.pending_remote_tool_count(), 0, "过期槽取走即消费");
     assert_eq!(ctx.next_remote_deadline(), None);
 
@@ -58,13 +78,21 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
         .iter()
         .flat_map(|m| m.blocks.iter())
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { content, is_error, .. } => Some((content.to_string(), *is_error)),
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => Some((content.to_string(), *is_error)),
             _ => None,
         })
         .collect();
     assert_eq!(results.len(), 1, "该正好有一条 tool_result: {results:#?}");
-    assert!(results[0].1, "超时该落 is_error 让模型自己收敛: {results:#?}");
-    assert!(results[0].0.contains("remote_tool_timeout"), "错误里该说清是超时: {results:#?}");
+    assert!(
+        results[0].1,
+        "超时该落 is_error 让模型自己收敛: {results:#?}"
+    );
+    assert!(
+        results[0].0.contains("remote_tool_timeout"),
+        "错误里该说清是超时: {results:#?}"
+    );
 
     // 可见性跟真回传落地同款：宿主/UI 看到这次调用有了结局。
     let events = events.borrow();
@@ -85,5 +113,8 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
         ToolCallId::new("call_card"),
         RemoteToolOutput::Success("{\"cardId\":\"card-1\"}".to_string()),
     );
-    assert!(late.is_err(), "超时之后迟到的回传必须被安全拒绝，不能写进已经收尾的轮次");
+    assert!(
+        late.is_err(),
+        "超时之后迟到的回传必须被安全拒绝，不能写进已经收尾的轮次"
+    );
 }

@@ -107,11 +107,19 @@ mod tests {
     type Log = History<String, i32, u32>;
 
     fn change(key: &str, prev: i32, next: i32) -> Change<String, i32> {
-        Change { key: key.to_string(), prev, next }
+        Change {
+            key: key.to_string(),
+            prev,
+            next,
+        }
     }
 
     fn entry(seq: u64) -> Entry<String, i32, u32> {
-        Entry { seq, meta: 1, changes: vec![change("a", seq as i32, seq as i32 + 1)] }
+        Entry {
+            seq,
+            meta: 1,
+            changes: vec![change("a", seq as i32, seq as i32 + 1)],
+        }
     }
 
     /// 三步日志：seq 0/1/2，游标在顶。
@@ -125,7 +133,11 @@ mod tests {
 
     /// 拒绝的理由。`History` 没有 `PartialEq`（也不该有 —— 它是个可变容器），
     /// 所以断言拿 `unwrap_err` 而不是比 `Result`。
-    fn rejected(entries: Vec<Entry<String, i32, u32>>, cursor: usize, next_seq: u64) -> InvalidHistory {
+    fn rejected(
+        entries: Vec<Entry<String, i32, u32>>,
+        cursor: usize,
+        next_seq: u64,
+    ) -> InvalidHistory {
         Log::from_parts(entries, cursor, next_seq).unwrap_err()
     }
 
@@ -153,7 +165,10 @@ mod tests {
 
     #[test]
     fn a_cursor_past_the_end_is_rejected_but_the_top_is_fine() {
-        assert_eq!(rejected(vec![entry(0)], 2, 1), InvalidHistory::CursorOutOfRange);
+        assert_eq!(
+            rejected(vec![entry(0)], 2, 1),
+            InvalidHistory::CursorOutOfRange
+        );
         assert!(Log::from_parts(vec![entry(0)], 1, 1).is_ok()); // 游标在栈顶
         assert!(Log::from_parts(Vec::new(), 0, 0).is_ok()); // 空日志
     }
@@ -174,8 +189,14 @@ mod tests {
 
     #[test]
     fn next_seq_must_be_past_the_last_entry() {
-        assert_eq!(rejected(vec![entry(4)], 1, 4), InvalidHistory::NextSeqTooSmall);
-        assert_eq!(rejected(vec![entry(4)], 1, 0), InvalidHistory::NextSeqTooSmall);
+        assert_eq!(
+            rejected(vec![entry(4)], 1, 4),
+            InvalidHistory::NextSeqTooSmall
+        );
+        assert_eq!(
+            rejected(vec![entry(4)], 1, 0),
+            InvalidHistory::NextSeqTooSmall
+        );
         assert!(Log::from_parts(vec![entry(4)], 1, 5).is_ok());
         // 空 entries 不设下限：cap 把老条目全裁光之后 next_seq 必须留在高位。
         assert!(Log::from_parts(Vec::new(), 0, 4096).is_ok());

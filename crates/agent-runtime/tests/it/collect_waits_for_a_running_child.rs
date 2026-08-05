@@ -35,7 +35,12 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
     let collect_wire = wire_tool_name(agent_runtime::COLLECT_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_collect_b", delay: Duration::ZERO, status: 200, lines: sse_text("收工：B 说好了") },
+        Route {
+            needle: "call_collect_b",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("收工：B 说好了"),
+        },
         // root 第二跳：**立刻**发 collect —— 这时候 B 才刚起飞。
         Route {
             needle: "call_bg_b",
@@ -43,7 +48,12 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
             status: 200,
             lines: sse_tool_call("call_collect_b", &collect_wire, r#"{"id":"root/a1"}"#),
         },
-        Route { needle: "TASKSLOW", delay: CHILD, status: 200, lines: sse_text("ANSWERSLOW 慢子的答案") },
+        Route {
+            needle: "TASKSLOW",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("ANSWERSLOW 慢子的答案"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
@@ -56,7 +66,10 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
@@ -66,18 +79,31 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
     // --- 结果真的回来了，而且是走 collect 那个槽回来的 ---
     let results = tool_results(&session, &AgentId::root());
     assert_eq!(results.len(), 2, "spawn + collect 各一条：{results:#?}");
-    assert!(results[0].1.contains("root/a1"), "第一条是后台 spawn 回的 agent_id：{results:#?}");
-    assert_eq!(results[1].0, "call_collect_b", "第二条该落在 collect 那个 call_id 上");
+    assert!(
+        results[0].1.contains("root/a1"),
+        "第一条是后台 spawn 回的 agent_id：{results:#?}"
+    );
+    assert_eq!(
+        results[1].0, "call_collect_b",
+        "第二条该落在 collect 那个 call_id 上"
+    );
     assert_eq!(results[1].1, "ANSWERSLOW 慢子的答案");
     assert!(!results[1].2);
 
     let child = AgentId::new("root/a1");
-    assert_eq!(session.status_of(&child), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        session.status_of(&child),
+        TurnStatus::Done { truncated: false }
+    );
 
     // --- 时序：collect 发出去时 B 还在跑，父的下一跳在 B 答完之后 ---
     let b = server.call("TASKSLOW").expect("子该被调用");
-    let collect_hop = server.call("call_bg_b").expect("root 该发出第二跳（collect）");
-    let resume_hop = server.call("call_collect_b").expect("root 该在拿到结果后恢复");
+    let collect_hop = server
+        .call("call_bg_b")
+        .expect("root 该发出第二跳（collect）");
+    let resume_hop = server
+        .call("call_collect_b")
+        .expect("root 该在拿到结果后恢复");
     assert!(
         collect_hop.start < b.end,
         "collect 该在 B 还在跑的时候就发出去（不然测的是 stash 那条路）：collect={:?} b.end={:?}",
@@ -92,10 +118,20 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
     );
 
     // --- 父在等的那段时间里**一次请求都没多发** ---
-    let root_hops = server.calls().into_iter().filter(|c| c.needle != "TASKSLOW").count();
-    assert_eq!(root_hops, 3, "root 该正好三跳：kickoff / collect / 收工。多一跳 = 它压根没被挡住");
+    let root_hops = server
+        .calls()
+        .into_iter()
+        .filter(|c| c.needle != "TASKSLOW")
+        .count();
+    assert_eq!(
+        root_hops, 3,
+        "root 该正好三跳：kickoff / collect / 收工。多一跳 = 它压根没被挡住"
+    );
 
     // --- 领走了就不是孤儿：轮末没有任何告警 ---
     let events = events.borrow();
-    assert!(!warned_about(&events, "root/a1"), "被领走的子不该在轮末被告警：{events:#?}");
+    assert!(
+        !warned_about(&events, "root/a1"),
+        "被领走的子不该在轮末被告警：{events:#?}"
+    );
 }

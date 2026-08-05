@@ -7,7 +7,10 @@
 #[test]
 fn the_invariants_script_passes_across_the_whole_repo() {
     let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/../../scripts/check-invariants.sh");
+    let script = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scripts/check-invariants.sh"
+    );
 
     let output = std::process::Command::new("bash")
         .arg(script)

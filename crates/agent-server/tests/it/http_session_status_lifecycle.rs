@@ -40,7 +40,11 @@ async fn creating_a_session_and_asking_its_status_reports_alive() {
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     assert_eq!(create.status, 201);
-    assert!(create.header("content-type").is_some_and(|v| v.starts_with("application/json")));
+    assert!(
+        create
+            .header("content-type")
+            .is_some_and(|v| v.starts_with("application/json"))
+    );
     let id = support::extract_json_string_field(&create.body, "id");
     assert!(!id.is_empty());
 
@@ -56,12 +60,26 @@ async fn an_unknown_session_id_is_404_everywhere() {
 
     let status = http_client::request(server.addr, "GET", "/sessions/never-existed", None);
     assert_eq!(status.status, 404, "{}", status.body);
-    assert!(status.body.contains("\"session_not_found\""), "{}", status.body);
+    assert!(
+        status.body.contains("\"session_not_found\""),
+        "{}",
+        status.body
+    );
 
-    let input = http_client::request(server.addr, "POST", "/sessions/never-existed/input", Some("{\"text\":\"hi\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        "/sessions/never-existed/input",
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 404, "{}", input.body);
 
-    let cancel = http_client::request(server.addr, "POST", "/sessions/never-existed/cancel", Some("{}"));
+    let cancel = http_client::request(
+        server.addr,
+        "POST",
+        "/sessions/never-existed/cancel",
+        Some("{}"),
+    );
     assert_eq!(cancel.status, 404, "{}", cancel.body);
 }
 
@@ -73,14 +91,22 @@ async fn a_dead_session_is_410_not_404() {
     let server = support::http_server::start_at_with_template(
         "127.0.0.1:0".parse().unwrap(),
         template,
-        |c| c.with_ring_capacity(5).with_cancel_grace(std::time::Duration::from_millis(200)),
+        |c| {
+            c.with_ring_capacity(5)
+                .with_cancel_grace(std::time::Duration::from_millis(200))
+        },
     )
     .await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     // 等 actor 线程死透——轮询 `GET /sessions/:id` 直到不再是 alive。
@@ -94,9 +120,21 @@ async fn a_dead_session_is_410_not_404() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    assert!(last_status.contains("\"dead\""), "session 该在 provider 喂了畸形响应之后死掉：{last_status}");
+    assert!(
+        last_status.contains("\"dead\""),
+        "session 该在 provider 喂了畸形响应之后死掉：{last_status}"
+    );
 
-    let cancel = http_client::request(server.addr, "POST", &format!("/sessions/{id}/cancel"), Some("{}"));
-    assert_eq!(cancel.status, 410, "对一个已死的 session 发命令该是 410，不是别的：{}", cancel.body);
+    let cancel = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/cancel"),
+        Some("{}"),
+    );
+    assert_eq!(
+        cancel.status, 410,
+        "对一个已死的 session 发命令该是 410，不是别的：{}",
+        cancel.body
+    );
     assert!(cancel.body.contains("\"session_dead\""), "{}", cancel.body);
 }

@@ -22,11 +22,20 @@ fn run_one_mcp_turn(dir: &std::path::Path, tool: &str, read_only: bool) -> Sessi
         mcp::hop_tool_use(&wire, "call_1"),
         mcp::hop_end_turn(),
     ]);
-    let (mut ctx, _events) =
-        mcp::build_ctx(port, dir, "everything", vec![mcp::tool_entry("everything", tool, read_only)], &script);
+    let (mut ctx, _events) = mcp::build_ctx(
+        port,
+        dir,
+        "everything",
+        vec![mcp::tool_entry("everything", tool, read_only)],
+        &script,
+    );
     let mut session = Session::new(AgentId::root());
     let status = run_turn(&mut session, &mut ctx, "调个 MCP 工具");
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "两跳该干净收尾");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "两跳该干净收尾"
+    );
     session
 }
 
@@ -38,7 +47,10 @@ fn read_only_mcp_result_has_no_barrier_and_undo_crosses_it_cleanly() {
 
     // `/undo` 一步干净退掉整轮，不撞屏障。
     let report = session.undo_turn();
-    assert!(matches!(report, UndoReport::Applied { .. }), "readOnly 该干净越过：{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "readOnly 该干净越过：{report:?}"
+    );
     assert!(session.messages().is_empty(), "越过之后这一轮该整个退掉");
 }
 
@@ -53,11 +65,21 @@ fn non_read_only_mcp_result_gets_a_barrier_that_stops_undo_until_forced() {
     let UndoReport::Blocked { barrier_seq, .. } = report else {
         panic!("非 readOnly 该撞屏障停下，拿到 {report:?}");
     };
-    let barrier_entry = session.history().entries().find(|e| e.seq == barrier_seq).unwrap();
-    assert!(barrier_entry.meta.barrier, "撞停的这条 entry 该带 barrier 位");
+    let barrier_entry = session
+        .history()
+        .entries()
+        .find(|e| e.seq == barrier_seq)
+        .unwrap();
+    assert!(
+        barrier_entry.meta.barrier,
+        "撞停的这条 entry 该带 barrier 位"
+    );
 
     // `/undo!` 才越过。
     let report = session.undo_turn_force();
-    assert!(matches!(report, UndoReport::Applied { .. }), "强制越过该成功：{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "强制越过该成功：{report:?}"
+    );
     assert!(session.messages().is_empty(), "越过之后这一轮该整个退掉");
 }

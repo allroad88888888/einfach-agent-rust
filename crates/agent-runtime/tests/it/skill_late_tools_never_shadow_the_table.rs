@@ -26,7 +26,9 @@ mod support;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::{AgentId, HostSkill, Reversibility, Session, SessionConfig, SkillId, ToolSpec, TurnStatus};
+use agent_core::{
+    AgentId, HostSkill, Reversibility, Session, SessionConfig, SkillId, ToolSpec, TurnStatus,
+};
 use agent_providers::deepseek::DeepSeek;
 use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable, run_turn};
 use agent_tools::ToolExecutor;
@@ -60,8 +62,13 @@ fn declared_skill() -> HostSkill {
     HostSkill {
         id: SkillId::new("crm-flow"),
         description: Arc::from("处理客户工单的标准流程"),
-        body: Arc::from(format!("这是 crm-flow 的正文，激活后整段进 late_system。{BODY_MARKER}")),
-        tools: vec![spec(CLASH, SKILL_DESC), spec(ONLY_FROM_SKILL, "只有 skill 带的")],
+        body: Arc::from(format!(
+            "这是 crm-flow 的正文，激活后整段进 late_system。{BODY_MARKER}"
+        )),
+        tools: vec![
+            spec(CLASH, SKILL_DESC),
+            spec(ONLY_FROM_SKILL, "只有 skill 带的"),
+        ],
     }
 }
 
@@ -71,7 +78,10 @@ fn build_ctx(port: u16, fs_root: &std::path::Path) -> RunnerCtx {
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let registry = SkillRegistry::from_host_skills(vec![declared_skill()]);
     let index = registry.skill_index_chunk();
@@ -124,10 +134,18 @@ fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_int
     let mut ctx = build_ctx(server.port, &fs_root);
     let mut session = Session::new(AgentId::root());
 
-    assert_eq!(run_turn(&mut session, &mut ctx, "帮我激活 crm-flow"), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        run_turn(&mut session, &mut ctx, "帮我激活 crm-flow"),
+        TurnStatus::Done { truncated: false }
+    );
 
     let calls = server.calls();
-    assert_eq!(calls.len(), 2, "一次工具调用 + 一次收敛，该正好两跳请求，实际 {}", calls.len());
+    assert_eq!(
+        calls.len(),
+        2,
+        "一次工具调用 + 一次收敛，该正好两跳请求，实际 {}",
+        calls.len()
+    );
     let after = &calls[1];
     let tools = tools_of(&after.body);
 
@@ -144,7 +162,8 @@ fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_int
     // ── 活下来的必须是**表里那一份**：赢家不是选出来的，是 dispatch 早就定死的
     //    （`declares()` 为真是因为表里有它，远端第五路派给的就是宿主注册的那份）。
     assert_eq!(
-        clashing[0]["function"]["description"], json!(TABLE_DESC),
+        clashing[0]["function"]["description"],
+        json!(TABLE_DESC),
         "留下来的得是表里那一份说明书——留下 skill 那份等于给模型看一份它影响不了的 schema"
     );
 
@@ -170,12 +189,14 @@ fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_int
 
 /// 请求体里的 `tools` 数组。
 fn tools_of(body: &str) -> Vec<Value> {
-    let parsed: Value = serde_json::from_str(body).unwrap_or_else(|e| panic!("请求体不是 JSON：{e}\n{body}"));
+    let parsed: Value =
+        serde_json::from_str(body).unwrap_or_else(|e| panic!("请求体不是 JSON：{e}\n{body}"));
     parsed["tools"].as_array().cloned().unwrap_or_default()
 }
 
 /// wire 上的 `function.name` 是转义过的（050），用 provider 自己那把解码器还原——
 /// 转义规则不在测试里抄第二遍。
 fn name_of(tool: &Value) -> String {
-    agent_providers::wire_name::from_wire(tool["function"]["name"].as_str().unwrap_or_default()).to_string()
+    agent_providers::wire_name::from_wire(tool["function"]["name"].as_str().unwrap_or_default())
+        .to_string()
 }

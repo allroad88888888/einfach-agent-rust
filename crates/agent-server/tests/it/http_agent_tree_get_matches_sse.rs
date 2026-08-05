@@ -23,7 +23,9 @@ fn text_reply(needle: &'static str, content: &str) -> Route {
     Route::sse(
         needle,
         vec![
-            format!(r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#),
+            format!(
+                r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#
+            ),
             USAGE_STOP.to_string(),
             "data: [DONE]".to_string(),
         ],
@@ -34,8 +36,17 @@ fn text_reply(needle: &'static str, content: &str) -> Route {
 /// 是这份支撑代码给「一条路由要故意拖一拖」用的口子（`support::routed` 模块
 /// 文档）。
 fn delayed_text_reply(needle: &'static str, content: &str, delay: Duration) -> Route {
-    let first = format!(r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#);
-    Route::paced(needle, vec![(delay, first.as_str()), (Duration::ZERO, USAGE_STOP), (Duration::ZERO, "data: [DONE]")])
+    let first = format!(
+        r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#
+    );
+    Route::paced(
+        needle,
+        vec![
+            (delay, first.as_str()),
+            (Duration::ZERO, USAGE_STOP),
+            (Duration::ZERO, "data: [DONE]"),
+        ],
+    )
 }
 
 fn routes() -> Vec<Route> {
@@ -62,17 +73,30 @@ async fn the_agent_tree_frame_over_sse_matches_a_concurrent_get() {
     let upstream = RoutedServer::start(routes());
 
     let mut template = support::http_server::session_template(upstream.endpoint());
-    template.tools = ToolTableSpec::Full { spawn_limits: AgentLimits::default() };
-    let server = support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, |c| c).await;
+    template.tools = ToolTableSpec::Full {
+        spawn_limits: AgentLimits::default(),
+    };
+    let server = support::http_server::start_at_with_template(
+        "127.0.0.1:0".parse().unwrap(),
+        template,
+        |c| c,
+    )
+    .await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     assert_eq!(create.status, 201, "{}", create.body);
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let (status, _, mut sse) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status, _, mut sse) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
     assert_eq!(status, 200);
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"分派任务查天气\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"分派任务查天气\"}"),
+    );
     assert_eq!(input.status, 202, "{}", input.body);
 
     // 读 SSE 直到看到第一帧「子 agent 已经生出来、还在 Thinking」的
@@ -81,8 +105,11 @@ async fn the_agent_tree_frame_over_sse_matches_a_concurrent_get() {
     let mut sse_tree: Option<AgentTree> = None;
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while std::time::Instant::now() < deadline {
-        let Some(raw) = sse.next_event(Duration::from_secs(5)) else { break };
-        let frame: Frame = serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
+        let Some(raw) = sse.next_event(Duration::from_secs(5)) else {
+            break;
+        };
+        let frame: Frame =
+            serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
         if let SessionEvent::AgentTree(tree) = &frame.event
             && tree.nodes.len() == 2
             && tree.nodes[1].activity == AgentActivity::Thinking
@@ -91,15 +118,20 @@ async fn the_agent_tree_frame_over_sse_matches_a_concurrent_get() {
             break;
         }
     }
-    let sse_tree = sse_tree.unwrap_or_else(|| panic!("该在子落终态之前看到一帧「root + 子(Thinking)」的 agent_tree"));
+    let sse_tree = sse_tree
+        .unwrap_or_else(|| panic!("该在子落终态之前看到一帧「root + 子(Thinking)」的 agent_tree"));
 
     // 同刻（子还在 300ms 的延迟里挂着）发一次 GET——两条路给出的该是完全
     // 相同的一棵树,不是碰巧长得像。
     let get = http_client::request(server.addr, "GET", &format!("/sessions/{id}/agents"), None);
     assert_eq!(get.status, 200, "{}", get.body);
-    let get_tree: AgentTree = serde_json::from_str(&get.body).unwrap_or_else(|e| panic!("{e}: {}", get.body));
+    let get_tree: AgentTree =
+        serde_json::from_str(&get.body).unwrap_or_else(|e| panic!("{e}: {}", get.body));
 
-    assert_eq!(get_tree, sse_tree, "GET /agents 该跟同刻的 SSE agent_tree 帧给出同一棵树");
+    assert_eq!(
+        get_tree, sse_tree,
+        "GET /agents 该跟同刻的 SSE agent_tree 帧给出同一棵树"
+    );
     assert_eq!(get_tree.nodes[0].id, AgentId::root());
     assert_eq!(get_tree.nodes[1].id, AgentId::root().child(1));
     assert_eq!(get_tree.nodes[1].parent, Some(AgentId::root()));
@@ -111,7 +143,8 @@ async fn the_agent_tree_frame_over_sse_matches_a_concurrent_get() {
     // 子的 `AgentId`，不是整轮真正收尾的那条（那条标 root）。只看 `status.
     // is_terminal()` 不看 `frame.agent` 会在子先于 root 落终态时提前误判。
     while let Some(raw) = sse.next_event(Duration::from_secs(5)) {
-        let frame: Frame = serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
+        let frame: Frame =
+            serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
         let root_terminal = frame.agent == AgentId::root()
             && matches!(
                 &frame.event,
@@ -124,10 +157,18 @@ async fn the_agent_tree_frame_over_sse_matches_a_concurrent_get() {
 
     // 终态之后再问一次 GET：两个都该是 Done——GET 不是只在轮子进行到一半才
     // 好使，它任何时候读到的都是当下的活树。
-    let final_get = http_client::request(server.addr, "GET", &format!("/sessions/{id}/agents"), None);
+    let final_get =
+        http_client::request(server.addr, "GET", &format!("/sessions/{id}/agents"), None);
     assert_eq!(final_get.status, 200, "{}", final_get.body);
-    let final_tree: AgentTree = serde_json::from_str(&final_get.body).unwrap_or_else(|e| panic!("{e}: {}", final_get.body));
+    let final_tree: AgentTree =
+        serde_json::from_str(&final_get.body).unwrap_or_else(|e| panic!("{e}: {}", final_get.body));
     assert_eq!(final_tree.nodes.len(), 2);
-    assert!(matches!(final_tree.nodes[0].activity, AgentActivity::Done { .. }), "{final_tree:?}");
-    assert!(matches!(final_tree.nodes[1].activity, AgentActivity::Done { .. }), "{final_tree:?}");
+    assert!(
+        matches!(final_tree.nodes[0].activity, AgentActivity::Done { .. }),
+        "{final_tree:?}"
+    );
+    assert!(
+        matches!(final_tree.nodes[1].activity, AgentActivity::Done { .. }),
+        "{final_tree:?}"
+    );
 }

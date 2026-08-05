@@ -119,7 +119,9 @@ fn main() {
     // 只加不改），装载状态给 `/mcp` 命令。**每次启动都跑**——kill-9 重启后 server 从这里
     // 重新 spawn，不从快照复活（docs/MCP.md §「活句柄住 store 外」）。
     let (mcp_config_path, mcp_explicit) = mcp::resolve_config_path(&args);
-    let mcp = mcp::bootstrap(&mcp_config_path, mcp_explicit, &mut |m| eprintln!("[mcp] {m}"));
+    let mcp = mcp::bootstrap(&mcp_config_path, mcp_explicit, &mut |m| {
+        eprintln!("[mcp] {m}")
+    });
     eprintln!("mcp={}", mcp.summary());
 
     let store = agent_runtime::open_backend(session_file, |e| eprintln!("[会话文件] {e}"));

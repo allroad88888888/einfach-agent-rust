@@ -12,7 +12,9 @@ use http_indep_support::sse_client::{SseClient, SseFrame};
 fn collect_until_terminal(sse: &mut SseClient) -> Vec<SseFrame> {
     let mut frames = Vec::new();
     loop {
-        let Some(frame) = sse.next_frame(Duration::from_secs(3)) else { panic!("等终态超时，已收到 {frames:?}") };
+        let Some(frame) = sse.next_frame(Duration::from_secs(3)) else {
+            panic!("等终态超时，已收到 {frames:?}")
+        };
         let terminal = frame.data.contains("TurnStatusChanged") && frame.data.contains("Done");
         frames.push(frame);
         if terminal || frames.len() > 30 {
@@ -39,7 +41,10 @@ async fn two_sse_clients_see_the_identical_frame_sequence() {
     let frames_a = collect_until_terminal(&mut client_a);
     let frames_b = collect_until_terminal(&mut client_b);
 
-    assert_eq!(frames_a, frames_b, "两条连接该看到完全相同的帧序（id + 内容）");
+    assert_eq!(
+        frames_a, frames_b,
+        "两条连接该看到完全相同的帧序（id + 内容）"
+    );
     assert!(!frames_a.is_empty());
 }
 
@@ -50,7 +55,14 @@ async fn two_sse_clients_see_the_identical_frame_sequence() {
 async fn disconnecting_one_client_does_not_affect_the_other_or_trigger_grace_cancel() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(200);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let mut client_a = SseClient::connect(server.addr, &id, None);
@@ -60,7 +72,9 @@ async fn disconnecting_one_client_does_not_affect_the_other_or_trigger_grace_can
     assert_eq!(resp.status, 202);
 
     // 两条都确认收到了 Thinking，证明轮真的在飞、两条连接都真的挂上了。
-    let thinking_a = client_a.next_frame(Duration::from_secs(2)).expect("A 该收到 Thinking");
+    let thinking_a = client_a
+        .next_frame(Duration::from_secs(2))
+        .expect("A 该收到 Thinking");
     assert!(thinking_a.data.contains("Thinking"));
 
     // 断开 B，只留 A。
@@ -73,7 +87,10 @@ async fn disconnecting_one_client_does_not_affect_the_other_or_trigger_grace_can
     // A 不该看到 Cancelled（会话没被宽限杀）。
     let after_wait = client_a.next_frame(Duration::from_millis(300));
     if let Some(frame) = &after_wait {
-        assert!(!frame.data.contains("Cancelled"), "还有 A 在订阅，不该被宽限取消：{frame:?}");
+        assert!(
+            !frame.data.contains("Cancelled"),
+            "还有 A 在订阅，不该被宽限取消：{frame:?}"
+        );
     }
     let status = server.get_status(&id);
     assert_eq!(status.json()["status"], "alive");
@@ -83,12 +100,17 @@ async fn disconnecting_one_client_does_not_affect_the_other_or_trigger_grace_can
     assert_eq!(cancel_resp.status, 202);
     let mut frames: Vec<_> = after_wait.into_iter().collect();
     loop {
-        let Some(frame) = client_a.next_frame(Duration::from_secs(3)) else { panic!("A 该还能正常收帧，已收到 {frames:?}") };
+        let Some(frame) = client_a.next_frame(Duration::from_secs(3)) else {
+            panic!("A 该还能正常收帧，已收到 {frames:?}")
+        };
         let cancelled = frame.data.contains("Cancelled");
         frames.push(frame);
         if cancelled || frames.len() > 20 {
             break;
         }
     }
-    assert!(frames.iter().any(|f| f.data.contains("Cancelled")), "主动 cancel 该照常生效：{frames:?}");
+    assert!(
+        frames.iter().any(|f| f.data.contains("Cancelled")),
+        "主动 cancel 该照常生效：{frames:?}"
+    );
 }

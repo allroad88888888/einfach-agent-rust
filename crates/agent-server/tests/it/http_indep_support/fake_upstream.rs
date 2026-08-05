@@ -37,7 +37,9 @@ impl FakeUpstream {
     pub fn start(scripts: Vec<Script>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake upstream");
         let port = listener.local_addr().unwrap().port();
-        listener.set_nonblocking(true).expect("nonblocking accept loop");
+        listener
+            .set_nonblocking(true)
+            .expect("nonblocking accept loop");
 
         let bodies = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -95,7 +97,9 @@ impl Drop for FakeUpstream {
 
 fn handle_one(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
     // 没带请求的连接不记账、也不消耗脚本槽位（issue 077）。
-    let Some(body) = read_request_body(&mut stream) else { return };
+    let Some(body) = read_request_body(&mut stream) else {
+        return;
+    };
     let idx = {
         let mut guard = bodies.lock().unwrap();
         guard.push(body);
@@ -119,7 +123,9 @@ fn handle_one(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Scr
 
 fn text_reply(text: &str) -> String {
     let content = serde_json::to_string(text).expect("json string");
-    format!("data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n")
+    format!(
+        "data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n"
+    )
 }
 
 /// 读不到请求返回 `None`——跟 `tests/support/server.rs` 同款（issue 077）。
@@ -144,7 +150,9 @@ fn read_request_body(stream: &mut TcpStream) -> Option<String> {
 }
 
 fn write_headers_only(stream: &mut TcpStream) {
-    let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+    );
     let _ = stream.flush();
 }
 

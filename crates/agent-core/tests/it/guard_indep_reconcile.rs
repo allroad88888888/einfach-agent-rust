@@ -3,7 +3,7 @@
 //! 只经公开 API（`agent_core::cache::{reconcile, ReconcileVerdict, ReconcileParams}`）
 //! 验证五态逐一 + 边界，以及 022 的两轮真实回放数字。
 
-use agent_core::cache::{reconcile, ReconcileParams, ReconcileVerdict};
+use agent_core::cache::{ReconcileParams, ReconcileVerdict, reconcile};
 
 /// `None`：这家没报 `cached`，第 2 层本轮不工作——不管 `predicted` 是不是 0，
 /// 都必须落 `Blind`，绝不能被 `unwrap_or(0)` 折算成「没命中」。

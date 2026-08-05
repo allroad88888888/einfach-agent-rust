@@ -64,7 +64,12 @@ pub(crate) fn tools_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> 
 /// 以及校验模型指定的名字——**子拿不到父没有的工具**，那是提权。
 pub(crate) fn allowed_names(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> Vec<Arc<str>> {
     match session.tools_allowed_of(agent) {
-        None => ctx.tools.specs().iter().map(|spec| Arc::clone(&spec.name)).collect(),
+        None => ctx
+            .tools
+            .specs()
+            .iter()
+            .map(|spec| Arc::clone(&spec.name))
+            .collect(),
         Some(allowed) => allowed,
     }
 }
@@ -91,10 +96,22 @@ mod tests {
     /// 红线 11 的最小实检：同一份 limits 两次渲染逐字节相同，不同 limits 不同。
     #[test]
     fn the_fixed_template_is_byte_stable_for_a_given_limit_pair() {
-        let a = subagent_prompt(AgentLimits { max_depth: 3, max_children: 8 });
-        let b = subagent_prompt(AgentLimits { max_depth: 3, max_children: 8 });
+        let a = subagent_prompt(AgentLimits {
+            max_depth: 3,
+            max_children: 8,
+        });
+        let b = subagent_prompt(AgentLimits {
+            max_depth: 3,
+            max_children: 8,
+        });
         assert_eq!(a, b);
-        assert_ne!(a, subagent_prompt(AgentLimits { max_depth: 2, max_children: 8 }));
+        assert_ne!(
+            a,
+            subagent_prompt(AgentLimits {
+                max_depth: 2,
+                max_children: 8
+            })
+        );
     }
 
     /// 模板里不许出现任务文本的位置——它是子 agent 的第一条 user 消息。

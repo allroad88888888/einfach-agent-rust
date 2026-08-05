@@ -30,6 +30,17 @@ pub(crate) fn report_success(
     ctx.guard_history.push(TurnHit::from_usage(usage));
     let window = cache::check_window(&ctx.guard_history, WindowParams::default());
 
-    let report = GuardReport { drift, reconcile, window };
-    ctx.emit(agent, RunnerEvent::TurnGuard { usage: usage.clone(), report, adjustments });
+    let report = GuardReport {
+        drift,
+        reconcile,
+        window,
+    };
+    ctx.emit(
+        agent,
+        RunnerEvent::TurnGuard {
+            usage: usage.clone(),
+            report,
+            adjustments,
+        },
+    );
 }

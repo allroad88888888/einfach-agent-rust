@@ -79,7 +79,9 @@ impl std::fmt::Display for CloseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CloseError::NotFound => write!(f, "这个 session id 没有 open 过"),
-            CloseError::WasDead { reason } => write!(f, "actor 已经先一步崩了（{reason}），现在才摘表"),
+            CloseError::WasDead { reason } => {
+                write!(f, "actor 已经先一步崩了（{reason}），现在才摘表")
+            }
         }
     }
 }
@@ -113,7 +115,9 @@ pub struct SessionRegistry {
 
 impl SessionRegistry {
     pub fn new() -> Self {
-        SessionRegistry { sessions: Mutex::new(HashMap::new()) }
+        SessionRegistry {
+            sessions: Mutex::new(HashMap::new()),
+        }
     }
 
     /// 开一个 session：起专属 actor 线程，登记进表，返回句柄。同一个 id 重复
@@ -141,10 +145,14 @@ impl SessionRegistry {
             let mut sessions = self.sessions.lock().unwrap();
             match sessions.get(&id) {
                 Some(Slot::Opening) => {
-                    return Err(OpenError(format!("session \"{id}\" 正在被另一次 open() 调用起，等它完成或者失败再试")));
+                    return Err(OpenError(format!(
+                        "session \"{id}\" 正在被另一次 open() 调用起，等它完成或者失败再试"
+                    )));
                 }
                 Some(Slot::Ready(existing)) if existing.died.lock().unwrap().is_none() => {
-                    return Err(OpenError(format!("session \"{id}\" 已经 open 着，先 close 或者等它自己死了再重开")));
+                    return Err(OpenError(format!(
+                        "session \"{id}\" 已经 open 着，先 close 或者等它自己死了再重开"
+                    )));
                 }
                 Some(Slot::Ready(_)) | None => {} // 没有，或者有但已经死了——占位，继续往下起。
             }
@@ -156,7 +164,14 @@ impl SessionRegistry {
         match spawn_result {
             Ok(spawned) => {
                 let handle = spawned.handle.clone();
-                sessions.insert(id, Slot::Ready(Entry { handle: spawned.handle, join: spawned.join, died: spawned.died }));
+                sessions.insert(
+                    id,
+                    Slot::Ready(Entry {
+                        handle: spawned.handle,
+                        join: spawned.join,
+                        died: spawned.died,
+                    }),
+                );
                 Ok(handle)
             }
             Err(e) => {
@@ -242,7 +257,10 @@ mod tests {
     #[test]
     fn close_on_a_never_opened_id_is_not_found() {
         let registry = SessionRegistry::new();
-        assert_eq!(registry.close(&SessionId::from("nope")), Err(CloseError::NotFound));
+        assert_eq!(
+            registry.close(&SessionId::from("nope")),
+            Err(CloseError::NotFound)
+        );
     }
 
     #[test]

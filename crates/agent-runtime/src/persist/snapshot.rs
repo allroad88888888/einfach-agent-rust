@@ -23,7 +23,9 @@ pub fn maybe_snapshot(ctx: &mut RunnerCtx, session: &agent_core::Session) {
     if ctx.last_snapshotted_turn == Some(turn_id) {
         return; // 这一轮已经拍过——`run_turn` 对同一个非终态卡住的 turn 可能被多次调用。
     }
-    let snap = Snapshot { values: session.primitives() };
+    let snap = Snapshot {
+        values: session.primitives(),
+    };
     ctx.session_store.snapshot(&snap);
     ctx.last_snapshotted_turn = Some(turn_id);
 }
@@ -46,7 +48,11 @@ mod tests {
 
     fn ctx(snapshot_every: u64) -> RunnerCtx {
         let fs = ToolExecutor::new(std::env::temp_dir()).unwrap();
-        let store: Box<SessionBackend> = Box::new(Memory::<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>::new());
+        let store: Box<SessionBackend> = Box::new(Memory::<
+            agent_core::AtomKey,
+            agent_core::AgentValue,
+            PersistedMeta,
+        >::new());
         let mut ctx = RunnerCtx::new(
             Arc::new(DeepSeek),
             Arc::new(Client::new()),
@@ -55,7 +61,12 @@ mod tests {
             fs,
             ToolTable::builtin(),
             Vec::new(),
-            agent_core::SessionConfig { model: Arc::from("m"), temperature: None, max_tokens: None, context_window: None },
+            agent_core::SessionConfig {
+                model: Arc::from("m"),
+                temperature: None,
+                max_tokens: None,
+                context_window: None,
+            },
             store,
             Box::new(|_| {}),
         );
@@ -74,11 +85,21 @@ mod tests {
     fn no_snapshot_before_the_configured_turn() {
         let mut ctx = ctx(3);
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("hi") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("hi"),
+        });
         sync(&mut ctx, &mut session);
 
         maybe_snapshot(&mut ctx, &session); // turn_id == 1，不是 3 的倍数
-        assert!(ctx.session_store.load().loaded().unwrap().snapshot.is_none());
+        assert!(
+            ctx.session_store
+                .load()
+                .loaded()
+                .unwrap()
+                .snapshot
+                .is_none()
+        );
     }
 
     #[test]
@@ -88,7 +109,14 @@ mod tests {
         advance_to_turn(&mut session, &mut ctx, 3);
 
         maybe_snapshot(&mut ctx, &session);
-        assert!(ctx.session_store.load().loaded().unwrap().snapshot.is_some());
+        assert!(
+            ctx.session_store
+                .load()
+                .loaded()
+                .unwrap()
+                .snapshot
+                .is_some()
+        );
 
         // 再调一次不该重复触发（`last_snapshotted_turn` 挡住）——不好直接断言
         // 「没有再拍一张」，但至少 `last_snapshotted_turn` 保持不变。
@@ -103,6 +131,13 @@ mod tests {
         let mut session = Session::new(AgentId::root());
         advance_to_turn(&mut session, &mut ctx, 10);
         maybe_snapshot(&mut ctx, &session);
-        assert!(ctx.session_store.load().loaded().unwrap().snapshot.is_none());
+        assert!(
+            ctx.session_store
+                .load()
+                .loaded()
+                .unwrap()
+                .snapshot
+                .is_none()
+        );
     }
 }

@@ -41,12 +41,14 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
     let dir = support::temp_dir("undo-after-turns");
     std::fs::write(dir.join("hello.txt"), b"hello world").unwrap();
 
-    let port = support::spawn_scripted_server(vec![hop1_tool_use(), hop2_end_turn(), second_turn_reply()]);
+    let port =
+        support::spawn_scripted_server(vec![hop1_tool_use(), hop2_end_turn(), second_turn_reply()]);
     let (mut ctx, _events) = support::build_ctx(port, &dir);
     let mut session = Session::new(AgentId::root());
 
     // 第一轮：一次工具调用 + 收尾。四条消息。
-    let status = agent_runtime::run_turn(&mut session, &mut ctx, "读一下 hello.txt，秘密指令 ALPHA");
+    let status =
+        agent_runtime::run_turn(&mut session, &mut ctx, "读一下 hello.txt，秘密指令 ALPHA");
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(session.messages().len(), 4);
     let snapshot_after_turn_1 = session.primitives();
@@ -59,12 +61,23 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
 
     // /undo：CLI 就是直接调这一行。
     let report = session.undo_turn();
-    assert!(matches!(report, UndoReport::Applied { turn_id: 2, .. }), "{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { turn_id: 2, .. }),
+        "{report:?}"
+    );
 
     // 上一轮消失：消息数、每一份 primitive 都跟第一轮结束时逐值相等。
     assert_eq!(session.messages().len(), 4, "第二轮的两条消息该被退掉");
-    assert_eq!(session.primitives(), snapshot_after_turn_1, "undo 一整轮后所有 primitive 逐值回退");
-    assert_eq!(session.status(), TurnStatus::Done { truncated: false }, "退回到第一轮收尾时的状态");
+    assert_eq!(
+        session.primitives(),
+        snapshot_after_turn_1,
+        "undo 一整轮后所有 primitive 逐值回退"
+    );
+    assert_eq!(
+        session.status(),
+        TurnStatus::Done { truncated: false },
+        "退回到第一轮收尾时的状态"
+    );
 
     // 下一轮 prompt 不含被退内容：真的 encode 一次，断言 body 字节。
     // provider/model 跟 `support::build_ctx` 建 `RunnerCtx` 时用的是同一家
@@ -72,7 +85,12 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
     // 拿不到，这里直接复刻同一份 `SessionConfig` 现造一次 `encode`。
     let messages: Vec<agent_core::Message> = session.messages().iter().cloned().collect();
     let prev_prefix = session.prev_prefix();
-    let config = SessionConfig { model: std::sync::Arc::from("deepseek-v4-pro"), temperature: None, max_tokens: None, context_window: None };
+    let config = SessionConfig {
+        model: std::sync::Arc::from("deepseek-v4-pro"),
+        temperature: None,
+        max_tokens: None,
+        context_window: None,
+    };
     let ing = Ingredients {
         system: &[],
         messages: &messages,
@@ -85,7 +103,16 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
     };
     let encoded = DeepSeek.encode(&ing);
     let body = String::from_utf8(encoded.body).unwrap();
-    assert!(body.contains("ALPHA"), "第一轮的内容该还在下一次请求里：{body}");
-    assert!(!body.contains("BETA"), "被退掉的第二轮用户提问不该出现在下一次请求里：{body}");
-    assert!(!body.contains("秘密回答"), "被退掉的第二轮助手回复不该出现在下一次请求里：{body}");
+    assert!(
+        body.contains("ALPHA"),
+        "第一轮的内容该还在下一次请求里：{body}"
+    );
+    assert!(
+        !body.contains("BETA"),
+        "被退掉的第二轮用户提问不该出现在下一次请求里：{body}"
+    );
+    assert!(
+        !body.contains("秘密回答"),
+        "被退掉的第二轮助手回复不该出现在下一次请求里：{body}"
+    );
 }

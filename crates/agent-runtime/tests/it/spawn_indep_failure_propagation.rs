@@ -12,7 +12,9 @@ mod spawn_indep_support;
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name};
+use spawn_indep_support::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+};
 
 #[test]
 fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_parent() {
@@ -20,16 +22,38 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_ok", delay: Default::default(), status: 200, lines: sse_text("summary: one succeeded, one failed") },
-        Route { needle: "OKTASK", delay: Default::default(), status: 200, lines: sse_text("ok child finished successfully") },
-        Route::http_error("FAILTASK", 402, r#"{"error":{"message":"payment required","code":"insufficient_balance"}}"#),
+        Route {
+            needle: "call_ok",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("summary: one succeeded, one failed"),
+        },
+        Route {
+            needle: "OKTASK",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("ok child finished successfully"),
+        },
+        Route::http_error(
+            "FAILTASK",
+            402,
+            r#"{"error":{"message":"payment required","code":"insufficient_balance"}}"#,
+        ),
         Route {
             needle: "kickoff2",
             delay: Default::default(),
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_ok", &spawn_wire, r#"{"task":"OKTASK do the good half"}"#),
-                ("call_fail", &spawn_wire, r#"{"task":"FAILTASK do the doomed half"}"#),
+                (
+                    "call_ok",
+                    &spawn_wire,
+                    r#"{"task":"OKTASK do the good half"}"#,
+                ),
+                (
+                    "call_fail",
+                    &spawn_wire,
+                    r#"{"task":"FAILTASK do the doomed half"}"#,
+                ),
             ]),
         },
     ]);
@@ -38,10 +62,18 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff2 split into a doomed half and a good half");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff2 split into a doomed half and a good half",
+    );
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "父该照常收尾，不因为一个子失败就整轮失败");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "父该照常收尾，不因为一个子失败就整轮失败"
+    );
 
     let root = AgentId::root();
     let ok_child = root.child(1);
@@ -50,10 +82,20 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
     live.sort();
     let mut expected = vec![root.clone(), ok_child.clone(), fail_child.clone()];
     expected.sort();
-    assert_eq!(live, expected, "两个子都该留在活名单上（失败的子不会被自动 despawn，029 的代价 1）");
+    assert_eq!(
+        live, expected,
+        "两个子都该留在活名单上（失败的子不会被自动 despawn，029 的代价 1）"
+    );
 
-    assert_eq!(session.status_of(&ok_child), TurnStatus::Done { truncated: false });
-    assert!(matches!(session.status_of(&fail_child), TurnStatus::Failed(_)), "失败的子该落 Failed: {:?}", session.status_of(&fail_child));
+    assert_eq!(
+        session.status_of(&ok_child),
+        TurnStatus::Done { truncated: false }
+    );
+    assert!(
+        matches!(session.status_of(&fail_child), TurnStatus::Failed(_)),
+        "失败的子该落 Failed: {:?}",
+        session.status_of(&fail_child)
+    );
 
     // --- 结构化判定：is_error 字段本身 ---
     let tool_results: Vec<_> = session
@@ -61,24 +103,49 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
         .iter()
         .flat_map(|m| m.blocks.iter())
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { id, content, is_error } => Some((id.clone(), content.clone(), *is_error)),
+            ContentBlock::ToolResult {
+                id,
+                content,
+                is_error,
+            } => Some((id.clone(), content.clone(), *is_error)),
             _ => None,
         })
         .collect();
-    assert_eq!(tool_results.len(), 2, "两个 tool_result 都该在: {tool_results:#?}");
+    assert_eq!(
+        tool_results.len(),
+        2,
+        "两个 tool_result 都该在: {tool_results:#?}"
+    );
 
-    let ok_result = tool_results.iter().find(|(_, content, _)| content.contains("finished successfully")).expect("ok 子的结果该在场");
+    let ok_result = tool_results
+        .iter()
+        .find(|(_, content, _)| content.contains("finished successfully"))
+        .expect("ok 子的结果该在场");
     assert!(!ok_result.2, "成功的那个不该是 is_error: {ok_result:?}");
 
     let fail_result = tool_results
         .iter()
         .find(|(_, _, is_error)| *is_error)
         .expect("失败的那个该有一条 is_error 的 tool_result");
-    assert_ne!(fail_result.1, ok_result.1, "失败与成功的 tool_result 内容不该雷同");
+    assert_ne!(
+        fail_result.1, ok_result.1,
+        "失败与成功的 tool_result 内容不该雷同"
+    );
 
     // --- wire 佐证：两条内容都真的进了父的第二跳请求体，且靠文本可辨 ---
-    let hop2 = server.call("call_ok").expect("root's second hop must have been called");
-    assert!(hop2.body.contains(&*ok_result.1), "成功那条的内容该逐字出现在第二跳请求体里");
-    assert!(hop2.body.contains(&*fail_result.1), "失败那条的内容也该逐字出现在第二跳请求体里（没有因为失败就被吞掉）");
-    assert!(hop2.body.contains("call_ok") && hop2.body.contains("call_fail"), "两个 tool_call_id 都该在第二跳请求体里回填");
+    let hop2 = server
+        .call("call_ok")
+        .expect("root's second hop must have been called");
+    assert!(
+        hop2.body.contains(&*ok_result.1),
+        "成功那条的内容该逐字出现在第二跳请求体里"
+    );
+    assert!(
+        hop2.body.contains(&*fail_result.1),
+        "失败那条的内容也该逐字出现在第二跳请求体里（没有因为失败就被吞掉）"
+    );
+    assert!(
+        hop2.body.contains("call_ok") && hop2.body.contains("call_fail"),
+        "两个 tool_call_id 都该在第二跳请求体里回填"
+    );
 }

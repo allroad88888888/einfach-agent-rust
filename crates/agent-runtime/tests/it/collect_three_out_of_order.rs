@@ -34,7 +34,12 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
 
     let server = RoutedServer::start(vec![
         // 越靠后发生的 call_id 越靠前判（root 每一跳都带着此前全部 call_id）。
-        Route { needle: "call_c1", delay: Duration::ZERO, status: 200, lines: sse_text("三个都拿到了") },
+        Route {
+            needle: "call_c1",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("三个都拿到了"),
+        },
         Route {
             needle: "call_c3",
             delay: Duration::ZERO,
@@ -53,22 +58,52 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
             status: 200,
             lines: sse_tool_call("call_c2", &collect_wire, r#"{"id":"root/a2"}"#),
         },
-        Route { needle: "TASKONE", delay: SLOW, status: 200, lines: sse_text("ANSWERONE 甲") },
-        Route { needle: "TASKTWO", delay: Duration::ZERO, status: 200, lines: sse_text("ANSWERTWO 乙") },
-        Route { needle: "TASKTHREE", delay: MEDIUM, status: 200, lines: sse_text("ANSWERTHREE 丙") },
+        Route {
+            needle: "TASKONE",
+            delay: SLOW,
+            status: 200,
+            lines: sse_text("ANSWERONE 甲"),
+        },
+        Route {
+            needle: "TASKTWO",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("ANSWERTWO 乙"),
+        },
+        Route {
+            needle: "TASKTHREE",
+            delay: MEDIUM,
+            status: 200,
+            lines: sse_text("ANSWERTHREE 丙"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_bg_1", &spawn_wire, r#"{"task":"TASKONE 最慢的一件","background":true}"#),
-                ("call_bg_2", &spawn_wire, r#"{"task":"TASKTWO 最快的一件","background":true}"#),
-                ("call_bg_3", &spawn_wire, r#"{"task":"TASKTHREE 中间那件","background":true}"#),
+                (
+                    "call_bg_1",
+                    &spawn_wire,
+                    r#"{"task":"TASKONE 最慢的一件","background":true}"#,
+                ),
+                (
+                    "call_bg_2",
+                    &spawn_wire,
+                    r#"{"task":"TASKTWO 最快的一件","background":true}"#,
+                ),
+                (
+                    "call_bg_3",
+                    &spawn_wire,
+                    r#"{"task":"TASKTHREE 中间那件","background":true}"#,
+                ),
             ]),
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
@@ -82,8 +117,10 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
         assert!(!is_error, "后台 spawn 该当场成功：{call_id} {body}");
         assert!(body.contains("agent_id"), "前三条该是 agent_id：{body}");
     }
-    let collected: Vec<(String, String)> =
-        results[3..].iter().map(|(id, body, _)| (id.clone(), body.clone())).collect();
+    let collected: Vec<(String, String)> = results[3..]
+        .iter()
+        .map(|(id, body, _)| (id.clone(), body.clone()))
+        .collect();
     assert_eq!(
         collected,
         vec![
@@ -98,7 +135,11 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
     // 三个子都真的跑完了（上面那三条不是靠别的路混过去的）。
     for i in 1..=3 {
         let child = AgentId::new(format!("root/a{i}"));
-        assert_eq!(session.status_of(&child), TurnStatus::Done { truncated: false }, "{child:?}");
+        assert_eq!(
+            session.status_of(&child),
+            TurnStatus::Done { truncated: false },
+            "{child:?}"
+        );
         assert!(session.is_live(&child), "领完的子还活着——collect 不拆人");
     }
 

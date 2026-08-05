@@ -11,11 +11,13 @@ mod support;
 use std::sync::Arc;
 
 use agent_core::{AgentEntry, AgentId, AtomKey, ChildConfig, Session, Slot, TurnStatus};
-use support::user_input_for;
 use support::user_input_event;
+use support::user_input_for;
 
 fn cfg() -> ChildConfig {
-    ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }
+    ChildConfig {
+        tools_allowed: vec![Arc::from("srv:fs/read")],
+    }
 }
 
 /// 快照 + 日志重放之后，整棵树逐值相同，子 agent 还在活名单上。
@@ -45,13 +47,23 @@ fn a_whole_tree_survives_a_snapshot_and_replay() {
     )
     .unwrap();
 
-    assert!(unknown.is_empty(), "子 agent 的键不该被当成不认识的键：{unknown:?}");
+    assert!(
+        unknown.is_empty(),
+        "子 agent 的键不该被当成不认识的键：{unknown:?}"
+    );
     assert_eq!(restored.primitives(), snapshot, "全树逐值相同");
     assert!(restored.is_live(&child) && restored.is_live(&grandchild));
     assert_eq!(restored.children_of(&root), vec![child.clone()]);
-    assert_eq!(restored.live_agents(), vec![root.clone(), child.clone(), grandchild]);
     assert_eq!(
-        restored.read_descendant(&root, &child, Slot::Status).unwrap().as_status().unwrap(),
+        restored.live_agents(),
+        vec![root.clone(), child.clone(), grandchild]
+    );
+    assert_eq!(
+        restored
+            .read_descendant(&root, &child, Slot::Status)
+            .unwrap()
+            .as_status()
+            .unwrap(),
         &TurnStatus::Thinking
     );
 }
@@ -67,19 +79,42 @@ fn the_restored_tree_keeps_stepping_and_undoing() {
     let entries: Vec<AgentEntry> = live.history().entries().cloned().collect();
     let cursor = live.cursor();
     let next_seq = entries.last().map_or(0, |e| e.seq + 1);
-    let mut restored =
-        Session::restore(root.clone(), None, entries, cursor, next_seq, 100, &mut |_| {}).unwrap();
+    let mut restored = Session::restore(
+        root.clone(),
+        None,
+        entries,
+        cursor,
+        next_seq,
+        100,
+        &mut |_| {},
+    )
+    .unwrap();
 
-    assert_eq!(restored.primitives(), live.primitives(), "无快照的整份重放也是全树");
-
-    let _ = restored.step(support::provider_done_end_turn_for(&child, restored.epoch(), "完"));
     assert_eq!(
-        restored.read_descendant(&root, &child, Slot::Status).unwrap().as_status().unwrap(),
+        restored.primitives(),
+        live.primitives(),
+        "无快照的整份重放也是全树"
+    );
+
+    let _ = restored.step(support::provider_done_end_turn_for(
+        &child,
+        restored.epoch(),
+        "完",
+    ));
+    assert_eq!(
+        restored
+            .read_descendant(&root, &child, Slot::Status)
+            .unwrap()
+            .as_status()
+            .unwrap(),
         &TurnStatus::Done { truncated: false }
     );
 
     let _ = restored.undo_turn();
-    assert!(!restored.is_live(&child), "退回 spawn 之前，子 agent 不在活名单上");
+    assert!(
+        !restored.is_live(&child),
+        "退回 spawn 之前，子 agent 不在活名单上"
+    );
 }
 
 /// 被 despawn 的子 agent 只留一个墓碑，快照里也就只有那一项——恢复之后它仍然
@@ -92,14 +127,25 @@ fn a_tombstone_survives_and_still_reserves_its_seq() {
     let _ = live.despawn_child(&first).unwrap();
 
     let snapshot = live.primitives();
-    assert!(snapshot.iter().any(|(k, _)| k == &AtomKey::Agent(first.clone(), Slot::ToolsAllowed)));
+    assert!(
+        snapshot
+            .iter()
+            .any(|(k, _)| k == &AtomKey::Agent(first.clone(), Slot::ToolsAllowed))
+    );
 
     let entries: Vec<AgentEntry> = live.history().entries().cloned().collect();
     let cursor = live.cursor();
     let next_seq = entries.last().map_or(0, |e| e.seq + 1);
-    let mut restored =
-        Session::restore(root.clone(), Some(snapshot), entries, cursor, next_seq, 100, &mut |_| {})
-            .unwrap();
+    let mut restored = Session::restore(
+        root.clone(),
+        Some(snapshot),
+        entries,
+        cursor,
+        next_seq,
+        100,
+        &mut |_| {},
+    )
+    .unwrap();
 
     assert!(!restored.is_live(&first));
     let second = restored.spawn_child(&root, cfg()).unwrap();

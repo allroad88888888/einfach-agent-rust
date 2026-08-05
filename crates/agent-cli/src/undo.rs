@@ -31,7 +31,9 @@ pub fn redo(session: &mut Session, ctx: &mut RunnerCtx) {
     match report {
         UndoReport::Applied { entries, turn_id } => print::redo_applied(entries, turn_id),
         UndoReport::Nothing => print::redo_nothing(),
-        UndoReport::Blocked { .. } => unreachable!("redo 没有屏障，Session::redo_turn 的文档写明了"),
+        UndoReport::Blocked { .. } => {
+            unreachable!("redo 没有屏障，Session::redo_turn 的文档写明了")
+        }
     }
 }
 
@@ -63,7 +65,10 @@ fn report_undo(session: &Session, report: UndoReport, forced: bool) {
     match report {
         UndoReport::Applied { entries, turn_id } => print::undo_applied(entries, turn_id),
         UndoReport::Nothing => print::undo_nothing(),
-        UndoReport::Blocked { entries, barrier_seq } => {
+        UndoReport::Blocked {
+            entries,
+            barrier_seq,
+        } => {
             let what = describe_barrier(session, barrier_seq);
             print::undo_blocked(entries, &what, forced);
         }
@@ -78,7 +83,10 @@ pub fn after_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx) {
     agent_runtime::persist::sync(ctx, session);
     match report {
         UndoReport::Applied { entries, turn_id } => print::cancelled_turn_erased(entries, turn_id),
-        UndoReport::Blocked { entries, barrier_seq } => {
+        UndoReport::Blocked {
+            entries,
+            barrier_seq,
+        } => {
             let what = describe_barrier(session, barrier_seq);
             print::cancelled_turn_kept(entries, &what);
         }
@@ -91,7 +99,9 @@ pub fn after_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx) {
 /// call_id（理论上也不该发生，`barrier` 只会在 tool_result/tool_failed 那条上）
 /// 退回带 seq/label 的兜底。
 fn describe_barrier(session: &Session, seq: u64) -> String {
-    let Some(info) = session.barrier_info(seq) else { return format!("entry #{seq}") };
+    let Some(info) = session.barrier_info(seq) else {
+        return format!("entry #{seq}");
+    };
     match (info.tool, info.call_id) {
         (Some(tool), Some(call_id)) => format!("{tool}（call_id={}）", call_id.0),
         _ => format!("entry #{seq}（{}）", info.label),
@@ -102,7 +112,9 @@ fn describe_barrier(session: &Session, seq: u64) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use agent_core::{AgentId, ContentBlock, Event, PrefixImage, StopReason, TokenUsage, ToolCallId};
+    use agent_core::{
+        AgentId, ContentBlock, Event, PrefixImage, StopReason, TokenUsage, ToolCallId,
+    };
 
     use super::*;
 
@@ -111,7 +123,10 @@ mod tests {
     /// `mark_irreversible` 再等结果），只是这里手工喂事件，不需要真的起进程。
     fn session_with_a_barrier_entry() -> Session {
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: "跑个命令".into() });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: "跑个命令".into(),
+        });
         let call_id = ToolCallId::new("call_shell_1");
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
@@ -122,8 +137,15 @@ mod tests {
                 input: Arc::new(serde_json::json!({"cmd": "echo hi"})),
             }],
             stop: StopReason::ToolUse,
-            usage: TokenUsage { prompt: 10, completion: 5, cached: None },
-            prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+            usage: TokenUsage {
+                prompt: 10,
+                completion: 5,
+                cached: None,
+            },
+            prefix: PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: None,
+            },
             adjustments: Vec::new(),
         });
         session.mark_irreversible(call_id.clone());
@@ -144,7 +166,10 @@ mod tests {
     fn describe_barrier_extracts_the_tool_name_and_call_id() {
         let session = session_with_a_barrier_entry();
         let entry = session.last_entry().unwrap();
-        assert!(entry.meta.barrier, "标记过 mark_irreversible，这条 entry 该带 barrier");
+        assert!(
+            entry.meta.barrier,
+            "标记过 mark_irreversible，这条 entry 该带 barrier"
+        );
 
         let described = describe_barrier(&session, entry.seq);
         assert!(described.contains("srv:shell/exec"), "{described}");

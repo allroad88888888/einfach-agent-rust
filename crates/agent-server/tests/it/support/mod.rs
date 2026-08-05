@@ -22,7 +22,8 @@ use agent_transport::{Backoff, Client};
 pub fn temp_dir(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("agent-server-it-{name}-{}-{n}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("agent-server-it-{name}-{}-{n}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -34,7 +35,10 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     OpenSpec {
         id: SessionId::from(id),
@@ -45,7 +49,10 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
         model: Arc::from("deepseek-v4-pro"),
         tools: ToolTableSpec::Builtin,
         tools_root: temp_dir(&format!("tools-{id}")),
-        system: vec![SystemChunk { label: Arc::from("base"), text: Arc::from("test") }],
+        system: vec![SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("test"),
+        }],
         client: Arc::new(client),
         history_cap: None,
         snapshot_every: Some(0), // 关掉节奏噪音——恢复靠 entry 重放，快照不是这些测试关心的事。
@@ -69,7 +76,11 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
 /// 「谁发的」，拆包让它们一行不用改。真要断言归属的测试用
 /// [`collect_frames_until_terminal`]。
 pub async fn collect_until_terminal(sub: &mut Subscription, budget: Duration) -> Vec<SessionEvent> {
-    collect_frames_until_terminal(sub, budget).await.into_iter().map(|frame| frame.event).collect()
+    collect_frames_until_terminal(sub, budget)
+        .await
+        .into_iter()
+        .map(|frame| frame.event)
+        .collect()
 }
 
 /// 同 [`collect_until_terminal`]，但不拆信封——给需要断言 `frame.agent` 的测试
@@ -106,7 +117,9 @@ pub fn text_of(events: &[SessionEvent]) -> String {
 /// 最后一条事件是不是终态 `TurnStatus`，方便 `assert!(matches!(..))` 前先拿到。
 pub fn terminal_status(events: &[SessionEvent]) -> Option<TurnStatus> {
     events.iter().rev().find_map(|ev| match ev {
-        SessionEvent::Notice(Notice::TurnStatusChanged { status }) if status.is_terminal() => Some(status.clone()),
+        SessionEvent::Notice(Notice::TurnStatusChanged { status }) if status.is_terminal() => {
+            Some(status.clone())
+        }
         _ => None,
     })
 }
@@ -117,7 +130,9 @@ pub fn terminal_status(events: &[SessionEvent]) -> Option<TurnStatus> {
 /// `serde_json::from_str` 反序列化成真类型，不用这个。
 pub fn extract_json_string_field(body: &str, field: &str) -> String {
     let needle = format!("\"{field}\":\"");
-    let Some(start) = body.find(&needle) else { return String::new() };
+    let Some(start) = body.find(&needle) else {
+        return String::new();
+    };
     let rest = &body[start + needle.len()..];
     let end = rest.find('"').unwrap_or(rest.len());
     rest[..end].to_string()

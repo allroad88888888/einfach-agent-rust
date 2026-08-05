@@ -71,7 +71,8 @@ fn depend_tolerates_computing_peer_without_panicking() {
         }
         num(5.0)
     });
-    let outer = store.create_derived_ctx(move |args| num(args.get(inner).as_number().unwrap() + 1.0));
+    let outer =
+        store.create_derived_ctx(move |args| num(args.get(inner).as_number().unwrap() + 1.0));
     outer_holder.set(Some(outer));
 
     // Reading `outer` drives `inner`, which calls `depend` on the still-
@@ -107,9 +108,11 @@ fn reverse_dependents_enumerates_committed_back_deps_transitively() {
     let other = store.create_atom(num(10.0));
 
     let first = store.create_derived_ctx(move |args| num(args.get(src).as_number().unwrap() + 1.0));
-    let second = store.create_derived_ctx(move |args| num(args.get(first).as_number().unwrap() * 2.0));
-    let sibling =
-        store.create_derived_ctx(move |args| num(args.get(src).as_number().unwrap() + args.get(other).as_number().unwrap()));
+    let second =
+        store.create_derived_ctx(move |args| num(args.get(first).as_number().unwrap() * 2.0));
+    let sibling = store.create_derived_ctx(move |args| {
+        num(args.get(src).as_number().unwrap() + args.get(other).as_number().unwrap())
+    });
     let isolated = store.create_derived_ctx(move |args| num(args.get(other).as_number().unwrap()));
 
     assert_eq!(store.get(second).as_number(), Some(4.0));

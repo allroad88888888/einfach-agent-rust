@@ -26,7 +26,11 @@ fn read_only_true_is_pure() {
         }),
     );
     let (_, rev) = translate(&tool, "s");
-    assert_eq!(rev, Reversibility::Pure, "readOnlyHint:true 必须翻译成 Pure");
+    assert_eq!(
+        rev,
+        Reversibility::Pure,
+        "readOnlyHint:true 必须翻译成 Pure"
+    );
 }
 
 #[test]

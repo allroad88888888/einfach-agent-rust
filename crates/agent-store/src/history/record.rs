@@ -186,8 +186,14 @@ mod tests {
         });
 
         assert_eq!(changes.len(), 2);
-        assert_eq!((changes[0].prev.clone(), changes[0].next.clone()), (num(1), num(2)));
-        assert_eq!((changes[1].prev.clone(), changes[1].next.clone()), (num(2), num(3)));
+        assert_eq!(
+            (changes[0].prev.clone(), changes[0].next.clone()),
+            (num(1), num(2))
+        );
+        assert_eq!(
+            (changes[1].prev.clone(), changes[1].next.clone()),
+            (num(2), num(3))
+        );
         assert_eq!(store.get(a), num(3));
     }
 

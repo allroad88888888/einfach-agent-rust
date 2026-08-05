@@ -36,7 +36,10 @@ use host_tools_bytes_support::{
 
 /// 一个装满的部署档：内置只读 + shell + 编排三件。
 fn deployed() -> ToolTable {
-    ToolTable::with_shell().with_spawn(AgentLimits::default()).with_status().with_collect()
+    ToolTable::with_shell()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect()
 }
 
 fn off(list: &[&str]) -> Vec<Arc<str>> {
@@ -59,30 +62,55 @@ fn a_disabled_tool_is_absent_from_the_bytes_the_model_sees() {
     // 每个被关掉的工具两把钥匙：wire 上转义过的名字（050），以及**只在它自己的
     // 描述里出现**的一小段文字。后者才是这条真正要的——名字没了、描述还在，那笔钱
     // 照付，而且模型仍然被那段文字影响。
-    const KEYS: [(&str, &str); 2] =
-        [("agent_2Fspawn", "交给一个新的子 agent"), ("shell_2Fexec", "sh -c")];
+    const KEYS: [(&str, &str); 2] = [
+        ("agent_2Fspawn", "交给一个新的子 agent"),
+        ("shell_2Fexec", "sh -c"),
+    ];
 
     for (family, provider) in providers() {
         let full = encode(&*provider, deployed().specs(), None);
         let full_bytes = text(wire_tools_bytes(&full));
         for (name, hint) in KEYS {
-            assert!(full_bytes.contains(name) && full_bytes.contains(hint), "{family}：夹具前提——{name} 的名字与描述本来都在 prompt 里");
+            assert!(
+                full_bytes.contains(name) && full_bytes.contains(hint),
+                "{family}：夹具前提——{name} 的名字与描述本来都在 prompt 里"
+            );
         }
 
         let reduced = deployed().without_builtins(&off(&DISABLED));
-        assert!(!reduced.declares("srv:agent/spawn"), "{family}：关掉之后 declares 必须为假（spawn 的截获闸问的就是它）");
-        assert!(!reduced.declares("srv:shell/exec"), "{family}：关掉之后 declares 必须为假");
+        assert!(
+            !reduced.declares("srv:agent/spawn"),
+            "{family}：关掉之后 declares 必须为假（spawn 的截获闸问的就是它）"
+        );
+        assert!(
+            !reduced.declares("srv:shell/exec"),
+            "{family}：关掉之后 declares 必须为假"
+        );
 
         let encoded = encode(&*provider, reduced.specs(), None);
         let bytes = text(wire_tools_bytes(&encoded));
         for (name, hint) in KEYS {
-            assert!(!bytes.contains(name), "{family}：关掉的工具名 {name} 还在进 prompt 的字节里");
-            assert!(!bytes.contains(hint), "{family}：{name} 的名字没了、**描述还在**（「{hint}」）= 那笔钱照付，模型还被那段文字影响");
+            assert!(
+                !bytes.contains(name),
+                "{family}：关掉的工具名 {name} 还在进 prompt 的字节里"
+            );
+            assert!(
+                !bytes.contains(hint),
+                "{family}：{name} 的名字没了、**描述还在**（「{hint}」）= 那笔钱照付，模型还被那段文字影响"
+            );
         }
 
         // 正对照：没点名的那些一件不少（否则一个「把整张表清空」的实现同样会绿）。
-        for name in ["fs_2Fread", "fs_2Flist", "agent_2Fstatus", "agent_2Fcollect"] {
-            assert!(bytes.contains(name), "{family}：没关的工具 {name} 被顺手带走了");
+        for name in [
+            "fs_2Fread",
+            "fs_2Flist",
+            "agent_2Fstatus",
+            "agent_2Fcollect",
+        ] {
+            assert!(
+                bytes.contains(name),
+                "{family}：没关的工具 {name} 被顺手带走了"
+            );
         }
     }
 }
@@ -102,7 +130,10 @@ fn shuffling_the_switch_never_moves_a_byte() {
 
         for (label, list) in [
             ("倒序", off(&["srv:shell/exec", "srv:agent/spawn"])),
-            ("含重复项", off(&["srv:shell/exec", "srv:agent/spawn", "srv:shell/exec"])),
+            (
+                "含重复项",
+                off(&["srv:shell/exec", "srv:agent/spawn", "srv:shell/exec"]),
+            ),
         ] {
             let table = deployed().without_builtins(&list);
             let again = encode(&*provider, table.specs(), Some(&first.prefix));
@@ -112,7 +143,11 @@ fn shuffling_the_switch_never_moves_a_byte() {
                 Some(Segment::Tools),
                 "{family}/{label}：同一份关闭列表换个写法就被判成前缀漂了——功能一切正常，只是每一轮都全价（红线 11）"
             );
-            assert_eq!(tools_segment(&again.prefix), tools_segment(&first.prefix), "{family}/{label}：前缀镜像的 Tools 段跟着列表写法变了");
+            assert_eq!(
+                tools_segment(&again.prefix),
+                tools_segment(&first.prefix),
+                "{family}/{label}：前缀镜像的 Tools 段跟着列表写法变了"
+            );
             assert_same_bytes(
                 &format!("{family}/{label}：关闭列表的写法漏进了 prompt 字节"),
                 wire_tools_bytes(&first),
@@ -131,15 +166,29 @@ fn shuffling_the_switch_never_moves_a_byte() {
 fn without_the_field_every_byte_is_what_it_was_before_076() {
     for (family, provider) in providers() {
         let before = encode(&*provider, deployed().specs(), None);
-        let after = encode(&*provider, deployed().without_builtins(&[]).specs(), Some(&before.prefix));
+        let after = encode(
+            &*provider,
+            deployed().without_builtins(&[]).specs(),
+            Some(&before.prefix),
+        );
 
         assert_same_bytes(
-            &format!("{family}：空开关改了工具表的字节——不带这个字段的会话本该跟 076 之前一个字节不差"),
+            &format!(
+                "{family}：空开关改了工具表的字节——不带这个字段的会话本该跟 076 之前一个字节不差"
+            ),
             wire_tools_bytes(&before),
             wire_tools_bytes(&after),
         );
-        assert_eq!(tools_segment(&after.prefix), tools_segment(&before.prefix), "{family}：空开关动了前缀镜像");
-        assert_ne!(after.drift, Some(Segment::Tools), "{family}：空开关把前缀判漂了（红线 11）");
+        assert_eq!(
+            tools_segment(&after.prefix),
+            tools_segment(&before.prefix),
+            "{family}：空开关动了前缀镜像"
+        );
+        assert_ne!(
+            after.drift,
+            Some(Segment::Tools),
+            "{family}：空开关把前缀判漂了（红线 11）"
+        );
     }
 }
 
@@ -156,7 +205,10 @@ fn dropping_the_tail_leaves_the_shared_head_byte_identical() {
         let cut = encode(&*provider, reduced.specs(), None);
 
         let (base_bytes, cut_bytes) = (wire_tools_bytes(&base), wire_tools_bytes(&cut));
-        assert!(cut_bytes.len() < base_bytes.len(), "{family}：夹具白搭了，关掉之后字节反而没变少");
+        assert!(
+            cut_bytes.len() < base_bytes.len(),
+            "{family}：夹具白搭了，关掉之后字节反而没变少"
+        );
         // 去掉收尾的 `]` 之后，剪短的那一段必须是原来那一段的**字节前缀**——
         // 缓存命中比的就是这个，逐项相同但项之间多了个空格照样全价。
         let head = &cut_bytes[..cut_bytes.len() - 1];
@@ -167,6 +219,10 @@ fn dropping_the_tail_leaves_the_shared_head_byte_identical() {
             text(cut_bytes)
         );
         // 镜像那一侧记的必须正是 wire 上这一段（不然「请求体确定」推不出「缓存判定确定」）。
-        assert_eq!(tools_segment(&cut.prefix).hash, hash(cut_bytes), "{family}：前缀镜像哈希的不是 wire 上那一段字节");
+        assert_eq!(
+            tools_segment(&cut.prefix).hash,
+            hash(cut_bytes),
+            "{family}：前缀镜像哈希的不是 wire 上那一段字节"
+        );
     }
 }

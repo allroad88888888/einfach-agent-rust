@@ -19,7 +19,10 @@ pub struct ResponseHead {
 
 impl ResponseHead {
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -27,7 +30,9 @@ impl ResponseHead {
 /// 之后、这一次 `read` 顺带读到的 body 前缀字节（不能扔掉——TCP 不按 HTTP
 /// 报文的语义边界切包，一次 `read` 常常已经带上一部分 body 甚至下一个 chunk）。
 pub fn read_head(stream: &mut TcpStream, timeout: Duration) -> (ResponseHead, Vec<u8>) {
-    stream.set_read_timeout(Some(timeout)).expect("set_read_timeout");
+    stream
+        .set_read_timeout(Some(timeout))
+        .expect("set_read_timeout");
     let mut buf = Vec::new();
     let mut chunk = [0u8; 4096];
     let deadline = Instant::now() + timeout;
@@ -36,12 +41,23 @@ pub fn read_head(stream: &mut TcpStream, timeout: Duration) -> (ResponseHead, Ve
             break pos;
         }
         if Instant::now() >= deadline {
-            panic!("读响应头超时，目前已读到：{:?}", String::from_utf8_lossy(&buf));
+            panic!(
+                "读响应头超时，目前已读到：{:?}",
+                String::from_utf8_lossy(&buf)
+            );
         }
         match stream.read(&mut chunk) {
-            Ok(0) => panic!("连接在读完响应头之前就关闭了，目前已读到：{:?}", String::from_utf8_lossy(&buf)),
+            Ok(0) => panic!(
+                "连接在读完响应头之前就关闭了，目前已读到：{:?}",
+                String::from_utf8_lossy(&buf)
+            ),
             Ok(n) => buf.extend_from_slice(&chunk[..n]),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => continue,
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                continue;
+            }
             Err(e) => panic!("读响应头失败：{e}"),
         }
     };
@@ -59,7 +75,11 @@ fn parse_head(raw: &str) -> ResponseHead {
     let mut lines = raw.split("\r\n");
     let status_line = lines.next().unwrap_or("");
     // "HTTP/1.1 200 OK"
-    let status = status_line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let mut headers = Vec::new();
     for line in lines {
         if line.is_empty() {
@@ -69,13 +89,19 @@ fn parse_head(raw: &str) -> ResponseHead {
             headers.push((k.trim().to_string(), v.trim().to_string()));
         }
     }
-    ResponseHead { status, headers, raw: raw.to_string() }
+    ResponseHead {
+        status,
+        headers,
+        raw: raw.to_string(),
+    }
 }
 
 /// 阻塞读，尽量填满 `buf`，超时或对端关闭都算「这次读到这里」。给调用方在读
 /// body 阶段用。
 pub fn read_some(stream: &mut TcpStream, timeout: Duration) -> Option<Vec<u8>> {
-    stream.set_read_timeout(Some(timeout)).expect("set_read_timeout");
+    stream
+        .set_read_timeout(Some(timeout))
+        .expect("set_read_timeout");
     let mut chunk = [0u8; 8192];
     match stream.read(&mut chunk) {
         Ok(0) => None,

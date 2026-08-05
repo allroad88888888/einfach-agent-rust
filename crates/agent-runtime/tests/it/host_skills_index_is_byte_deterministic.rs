@@ -91,7 +91,11 @@ fn index_chunk(order: &[usize]) -> SystemChunk {
 }
 
 fn providers() -> Vec<(&'static str, Box<dyn Provider>)> {
-    vec![("deepseek", Box::new(DeepSeek)), ("glm", Box::new(Glm)), ("kimi", Box::new(Kimi))]
+    vec![
+        ("deepseek", Box::new(DeepSeek)),
+        ("glm", Box::new(Glm)),
+        ("kimi", Box::new(Kimi)),
+    ]
 }
 
 fn config() -> &'static SessionConfig {
@@ -119,15 +123,25 @@ fn encode(provider: &dyn Provider, system: &[SystemChunk], prev: Option<&PrefixI
 
 /// 前缀镜像里 System 那一段。
 fn system_segment(prefix: &PrefixImage) -> &SegmentImage {
-    prefix.segments.iter().find(|s| s.segment == Segment::System).expect("镜像里该有 System 段")
+    prefix
+        .segments
+        .iter()
+        .find(|s| s.segment == Segment::System)
+        .expect("镜像里该有 System 段")
 }
 
 /// 请求体里那条 `role: "system"` 消息的正文——**模型真正看到的那串字符**。
 fn wire_system_text(enc: &Encoded) -> String {
     let body: Value = serde_json::from_slice(&enc.body).expect("请求体该是合法 JSON");
     let messages = body["messages"].as_array().expect("请求体里该有 messages");
-    let system = messages.iter().find(|m| m["role"] == json!("system")).expect("该有一条 system 消息");
-    system["content"].as_str().expect("system 消息该有文本正文").to_string()
+    let system = messages
+        .iter()
+        .find(|m| m["role"] == json!("system"))
+        .expect("该有一条 system 消息");
+    system["content"]
+        .as_str()
+        .expect("system 消息该有文本正文")
+        .to_string()
 }
 
 /// `agent-providers` 里 `wire::prefix::hash` 的同款复制（`DefaultHasher`，固定种子）。
@@ -148,14 +162,21 @@ fn the_same_declaration_renders_the_very_same_index_twice() {
     for (family, provider) in providers() {
         let one = index_chunk(&forward());
         let other = index_chunk(&forward());
-        let (a, b) = (encode(&*provider, &[one], None), encode(&*provider, &[other], None));
+        let (a, b) = (
+            encode(&*provider, &[one], None),
+            encode(&*provider, &[other], None),
+        );
 
         assert_eq!(
             system_segment(&a.prefix),
             system_segment(&b.prefix),
             "{family}：同一份 skill 声明两次渲染，前缀镜像的 System 段不一样"
         );
-        assert_eq!(wire_system_text(&a), wire_system_text(&b), "{family}：同一份 skill 声明两次渲染，wire 上的索引不一样");
+        assert_eq!(
+            wire_system_text(&a),
+            wire_system_text(&b),
+            "{family}：同一份 skill 声明两次渲染，wire 上的索引不一样"
+        );
     }
 }
 
@@ -202,10 +223,15 @@ fn the_prefix_mirror_hashes_exactly_the_system_text_that_goes_on_the_wire() {
         let encoded = encode(&*provider, &[index_chunk(&forward())], None);
         // 镜像那一段是 `canonical(&json!(system_text))`（三家 `encode.rs` 同形），
         // 也就是把整段正文当一个 JSON 字符串序列化。
-        let wire = serde_json::to_vec(&json!(wire_system_text(&encoded))).expect("字符串序列化不会失败");
+        let wire =
+            serde_json::to_vec(&json!(wire_system_text(&encoded))).expect("字符串序列化不会失败");
         let mirror = system_segment(&encoded.prefix);
 
-        assert_eq!(mirror.bytes as usize, wire.len(), "{family}：镜像记的字节数跟 wire 上那一段对不上");
+        assert_eq!(
+            mirror.bytes as usize,
+            wire.len(),
+            "{family}：镜像记的字节数跟 wire 上那一段对不上"
+        );
         assert_eq!(
             mirror.hash,
             hash(&wire),
@@ -222,10 +248,19 @@ fn the_prefix_mirror_hashes_exactly_the_system_text_that_goes_on_the_wire() {
 fn the_index_is_one_sorted_line_per_skill_and_carries_no_body() {
     let text = &*index_chunk(&reversed()).text;
 
-    let mut expected: Vec<String> = DECLARED.iter().map(|(id, d)| format!("{id}: {d}")).collect();
+    let mut expected: Vec<String> = DECLARED
+        .iter()
+        .map(|(id, d)| format!("{id}: {d}"))
+        .collect();
     expected.sort();
     let lines: Vec<&str> = text.lines().skip(1).collect();
-    assert_eq!(lines, expected, "索引该是按 id 排序、一行一个「id: 描述」（第一行是那句抬头）");
+    assert_eq!(
+        lines, expected,
+        "索引该是按 id 排序、一行一个「id: 描述」（第一行是那句抬头）"
+    );
 
-    assert!(!text.contains("的正文"), "正文只在激活之后进 late_system，常驻索引里一个字都不该有：{text}");
+    assert!(
+        !text.contains("的正文"),
+        "正文只在激活之后进 late_system，常驻索引里一个字都不该有：{text}"
+    );
 }

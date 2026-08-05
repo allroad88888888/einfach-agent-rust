@@ -23,11 +23,18 @@ use crate::registry::SessionId;
 /// 全链路才老实。
 const HEADER_NO_ACCEL_BUFFERING: (&str, &str) = ("x-accel-buffering", "no");
 
-pub(in crate::http) async fn events(State(state): State<AppState>, Path(id): Path<String>, headers: axum::http::HeaderMap) -> Result<Response, ApiError> {
+pub(in crate::http) async fn events(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: axum::http::HeaderMap,
+) -> Result<Response, ApiError> {
     let id = SessionId::from(id);
     let hub = state.hub_for(&id)?;
 
-    let last_event_id = headers.get("last-event-id").and_then(|v| v.to_str().ok()).and_then(|s| s.parse::<u64>().ok());
+    let last_event_id = headers
+        .get("last-event-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
 
     let (rx, guard) = hub.spawn_forwarder(last_event_id);
     // `guard` 被这个 `.map` 闭包整个拿走（`move`）——它的存活期从此就是这个
@@ -39,12 +46,19 @@ pub(in crate::http) async fn events(State(state): State<AppState>, Path(id): Pat
         let _keep_guard_alive = &guard;
         Ok::<Event, Infallible>(to_sse_event(&frame))
     });
-    let sse = Sse::new(stream).keep_alive(KeepAlive::new().interval(state.sse_keep_alive()).text("keep-alive"));
+    let sse = Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(state.sse_keep_alive())
+            .text("keep-alive"),
+    );
 
     let mut response = sse.into_response();
     let headers = response.headers_mut();
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    headers.insert(HeaderName::from_static(HEADER_NO_ACCEL_BUFFERING.0), HeaderValue::from_static(HEADER_NO_ACCEL_BUFFERING.1));
+    headers.insert(
+        HeaderName::from_static(HEADER_NO_ACCEL_BUFFERING.0),
+        HeaderValue::from_static(HEADER_NO_ACCEL_BUFFERING.1),
+    );
     Ok(response)
 }
 

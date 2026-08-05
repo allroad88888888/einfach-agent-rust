@@ -27,4 +27,5 @@ pub use sync::{seed_after_recover, sync};
 /// [`crate::ctx::RunnerCtx`] 挂的就是它。`K=AtomKey`/`V=AgentValue` 是
 /// `Session` 的落盘键值类型（026），`M=PersistedMeta` 是这一层特有的、可
 /// `Deserialize` 的元数据（`agent_core::EntryMeta` 本身不行，见 [`meta`]）。
-pub type SessionBackend = dyn agent_store::SessionStore<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>;
+pub type SessionBackend =
+    dyn agent_store::SessionStore<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>;

@@ -129,14 +129,23 @@ mod tests {
                 used: Arc::from("required"),
             },
             Adjustment::ThinkingDisabledForToolChoice,
-            Adjustment::LateToolsForcedIntoPrefix { count: 3, est_cost_multiple: 120.0 },
-            Adjustment::LateSystemReshapedPrefix { est_cost_multiple: 11.0 },
+            Adjustment::LateToolsForcedIntoPrefix {
+                count: 3,
+                est_cost_multiple: 120.0,
+            },
+            Adjustment::LateSystemReshapedPrefix {
+                est_cost_multiple: 11.0,
+            },
         ];
         let s = serde_json::to_string(&adj).unwrap();
         assert_eq!(serde_json::from_str::<Vec<Adjustment>>(&s).unwrap(), adj);
 
         let img = PrefixImage {
-            segments: vec![SegmentImage { segment: Segment::Tools, bytes: 512, hash: 42 }],
+            segments: vec![SegmentImage {
+                segment: Segment::Tools,
+                bytes: 512,
+                hash: 42,
+            }],
             prompt_tokens: Some(2432),
         };
         let s = serde_json::to_string(&img).unwrap();

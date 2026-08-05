@@ -21,7 +21,8 @@ mod tests {
 
     #[test]
     fn model_name_error_is_404_but_classified_bad_request() {
-        let body = r#"{"error":{"message":"The model does not exist","type":"resource_not_found_error"}}"#;
+        let body =
+            r#"{"error":{"message":"The model does not exist","type":"resource_not_found_error"}}"#;
         assert_eq!(classify(404, body), ErrorClass::BadRequest);
     }
 
@@ -33,7 +34,8 @@ mod tests {
 
     #[test]
     fn invalid_key_is_401_classified_auth() {
-        let body = r#"{"error":{"message":"invalid api key","type":"invalid_authentication_error"}}"#;
+        let body =
+            r#"{"error":{"message":"invalid api key","type":"invalid_authentication_error"}}"#;
         assert_eq!(classify(401, body), ErrorClass::Auth);
     }
 

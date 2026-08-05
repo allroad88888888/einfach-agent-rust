@@ -5,7 +5,9 @@ mod support;
 
 use agent_core::TurnStatus;
 use support::session::new_session;
-use support::{provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event};
+use support::{
+    provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
+};
 
 #[test]
 fn begin_turn_advances_the_turn_resets_the_slate_and_keeps_the_conversation() {
@@ -46,9 +48,17 @@ fn begin_turn_writes_its_own_entry_carrying_the_new_turn_id() {
 
     session.begin_turn();
 
-    assert_eq!(session.history_len(), history_len_before + 1, "begin_turn 本身也是一次写入,留痕");
+    assert_eq!(
+        session.history_len(),
+        history_len_before + 1,
+        "begin_turn 本身也是一次写入,留痕"
+    );
     let last = session.history().last().expect("刚写完不该是空的");
-    assert_eq!(last.meta.turn_id, session.turn_id(), "这条 entry 记的是新轮的号，undo_turn 才能把它跟新轮的其余 entry 分在一组");
+    assert_eq!(
+        last.meta.turn_id,
+        session.turn_id(),
+        "这条 entry 记的是新轮的号，undo_turn 才能把它跟新轮的其余 entry 分在一组"
+    );
 }
 
 #[test]
@@ -63,10 +73,17 @@ fn a_terminal_status_receiving_user_input_directly_is_still_a_protocol_violation
     let history_len_before = session.history_len();
     let effects = session.step(user_input_event("no begin_turn"));
 
-    assert_eq!(session.status(), TurnStatus::Done { truncated: false }, "违规转移不改状态");
+    assert_eq!(
+        session.status(),
+        TurnStatus::Done { truncated: false },
+        "违规转移不改状态"
+    );
     assert_eq!(session.history_len(), history_len_before, "违规转移不留痕");
     assert!(
-        effects.iter().any(|e| matches!(e, agent_core::Effect::Emit(agent_core::Notice::ProtocolViolation { .. }))),
+        effects.iter().any(|e| matches!(
+            e,
+            agent_core::Effect::Emit(agent_core::Notice::ProtocolViolation { .. })
+        )),
         "该有一条可观测的 ProtocolViolation 通报，而不是静默什么都不做"
     );
 }

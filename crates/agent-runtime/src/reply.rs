@@ -73,8 +73,18 @@ pub(crate) fn settle(
     );
     let agent = agent.clone();
     Dispatched::Event(if is_error {
-        Event::ToolFailed { agent, epoch, call_id, error: Arc::from(body) }
+        Event::ToolFailed {
+            agent,
+            epoch,
+            call_id,
+            error: Arc::from(body),
+        }
     } else {
-        Event::ToolResult { agent, epoch, call_id, content: Arc::from(body) }
+        Event::ToolResult {
+            agent,
+            epoch,
+            call_id,
+            content: Arc::from(body),
+        }
     })
 }

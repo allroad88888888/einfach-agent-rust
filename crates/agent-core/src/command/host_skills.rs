@@ -100,15 +100,29 @@ mod tests {
 
         let before = s.history_len();
         s.declare_host_skills(vec![skill("zeta-flow"), skill("alpha-flow")]);
-        assert_eq!(s.history_len(), before + 1, "声明是一条 journaled entry，不是一个不进日志的构造参数");
+        assert_eq!(
+            s.history_len(),
+            before + 1,
+            "声明是一条 journaled entry，不是一个不进日志的构造参数"
+        );
 
-        let ids: Vec<String> = s.host_skills().iter().map(|sk| sk.id.as_str().to_string()).collect();
+        let ids: Vec<String> = s
+            .host_skills()
+            .iter()
+            .map(|sk| sk.id.as_str().to_string())
+            .collect();
         assert_eq!(ids, vec!["alpha-flow", "zeta-flow"]);
         assert_eq!(&*s.host_skills()[0].body, "正文若干");
 
         let report = s.undo_step();
-        assert!(matches!(report, crate::command::UndoReport::Applied { .. }), "{report:?}");
-        assert!(s.host_skills().is_empty(), "undo 越过声明那一步之后，这个会话不该还认得那些 skill");
+        assert!(
+            matches!(report, crate::command::UndoReport::Applied { .. }),
+            "{report:?}"
+        );
+        assert!(
+            s.host_skills().is_empty(),
+            "undo 越过声明那一步之后，这个会话不该还认得那些 skill"
+        );
 
         let _ = s.redo_step();
         assert_eq!(s.host_skills().len(), 2);

@@ -40,7 +40,10 @@ pub fn late_system_message(late: &[SystemChunk]) -> Option<Value> {
 /// 若干段文本用空行拼成一条，全空返回 `None`。[`system_text`] /
 /// [`system_text_folded`] 共用——「怎么把多段 system 拼成一条正文」只有一处。
 fn join_texts<'a>(texts: impl Iterator<Item = &'a str>) -> Option<String> {
-    let text = texts.filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n\n");
+    let text = texts
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
     (!text.is_empty()).then_some(text)
 }
 
@@ -112,14 +115,24 @@ mod tests {
     use std::sync::Arc;
 
     fn msg(role: Role, blocks: Vec<ContentBlock>) -> Message {
-        Message { id: MessageId(1), role, blocks }
+        Message {
+            id: MessageId(1),
+            role,
+            blocks,
+        }
     }
 
     #[test]
     fn system_chunks_join_with_blank_line() {
         let chunks = vec![
-            SystemChunk { label: Arc::from("base"), text: Arc::from("你是助手") },
-            SystemChunk { label: Arc::from("skill"), text: Arc::from("会用工具") },
+            SystemChunk {
+                label: Arc::from("base"),
+                text: Arc::from("你是助手"),
+            },
+            SystemChunk {
+                label: Arc::from("skill"),
+                text: Arc::from("会用工具"),
+            },
         ];
         assert_eq!(system_text(&chunks).unwrap(), "你是助手\n\n会用工具");
         assert_eq!(system_text(&[]), None);

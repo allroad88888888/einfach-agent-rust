@@ -69,7 +69,11 @@ pub(crate) fn from_value(value: &AgentValue) -> Vec<(ToolSpec, Reversibility)> {
         .iter()
         .filter_map(|item| serde_json::from_value::<Declared>(item.clone()).ok())
         .map(|d| {
-            let spec = ToolSpec { name: d.name, description: d.description, schema: d.schema };
+            let spec = ToolSpec {
+                name: d.name,
+                description: d.description,
+                schema: d.schema,
+            };
             (spec, d.reversibility)
         })
         .collect()
@@ -85,7 +89,9 @@ mod tests {
         let spec = ToolSpec {
             name: Arc::from(name),
             description: Arc::from("说明"),
-            schema: Arc::new(json!({ "type": "object", "properties": { "id": { "type": "string" } } })),
+            schema: Arc::new(
+                json!({ "type": "object", "properties": { "id": { "type": "string" } } }),
+            ),
         };
         (spec, reversibility)
     }
@@ -93,16 +99,25 @@ mod tests {
     /// 往返：落值再读回来，四个字段一个不少、一个不错。
     #[test]
     fn round_trips_through_the_value() {
-        let tools = vec![tool("web:crm/lookup", Reversibility::Pure), tool("desk:clipboard/write", Reversibility::Irreversible)];
+        let tools = vec![
+            tool("web:crm/lookup", Reversibility::Pure),
+            tool("desk:clipboard/write", Reversibility::Irreversible),
+        ];
         let read = from_value(&to_value(tools));
 
         assert_eq!(read.len(), 2);
-        assert_eq!(&*read[0].0.name, "desk:clipboard/write", "写入时按名字排过序");
+        assert_eq!(
+            &*read[0].0.name, "desk:clipboard/write",
+            "写入时按名字排过序"
+        );
         assert_eq!(read[0].1, Reversibility::Irreversible);
         assert_eq!(&*read[1].0.name, "web:crm/lookup");
         assert_eq!(read[1].1, Reversibility::Pure);
         assert_eq!(&*read[1].0.description, "说明");
-        assert_eq!(read[1].0.schema["properties"]["id"]["type"], json!("string"));
+        assert_eq!(
+            read[1].0.schema["properties"]["id"]["type"],
+            json!("string")
+        );
     }
 
     /// 红线 11：客户端给的数组顺序、以及 `schema` 里键的插入顺序，都进不了落盘
@@ -123,10 +138,15 @@ mod tests {
                 description: Arc::from("说明"),
                 schema: Arc::new(serde_json::Value::Object(schema.clone())),
             };
-            vec![(spec("web:b/x"), Reversibility::Pure), (spec("desk:a/y"), Reversibility::Pure)]
+            vec![
+                (spec("web:b/x"), Reversibility::Pure),
+                (spec("desk:a/y"), Reversibility::Pure),
+            ]
         };
         let bytes = |v: &AgentValue| {
-            let AgentValue::Json(json) = v else { panic!("落 Json") };
+            let AgentValue::Json(json) = v else {
+                panic!("落 Json")
+            };
             serde_json::to_string(&**json).unwrap()
         };
 
@@ -134,8 +154,16 @@ mod tests {
         let a = to_value(with(&forward));
         let mut reversed = with(&backward);
         reversed.reverse();
-        assert_eq!(bytes(&a), bytes(&to_value(reversed)), "声明的落盘字节不许跟着输入顺序漂（红线 11）");
-        assert_eq!(bytes(&a), bytes(&to_value(with(&forward))), "同一份声明两次序列化也必须逐字节相同");
+        assert_eq!(
+            bytes(&a),
+            bytes(&to_value(reversed)),
+            "声明的落盘字节不许跟着输入顺序漂（红线 11）"
+        );
+        assert_eq!(
+            bytes(&a),
+            bytes(&to_value(with(&forward))),
+            "同一份声明两次序列化也必须逐字节相同"
+        );
     }
 
     /// 空声明落成空数组（默认值就是它），读回来也是空——「没声明」和「声明了零个」

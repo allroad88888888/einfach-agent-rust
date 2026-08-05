@@ -61,7 +61,11 @@ use crate::registry::OpenSpec;
 /// 三样一起从 [`declaration`] 出来，是因为它们的**来源判据只有一个**（`restored`
 /// 与否）——分成三个函数各判一次，早晚会出现「工具从历史来、开关却从这次请求来」
 /// 这种半新半旧的表，而那种不一致不报错，只在下一次恢复时以少几个工具的形式浮出来。
-type Declared = (Vec<(ToolSpec, Reversibility)>, Vec<HostSkill>, Vec<Arc<str>>);
+type Declared = (
+    Vec<(ToolSpec, Reversibility)>,
+    Vec<HostSkill>,
+    Vec<Arc<str>>,
+);
 
 /// 这个会话的两段「进 prompt 的料」：工具表 + system 段。
 pub(super) struct Assembled {
@@ -79,7 +83,11 @@ pub(super) struct Assembled {
 ///
 /// skill 那一半跟工具**一视同仁**：HTTP 那道闸看的是「带没带 `capabilities`」这个
 /// 整体，这里也不能只挡一半。
-pub(super) fn assemble(spec: &OpenSpec, session: &Session, restored: bool) -> Result<Assembled, String> {
+pub(super) fn assemble(
+    spec: &OpenSpec,
+    session: &Session,
+    restored: bool,
+) -> Result<Assembled, String> {
     if restored && !nothing_declared(spec) {
         return Err(format!(
             "session \"{}\" 是从历史恢复出来的，能力只能从历史来：它当初声明的 {} 个工具 / {} 个 skill、关掉的 {} 个内置工具已经在日志里，这次又带了 {} 个工具 / {} 个 skill / {} 个关闭项——恢复是忠实重放，不接受改写（docs/HOST-CAPABILITIES.md §三）",
@@ -118,16 +126,31 @@ pub(super) fn assemble(spec: &OpenSpec, session: &Session, restored: bool) -> Re
     // 那一格。`without_builtins` 空列表是一次真正的空操作，不带这个字段的会话工具表
     // 跟 076 之前逐字节相同。
     let tools = spec.tools.build().without_builtins(&disable_builtin);
-    let tools = if skills.is_empty() { tools } else { tools.with_skills(skills) };
-    Ok(Assembled { tools: tools.with_host_tools(host_tools), system })
+    let tools = if skills.is_empty() {
+        tools
+    } else {
+        tools.with_skills(skills)
+    };
+    Ok(Assembled {
+        tools: tools.with_host_tools(host_tools),
+        system,
+    })
 }
 
 /// ①：这个会话的声明与开关从哪来。**新建看这次请求，恢复看回放出来的状态。**
 fn declaration(spec: &OpenSpec, session: &Session, restored: bool) -> Declared {
     if restored {
-        (session.host_tools(), session.host_skills(), session.disabled_builtins())
+        (
+            session.host_tools(),
+            session.host_skills(),
+            session.disabled_builtins(),
+        )
     } else {
-        (spec.host_tools.clone(), spec.host_skills.clone(), spec.disable_builtin.clone())
+        (
+            spec.host_tools.clone(),
+            spec.host_skills.clone(),
+            spec.disable_builtin.clone(),
+        )
     }
 }
 

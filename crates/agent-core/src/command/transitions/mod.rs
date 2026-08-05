@@ -45,15 +45,19 @@ pub(super) fn transition(txn: &mut Txn, event: Event) -> Vec<Effect> {
 
     match event {
         Event::UserInput { text, .. } => user_input::on_user_input(txn, text, &event_desc),
-        Event::ProviderDone { blocks, stop, usage, prefix, .. } => {
-            provider_done::on_provider_done(txn, blocks, stop, usage, prefix, &event_desc)
-        }
+        Event::ProviderDone {
+            blocks,
+            stop,
+            usage,
+            prefix,
+            ..
+        } => provider_done::on_provider_done(txn, blocks, stop, usage, prefix, &event_desc),
         Event::ProviderFailed { class, .. } => {
             provider_failed::on_provider_failed(txn, class, &event_desc)
         }
-        Event::ToolResult { call_id, content, .. } => {
-            tool_outcome::on_tool_outcome(txn, call_id, content, false, &event_desc)
-        }
+        Event::ToolResult {
+            call_id, content, ..
+        } => tool_outcome::on_tool_outcome(txn, call_id, content, false, &event_desc),
         Event::ToolFailed { call_id, error, .. } => {
             tool_outcome::on_tool_outcome(txn, call_id, error, true, &event_desc)
         }
@@ -100,9 +104,14 @@ fn try_call_provider(txn: &mut Txn) -> Vec<Effect> {
         txn.set_status(TurnStatus::Thinking);
         let mut effects = Vec::new();
         if prev != TurnStatus::Thinking {
-            effects.push(Effect::Emit(Notice::TurnStatusChanged { status: TurnStatus::Thinking }));
+            effects.push(Effect::Emit(Notice::TurnStatusChanged {
+                status: TurnStatus::Thinking,
+            }));
         }
-        effects.push(Effect::CallProvider { agent: txn.agent().clone(), epoch: txn.epoch() });
+        effects.push(Effect::CallProvider {
+            agent: txn.agent().clone(),
+            epoch: txn.epoch(),
+        });
         effects
     } else {
         let status = TurnStatus::Done { truncated: true };

@@ -33,7 +33,11 @@ fn build(model: &str) -> RunnerCtx {
 #[test]
 fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window() {
     let mut ctx = build("deepseek-v4-pro");
-    ctx.guard_history.push(TurnHit::from_usage(&TokenUsage { prompt: 100, completion: 10, cached: Some(64) }));
+    ctx.guard_history.push(TurnHit::from_usage(&TokenUsage {
+        prompt: 100,
+        completion: 10,
+        cached: Some(64),
+    }));
     assert!(!ctx.guard_history.is_empty());
 
     ctx.switch_provider(
@@ -46,7 +50,10 @@ fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window()
     assert_eq!(ctx.endpoint, "https://api.moonshot.cn/v1/chat/completions");
     assert_eq!(ctx.api_key, "kimi-key");
     assert_eq!(&*ctx.session_config.model, "kimi-k3");
-    assert!(ctx.guard_history.is_empty(), "跨家滚动窗口该清空，不能把 deepseek 的观测带进 kimi 的命中率");
+    assert!(
+        ctx.guard_history.is_empty(),
+        "跨家滚动窗口该清空，不能把 deepseek 的观测带进 kimi 的命中率"
+    );
 }
 
 /// 014 验收原文点名的断言：切到 kimi 之后，真的 `encode` 一次，产出的
@@ -78,6 +85,12 @@ fn switch_provider_encode_reflects_the_new_family_not_the_old() {
     });
 
     let body = String::from_utf8(encoded.body).unwrap();
-    assert!(body.contains("kimi-k3"), "encode 该带上切换后的 model 名: {body}");
-    assert!(!body.contains("deepseek-v4-pro"), "encode 出的 body 不该残留切换前那家的 model 名: {body}");
+    assert!(
+        body.contains("kimi-k3"),
+        "encode 该带上切换后的 model 名: {body}"
+    );
+    assert!(
+        !body.contains("deepseek-v4-pro"),
+        "encode 出的 body 不该残留切换前那家的 model 名: {body}"
+    );
 }

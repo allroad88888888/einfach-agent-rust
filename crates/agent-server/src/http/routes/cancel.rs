@@ -12,7 +12,10 @@ use crate::http::error::ApiError;
 use crate::http::state::AppState;
 use crate::registry::SessionId;
 
-pub(in crate::http) async fn cancel(State(state): State<AppState>, Path(id): Path<String>) -> Result<StatusCode, ApiError> {
+pub(in crate::http) async fn cancel(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
     state.dispatch(&SessionId::from(id), Command::Cancel)?;
     Ok(StatusCode::ACCEPTED)
 }

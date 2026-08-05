@@ -37,9 +37,18 @@ async fn server() -> http_indep_support::server_harness::TestServer {
 
 fn assert_error_shape(body: &serde_json::Value, expected_code: &str) {
     let error = &body["error"];
-    assert!(error.is_object(), "错误体该是 {{\"error\":{{...}}}} 形状，实际：{body}");
-    assert_eq!(error["code"], expected_code, "错误码不对，完整 body：{body}");
-    assert!(error["message"].is_string(), "message 该是字符串，完整 body：{body}");
+    assert!(
+        error.is_object(),
+        "错误体该是 {{\"error\":{{...}}}} 形状，实际：{body}"
+    );
+    assert_eq!(
+        error["code"], expected_code,
+        "错误码不对，完整 body：{body}"
+    );
+    assert!(
+        error["message"].is_string(),
+        "message 该是字符串，完整 body：{body}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -50,15 +59,34 @@ async fn nonexistent_session_id_is_404_on_status_and_events() {
     assert_eq!(status.status, 404);
     assert_error_shape(&status.json(), "session_not_found");
 
-    let events = request(server.addr, "GET", "/sessions/does-not-exist/events", &[], None);
-    assert_eq!(events.status, 404, "events 端点对不存在的 id 也该 404，实际 body={}", events.body_str());
+    let events = request(
+        server.addr,
+        "GET",
+        "/sessions/does-not-exist/events",
+        &[],
+        None,
+    );
+    assert_eq!(
+        events.status,
+        404,
+        "events 端点对不存在的 id 也该 404，实际 body={}",
+        events.body_str()
+    );
     assert_error_shape(&events.json(), "session_not_found");
 
-    let input = post_json(server.addr, "/sessions/does-not-exist/input", "{\"text\":\"hi\"}");
+    let input = post_json(
+        server.addr,
+        "/sessions/does-not-exist/input",
+        "{\"text\":\"hi\"}",
+    );
     assert_eq!(input.status, 404);
     assert_error_shape(&input.json(), "session_not_found");
 
-    let undo = post_json(server.addr, "/sessions/does-not-exist/undo", "{\"granularity\":\"turn\",\"force\":false}");
+    let undo = post_json(
+        server.addr,
+        "/sessions/does-not-exist/undo",
+        "{\"granularity\":\"turn\",\"force\":false}",
+    );
     assert_eq!(undo.status, 404);
     assert_error_shape(&undo.json(), "session_not_found");
 
@@ -80,10 +108,23 @@ async fn malformed_json_body_is_400() {
     let server = server().await;
     let id = server.create_session();
 
-    let bad = post_json(server.addr, &format!("/sessions/{id}/input"), "{not json at all");
-    assert_eq!(bad.status, 400, "坏 JSON body 该 400，实际 body={}", bad.body_str());
+    let bad = post_json(
+        server.addr,
+        &format!("/sessions/{id}/input"),
+        "{not json at all",
+    );
+    assert_eq!(
+        bad.status,
+        400,
+        "坏 JSON body 该 400，实际 body={}",
+        bad.body_str()
+    );
 
-    let bad_undo = post_json(server.addr, &format!("/sessions/{id}/undo"), "not even an object");
+    let bad_undo = post_json(
+        server.addr,
+        &format!("/sessions/{id}/undo"),
+        "not even an object",
+    );
     assert_eq!(bad_undo.status, 400);
 }
 
@@ -101,8 +142,16 @@ async fn malformed_json_body_is_400() {
 async fn malformed_json_body_uses_the_unified_error_shape() {
     let server = server().await;
     let id = server.create_session();
-    let bad = post_json(server.addr, &format!("/sessions/{id}/input"), "{not json at all");
-    assert_eq!(bad.header("content-type"), Some("application/json"), "实际是 text/plain");
+    let bad = post_json(
+        server.addr,
+        &format!("/sessions/{id}/input"),
+        "{not json at all",
+    );
+    assert_eq!(
+        bad.header("content-type"),
+        Some("application/json"),
+        "实际是 text/plain"
+    );
     assert_error_shape(&bad.json(), "bad_request");
 }
 
@@ -114,14 +163,29 @@ async fn undo_step_granularity_with_force_is_400() {
     // Session 没有 undo_step 的 force 变体（issue 031 实做记录），HTTP 层在
     // 转发给 actor 之前就该拒绝。
     let resp = server.post_undo(&id, "step", true);
-    assert_eq!(resp.status, 400, "step+force=true 该被拒，实际 body={}", resp.body_str());
+    assert_eq!(
+        resp.status,
+        400,
+        "step+force=true 该被拒，实际 body={}",
+        resp.body_str()
+    );
     assert_error_shape(&resp.json(), "bad_request");
 
     // 对照组：step + force=false、turn + force=true 都该正常放行（202）。
     let ok1 = server.post_undo(&id, "step", false);
-    assert_eq!(ok1.status, 202, "step+force=false 该正常放行，body={}", ok1.body_str());
+    assert_eq!(
+        ok1.status,
+        202,
+        "step+force=false 该正常放行，body={}",
+        ok1.body_str()
+    );
     let ok2 = server.post_undo(&id, "turn", true);
-    assert_eq!(ok2.status, 202, "turn+force=true 该正常放行，body={}", ok2.body_str());
+    assert_eq!(
+        ok2.status,
+        202,
+        "turn+force=true 该正常放行，body={}",
+        ok2.body_str()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -130,14 +194,24 @@ async fn tool_result_uses_the_same_session_lookup_as_other_commands() {
     let id = server.create_session();
 
     let existing = server.post_tool_result(&id);
-    assert_eq!(existing.status, 202, "活 session 的回传应成功入 actor 队列，body={}", existing.body_str());
+    assert_eq!(
+        existing.status,
+        202,
+        "活 session 的回传应成功入 actor 队列，body={}",
+        existing.body_str()
+    );
 
     let missing = post_json(
         server.addr,
         "/sessions/does-not-exist/tool_result",
         "{\"agent\":\"root\",\"tool_call_id\":\"x\",\"result\":{\"content\":\"x\"}}",
     );
-    assert_eq!(missing.status, 404, "不存在的 session 不应接受回传，body={}", missing.body_str());
+    assert_eq!(
+        missing.status,
+        404,
+        "不存在的 session 不应接受回传，body={}",
+        missing.body_str()
+    );
     assert_error_shape(&missing.json(), "session_not_found");
 }
 

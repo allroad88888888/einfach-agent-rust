@@ -23,21 +23,37 @@ fn session_with_a_finished_child() -> (Session, AgentId, Epoch) {
     let root = AgentId::root();
     // root 先进 `Thinking`：后面那条 `Cancel` 才是一次合法转移（Idle 收 Cancel
     // 是协议违规，不写任何 primitive，也就不会 bump 世代——测试会假绿）。
-    let _ = session.step(Event::UserInput { agent: root.clone(), text: Arc::from("拆一个给后台") });
+    let _ = session.step(Event::UserInput {
+        agent: root.clone(),
+        text: Arc::from("拆一个给后台"),
+    });
 
     let spawned_at = session.epoch();
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: child.clone(), text: Arc::from("BGTASK") });
+    let _ = session.step(Event::UserInput {
+        agent: child.clone(),
+        text: Arc::from("BGTASK"),
+    });
     let _ = session.step(Event::ProviderDone {
         agent: child.clone(),
         epoch: session.epoch(),
         blocks: vec![ContentBlock::Text(Arc::from("后台子的答案"))],
         stop: StopReason::EndTurn,
-        usage: TokenUsage { prompt: 10, completion: 5, cached: None },
-        prefix: agent_core::PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        usage: TokenUsage {
+            prompt: 10,
+            completion: 5,
+            cached: None,
+        },
+        prefix: agent_core::PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     });
-    assert_eq!(session.status_of(&child), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        session.status_of(&child),
+        TurnStatus::Done { truncated: false }
+    );
 
     (session, child, spawned_at)
 }
@@ -56,7 +72,10 @@ fn a_finished_background_child_lands_in_the_stash() {
     assert_eq!(stash[0].child, child);
     assert_eq!(&*stash[0].content, "后台子的答案");
     assert!(!stash[0].is_error);
-    assert!(subtree.take_orphans(&session).is_empty(), "进了 stash 就该从 detached 名单里划掉");
+    assert!(
+        subtree.take_orphans(&session).is_empty(),
+        "进了 stash 就该从 detached 名单里划掉"
+    );
 }
 
 /// **红线 6，stash 这一侧的门。**
@@ -75,12 +94,21 @@ fn a_stale_epoch_keeps_the_background_result_out_of_the_stash() {
 
     // 在飞期间的取消/undo：世代 +1。子自己那份答案还原样躺在它的历史里
     // （`Cancel` 只推 root），但它属于上一代。
-    let _ = session.step(Event::Cancel { agent: AgentId::root() });
-    assert_ne!(session.epoch(), spawned_at, "取消该推走世代，否则这条测试是空跑的");
+    let _ = session.step(Event::Cancel {
+        agent: AgentId::root(),
+    });
+    assert_ne!(
+        session.epoch(),
+        spawned_at,
+        "取消该推走世代，否则这条测试是空跑的"
+    );
 
     subtree.harvest_detached(&session);
 
-    assert!(subtree.take_stash().is_empty(), "过期世代的后台子结果不该进 stash（红线 6）");
+    assert!(
+        subtree.take_stash().is_empty(),
+        "过期世代的后台子结果不该进 stash（红线 6）"
+    );
 }
 
 /// 上一条的孪生：**不** bump 世代，同一份 fixture 该进 stash。
@@ -101,13 +129,19 @@ fn a_running_background_child_is_the_orphan_candidate() {
     let mut session = Session::new(AgentId::root());
     let root = AgentId::root();
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: child.clone(), text: Arc::from("BGTASK") });
+    let _ = session.step(Event::UserInput {
+        agent: child.clone(),
+        text: Arc::from("BGTASK"),
+    });
 
     let mut subtree = Subtree::default();
     subtree.detach(child.clone(), root, session.epoch());
     subtree.harvest_detached(&session);
 
-    assert!(subtree.take_stash().is_empty(), "还没落终态，没有结果可 stash");
+    assert!(
+        subtree.take_stash().is_empty(),
+        "还没落终态，没有结果可 stash"
+    );
     let orphans = subtree.take_orphans(&session);
     assert_eq!(orphans.len(), 1);
     assert_eq!(orphans[0].child, child);
@@ -121,14 +155,26 @@ fn a_child_bound_to_a_slot_is_not_an_orphan() {
     let mut session = Session::new(AgentId::root());
     let root = AgentId::root();
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: child.clone(), text: Arc::from("BGTASK") });
+    let _ = session.step(Event::UserInput {
+        agent: child.clone(),
+        text: Arc::from("BGTASK"),
+    });
 
     let mut subtree = Subtree::default();
     subtree.detach(child.clone(), root.clone(), session.epoch());
     let epoch = session.epoch();
-    subtree.record(child, root, ToolCallId::new("call_collect"), epoch, crate::COLLECT_TOOL);
+    subtree.record(
+        child,
+        root,
+        ToolCallId::new("call_collect"),
+        epoch,
+        crate::COLLECT_TOOL,
+    );
 
-    assert!(subtree.take_orphans(&session).is_empty(), "有人在等它，就不该被当孤儿拆掉");
+    assert!(
+        subtree.take_orphans(&session).is_empty(),
+        "有人在等它，就不该被当孤儿拆掉"
+    );
 }
 
 /// 已经不活的（spawn 那一轮被 undo 撤了）不算孤儿：没东西要拆，也没什么可告警。

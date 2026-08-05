@@ -12,7 +12,12 @@ mod support;
 use agent_core::{Adjustment, RequestIntent};
 use agent_providers::Provider;
 
-fn base_ingredients_parts() -> (Vec<agent_core::SystemChunk>, Vec<agent_core::Message>, Vec<agent_core::ToolSpec>, agent_core::SessionConfig) {
+fn base_ingredients_parts() -> (
+    Vec<agent_core::SystemChunk>,
+    Vec<agent_core::Message>,
+    Vec<agent_core::ToolSpec>,
+    agent_core::SessionConfig,
+) {
     let system = vec![support::sys_chunk("base", "你是一个助手。")];
     let messages = vec![support::user_text(1, "北京天气怎么样")];
     let tools = vec![support::tool_spec(
@@ -66,7 +71,9 @@ fn must_use_named_tool_disables_thinking_on_deepseek() {
 
     let encoded = provider.encode(&ing);
     assert!(
-        encoded.adjustments.contains(&Adjustment::ThinkingDisabledForToolChoice),
+        encoded
+            .adjustments
+            .contains(&Adjustment::ThinkingDisabledForToolChoice),
         "DeepSeek 默认开思考，MustUse 必须先关思考才能传，adjustments: {:?}",
         encoded.adjustments
     );
@@ -90,7 +97,9 @@ fn must_use_tool_disables_thinking_on_deepseek() {
 
     let encoded = provider.encode(&ing);
     assert!(
-        encoded.adjustments.contains(&Adjustment::ThinkingDisabledForToolChoice),
+        encoded
+            .adjustments
+            .contains(&Adjustment::ThinkingDisabledForToolChoice),
         "MustUseTool 等价于 tool_choice=required，DeepSeek 默认思考下这条也是 400，\
          必须先关思考，adjustments: {:?}",
         encoded.adjustments

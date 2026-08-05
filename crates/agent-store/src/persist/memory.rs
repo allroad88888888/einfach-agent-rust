@@ -17,7 +17,9 @@ pub struct Memory<K, V, M> {
 
 impl<K, V, M> Memory<K, V, M> {
     pub fn new() -> Self {
-        Memory { inner: Mutex::new(SessionLog::new()) }
+        Memory {
+            inner: Mutex::new(SessionLog::new()),
+        }
     }
 }
 
@@ -30,7 +32,11 @@ impl<K, V, M> Default for Memory<K, V, M> {
 /// 锁中毒（某次持锁时 panic）按「这个后端从今往后再也读不到／写不进任何东西」处理，
 /// 而不是把 panic 传染给调用方——那正是 `Memory` 存在的意义之一：它是给测试用的
 /// 无 IO 后端，唯一可能失败的地方就是自己的锁，不该比 `Jsonl` 更容易把上层带崩。
-fn with_lock<K, V, M, R>(inner: &Mutex<SessionLog<K, V, M>>, f: impl FnOnce(&mut SessionLog<K, V, M>) -> R, default: R) -> R {
+fn with_lock<K, V, M, R>(
+    inner: &Mutex<SessionLog<K, V, M>>,
+    f: impl FnOnce(&mut SessionLog<K, V, M>) -> R,
+    default: R,
+) -> R {
     match inner.lock() {
         Ok(mut guard) => f(&mut guard),
         Err(_) => default,
@@ -46,11 +52,21 @@ impl<K: Clone, V: Clone, M: Clone> SessionStore<K, V, M> for Memory<K, V, M> {
         // 返回值（真正切掉了多少条）只有 `Jsonl` 落盘需要——见 `record_drop_oldest`
         // 文档；`Memory` 是单一份连续存活的 `SessionLog`，不存在「从压实点重放」这回事，
         // 用不上它。
-        with_lock(&self.inner, |log| { log.record_drop_oldest(count); }, ());
+        with_lock(
+            &self.inner,
+            |log| {
+                log.record_drop_oldest(count);
+            },
+            (),
+        );
     }
 
     fn drop_after(&self, first_seq: u64, count: usize) {
-        with_lock(&self.inner, |log| log.record_drop_after(first_seq, count), ());
+        with_lock(
+            &self.inner,
+            |log| log.record_drop_after(first_seq, count),
+            (),
+        );
     }
 
     fn set_cursor(&self, cursor: usize) {
@@ -64,7 +80,14 @@ impl<K: Clone, V: Clone, M: Clone> SessionStore<K, V, M> for Memory<K, V, M> {
     fn load(&self) -> LoadOutcome<K, V, M> {
         // `Memory` 没有序列化步骤（红线 7：这个模块零 IO），天生不会 `Refused`
         // ——`to_loaded()` 只有「从没写过」与「有数据」两种可能。
-        with_lock(&self.inner, |log| log.to_loaded().map_or(LoadOutcome::Absent, LoadOutcome::Loaded), LoadOutcome::Absent)
+        with_lock(
+            &self.inner,
+            |log| {
+                log.to_loaded()
+                    .map_or(LoadOutcome::Absent, LoadOutcome::Loaded)
+            },
+            LoadOutcome::Absent,
+        )
     }
 }
 
@@ -80,7 +103,11 @@ mod tests {
         Entry {
             seq,
             meta: 1,
-            changes: vec![Change { key: "a".to_string(), prev: V(seq as i64), next: V(seq as i64 + 1) }],
+            changes: vec![Change {
+                key: "a".to_string(),
+                prev: V(seq as i64),
+                next: V(seq as i64 + 1),
+            }],
         }
     }
 
@@ -99,7 +126,10 @@ mod tests {
         store.set_cursor(3);
 
         let loaded = store.load().loaded().unwrap();
-        assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![0, 1, 2]);
+        assert_eq!(
+            loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
         assert_eq!(loaded.cursor, 3);
         assert_eq!(loaded.next_seq, 3);
         assert!(loaded.snapshot.is_none());

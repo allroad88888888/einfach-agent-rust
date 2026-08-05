@@ -44,10 +44,17 @@ fn tool_timeout_finishes_the_slot_as_an_error_result() {
 
     assert_eq!(s.status(), TurnStatus::Thinking, "唯一的槽落地就收敛了");
     assert!(s.tool_slots().is_empty());
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 
     let msg = s.messages().back().expect("收敛应该拼出一条消息").clone();
-    let ContentBlock::ToolResult { is_error, content, .. } = &msg.blocks[0] else {
+    let ContentBlock::ToolResult {
+        is_error, content, ..
+    } = &msg.blocks[0]
+    else {
         panic!("期待 ToolResult 块");
     };
     assert!(*is_error, "超时必须标 is_error:true");
@@ -66,8 +73,16 @@ fn tool_timeout_among_multiple_slots_does_not_abort_the_turn() {
         Some(ToolCallId::new("call_2")),
     ));
 
-    assert_eq!(s.status(), TurnStatus::Thinking, "部分超时不中止，loop 继续");
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert_eq!(
+        s.status(),
+        TurnStatus::Thinking,
+        "部分超时不中止，loop 继续"
+    );
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 
     let msg = s.messages().back().unwrap().clone();
     let ContentBlock::ToolResult { is_error: err1, .. } = &msg.blocks[0] else {

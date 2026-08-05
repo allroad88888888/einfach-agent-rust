@@ -21,11 +21,18 @@ pub fn provider() -> DeepSeek {
 }
 
 pub fn sys_chunk(label: &str, text: &str) -> SystemChunk {
-    SystemChunk { label: Arc::from(label), text: Arc::from(text) }
+    SystemChunk {
+        label: Arc::from(label),
+        text: Arc::from(text),
+    }
 }
 
 pub fn user_text(id: u64, text: &str) -> Message {
-    Message { id: MessageId(id), role: Role::User, blocks: vec![ContentBlock::Text(Arc::from(text))] }
+    Message {
+        id: MessageId(id),
+        role: Role::User,
+        blocks: vec![ContentBlock::Text(Arc::from(text))],
+    }
 }
 
 pub fn assistant_text(id: u64, text: &str) -> Message {
@@ -37,7 +44,11 @@ pub fn assistant_text(id: u64, text: &str) -> Message {
 }
 
 pub fn tool_spec(name: &str, description: &str, schema: Value) -> ToolSpec {
-    ToolSpec { name: Arc::from(name), description: Arc::from(description), schema: Arc::new(schema) }
+    ToolSpec {
+        name: Arc::from(name),
+        description: Arc::from(description),
+        schema: Arc::new(schema),
+    }
 }
 
 pub fn session_config() -> SessionConfig {
@@ -63,7 +74,16 @@ pub fn ingredients<'a>(
     // 039 的 `late_system` 走独立的 `skill_indep_late_system_placement.rs`（它直接
     // 构造 `Ingredients` 字面量），这个共用 builder 的既有调用方都不带 skill 注入，
     // 所以这里硬编码空——加成参数会波及 32 个调用点却没有一个真的用它。
-    Ingredients { system, messages, tools, late_tools, late_system: &[], config, intent, prev_prefix }
+    Ingredients {
+        system,
+        messages,
+        tools,
+        late_tools,
+        late_system: &[],
+        config,
+        intent,
+        prev_prefix,
+    }
 }
 
 /// 两个不常用工具的 schema，用两种不同 key 插入顺序构造出「值相等」的
@@ -72,15 +92,27 @@ pub fn ingredients<'a>(
 pub fn schema_order_a() -> Value {
     let mut map = serde_json::Map::new();
     map.insert("path".to_string(), serde_json::json!({"type": "string"}));
-    map.insert("recursive".to_string(), serde_json::json!({"type": "boolean"}));
-    map.insert("encoding".to_string(), serde_json::json!({"type": "string"}));
+    map.insert(
+        "recursive".to_string(),
+        serde_json::json!({"type": "boolean"}),
+    );
+    map.insert(
+        "encoding".to_string(),
+        serde_json::json!({"type": "string"}),
+    );
     Value::Object(map)
 }
 
 pub fn schema_order_b() -> Value {
     let mut map = serde_json::Map::new();
-    map.insert("encoding".to_string(), serde_json::json!({"type": "string"}));
-    map.insert("recursive".to_string(), serde_json::json!({"type": "boolean"}));
+    map.insert(
+        "encoding".to_string(),
+        serde_json::json!({"type": "string"}),
+    );
+    map.insert(
+        "recursive".to_string(),
+        serde_json::json!({"type": "boolean"}),
+    );
     map.insert("path".to_string(), serde_json::json!({"type": "string"}));
     Value::Object(map)
 }

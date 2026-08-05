@@ -37,7 +37,10 @@ impl<V: AtomValue> Store<V> {
             inner: Rc::new(RefCell::new(Inner {
                 records: HashMap::new(),
                 next_id: 0,
-                pending: PendingQueue { order: Vec::new(), entries: HashMap::new() },
+                pending: PendingQueue {
+                    order: Vec::new(),
+                    entries: HashMap::new(),
+                },
                 setting: Vec::new(),
                 write_seq: 0,
                 subscriptions: HashMap::new(),
@@ -71,10 +74,7 @@ impl<V: AtomValue> Store<V> {
     /// current sheet engine's spill targets rely on the back-dep edge
     /// existing immediately (`has_dependents` guards anchor destruction).
     /// New code should use the vanilla-faithful `create_derived_ctx`.
-    pub fn create_derived(
-        &self,
-        read_fn: impl Fn(&dyn Fn(AtomId) -> V) -> V + 'static,
-    ) -> AtomId {
+    pub fn create_derived(&self, read_fn: impl Fn(&dyn Fn(AtomId) -> V) -> V + 'static) -> AtomId {
         let id = self.create_derived_ctx(move |args| read_fn(&|id| args.get(id)));
         let _ = read_atom(&self.inner, id);
         id

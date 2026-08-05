@@ -54,8 +54,8 @@ pub mod session;
 pub mod skill;
 pub mod spawn;
 pub mod step;
-pub mod tree;
 mod transitions;
+pub mod tree;
 pub mod txn;
 pub mod undo;
 

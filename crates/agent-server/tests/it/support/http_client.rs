@@ -18,7 +18,10 @@ pub struct HttpResponse {
 
 impl HttpResponse {
     pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+        self.headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
     }
 }
 
@@ -28,24 +31,55 @@ pub fn request(addr: SocketAddr, method: &str, path: &str, body: Option<&str>) -
     let mut reader = connect_and_send(addr, method, path, &[], body);
     let (status, headers) = read_head(&mut reader);
     let body = read_full_body(&mut reader, &headers);
-    HttpResponse { status, headers, body }
+    HttpResponse {
+        status,
+        headers,
+        body,
+    }
 }
 
 /// 打开一条 SSE 连接（不发 body），返回状态行/headers 和一个可以增量
 /// `next_event` 的读取器。真实浏览器的 `EventSource` 长这样：一次 `GET`,
 /// 连接开着不关,数据一帧一帧地来。
-pub fn connect_sse(addr: SocketAddr, path: &str, last_event_id: Option<u64>) -> (u16, Vec<(String, String)>, SseReader) {
-    let extra: Vec<(&str, String)> = last_event_id.map(|id| ("last-event-id", id.to_string())).into_iter().collect();
+pub fn connect_sse(
+    addr: SocketAddr,
+    path: &str,
+    last_event_id: Option<u64>,
+) -> (u16, Vec<(String, String)>, SseReader) {
+    let extra: Vec<(&str, String)> = last_event_id
+        .map(|id| ("last-event-id", id.to_string()))
+        .into_iter()
+        .collect();
     let extra_refs: Vec<(&str, &str)> = extra.iter().map(|(k, v)| (*k, v.as_str())).collect();
     let mut reader = connect_and_send(addr, "GET", path, &extra_refs, None);
     let (status, headers) = read_head(&mut reader);
-    let chunked = header(&headers, "transfer-encoding").map(|v| v.eq_ignore_ascii_case("chunked")).unwrap_or(false);
-    (status, headers, SseReader { reader, chunked, raw: Vec::new(), decoded: Vec::new(), done: false })
+    let chunked = header(&headers, "transfer-encoding")
+        .map(|v| v.eq_ignore_ascii_case("chunked"))
+        .unwrap_or(false);
+    (
+        status,
+        headers,
+        SseReader {
+            reader,
+            chunked,
+            raw: Vec::new(),
+            decoded: Vec::new(),
+            done: false,
+        },
+    )
 }
 
-fn connect_and_send(addr: SocketAddr, method: &str, path: &str, extra_headers: &[(&str, &str)], body: Option<&str>) -> BufReader<TcpStream> {
+fn connect_and_send(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    extra_headers: &[(&str, &str)],
+    body: Option<&str>,
+) -> BufReader<TcpStream> {
     let stream = TcpStream::connect(addr).expect("连接假浏览器目标地址");
-    stream.set_read_timeout(Some(Duration::from_millis(50))).expect("设置短读超时,给增量轮询用");
+    stream
+        .set_read_timeout(Some(Duration::from_millis(50)))
+        .expect("设置短读超时,给增量轮询用");
     let mut stream = stream;
 
     let mut head = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n");
@@ -70,7 +104,11 @@ fn connect_and_send(addr: SocketAddr, method: &str, path: &str, extra_headers: &
 /// 不必做成通用的「跨超时累积一行」。
 fn read_head(reader: &mut BufReader<TcpStream>) -> (u16, Vec<(String, String)>) {
     let status_line = read_line_retrying(reader);
-    let status = status_line.split_whitespace().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
 
     let mut headers = Vec::new();
     loop {
@@ -93,7 +131,10 @@ fn read_line_retrying(reader: &mut BufReader<TcpStream>) -> String {
         match reader.read_line(&mut line) {
             Ok(0) => return String::new(), // 连接关了
             Ok(_) => return line.trim_end_matches(['\r', '\n']).to_string(),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
                 if Instant::now() >= deadline {
                     panic!("读响应头超时");
                 }
@@ -104,7 +145,10 @@ fn read_line_retrying(reader: &mut BufReader<TcpStream>) -> String {
 }
 
 fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(name)).map(|(_, v)| v.as_str())
+    headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case(name))
+        .map(|(_, v)| v.as_str())
 }
 
 /// 读完整个 body——按 `Content-Length`，没有就按 `Transfer-Encoding: chunked`
@@ -116,7 +160,10 @@ fn read_full_body(reader: &mut BufReader<TcpStream>, headers: &[(String, String)
         reader.read_exact(&mut buf).unwrap_or(());
         return String::from_utf8_lossy(&buf).into_owned();
     }
-    if header(headers, "transfer-encoding").map(|v| v.eq_ignore_ascii_case("chunked")).unwrap_or(false) {
+    if header(headers, "transfer-encoding")
+        .map(|v| v.eq_ignore_ascii_case("chunked"))
+        .unwrap_or(false)
+    {
         let mut decoder = ChunkDecoder::default();
         let mut tmp = [0u8; 4096];
         loop {
@@ -128,7 +175,12 @@ fn read_full_body(reader: &mut BufReader<TcpStream>, headers: &[(String, String)
                         break;
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => continue,
+                Err(e)
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut =>
+                {
+                    continue;
+                }
                 Err(_) => break,
             }
         }
@@ -184,7 +236,9 @@ impl SseReader {
                 self.drain_chunks();
             }
             Ok(n) => self.decoded.extend_from_slice(&tmp[..n]),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut => {}
             Err(_) => self.done = true,
         }
     }
@@ -192,7 +246,9 @@ impl SseReader {
     /// 把 `raw` 里凑够的完整 chunk 挪进 `decoded`，不完整的留着等下一次 `pump`。
     fn drain_chunks(&mut self) {
         loop {
-            let Some(line_end) = find(&self.raw, b"\r\n") else { return };
+            let Some(line_end) = find(&self.raw, b"\r\n") else {
+                return;
+            };
             let size_str = String::from_utf8_lossy(&self.raw[..line_end]);
             let size_str = size_str.split(';').next().unwrap_or("").trim();
             let Ok(size) = usize::from_str_radix(size_str, 16) else {
@@ -208,7 +264,8 @@ impl SseReader {
                 self.raw.clear();
                 return;
             }
-            self.decoded.extend_from_slice(&self.raw[line_end + 2..line_end + 2 + size]);
+            self.decoded
+                .extend_from_slice(&self.raw[line_end + 2..line_end + 2 + size]);
             self.raw.drain(..needed);
         }
     }
@@ -256,7 +313,9 @@ impl ChunkDecoder {
     fn feed(&mut self, bytes: &[u8]) {
         self.raw.extend_from_slice(bytes);
         loop {
-            let Some(line_end) = find(&self.raw, b"\r\n") else { return };
+            let Some(line_end) = find(&self.raw, b"\r\n") else {
+                return;
+            };
             let size_str = String::from_utf8_lossy(&self.raw[..line_end]);
             let Ok(size) = usize::from_str_radix(size_str.trim(), 16) else {
                 self.done = true;
@@ -270,7 +329,8 @@ impl ChunkDecoder {
                 self.done = true;
                 return;
             }
-            self.decoded.extend_from_slice(&self.raw[line_end + 2..line_end + 2 + size]);
+            self.decoded
+                .extend_from_slice(&self.raw[line_end + 2..line_end + 2 + size]);
             self.raw.drain(..needed);
         }
     }

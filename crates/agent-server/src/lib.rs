@@ -59,8 +59,10 @@ mod registry;
 pub mod ts_protocol;
 
 pub use actor::OpenError;
-pub use bind::{AGENT_BIND_ENV, BindConfigError, default_bind_addr, default_bind_ip, resolve_bind_ip};
-pub use bootstrap::{Bootstrapped, BootstrapError, BootstrapOptions, bootstrap};
+pub use bind::{
+    AGENT_BIND_ENV, BindConfigError, default_bind_addr, default_bind_ip, resolve_bind_ip,
+};
+pub use bootstrap::{BootstrapError, BootstrapOptions, Bootstrapped, bootstrap};
 pub use command::{Command, Granularity};
 pub use event::{Frame, OrphanFate, SessionEvent, UndoOutcome};
 pub use handle::{SessionClosed, SessionHandle, Subscription};

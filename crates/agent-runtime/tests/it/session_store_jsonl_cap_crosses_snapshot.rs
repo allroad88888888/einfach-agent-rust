@@ -30,25 +30,29 @@ struct World {
 }
 
 fn slot(w: &World, key: &str) -> AtomId {
-    w.fam.borrow_mut().get_or_create(key.to_string(), || w.store.create_atom(Val(0)))
+    w.fam
+        .borrow_mut()
+        .get_or_create(key.to_string(), || w.store.create_atom(Val(0)))
 }
 
 fn build(keys: &'static [&'static str]) -> World {
     let store: Store<Val> = Store::new();
     let fam: Rc<RefCell<AtomFamily<String>>> = Rc::new(RefCell::new(AtomFamily::new()));
     for key in keys {
-        fam.borrow_mut().get_or_create((*key).to_string(), || store.create_atom(Val(0)));
+        fam.borrow_mut()
+            .get_or_create((*key).to_string(), || store.create_atom(Val(0)));
     }
     let (st, fm) = (store.clone(), fam.clone());
     let total = store.create_derived_ctx(move |args| {
-        Val(
-            keys.iter()
-                .map(|key| {
-                    let id = fm.borrow_mut().get_or_create((*key).to_string(), || st.create_atom(Val(0)));
-                    args.get(id).0
-                })
-                .sum::<i64>(),
-        )
+        Val(keys
+            .iter()
+            .map(|key| {
+                let id = fm
+                    .borrow_mut()
+                    .get_or_create((*key).to_string(), || st.create_atom(Val(0)));
+                args.get(id).0
+            })
+            .sum::<i64>())
     });
     let w = World { store, fam, total };
     let _ = w.store.get(w.total);
@@ -70,13 +74,20 @@ fn command(w: &World, log: &mut Log, backend: &Backend, turn: u32, writes: &[(&s
     for ev in log.take_drop_events() {
         match ev {
             agent_store::DropEvent::Oldest { count } => backend.drop_oldest(count),
-            agent_store::DropEvent::RedoTail { first_seq, count } => backend.drop_after(first_seq, count),
+            agent_store::DropEvent::RedoTail { first_seq, count } => {
+                backend.drop_after(first_seq, count)
+            }
         }
     }
 }
 
 fn capture_all(w: &World) -> Snapshot<String, Val> {
-    let mut pairs: Vec<(String, AtomId)> = w.fam.borrow().iter().map(|(k, id)| (k.clone(), id)).collect();
+    let mut pairs: Vec<(String, AtomId)> = w
+        .fam
+        .borrow()
+        .iter()
+        .map(|(k, id)| (k.clone(), id))
+        .collect();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     capture(&w.store, pairs.into_iter())
 }
@@ -84,7 +95,9 @@ fn capture_all(w: &World) -> Snapshot<String, Val> {
 fn restore_into(w: &World, snap: &Snapshot<String, Val>) -> Vec<String> {
     let mut unknown = Vec::new();
     let mut resolve = |k: &String| w.fam.borrow().get(k);
-    restore(&w.store, &mut resolve, snap, &mut |k: &String| unknown.push(k.clone()));
+    restore(&w.store, &mut resolve, snap, &mut |k: &String| {
+        unknown.push(k.clone())
+    });
     unknown
 }
 
@@ -128,7 +141,10 @@ fn cap_eviction_crossing_a_snapshot_boundary_survives_a_restart() {
 
     // 这正是修复前会错的地方：压实截断文件之后，游标必须是「换算过的净效果」，
     // 不是调用方给的原始 History::cursor() 原样值——否则这里会跟 log.cursor() 对不上。
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![2, 3]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![2, 3]
+    );
     assert_eq!(loaded.cursor, log.cursor());
     assert_eq!(loaded.next_seq, 4);
 

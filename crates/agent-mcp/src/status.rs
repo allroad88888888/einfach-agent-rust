@@ -37,15 +37,28 @@ pub struct ServerStatus {
 
 impl ServerStatus {
     pub fn connected(id: impl Into<String>, tool_count: usize) -> Self {
-        Self { id: id.into(), availability: Availability::Connected { tool_count } }
+        Self {
+            id: id.into(),
+            availability: Availability::Connected { tool_count },
+        }
     }
 
     pub fn unavailable(id: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self { id: id.into(), availability: Availability::Unavailable { reason: reason.into() } }
+        Self {
+            id: id.into(),
+            availability: Availability::Unavailable {
+                reason: reason.into(),
+            },
+        }
     }
 
     pub fn unsupported(id: impl Into<String>, reason: impl Into<String>) -> Self {
-        Self { id: id.into(), availability: Availability::Unsupported { reason: reason.into() } }
+        Self {
+            id: id.into(),
+            availability: Availability::Unsupported {
+                reason: reason.into(),
+            },
+        }
     }
 
     pub fn is_connected(&self) -> bool {

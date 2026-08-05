@@ -27,8 +27,18 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
     let status_wire = wire_tool_name(agent_runtime::STATUS_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_a2", delay: Duration::ZERO, status: 200, lines: sse_text("asked wrong, carried on anyway") },
-        Route { needle: "call_r1", delay: Duration::ZERO, status: 200, lines: sse_text("all done") },
+        Route {
+            needle: "call_a2",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("asked wrong, carried on anyway"),
+        },
+        Route {
+            needle: "call_r1",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("all done"),
+        },
         Route {
             needle: "TASKPEEK",
             delay: Duration::ZERO,
@@ -38,24 +48,47 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
                 ("call_a2", &status_wire, r#"{"id":"root/a2"}"#),
             ]),
         },
-        Route { needle: "TASKOTHER", delay: Duration::from_millis(200), status: 200, lines: sse_text("other branch answer") },
+        Route {
+            needle: "TASKOTHER",
+            delay: Duration::from_millis(200),
+            status: 200,
+            lines: sse_text("other branch answer"),
+        },
         Route {
             needle: "kickoff-refusal",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_r1", &spawn_wire, r#"{"task":"TASKPEEK try to peek outside your own subtree"}"#),
-                ("call_r2", &spawn_wire, r#"{"task":"TASKOTHER work the other branch"}"#),
+                (
+                    "call_r1",
+                    &spawn_wire,
+                    r#"{"task":"TASKPEEK try to peek outside your own subtree"}"#,
+                ),
+                (
+                    "call_r2",
+                    &spawn_wire,
+                    r#"{"task":"TASKOTHER work the other branch"}"#,
+                ),
             ]),
         },
     ]);
 
-    let tools = agent_runtime::ToolTable::builtin().with_spawn(AgentLimits::default()).with_status();
+    let tools = agent_runtime::ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status();
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff-refusal one of them will try to peek");
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "被拒的调用不该把这一轮弄停");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff-refusal one of them will try to peek",
+    );
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "被拒的调用不该把这一轮弄停"
+    );
 
     let root = AgentId::root();
     let peeker = root.child(1);
@@ -69,9 +102,15 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
     // --- 横读：活着的兄弟 ---
     let (sideways, is_error) = tool_result(&session, &peeker, "call_a2");
     assert!(is_error, "问自己的兄弟该是 is_error：{sideways}");
-    assert!(sideways.contains("root/a2"), "拒绝文本该点名是哪个 id：{sideways}");
+    assert!(
+        sideways.contains("root/a2"),
+        "拒绝文本该点名是哪个 id：{sideways}"
+    );
     // 被拒的原因是**方向**，不是「那个 id 不存在」——兄弟此刻确实在树上。
-    assert!(session.live_agents().contains(&root.child(2)), "兄弟该真的活着，否则这条测的是另一件事");
+    assert!(
+        session.live_agents().contains(&root.child(2)),
+        "兄弟该真的活着，否则这条测的是另一件事"
+    );
 
     // --- loop 照常往下走 ---
     let peeker_text: Vec<_> = session
@@ -83,7 +122,10 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
             _ => None,
         })
         .collect();
-    assert!(peeker_text.iter().any(|t| t.contains("carried on anyway")), "被拒的 agent 该照常收尾：{peeker_text:#?}");
+    assert!(
+        peeker_text.iter().any(|t| t.contains("carried on anyway")),
+        "被拒的 agent 该照常收尾：{peeker_text:#?}"
+    );
 
     let root_text: Vec<_> = session
         .messages()
@@ -94,5 +136,8 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
             _ => None,
         })
         .collect();
-    assert!(root_text.iter().any(|t| t.contains("all done")), "父该照常拿到结果：{root_text:#?}");
+    assert!(
+        root_text.iter().any(|t| t.contains("all done")),
+        "父该照常拿到结果：{root_text:#?}"
+    );
 }

@@ -29,8 +29,10 @@ fn primitive_atom_basics() {
 fn derived_of_derived() {
     let store = Store::new();
     let count = store.create_atom(num(0.0));
-    let double = store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
-    let triple = store.create_derived_ctx(move |args| num(args.get(double).as_number().unwrap() * 3.0));
+    let double =
+        store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
+    let triple =
+        store.create_derived_ctx(move |args| num(args.get(double).as_number().unwrap() * 3.0));
     assert_eq!(store.get(triple).as_number(), Some(0.0));
     store.set(count, num(5.0));
     assert_eq!(store.get(triple).as_number(), Some(30.0));

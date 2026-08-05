@@ -31,9 +31,19 @@ fn routes(root_hop2: Duration) -> Vec<Route> {
     vec![
         // 子的**第二跳**：请求体里带着它自己那次工具调用的 id。只有子跑满两轮
         // 时这条才会被命中——两个用例的核心断言都是「它有没有被命中」。
-        Route { needle: "call_childread", delay: Duration::ZERO, status: 200, lines: sse_text("子的第二轮答完了") },
+        Route {
+            needle: "call_childread",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("子的第二轮答完了"),
+        },
         // root 的第二跳：带着 spawn 的 call_id。
-        Route { needle: "call_bg", delay: root_hop2, status: 200, lines: sse_text("root 收尾") },
+        Route {
+            needle: "call_bg",
+            delay: root_hop2,
+            status: 200,
+            lines: sse_text("root 收尾"),
+        },
         // 子的第一跳：吐一个本地工具调用（跑完它就会发第二跳）。
         Route {
             needle: "TAILTASK",
@@ -45,12 +55,25 @@ fn routes(root_hop2: Duration) -> Vec<Route> {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
-            lines: sse_tool_call("call_bg", &spawn_wire, r#"{"task":"TAILTASK 多轮后台活","background":true}"#),
+            lines: sse_tool_call(
+                "call_bg",
+                &spawn_wire,
+                r#"{"task":"TAILTASK 多轮后台活","background":true}"#,
+            ),
         },
     ]
 }
 
-fn run(dir_tag: &str, root_hop2: Duration) -> (RoutedServer, Session, Vec<agent_runtime::AgentEvent>, TurnStatus, Duration) {
+fn run(
+    dir_tag: &str,
+    root_hop2: Duration,
+) -> (
+    RoutedServer,
+    Session,
+    Vec<agent_runtime::AgentEvent>,
+    TurnStatus,
+    Duration,
+) {
     let dir = temp_dir(dir_tag);
     std::fs::write(dir.join("note.txt"), "一行料\n").unwrap();
     let server = RoutedServer::start(routes(root_hop2));
@@ -72,7 +95,10 @@ fn a_reaped_background_child_is_cut_short() {
     let (server, session, events, status, elapsed) = run("bg-tail-cut", Duration::ZERO);
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
-    assert!(elapsed < Duration::from_secs(8), "该在有界时间内收尾：实际 {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(8),
+        "该在有界时间内收尾：实际 {elapsed:?}"
+    );
 
     assert!(
         server.call("call_childread").is_none(),

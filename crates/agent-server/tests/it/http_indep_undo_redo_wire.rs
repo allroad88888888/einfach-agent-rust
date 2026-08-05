@@ -12,8 +12,14 @@ use http_indep_support::sse_client::SseClient;
 
 fn drain_until_terminal(sse: &mut SseClient) {
     loop {
-        let Some(frame) = sse.next_frame(Duration::from_secs(3)) else { panic!("等终态超时") };
-        if frame.data.contains("TurnStatusChanged") && (frame.data.contains("Done") || frame.data.contains("Cancelled") || frame.data.contains("Failed")) {
+        let Some(frame) = sse.next_frame(Duration::from_secs(3)) else {
+            panic!("等终态超时")
+        };
+        if frame.data.contains("TurnStatusChanged")
+            && (frame.data.contains("Done")
+                || frame.data.contains("Cancelled")
+                || frame.data.contains("Failed"))
+        {
             return;
         }
     }
@@ -26,7 +32,9 @@ fn next_matching(sse: &mut SseClient, needle: &str, budget: Duration) -> String 
         if remaining.is_zero() {
             panic!("等 {needle} 超时");
         }
-        let Some(frame) = sse.next_frame(remaining) else { panic!("连接断了，还没等到 {needle}") };
+        let Some(frame) = sse.next_frame(remaining) else {
+            panic!("连接断了，还没等到 {needle}")
+        };
         if frame.data.contains(needle) {
             return frame.data;
         }
@@ -52,7 +60,10 @@ async fn undo_turn_outcome_frame_and_upstream_body_no_longer_carries_the_undone_
 
     assert_eq!(upstream.request_count(), 2);
     let round_two_body = upstream.bodies()[1].clone();
-    assert!(round_two_body.contains("distinctive-marker-round-one"), "第二轮的请求体该带着第一轮的历史（还没退之前）");
+    assert!(
+        round_two_body.contains("distinctive-marker-round-one"),
+        "第二轮的请求体该带着第一轮的历史（还没退之前）"
+    );
     assert!(round_two_body.contains("distinctive-marker-round-two"));
 
     // 退第二轮（turn 粒度，不 force）。
@@ -67,7 +78,10 @@ async fn undo_turn_outcome_frame_and_upstream_body_no_longer_carries_the_undone_
     assert_eq!(undo_json["event"]["type"], "undo");
     // UndoOutcome::Applied { entries, turn_id } 邻接标签之下再套一层
     // UndoOutcome 自己的 tag/content（"applied"/"blocked"/"nothing"）。
-    assert_eq!(undo_json["event"]["data"]["type"], "applied", "两轮都没碰不可逆工具，第二轮该能干净退掉：{undo_json}");
+    assert_eq!(
+        undo_json["event"]["data"]["type"], "applied",
+        "两轮都没碰不可逆工具，第二轮该能干净退掉：{undo_json}"
+    );
 
     // 第三轮 input：上游请求体不该再带第二轮的内容（027 的证法搬到 HTTP 层）。
     server.post_input(&id, "distinctive-marker-round-three");
@@ -75,14 +89,23 @@ async fn undo_turn_outcome_frame_and_upstream_body_no_longer_carries_the_undone_
 
     assert_eq!(upstream.request_count(), 3);
     let round_three_body = upstream.bodies()[2].clone();
-    assert!(round_three_body.contains("distinctive-marker-round-one"), "第一轮没被退，该还在：{round_three_body}");
-    assert!(!round_three_body.contains("distinctive-marker-round-two"), "第二轮被退了，不该再出现在上游请求体里：{round_three_body}");
+    assert!(
+        round_three_body.contains("distinctive-marker-round-one"),
+        "第一轮没被退，该还在：{round_three_body}"
+    );
+    assert!(
+        !round_three_body.contains("distinctive-marker-round-two"),
+        "第二轮被退了，不该再出现在上游请求体里：{round_three_body}"
+    );
     assert!(round_three_body.contains("distinctive-marker-round-three"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn redo_outcome_frame_restores_the_undone_turn_into_the_next_upstream_body() {
-    let upstream = FakeUpstream::start(vec![Script::Text("first reply".to_string()), Script::Text("third reply".to_string())]);
+    let upstream = FakeUpstream::start(vec![
+        Script::Text("first reply".to_string()),
+        Script::Text("third reply".to_string()),
+    ]);
     let server = start(upstream.endpoint(), HarnessConfig::default()).await;
     let id = server.create_session();
     let mut sse = SseClient::connect(server.addr, &id, None);
@@ -98,7 +121,10 @@ async fn redo_outcome_frame_restores_the_undone_turn_into_the_next_upstream_body
     assert_eq!(redo_resp.status, 202, "body={}", redo_resp.body_str());
     let redo_frame = next_matching(&mut sse, "\"type\":\"redo\"", Duration::from_secs(3));
     let redo_json: serde_json::Value = serde_json::from_str(&redo_frame).unwrap();
-    assert_eq!(redo_json["event"]["data"]["type"], "applied", "退了又还，该正常 applied：{redo_json}");
+    assert_eq!(
+        redo_json["event"]["data"]["type"], "applied",
+        "退了又还，该正常 applied：{redo_json}"
+    );
 
     // 下一轮 input：上游请求体该重新带上 redo 回来的那一轮。
     server.post_input(&id, "next-round");

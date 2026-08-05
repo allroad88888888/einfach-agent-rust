@@ -85,7 +85,10 @@ mod tests {
         let s = "x".repeat(200);
         let out = truncate_tool_output(&s, 100);
         assert!(out.starts_with(&"x".repeat(100)));
-        assert!(!out.contains(&"x".repeat(101)), "内容部分必须正好 limit 字节");
+        assert!(
+            !out.contains(&"x".repeat(101)),
+            "内容部分必须正好 limit 字节"
+        );
         assert!(out.contains("原始 200 字节"));
         assert!(out.contains("保留前 100 字节"));
         assert!(out.contains("缩小范围重新调用"));

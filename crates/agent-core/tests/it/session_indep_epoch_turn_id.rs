@@ -26,7 +26,10 @@ fn epoch_only_moves_forward_across_undo_and_redo() {
 
     let _ = session.undo_step();
     let epoch_after_second_undo = session.epoch();
-    assert_ne!(epoch_after_second_undo, epoch_after_first_undo, "每次 undo 各自 bump 一次");
+    assert_ne!(
+        epoch_after_second_undo, epoch_after_first_undo,
+        "每次 undo 各自 bump 一次"
+    );
 
     let redo1 = session.redo_step();
     assert!(matches!(redo1, UndoReport::Applied { .. }));
@@ -34,7 +37,11 @@ fn epoch_only_moves_forward_across_undo_and_redo() {
 
     let redo2 = session.redo_step();
     assert!(matches!(redo2, UndoReport::Applied { .. }));
-    assert_eq!(session.epoch(), epoch_after_second_undo, "redo 到底也不会把 epoch 还原成更早的值");
+    assert_eq!(
+        session.epoch(),
+        epoch_after_second_undo,
+        "redo 到底也不会把 epoch 还原成更早的值"
+    );
     assert_ne!(session.epoch(), initial_epoch, "epoch 永远回不到 undo 之前");
 }
 
@@ -57,7 +64,11 @@ fn turn_id_survives_an_undo_turn_that_rolls_back_the_whole_turn_it_belongs_to() 
     let report = session.undo_turn();
     assert!(matches!(report, UndoReport::Applied { turn_id: 2, .. }));
     assert_eq!(session.turn_id(), 2, "turn_id 不回退：日志分组依据只增不减");
-    assert_eq!(session.status(), agent_core::TurnStatus::Done { truncated: false }, "primitive 确实回到了第一轮结束时的样子");
+    assert_eq!(
+        session.status(),
+        agent_core::TurnStatus::Done { truncated: false },
+        "primitive 确实回到了第一轮结束时的样子"
+    );
 
     // 再开一轮拿到的是全新的号码，不是被退掉的那个 2。
     session.begin_turn();

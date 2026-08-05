@@ -53,10 +53,8 @@ fn one_turn(session: &mut Session, ctx: &mut agent_runtime::RunnerCtx, input: &s
 #[test]
 fn cancelled_turn_is_erased_and_the_next_turn_still_works() {
     let dir = support::temp_dir("cancel-flow");
-    let port = support::spawn_scripted_server(vec![
-        ScriptedResponse::HangAfterHeaders,
-        plain_end_turn(),
-    ]);
+    let port =
+        support::spawn_scripted_server(vec![ScriptedResponse::HangAfterHeaders, plain_end_turn()]);
     let mut ctx = support::build_ctx(port, &dir).with_provider_timeout(Duration::from_secs(5));
 
     // 模拟 Ctrl-C：跟 `main.rs` 里 `ctrlc::set_handler` 翻的是同一份标志
@@ -78,8 +76,16 @@ fn cancelled_turn_is_erased_and_the_next_turn_still_works() {
         elapsed < Duration::from_secs(2),
         "该在取消标志置位之后的几个 poll 间隔内收尾，不该等到 5s 超时预算，实际 {elapsed:?}"
     );
-    assert!(session.messages().is_empty(), "自动 undo_turn 该把这一轮的痕迹擦干净：{:#?}", session.messages());
-    assert_eq!(session.status(), TurnStatus::Idle, "撤到会话开局，本来就是 Idle——不需要额外的 begin_turn");
+    assert!(
+        session.messages().is_empty(),
+        "自动 undo_turn 该把这一轮的痕迹擦干净：{:#?}",
+        session.messages()
+    );
+    assert_eq!(
+        session.status(),
+        TurnStatus::Idle,
+        "撤到会话开局，本来就是 Idle——不需要额外的 begin_turn"
+    );
 
     // 进程逻辑继续：下一轮输入正常处理，而且历史里只有这一轮的问答——
     // 上一轮被取消的那句话没有借尸还魂。
@@ -87,10 +93,16 @@ fn cancelled_turn_is_erased_and_the_next_turn_still_works() {
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
     let messages = session.messages();
-    assert_eq!(messages.len(), 2, "历史该只有这一轮的一问一答：{messages:#?}");
+    assert_eq!(
+        messages.len(),
+        2,
+        "历史该只有这一轮的一问一答：{messages:#?}"
+    );
     assert_eq!(messages[0].role, Role::User);
     match &messages[0].blocks[0] {
-        agent_core::ContentBlock::Text(t) => assert_eq!(&**t, "第二句话，这次有人接", "不该是被取消那轮的孤儿文本"),
+        agent_core::ContentBlock::Text(t) => {
+            assert_eq!(&**t, "第二句话，这次有人接", "不该是被取消那轮的孤儿文本")
+        }
         other => panic!("期望 Text，拿到 {other:?}"),
     }
 }
@@ -111,7 +123,10 @@ fn manual_undo_after_a_normal_turn_reports_applied_and_erases_it() {
 
     let report = session.undo_turn();
     agent_runtime::persist::sync(&mut ctx, &mut session);
-    assert!(matches!(report, UndoReport::Applied { turn_id: 1, .. }), "{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { turn_id: 1, .. }),
+        "{report:?}"
+    );
     assert!(session.messages().is_empty());
     assert_eq!(session.status(), TurnStatus::Idle);
 }

@@ -122,7 +122,12 @@ impl Session {
     pub fn tools_allowed_of(&self, agent: &AgentId) -> Option<Vec<Arc<str>>> {
         let value = self.slot_of(agent, Slot::ToolsAllowed);
         let array = value.as_json()?.as_array()?.clone();
-        Some(array.iter().filter_map(|v| v.as_str().map(Arc::from)).collect())
+        Some(
+            array
+                .iter()
+                .filter_map(|v| v.as_str().map(Arc::from))
+                .collect(),
+        )
     }
 
     /// 本轮的工具槽，**顺序就是模型请求的顺序**。

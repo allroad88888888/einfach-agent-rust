@@ -12,9 +12,19 @@ use agent_core::{Segment, TokenUsage};
 #[test]
 fn three_layers_are_distinguishable_by_type() {
     let report = GuardReport {
-        drift: DriftVerdict::Unexpected { segment: Segment::Tools },
-        reconcile: ReconcileVerdict::Shortfall { predicted: 5120, actual: 0, gap: 5120 },
-        window: WindowVerdict::ChronicMiss { streak: 3, turns: 10, hit_percent: 4 },
+        drift: DriftVerdict::Unexpected {
+            segment: Segment::Tools,
+        },
+        reconcile: ReconcileVerdict::Shortfall {
+            predicted: 5120,
+            actual: 0,
+            gap: 5120,
+        },
+        window: WindowVerdict::ChronicMiss {
+            streak: 3,
+            turns: 10,
+            hit_percent: 4,
+        },
     };
 
     let alerts = report.alerts();
@@ -40,9 +50,19 @@ fn three_layers_are_distinguishable_by_type() {
     assert_eq!(seen, vec![1, 2, 3]);
     assert_eq!(
         alerts.iter().map(GuardAlert::layer).collect::<Vec<_>>(),
-        vec![GuardLayer::PreFlight, GuardLayer::Reconcile, GuardLayer::Window]
+        vec![
+            GuardLayer::PreFlight,
+            GuardLayer::Reconcile,
+            GuardLayer::Window
+        ]
     );
-    assert_eq!(alerts.iter().map(|a| a.layer().number()).collect::<Vec<_>>(), vec![1, 2, 3]);
+    assert_eq!(
+        alerts
+            .iter()
+            .map(|a| a.layer().number())
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
 }
 
 /// 一层告警不牵连另外两层：只有第 2 层出事时，报告里只有第 2 层那一条。
@@ -50,8 +70,16 @@ fn three_layers_are_distinguishable_by_type() {
 fn one_layer_alerting_does_not_drag_the_others() {
     let report = GuardReport {
         drift: DriftVerdict::Clean,
-        reconcile: ReconcileVerdict::Shortfall { predicted: 5120, actual: 0, gap: 5120 },
-        window: WindowVerdict::Healthy { turns: 10, hit_percent: 96, low_streak: 0 },
+        reconcile: ReconcileVerdict::Shortfall {
+            predicted: 5120,
+            actual: 0,
+            gap: 5120,
+        },
+        window: WindowVerdict::Healthy {
+            turns: 10,
+            hit_percent: 96,
+            low_streak: 0,
+        },
     };
     assert!(report.has_alert());
     assert_eq!(report.alerts().len(), 1);
@@ -72,7 +100,11 @@ fn blind_layers_are_reported_but_not_alerted() {
 
     let text = report.to_string();
     assert_eq!(text.lines().count(), 3, "{text}");
-    assert_eq!(text.matches("不工作").count(), 2, "两层失明各说一次：{text}");
+    assert_eq!(
+        text.matches("不工作").count(),
+        2,
+        "两层失明各说一次：{text}"
+    );
 }
 
 /// 三层各自的判读同时存在于一份报告里，Display 三行都打——只打告警那层，
@@ -81,8 +113,15 @@ fn blind_layers_are_reported_but_not_alerted() {
 fn report_prints_all_three_layers() {
     let report = GuardReport {
         drift: DriftVerdict::Clean,
-        reconcile: ReconcileVerdict::Match { predicted: 512, actual: 512 },
-        window: WindowVerdict::Healthy { turns: 4, hit_percent: 91, low_streak: 0 },
+        reconcile: ReconcileVerdict::Match {
+            predicted: 512,
+            actual: 512,
+        },
+        window: WindowVerdict::Healthy {
+            turns: 4,
+            hit_percent: 91,
+            low_streak: 0,
+        },
     };
     let text = report.to_string();
     assert_eq!(text.lines().count(), 3, "{text}");
@@ -95,13 +134,19 @@ fn report_prints_all_three_layers() {
 #[test]
 fn report_roundtrips_through_serde() {
     let report = GuardReport {
-        drift: DriftVerdict::Expected { segment: Segment::History },
+        drift: DriftVerdict::Expected {
+            segment: Segment::History,
+        },
         reconcile: ReconcileVerdict::BetterThanExpected {
             predicted: 512,
             actual: 5120,
             surplus: 4608,
         },
-        window: WindowVerdict::ChronicMiss { streak: 4, turns: 10, hit_percent: 12 },
+        window: WindowVerdict::ChronicMiss {
+            streak: 4,
+            turns: 10,
+            hit_percent: 12,
+        },
     };
     let s = serde_json::to_string(&report).unwrap();
     assert_eq!(serde_json::from_str::<GuardReport>(&s).unwrap(), report);
@@ -115,13 +160,32 @@ fn one_turn_end_to_end() {
     let drift = check_drift(Some(Segment::History), PrefixIntent::Reuse);
 
     // 2. 响应回来。
-    let usage = TokenUsage { prompt: 2432, completion: 88, cached: Some(2048) };
+    let usage = TokenUsage {
+        prompt: 2432,
+        completion: 88,
+        cached: Some(2048),
+    };
     let reconciled = reconcile(2048, usage.cached, ReconcileParams::default());
-    let history = vec![TurnHit::Observed { prompt: 2000, cached: 1900 }, TurnHit::from_usage(&usage)];
+    let history = vec![
+        TurnHit::Observed {
+            prompt: 2000,
+            cached: 1900,
+        },
+        TurnHit::from_usage(&usage),
+    ];
     let window = check_window(&history, WindowParams::default());
 
-    let report = GuardReport { drift, reconcile: reconciled, window };
-    assert_eq!(report.alerts(), vec![GuardAlert::UnexpectedDrift { segment: Segment::History }]);
+    let report = GuardReport {
+        drift,
+        reconcile: reconciled,
+        window,
+    };
+    assert_eq!(
+        report.alerts(),
+        vec![GuardAlert::UnexpectedDrift {
+            segment: Segment::History
+        }]
+    );
     assert_eq!(report.alerts()[0].layer().number(), 1, "钱还没花的那一层");
 }
 
@@ -132,7 +196,11 @@ fn one_turn_end_to_end() {
 fn recorded_real_two_turns_are_quiet() {
     let p = ReconcileParams::default();
 
-    let turn1 = TokenUsage { prompt: 587, completion: 44, cached: Some(512) };
+    let turn1 = TokenUsage {
+        prompt: 587,
+        completion: 44,
+        cached: Some(512),
+    };
     let r1 = GuardReport {
         drift: check_drift(None, PrefixIntent::Reuse),
         reconcile: reconcile(0, turn1.cached, p),
@@ -141,7 +209,11 @@ fn recorded_real_two_turns_are_quiet() {
     assert!(r1.alerts().is_empty(), "{r1}");
     assert_eq!(r1.reconcile, ReconcileVerdict::NoPrediction { actual: 512 });
 
-    let turn2 = TokenUsage { prompt: 596, completion: 40, cached: Some(512) };
+    let turn2 = TokenUsage {
+        prompt: 596,
+        completion: 40,
+        cached: Some(512),
+    };
     let r2 = GuardReport {
         drift: check_drift(None, PrefixIntent::Reuse),
         reconcile: reconcile(512, turn2.cached, p),
@@ -151,5 +223,11 @@ fn recorded_real_two_turns_are_quiet() {
         ),
     };
     assert!(r2.alerts().is_empty(), "{r2}");
-    assert_eq!(r2.reconcile, ReconcileVerdict::Match { predicted: 512, actual: 512 });
+    assert_eq!(
+        r2.reconcile,
+        ReconcileVerdict::Match {
+            predicted: 512,
+            actual: 512
+        }
+    );
 }

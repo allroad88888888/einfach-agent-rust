@@ -208,7 +208,11 @@ mod tests {
 
     #[test]
     fn nobody_is_their_own_ancestor() {
-        for id in [AgentId::root(), AgentId::root().child(1), AgentId::root().child(1).child(2)] {
+        for id in [
+            AgentId::root(),
+            AgentId::root().child(1),
+            AgentId::root().child(1).child(2),
+        ] {
             assert!(!id.is_ancestor_of(&id), "{id:?}");
             assert!(!id.is_descendant_of(&id), "{id:?}");
         }

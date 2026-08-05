@@ -28,12 +28,18 @@
 
 mod support;
 
-use agent_core::{AgentEntry, AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport};
+use agent_core::{
+    AgentEntry, AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
+};
 use support::session::new_session;
 use support::{provider_done_tool_use_for, tool_result_for, user_input_for};
 
 fn child_key_count(session: &Session, agent: &AgentId) -> usize {
-    session.primitives().iter().filter(|(k, _)| k.agent() == agent).count()
+    session
+        .primitives()
+        .iter()
+        .filter(|(k, _)| k.agent() == agent)
+        .count()
 }
 
 fn value_of(session: &Session, agent: &AgentId, slot: Slot) -> AgentValue {
@@ -72,11 +78,23 @@ fn next_of(entry: &AgentEntry, agent: &AgentId, slot: Slot) -> AgentValue {
 fn spawn_and_drive_child(session: &mut Session) -> AgentId {
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("spawn child");
     session.step(user_input_for(&child, "do something"));
-    session.step(provider_done_tool_use_for(&child, session.epoch(), &[("call_1", "srv:fs/read")]));
-    assert_eq!(value_of(session, &child, Slot::Status), AgentValue::Status(TurnStatus::ToolsPending));
+    session.step(provider_done_tool_use_for(
+        &child,
+        session.epoch(),
+        &[("call_1", "srv:fs/read")],
+    ));
+    assert_eq!(
+        value_of(session, &child, Slot::Status),
+        AgentValue::Status(TurnStatus::ToolsPending)
+    );
     child
 }
 
@@ -88,9 +106,15 @@ fn the_teardown_entry_records_every_live_value_as_prev_and_the_default_as_next()
     let live_messages = value_of(&session, &child, Slot::Messages);
     let live_status = value_of(&session, &child, Slot::Status);
     let live_slots = value_of(&session, &child, Slot::ToolSlots);
-    assert_ne!(live_messages, Slot::Messages.default_value(), "子该已经写过至少一条消息");
+    assert_ne!(
+        live_messages,
+        Slot::Messages.default_value(),
+        "子该已经写过至少一条消息"
+    );
 
-    let _report = session.despawn_child(&child).expect("despawn should succeed");
+    let _report = session
+        .despawn_child(&child)
+        .expect("despawn should succeed");
 
     let entry = session.last_entry().expect("despawn 应该留下一条 entry");
 
@@ -98,9 +122,19 @@ fn the_teardown_entry_records_every_live_value_as_prev_and_the_default_as_next()
     assert_eq!(prev_of(entry, &child, Slot::Status), live_status);
     assert_eq!(prev_of(entry, &child, Slot::ToolSlots), live_slots);
 
-    assert_eq!(next_of(entry, &child, Slot::Messages), Slot::Messages.default_value());
-    assert_eq!(next_of(entry, &child, Slot::Status), Slot::Status.default_value());
-    assert_eq!(next_of(entry, &child, Slot::ToolsAllowed), AgentValue::Null, "ToolsAllowed 移出活名单");
+    assert_eq!(
+        next_of(entry, &child, Slot::Messages),
+        Slot::Messages.default_value()
+    );
+    assert_eq!(
+        next_of(entry, &child, Slot::Status),
+        Slot::Status.default_value()
+    );
+    assert_eq!(
+        next_of(entry, &child, Slot::ToolsAllowed),
+        AgentValue::Null,
+        "ToolsAllowed 移出活名单"
+    );
 }
 
 #[test]
@@ -112,13 +146,25 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
     // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14。
     assert_eq!(child_key_count(&session, &child), 14);
 
-    let report = session.despawn_child(&child).expect("despawn should not panic or refuse");
+    let report = session
+        .despawn_child(&child)
+        .expect("despawn should not panic or refuse");
 
     assert_eq!(report.agents, vec![child.clone()]);
-    assert_eq!(report.atoms_evicted, 13, "十四个槽位里只留 ToolsAllowed 一个墓碑");
-    assert_eq!(child_key_count(&session, &child), 1, "其余十三个 atom 该被物理逐出");
+    assert_eq!(
+        report.atoms_evicted, 13,
+        "十四个槽位里只留 ToolsAllowed 一个墓碑"
+    );
+    assert_eq!(
+        child_key_count(&session, &child),
+        1,
+        "其余十三个 atom 该被物理逐出"
+    );
     assert!(!session.is_live(&child));
-    assert_eq!(value_of(&session, &child, Slot::ToolsAllowed), AgentValue::Null);
+    assert_eq!(
+        value_of(&session, &child, Slot::ToolsAllowed),
+        AgentValue::Null
+    );
 }
 
 #[test]
@@ -135,12 +181,25 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     assert!(!session.is_live(&child));
 
     let undo = session.undo_turn();
-    assert!(matches!(undo, UndoReport::Applied { .. }), "undo 该 Applied，实际 {undo:?}");
+    assert!(
+        matches!(undo, UndoReport::Applied { .. }),
+        "undo 该 Applied，实际 {undo:?}"
+    );
 
-    assert!(session.is_live(&child), "undo 一次 despawn 之后子该重新活着");
+    assert!(
+        session.is_live(&child),
+        "undo 一次 despawn 之后子该重新活着"
+    );
     assert_eq!(session.children_of(&root), vec![child.clone()]);
-    assert_eq!(child_key_count(&session, &child), 14, "全部十四个槽位都该被按需重建");
-    assert_eq!(value_of(&session, &child, Slot::Status), AgentValue::Status(TurnStatus::ToolsPending));
+    assert_eq!(
+        child_key_count(&session, &child),
+        14,
+        "全部十四个槽位都该被按需重建"
+    );
+    assert_eq!(
+        value_of(&session, &child, Slot::Status),
+        AgentValue::Status(TurnStatus::ToolsPending)
+    );
 
     // 子接着工作：喂它那条挂起工具调用的结果，让它收敛。注意这里不能拿
     // `history_len()` 前后一比：undo 之后游标不在栈顶，这一步新写入会按
@@ -149,7 +208,10 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     // 推进了才是「继续工作」的证据。
     let before_cursor = session.cursor();
     session.step(tool_result_for(&child, session.epoch(), "call_1", "ok"));
-    assert!(session.cursor() > before_cursor, "游标该往前走，证明这一步是被正常接受、记账的");
+    assert!(
+        session.cursor() > before_cursor,
+        "游标该往前走，证明这一步是被正常接受、记账的"
+    );
     assert_eq!(
         value_of(&session, &child, Slot::Status),
         AgentValue::Status(TurnStatus::Thinking),

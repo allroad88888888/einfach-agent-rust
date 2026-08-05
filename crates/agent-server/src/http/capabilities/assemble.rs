@@ -55,14 +55,22 @@ use super::{Capabilities, CapabilityTool};
 ///
 /// 没带 `capabilities`（老调用方）或者声明为空 → 空 `Vec`，下游一路空操作，工具表
 /// 与 062 之前逐字节相同。**只翻译顶层 `tools`**，理由见模块文档。
-pub(in crate::http) fn host_tools(capabilities: Option<&Capabilities>) -> Vec<(ToolSpec, Reversibility)> {
-    let Some(capabilities) = capabilities else { return Vec::new() };
+pub(in crate::http) fn host_tools(
+    capabilities: Option<&Capabilities>,
+) -> Vec<(ToolSpec, Reversibility)> {
+    let Some(capabilities) = capabilities else {
+        return Vec::new();
+    };
     capabilities
         .tools
         .iter()
         .map(|tool| {
             let spec = tool_spec(tool);
-            (spec, tool.reversibility.map_or(Reversibility::Irreversible, Reversibility::from))
+            (
+                spec,
+                tool.reversibility
+                    .map_or(Reversibility::Irreversible, Reversibility::from),
+            )
         })
         .collect()
 }
@@ -76,7 +84,9 @@ pub(in crate::http) fn host_tools(capabilities: Option<&Capabilities>) -> Vec<(T
 /// 第三个等激活才进 `late_system`），自带的工具只搬**进 prompt 的那三个字段**，
 /// 可逆性丢掉（理由见模块文档）。
 pub(in crate::http) fn host_skills(capabilities: Option<&Capabilities>) -> Vec<HostSkill> {
-    let Some(capabilities) = capabilities else { return Vec::new() };
+    let Some(capabilities) = capabilities else {
+        return Vec::new();
+    };
     capabilities
         .skills
         .iter()
@@ -139,7 +149,10 @@ mod tests {
             ]
         }));
 
-        let levels: Vec<Reversibility> = host_tools(Some(&declared)).into_iter().map(|(_, r)| r).collect();
+        let levels: Vec<Reversibility> = host_tools(Some(&declared))
+            .into_iter()
+            .map(|(_, r)| r)
+            .collect();
         assert_eq!(
             levels,
             vec![
@@ -169,7 +182,10 @@ mod tests {
             "tools": [ { "name": "web:crm/lookup" } ],
             "skills": [ { "id": "crm-flow", "tools": [ { "name": "web:crm/close-ticket" } ] } ]
         }));
-        let names: Vec<String> = host_tools(Some(&declared)).iter().map(|(s, _)| s.name.to_string()).collect();
+        let names: Vec<String> = host_tools(Some(&declared))
+            .iter()
+            .map(|(s, _)| s.name.to_string())
+            .collect();
         assert_eq!(names, vec!["web:crm/lookup"]);
     }
 

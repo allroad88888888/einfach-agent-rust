@@ -13,12 +13,18 @@
 
 mod support;
 
-use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport};
+use agent_core::{
+    AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
+};
 use support::session::new_session;
 use support::{provider_done_end_turn_for, user_input_for};
 
 fn child_slot_count(session: &Session, child: &AgentId) -> usize {
-    session.primitives().iter().filter(|(k, _)| k.agent() == child).count()
+    session
+        .primitives()
+        .iter()
+        .filter(|(k, _)| k.agent() == child)
+        .count()
 }
 
 fn tools_allowed_of(session: &Session, child: &AgentId) -> AgentValue {
@@ -44,7 +50,12 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     let mut session = new_session();
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("spawn child");
 
     assert!(session.is_live(&child));
@@ -53,11 +64,17 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     // 子在同一轮里写状态。
     let before_write = session.history_len();
     session.step(user_input_for(&child, "hello from child"));
-    assert!(session.history_len() > before_write, "子的 UserInput 该留一条 entry");
+    assert!(
+        session.history_len() > before_write,
+        "子的 UserInput 该留一条 entry"
+    );
     assert_eq!(child_slot_count(&session, &child), 14);
 
     let report = session.undo_turn();
-    assert!(matches!(report, UndoReport::Applied { .. }), "undo_turn 该 Applied，实际 {report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "undo_turn 该 Applied，实际 {report:?}"
+    );
 
     assert!(!session.is_live(&child), "撤回 spawn 之后子不该再活着");
     assert_eq!(session.live_agents(), vec![root.clone()]);
@@ -76,10 +93,15 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
 fn events_for_an_undone_spawn_are_silently_dropped_by_the_liveness_gate() {
     let mut session = new_session();
     let root = session.agent().clone();
-    let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn child");
+    let child = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn child");
     session.step(user_input_for(&child, "hi"));
     let undo = session.undo_turn();
-    assert!(matches!(undo, UndoReport::Applied { .. }), "undo_turn 该 Applied，实际 {undo:?}");
+    assert!(
+        matches!(undo, UndoReport::Applied { .. }),
+        "undo_turn 该 Applied，实际 {undo:?}"
+    );
     assert!(!session.is_live(&child));
 
     let before_primitives = session.primitives();
@@ -89,8 +111,16 @@ fn events_for_an_undone_spawn_are_silently_dropped_by_the_liveness_gate() {
     let effects = session.step(user_input_for(&child, "are you still there?"));
 
     assert!(effects.is_empty(), "死 agent 的事件不该产生 effect");
-    assert_eq!(session.history_len(), before_history_len, "死 agent 的事件不该落一条 entry");
-    assert_eq!(session.primitives(), before_primitives, "死 agent 的事件不该改动任何 primitive");
+    assert_eq!(
+        session.history_len(),
+        before_history_len,
+        "死 agent 的事件不该落一条 entry"
+    );
+    assert_eq!(
+        session.primitives(),
+        before_primitives,
+        "死 agent 的事件不该改动任何 primitive"
+    );
 }
 
 #[test]
@@ -98,16 +128,27 @@ fn redo_brings_the_whole_subtree_back_and_it_keeps_working() {
     let mut session = new_session();
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("spawn child");
     session.step(user_input_for(&child, "hello from child"));
 
     let undo = session.undo_turn();
-    assert!(matches!(undo, UndoReport::Applied { .. }), "undo_turn 该 Applied，实际 {undo:?}");
+    assert!(
+        matches!(undo, UndoReport::Applied { .. }),
+        "undo_turn 该 Applied，实际 {undo:?}"
+    );
     assert!(!session.is_live(&child));
 
     let redo = session.redo_turn();
-    assert!(matches!(redo, UndoReport::Applied { .. }), "redo_turn 该 Applied，实际 {redo:?}");
+    assert!(
+        matches!(redo, UndoReport::Applied { .. }),
+        "redo_turn 该 Applied，实际 {redo:?}"
+    );
 
     assert!(session.is_live(&child), "redo 之后子该活过来");
     assert_eq!(session.live_agents(), vec![root.clone(), child.clone()]);
@@ -128,6 +169,12 @@ fn redo_brings_the_whole_subtree_back_and_it_keeps_working() {
     let before_history_len = session.history_len();
     session.step(provider_done_end_turn_for(&child, session.epoch(), "答案"));
 
-    assert!(session.history_len() > before_history_len, "redo 之后子必须能继续处理事件、继续记账");
-    assert_eq!(status_of(&session, &child), AgentValue::Status(TurnStatus::Done { truncated: false }));
+    assert!(
+        session.history_len() > before_history_len,
+        "redo 之后子必须能继续处理事件、继续记账"
+    );
+    assert_eq!(
+        status_of(&session, &child),
+        AgentValue::Status(TurnStatus::Done { truncated: false })
+    );
 }

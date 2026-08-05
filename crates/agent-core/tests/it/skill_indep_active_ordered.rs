@@ -92,7 +92,10 @@ fn reactivating_an_already_active_skill_does_not_duplicate_it() {
 
     let active = session.active_skills();
     assert_eq!(
-        active.iter().filter(|s| **s == SkillId::new("alpha")).count(),
+        active
+            .iter()
+            .filter(|s| **s == SkillId::new("alpha"))
+            .count(),
         1,
         "重复激活同一个 skill 不该产生重复项,实际: {active:?}"
     );

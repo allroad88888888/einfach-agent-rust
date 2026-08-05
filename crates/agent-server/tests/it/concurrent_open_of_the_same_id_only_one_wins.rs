@@ -30,7 +30,8 @@ fn only_one_concurrent_open_of_the_same_id_succeeds() {
             let barrier = Arc::clone(&barrier);
             // 各起各的假 endpoint/tools_root——这条测试不发任何 `Input`，
             // `open` 本身不碰网络，`endpoint` 只是个占位字符串。
-            let spec = support::open_spec("same-id", format!("http://127.0.0.1:1/unused-{i}"), None);
+            let spec =
+                support::open_spec("same-id", format!("http://127.0.0.1:1/unused-{i}"), None);
             thread::spawn(move || {
                 barrier.wait();
                 registry.open(spec)
@@ -40,12 +41,19 @@ fn only_one_concurrent_open_of_the_same_id_succeeds() {
 
     let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
     let ok_count = results.iter().filter(|r| r.is_ok()).count();
-    assert_eq!(ok_count, 1, "并发 open 同一个 id，该有且只有一次成功，实际：{}", ok_count);
+    assert_eq!(
+        ok_count, 1,
+        "并发 open 同一个 id，该有且只有一次成功，实际：{}",
+        ok_count
+    );
 
     // 表里现在正好是那一个赢家——`get` 拿到 `Alive`，`close` 只需要一次就能
     // 干净收尾（如果真的泄漏了线程，close 之后 registry 该报的死因/状态不会
     // 是这么干净的 `Ok`）。
     let id = agent_server::SessionId::from("same-id");
-    assert!(matches!(registry.get(&id), Some(agent_server::SessionQuery::Alive(_))));
+    assert!(matches!(
+        registry.get(&id),
+        Some(agent_server::SessionQuery::Alive(_))
+    ));
     assert_eq!(registry.close(&id), Ok(()));
 }

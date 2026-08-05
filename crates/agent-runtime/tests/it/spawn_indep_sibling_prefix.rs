@@ -16,10 +16,13 @@ mod spawn_indep_support;
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name};
+use spawn_indep_support::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+};
 
 #[test]
-fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_before_their_task_text() {
+fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_before_their_task_text()
+{
     let dir = temp_dir("sibling-prefix");
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
@@ -27,9 +30,24 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
     let task_b = "SIBB task text unique to child B";
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_a", delay: Default::default(), status: 200, lines: sse_text("both siblings reported") },
-        Route { needle: "SIBA", delay: Default::default(), status: 200, lines: sse_text("sibling A done") },
-        Route { needle: "SIBB", delay: Default::default(), status: 200, lines: sse_text("sibling B done") },
+        Route {
+            needle: "call_a",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("both siblings reported"),
+        },
+        Route {
+            needle: "SIBA",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("sibling A done"),
+        },
+        Route {
+            needle: "SIBB",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("sibling B done"),
+        },
         Route {
             needle: "kickoff5",
             delay: Default::default(),
@@ -45,7 +63,11 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff5 spawn two siblings with the default tool subset");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff5 spawn two siblings with the default tool subset",
+    );
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();
@@ -53,17 +75,34 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
     let b_id = root.child(2);
     // 两个子都省了 `tools`，缺省该都等于父当时的工具子集——先验一下它们
     // 拿到的确实是同一份（不只是长度碰巧相等）。
-    let a_tools = session.tools_allowed_of(&a_id).expect("a 该有 ToolsAllowed");
-    let b_tools = session.tools_allowed_of(&b_id).expect("b 该有 ToolsAllowed");
+    let a_tools = session
+        .tools_allowed_of(&a_id)
+        .expect("a 该有 ToolsAllowed");
+    let b_tools = session
+        .tools_allowed_of(&b_id)
+        .expect("b 该有 ToolsAllowed");
     assert_eq!(a_tools, b_tools, "两个子都省了 tools，缺省子集该完全一样");
 
-    let body_a = &server.call("SIBA").expect("child A must have been called").body;
-    let body_b = &server.call("SIBB").expect("child B must have been called").body;
+    let body_a = &server
+        .call("SIBA")
+        .expect("child A must have been called")
+        .body;
+    let body_b = &server
+        .call("SIBB")
+        .expect("child B must have been called")
+        .body;
 
-    let idx_a = body_a.find(task_a).expect("task 文本该逐字出现在子 A 的请求体里");
-    let idx_b = body_b.find(task_b).expect("task 文本该逐字出现在子 B 的请求体里");
+    let idx_a = body_a
+        .find(task_a)
+        .expect("task 文本该逐字出现在子 A 的请求体里");
+    let idx_b = body_b
+        .find(task_b)
+        .expect("task 文本该逐字出现在子 B 的请求体里");
 
-    assert_eq!(idx_a, idx_b, "task 文本出现的字节位置该完全相同——前面的前缀长度必须一样长");
+    assert_eq!(
+        idx_a, idx_b,
+        "task 文本出现的字节位置该完全相同——前面的前缀长度必须一样长"
+    );
     assert_eq!(
         &body_a[..idx_a],
         &body_b[..idx_b],
@@ -73,5 +112,8 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
     );
 
     // 前缀确实非空——不是两条空字符串巧合相等蒙混过关。
-    assert!(idx_a > 20, "前缀该有实质内容（工具表 + 固定模板），不是几乎贴着请求体开头就出现 task：idx_a={idx_a}");
+    assert!(
+        idx_a > 20,
+        "前缀该有实质内容（工具表 + 固定模板），不是几乎贴着请求体开头就出现 task：idx_a={idx_a}"
+    );
 }

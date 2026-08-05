@@ -119,7 +119,10 @@ mod tests {
     use super::*;
 
     fn slots_with(v: Visibility) -> Vec<Slot> {
-        Slot::ALL.into_iter().filter(|s| s.visibility() == v).collect()
+        Slot::ALL
+            .into_iter()
+            .filter(|s| s.visibility() == v)
+            .collect()
     }
 
     /// **集合性质本身**（issue 028 的「注意」点名要的那条，不是几个用例）：
@@ -135,7 +138,10 @@ mod tests {
 
         // 不相交：任一槽位只可能出现在一类里。
         for slot in &up {
-            assert!(!down.contains(slot), "{slot:?} 同时可上读可下读——环就有可能了");
+            assert!(
+                !down.contains(slot),
+                "{slot:?} 同时可上读可下读——环就有可能了"
+            );
             assert!(!private.contains(slot), "{slot:?} 落进了两类");
         }
         for slot in &down {

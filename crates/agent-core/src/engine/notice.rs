@@ -122,7 +122,10 @@ mod tests {
                 state: TurnStatus::Idle,
                 event: Arc::from("ToolResult { .. }"),
             },
-            Notice::Retrying { attempt: 1, max_retries: 2 },
+            Notice::Retrying {
+                attempt: 1,
+                max_retries: 2,
+            },
         ];
         let s = serde_json::to_string(&notices).unwrap();
         assert_eq!(serde_json::from_str::<Vec<Notice>>(&s).unwrap(), notices);

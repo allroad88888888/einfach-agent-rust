@@ -39,13 +39,23 @@ const SECRET: &str = "SECRET_MARKER_XYZ_do_not_leak";
 /// session 文件。用户输入里带一个独一无二的标记，方便后面断言“坏文件的
 /// 错误信息里绝不出现原始对话内容”。
 fn build_clean_session(scratch: &indep_support::Scratch, file_name: &str) -> PathBuf {
-    let server = FakeServer::start(vec![Script::Immediate(sse::text_reply("clean reply marker"))]);
+    let server = FakeServer::start(vec![Script::Immediate(sse::text_reply(
+        "clean reply marker",
+    ))]);
     let providers = scratch.write_providers_toml(&server.base_url());
     let session = scratch.path(file_name);
     let mut cli = CliProcess::spawn(&providers, Some(&session));
-    assert!(cli.wait_for("输入一句话开始对话", T), "构造干净会话时启动横幅超时：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("输入一句话开始对话", T),
+        "构造干净会话时启动横幅超时：{}",
+        cli.combined_output()
+    );
     cli.send_line(SECRET);
-    assert!(cli.wait_for("[本轮完成]", T), "构造干净会话时那一轮没完成：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("[本轮完成]", T),
+        "构造干净会话时那一轮没完成：{}",
+        cli.combined_output()
+    );
     cli.send_line("/quit");
     assert!(cli.wait_exit(T).is_some(), "构造干净会话时该干净退出");
     session
@@ -63,18 +73,35 @@ fn truncated_tail_line_is_tolerated_and_the_session_stays_usable() {
     let truncated = scratch.path("truncated.jsonl");
     std::fs::write(&truncated, &bytes).expect("write truncated session");
 
-    let server = FakeServer::start(vec![Script::Immediate(sse::text_reply("post truncation reply"))]);
+    let server = FakeServer::start(vec![Script::Immediate(sse::text_reply(
+        "post truncation reply",
+    ))]);
     let providers = scratch.write_providers_toml(&server.base_url());
     let mut cli = CliProcess::spawn(&providers, Some(&truncated));
 
-    assert!(cli.wait_for("不完整的尾行", T), "该有尾部截断的容忍提示：{}", cli.combined_output());
-    assert!(cli.wait_for("[会话已恢复]", T), "截断尾行之后仍要能正常恢复：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("不完整的尾行", T),
+        "该有尾部截断的容忍提示：{}",
+        cli.combined_output()
+    );
+    assert!(
+        cli.wait_for("[会话已恢复]", T),
+        "截断尾行之后仍要能正常恢复：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("continue after truncation");
-    assert!(cli.wait_for("[本轮完成]", T), "容忍截断之后该能继续对话：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("[本轮完成]", T),
+        "容忍截断之后该能继续对话：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("/quit");
-    assert!(cli.wait_exit(T).is_some(), "容忍截断之后进程该能正常退出，不是卡死");
+    assert!(
+        cli.wait_exit(T).is_some(),
+        "容忍截断之后进程该能正常退出，不是卡死"
+    );
 }
 
 #[test]
@@ -105,21 +132,36 @@ fn a_broken_middle_line_is_reported_with_its_line_number_and_never_leaks_convers
     let out = cli.combined_output();
 
     assert!(out.contains("第 1 行"), "错误该指出具体行号：{out}");
-    assert!(out.contains("损坏") || out.contains("拒绝加载"), "该有清楚的损坏说明：{out}");
+    assert!(
+        out.contains("损坏") || out.contains("拒绝加载"),
+        "该有清楚的损坏说明：{out}"
+    );
     assert!(!out.contains(SECRET), "错误里绝不能带出原始对话内容：{out}");
-    assert!(!out.contains("clean reply marker"), "错误里绝不能带出原始对话内容：{out}");
+    assert!(
+        !out.contains("clean reply marker"),
+        "错误里绝不能带出原始对话内容：{out}"
+    );
     assert!(!out.contains("panicked"), "损坏文件不该让进程 panic：{out}");
-    assert!(!out.contains("输入一句话开始对话"), "该在进入 REPL 之前就硬失败，不该看到启动横幅：{out}");
+    assert!(
+        !out.contains("输入一句话开始对话"),
+        "该在进入 REPL 之前就硬失败，不该看到启动横幅：{out}"
+    );
 
     match status {
-        Some(exit) => assert!(!exit.success(), "中部损坏该以非零退出码硬失败，实际：{exit:?}\n{out}"),
+        Some(exit) => assert!(
+            !exit.success(),
+            "中部损坏该以非零退出码硬失败，实际：{exit:?}\n{out}"
+        ),
         None => panic!("进程该已经因为硬失败退出，而不是卡住等待输入：{out}"),
     }
 
     // 硬失败的意义就在这——继续跑会在下一张快照把原文件覆盖，所以这里必须
     // 停在"连一个字节都还没动"的状态，让人有机会先备份再决定怎么办。
     let after = std::fs::read(&corrupted).expect("read corrupted session bytes after exit");
-    assert_eq!(before, after, "硬失败必须原样保留损坏文件，一个字节都不能动");
+    assert_eq!(
+        before, after,
+        "硬失败必须原样保留损坏文件，一个字节都不能动"
+    );
 }
 
 #[test]
@@ -142,10 +184,19 @@ fn a_semantically_unknown_label_is_a_hard_failure_that_still_never_leaks_content
     let status = cli.wait_exit(T);
     let out = cli.combined_output();
     assert!(!out.contains(SECRET), "错误里绝不能带出原始对话内容：{out}");
-    assert!(!out.contains("panicked"), "不认识的标签不该让进程 panic：{out}");
-    assert!(out.contains("bogus_unknown_label_xyz"), "该说明具体是哪个标签不认识：{out}");
+    assert!(
+        !out.contains("panicked"),
+        "不认识的标签不该让进程 panic：{out}"
+    );
+    assert!(
+        out.contains("bogus_unknown_label_xyz"),
+        "该说明具体是哪个标签不认识：{out}"
+    );
     match status {
-        Some(exit) => assert!(!exit.success(), "语义不认识的标签该以非零退出码硬失败，实际：{exit:?}\n{out}"),
+        Some(exit) => assert!(
+            !exit.success(),
+            "语义不认识的标签该以非零退出码硬失败，实际：{exit:?}\n{out}"
+        ),
         None => panic!("进程该已经因为硬失败退出，而不是卡住等待输入：{out}"),
     }
 }

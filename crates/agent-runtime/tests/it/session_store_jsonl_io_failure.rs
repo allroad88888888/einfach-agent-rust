@@ -15,7 +15,15 @@ use session_store_support::{Val, collecting_on_error, temp_path};
 type Backend = Jsonl<String, Val, u32>;
 
 fn entry(seq: u64) -> Entry<String, Val, u32> {
-    Entry { seq, meta: 1, changes: vec![Change { key: "a".to_string(), prev: Val(seq as i64), next: Val(seq as i64 + 1) }] }
+    Entry {
+        seq,
+        meta: 1,
+        changes: vec![Change {
+            key: "a".to_string(),
+            prev: Val(seq as i64),
+            next: Val(seq as i64 + 1),
+        }],
+    }
 }
 
 #[test]
@@ -23,7 +31,9 @@ fn a_missing_parent_directory_reports_once_and_never_panics() {
     // `temp_path` 本身已经是「不预先创建」的文件路径；这里在它前面再插一层不存在的
     // 目录组件，让它连**父目录**都没有——`OpenOptions::new().create(true)` 不会帮忙
     // 建父目录，`open` 必然失败。
-    let bad_path = temp_path("io-failure").with_file_name("nonexistent-parent").join("session.jsonl");
+    let bad_path = temp_path("io-failure")
+        .with_file_name("nonexistent-parent")
+        .join("session.jsonl");
     let (errors, on_error) = collecting_on_error();
     let backend: Backend = Jsonl::new(&bad_path, on_error);
 
@@ -31,7 +41,9 @@ fn a_missing_parent_directory_reports_once_and_never_panics() {
     // 处理完 open（下面第一次 append 之后的 flush 会顺带等到这一步完成）。
     backend.append(&entry(0));
     backend.set_cursor(1);
-    backend.snapshot(&agent_store::Snapshot { values: vec![("a".to_string(), Val(1))] });
+    backend.snapshot(&agent_store::Snapshot {
+        values: vec![("a".to_string(), Val(1))],
+    });
     backend.drop_oldest(1);
     backend.drop_after(0, 1);
     backend.flush(); // 排干——此时前面几条消息都已经被 IO 线程处理过（哪怕处理结果是「写不进」）
@@ -39,7 +51,8 @@ fn a_missing_parent_directory_reports_once_and_never_panics() {
     let seen = errors.lock().unwrap().clone();
     assert!(!seen.is_empty(), "打不开文件应该经 on_error 报至少一次");
     assert!(
-        seen.iter().all(|e| matches!(e, agent_runtime::SessionStoreError::Io { .. })),
+        seen.iter()
+            .all(|e| matches!(e, agent_runtime::SessionStoreError::Io { .. })),
         "这条路径上唯一可能的错误类别是 Io，见到别的说明分类分岔了：{seen:?}"
     );
 

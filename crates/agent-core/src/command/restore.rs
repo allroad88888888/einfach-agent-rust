@@ -143,7 +143,12 @@ mod tests {
     }
 
     fn meta(turn_id: u64, epoch: u64, label: &'static str) -> EntryMeta {
-        EntryMeta { turn_id, epoch: Epoch(epoch), label, barrier: false }
+        EntryMeta {
+            turn_id,
+            epoch: Epoch(epoch),
+            label,
+            barrier: false,
+        }
     }
 
     fn status_change(prev: TurnStatus, next: TurnStatus) -> Change<AtomKey, AgentValue> {
@@ -163,7 +168,10 @@ mod tests {
             changes: vec![status_change(TurnStatus::Idle, TurnStatus::Thinking)],
         }];
         let mut unknown = Vec::new();
-        let session = Session::restore(agent(), None, entries, 1, 1, 100, &mut |k| unknown.push(k.clone())).unwrap();
+        let session = Session::restore(agent(), None, entries, 1, 1, 100, &mut |k| {
+            unknown.push(k.clone())
+        })
+        .unwrap();
 
         assert_eq!(session.status(), TurnStatus::Thinking);
         assert_eq!(session.turn_id(), 1);
@@ -191,8 +199,10 @@ mod tests {
             },
         ];
         let mut unknown = Vec::new();
-        let mut session =
-            Session::restore(agent(), None, entries, 1, 2, 100, &mut |k| unknown.push(k.clone())).unwrap();
+        let mut session = Session::restore(agent(), None, entries, 1, 2, 100, &mut |k| {
+            unknown.push(k.clone())
+        })
+        .unwrap();
 
         // 只应用了第一条：状态是 Thinking，不是 Cancelled。
         assert_eq!(session.status(), TurnStatus::Thinking);
@@ -201,24 +211,37 @@ mod tests {
 
         // redo 能把第二条找回来——它没有丢，只是没被应用。
         let report = session.redo_turn();
-        assert!(matches!(report, crate::command::UndoReport::Applied { entries: 1, .. }));
-        assert_eq!(session.status(), TurnStatus::Failed(crate::engine::state::Failure::Cancelled));
+        assert!(matches!(
+            report,
+            crate::command::UndoReport::Applied { entries: 1, .. }
+        ));
+        assert_eq!(
+            session.status(),
+            TurnStatus::Failed(crate::engine::state::Failure::Cancelled)
+        );
     }
 
     /// 快照 + 之后的日志：快照灌回 primitive，日志接着把状态推到快照点之后。
     #[test]
     fn a_snapshot_seeds_primitives_then_entries_advance_past_it() {
-        let snapshot = vec![(AtomKey::Agent(agent(), Slot::Status), AgentValue::Status(TurnStatus::Thinking))];
+        let snapshot = vec![(
+            AtomKey::Agent(agent(), Slot::Status),
+            AgentValue::Status(TurnStatus::Thinking),
+        )];
         let entries = vec![AgentEntry {
             seq: 5,
             meta: meta(3, 2, "provider_failed"),
             changes: vec![status_change(
                 TurnStatus::Thinking,
-                TurnStatus::Failed(crate::engine::state::Failure::Provider(crate::seam::ErrorClass::Unknown)),
+                TurnStatus::Failed(crate::engine::state::Failure::Provider(
+                    crate::seam::ErrorClass::Unknown,
+                )),
             )],
         }];
-        let session =
-            Session::restore(agent(), Some(snapshot), entries, 1, 6, 100, &mut |_| panic!("不该有不认识的键")).unwrap();
+        let session = Session::restore(agent(), Some(snapshot), entries, 1, 6, 100, &mut |_| {
+            panic!("不该有不认识的键")
+        })
+        .unwrap();
 
         assert_eq!(session.turn_id(), 3);
         assert_eq!(session.epoch(), Epoch(3));
@@ -229,13 +252,26 @@ mod tests {
     /// 其余照常灌回。
     #[test]
     fn an_unknown_snapshot_key_is_reported_not_silently_dropped() {
-        let dropped_key = AtomKey::ToolCall(agent(), crate::ids::ToolCallId::new("gone"), crate::graph::ToolCallSlot::Result);
+        let dropped_key = AtomKey::ToolCall(
+            agent(),
+            crate::ids::ToolCallId::new("gone"),
+            crate::graph::ToolCallSlot::Result,
+        );
         let snapshot = vec![
-            (AtomKey::Agent(agent(), Slot::Status), AgentValue::Status(TurnStatus::Idle)),
-            (dropped_key.clone(), AgentValue::Text(std::sync::Arc::from("旧版本的东西"))),
+            (
+                AtomKey::Agent(agent(), Slot::Status),
+                AgentValue::Status(TurnStatus::Idle),
+            ),
+            (
+                dropped_key.clone(),
+                AgentValue::Text(std::sync::Arc::from("旧版本的东西")),
+            ),
         ];
         let mut unknown = Vec::new();
-        let session = Session::restore(agent(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| unknown.push(k.clone())).unwrap();
+        let session = Session::restore(agent(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+            unknown.push(k.clone())
+        })
+        .unwrap();
 
         assert_eq!(unknown, vec![dropped_key]);
         assert_eq!(session.status(), TurnStatus::Idle);
@@ -251,7 +287,15 @@ mod tests {
             meta: meta(1, 0, "user_input"),
             changes: vec![status_change(TurnStatus::Idle, TurnStatus::Thinking)],
         }];
-        let Err(err) = Session::restore(agent(), None, entries, 5 /* 越界 */, 1, 100, &mut |_| {}) else {
+        let Err(err) = Session::restore(
+            agent(),
+            None,
+            entries,
+            5, /* 越界 */
+            1,
+            100,
+            &mut |_| {},
+        ) else {
             panic!("越界游标该被拒绝");
         };
         assert_eq!(err, InvalidHistory::CursorOutOfRange);

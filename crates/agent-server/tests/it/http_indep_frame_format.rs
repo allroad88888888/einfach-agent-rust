@@ -26,8 +26,18 @@ async fn sse_response_always_carries_the_two_required_headers() {
 
     let sse = SseClient::connect(server.addr, &id, None);
     assert_eq!(sse.status(), 200);
-    assert_eq!(sse.header("cache-control"), Some("no-cache"), "raw head:\n{}", sse.head.raw);
-    assert_eq!(sse.header("x-accel-buffering"), Some("no"), "raw head:\n{}", sse.head.raw);
+    assert_eq!(
+        sse.header("cache-control"),
+        Some("no-cache"),
+        "raw head:\n{}",
+        sse.head.raw
+    );
+    assert_eq!(
+        sse.header("x-accel-buffering"),
+        Some("no"),
+        "raw head:\n{}",
+        sse.head.raw
+    );
 }
 
 /// `text_delta` 的 `data` 字段必须是纯 JSON 字符串（不是 `{"text": "hi"}` 这种
@@ -40,11 +50,17 @@ async fn text_delta_data_is_a_plain_string_and_frame_ids_are_monotonic() {
 
     let mut sse = SseClient::connect(server.addr, &id, None);
     let resp = server.post_input(&id, "hi");
-    assert_eq!(resp.status, 202, "input 该是 fire-and-forget 的 202，body={}", resp.body_str());
+    assert_eq!(
+        resp.status,
+        202,
+        "input 该是 fire-and-forget 的 202，body={}",
+        resp.body_str()
+    );
 
     let mut frames = Vec::new();
     while let Some(frame) = sse.next_frame(Duration::from_secs(3)) {
-        let is_terminal = frame.data.contains("\"turn_status_changed\"") || frame.data.contains("TurnStatusChanged");
+        let is_terminal = frame.data.contains("\"turn_status_changed\"")
+            || frame.data.contains("TurnStatusChanged");
         frames.push(frame);
         if is_terminal && frames.last().unwrap().data.contains("Done") {
             break;
@@ -57,7 +73,10 @@ async fn text_delta_data_is_a_plain_string_and_frame_ids_are_monotonic() {
     assert!(!frames.is_empty(), "至少要收到一帧");
 
     // 帧 id 严格单调递增，从 1 开始。
-    let ids: Vec<u64> = frames.iter().map(|f| f.id.expect("每一帧都该带 id")).collect();
+    let ids: Vec<u64> = frames
+        .iter()
+        .map(|f| f.id.expect("每一帧都该带 id"))
+        .collect();
     assert_eq!(ids[0], 1, "首帧 id 该是 1，实际 {ids:?}");
     for w in ids.windows(2) {
         assert!(w[1] > w[0], "帧 id 必须严格单调递增：{ids:?}");
@@ -66,20 +85,33 @@ async fn text_delta_data_is_a_plain_string_and_frame_ids_are_monotonic() {
     // 034：帧 data 最外层是 `Frame` 信封——`agent` 字段先于 `event`（字段声明
     // 顺序，serde 默认按结构体字段顺序序列化），root 会话唯一的 agent 就是
     // "root"。信封本身也是逐字节钉的一部分，不是只挑 `event` 那一半看。
-    let text_delta = frames.iter().find(|f| f.data.starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"text_delta\"")).unwrap_or_else(|| {
-        panic!("没找到 text_delta 帧，收到的帧：{frames:?}")
-    });
+    let text_delta = frames
+        .iter()
+        .find(|f| {
+            f.data
+                .starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"text_delta\"")
+        })
+        .unwrap_or_else(|| panic!("没找到 text_delta 帧，收到的帧：{frames:?}"));
     let value: serde_json::Value = serde_json::from_str(&text_delta.data).unwrap();
     assert_eq!(value["agent"], "root");
     assert_eq!(value["event"]["type"], "text_delta");
-    assert!(value["event"]["data"].is_string(), "text_delta 的 data 必须是纯字符串，实际：{value}");
+    assert!(
+        value["event"]["data"].is_string(),
+        "text_delta 的 data 必须是纯字符串，实际：{value}"
+    );
     assert_eq!(value["event"]["data"].as_str().unwrap(), "hello world");
 
     // 邻接标签对任意变体形状都成立：随手挑一个对象形态的变体（turn_guard）验证
     // 它的 data 是 JSON 对象而不是字符串——两种形状都要能正确落地，不是巧合。
-    if let Some(guard) = frames.iter().find(|f| f.data.contains("\"type\":\"turn_guard\"")) {
+    if let Some(guard) = frames
+        .iter()
+        .find(|f| f.data.contains("\"type\":\"turn_guard\""))
+    {
         let value: serde_json::Value = serde_json::from_str(&guard.data).unwrap();
         assert_eq!(value["agent"], "root");
-        assert!(value["event"]["data"].is_object(), "turn_guard 的 data 该是对象：{value}");
+        assert!(
+            value["event"]["data"].is_object(),
+            "turn_guard 的 data 该是对象：{value}"
+        );
     }
 }

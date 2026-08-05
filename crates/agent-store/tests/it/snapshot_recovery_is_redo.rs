@@ -13,8 +13,8 @@ use std::rc::Rc;
 use serde::{Deserialize, Serialize};
 
 use agent_store::{
-    apply_next, capture, record_set, restore, AtomFamily, AtomId, AtomValue, History, Snapshot,
-    Store,
+    AtomFamily, AtomId, AtomValue, History, Snapshot, Store, apply_next, capture, record_set,
+    restore,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -61,12 +61,7 @@ fn build_graph() -> Graph {
     Graph { store, family }
 }
 
-fn write(
-    g: &Graph,
-    history: &mut History<String, Tv, String>,
-    meta: &str,
-    writes: &[(&str, Tv)],
-) {
+fn write(g: &Graph, history: &mut History<String, Tv, String>, meta: &str, writes: &[(&str, Tv)]) {
     let mut changes = Vec::new();
     g.store.batch(|s| {
         for (key, next) in writes {
@@ -82,8 +77,18 @@ fn snapshot_plus_apply_next_replay_matches_the_original_world() {
     let original = build_graph();
     let mut history: History<String, Tv, String> = History::new();
 
-    write(&original, &mut history, "e0", &[("p1", Tv(1)), ("p2", Tv(2))]); // seq 0
-    write(&original, &mut history, "e1", &[("p1", Tv(3)), ("p2", Tv(4))]); // seq 1 —— 第 2 条
+    write(
+        &original,
+        &mut history,
+        "e0",
+        &[("p1", Tv(1)), ("p2", Tv(2))],
+    ); // seq 0
+    write(
+        &original,
+        &mut history,
+        "e1",
+        &[("p1", Tv(3)), ("p2", Tv(4))],
+    ); // seq 1 —— 第 2 条
 
     // capture 于第 2 条 entry 之后。
     let atoms = vec![
@@ -93,8 +98,18 @@ fn snapshot_plus_apply_next_replay_matches_the_original_world() {
     let snap: Snapshot<String, Tv> = capture(&original.store, atoms.into_iter());
 
     // 原 store 继续写第 3、4 条 —— record_set 照常记录进同一份 History。
-    write(&original, &mut history, "e2", &[("p1", Tv(5)), ("p2", Tv(6))]); // seq 2
-    write(&original, &mut history, "e3", &[("p1", Tv(7)), ("p2", Tv(8))]); // seq 3
+    write(
+        &original,
+        &mut history,
+        "e2",
+        &[("p1", Tv(5)), ("p2", Tv(6))],
+    ); // seq 2
+    write(
+        &original,
+        &mut history,
+        "e3",
+        &[("p1", Tv(7)), ("p2", Tv(8))],
+    ); // seq 3
     assert_eq!(original.value("p1"), Tv(7));
     assert_eq!(original.value("p2"), Tv(8));
     let expected_d = original.value("d");

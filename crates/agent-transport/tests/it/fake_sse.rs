@@ -11,8 +11,8 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::ops::ControlFlow;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use agent_transport::{Backoff, Client, StreamOutcome, TransportError};
@@ -41,7 +41,9 @@ fn drain_request(stream: &mut TcpStream) {
 /// 写一段「立刻可用」的 200 响应头，`Connection: close` 表示 body 读到 EOF 为止。
 fn write_sse_headers(stream: &mut TcpStream) {
     stream
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+        )
         .unwrap();
     stream.flush().unwrap();
 }
@@ -62,7 +64,10 @@ fn local_client() -> Client {
         // 测试要快——这个值只影响取消标志被发现的延迟，跟 socket 的读超时
         // （固定 60s，不给外部调，见 client.rs `DEFAULT_SOCKET_TIMEOUT`）无关。
         Duration::from_millis(120),
-        Backoff { base: Duration::from_millis(30), max_attempts: 3 },
+        Backoff {
+            base: Duration::from_millis(30),
+            max_attempts: 3,
+        },
     )
 }
 
@@ -141,21 +146,37 @@ fn slow_status_line_is_tolerated_not_retried() {
     let mut lines = Vec::new();
     let start = Instant::now();
     let outcome = client
-        .post_stream(&format!("http://127.0.0.1:{port}/chat/completions"), "fake-key", b"{}", &cancel, |line| {
-            if !line.is_empty() {
-                lines.push(line.to_string());
-            }
-            ControlFlow::Continue(())
-        })
+        .post_stream(
+            &format!("http://127.0.0.1:{port}/chat/completions"),
+            "fake-key",
+            b"{}",
+            &cancel,
+            |line| {
+                if !line.is_empty() {
+                    lines.push(line.to_string());
+                }
+                ControlFlow::Continue(())
+            },
+        )
         .unwrap();
     let elapsed = start.elapsed();
 
     server.join().unwrap();
     assert_eq!(outcome, StreamOutcome::Finished);
     assert_eq!(lines, vec!["data: [DONE]"]);
-    assert_eq!(accepted.load(Ordering::Relaxed), 1, "慢首字节不该触发第二次连接（退避重试）");
-    assert!(elapsed >= Duration::from_millis(700), "该老老实实等了慢首字节，实际 {elapsed:?}");
-    assert!(elapsed < Duration::from_secs(5), "不该额外卡在退避里，实际 {elapsed:?}");
+    assert_eq!(
+        accepted.load(Ordering::Relaxed),
+        1,
+        "慢首字节不该触发第二次连接（退避重试）"
+    );
+    assert!(
+        elapsed >= Duration::from_millis(700),
+        "该老老实实等了慢首字节，实际 {elapsed:?}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "不该额外卡在退避里，实际 {elapsed:?}"
+    );
 }
 
 /// 取消标志在流中途置位：服务端发一行后就不再发任何东西、也不关闭连接
@@ -188,9 +209,13 @@ fn cancel_flag_interrupts_a_stalled_stream() {
 
     let start = Instant::now();
     let outcome = client
-        .post_stream(&format!("http://127.0.0.1:{port}/chat/completions"), "fake-key", b"{}", &cancel, |_| {
-            ControlFlow::Continue(())
-        })
+        .post_stream(
+            &format!("http://127.0.0.1:{port}/chat/completions"),
+            "fake-key",
+            b"{}",
+            &cancel,
+            |_| ControlFlow::Continue(()),
+        )
         .unwrap();
     let elapsed = start.elapsed();
 
@@ -225,13 +250,19 @@ fn on_line_break_stops_the_stream_without_cancel_flag() {
     let mut seen = Vec::new();
     let start = Instant::now();
     let outcome = client
-        .post_stream(&format!("http://127.0.0.1:{port}/chat/completions"), "fake-key", b"{}", &cancel, |line| {
-            if !line.is_empty() {
-                seen.push(line.to_string());
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
-        })
+        .post_stream(
+            &format!("http://127.0.0.1:{port}/chat/completions"),
+            "fake-key",
+            b"{}",
+            &cancel,
+            |line| {
+                if !line.is_empty() {
+                    seen.push(line.to_string());
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(())
+            },
+        )
         .unwrap();
 
     assert_eq!(outcome, StreamOutcome::Cancelled);
@@ -259,7 +290,12 @@ fn payment_required_is_reported_without_retrying() {
                     accepted_counter.fetch_add(1, Ordering::Relaxed);
                     stream.set_nonblocking(false).unwrap();
                     drain_request(&mut stream);
-                    write_status(&mut stream, 402, "Payment Required", r#"{"error":{"message":"Insufficient Balance"}}"#);
+                    write_status(
+                        &mut stream,
+                        402,
+                        "Payment Required",
+                        r#"{"error":{"message":"Insufficient Balance"}}"#,
+                    );
                 }
                 Err(_) => std::thread::sleep(Duration::from_millis(10)),
             }
@@ -271,25 +307,45 @@ fn payment_required_is_reported_without_retrying() {
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(120),
-        Backoff { base: Duration::from_secs(2), max_attempts: 3 },
+        Backoff {
+            base: Duration::from_secs(2),
+            max_attempts: 3,
+        },
     );
     let cancel = AtomicBool::new(false);
     let start = Instant::now();
     let err = client
-        .post_stream(&format!("http://127.0.0.1:{port}/chat/completions"), "fake-key", b"{}", &cancel, |_| {
-            ControlFlow::Continue(())
-        })
+        .post_stream(
+            &format!("http://127.0.0.1:{port}/chat/completions"),
+            "fake-key",
+            b"{}",
+            &cancel,
+            |_| ControlFlow::Continue(()),
+        )
         .unwrap_err();
     let elapsed = start.elapsed();
 
-    assert_eq!(err, TransportError::Http { status: 402, body: r#"{"error":{"message":"Insufficient Balance"}}"#.to_string() });
-    assert!(elapsed < Duration::from_secs(1), "402 不该退避，实际耗时 {elapsed:?}");
+    assert_eq!(
+        err,
+        TransportError::Http {
+            status: 402,
+            body: r#"{"error":{"message":"Insufficient Balance"}}"#.to_string()
+        }
+    );
+    assert!(
+        elapsed < Duration::from_secs(1),
+        "402 不该退避，实际耗时 {elapsed:?}"
+    );
 
     // 给服务端线程一点时间把这次连接计数落好，再关它。
     std::thread::sleep(Duration::from_millis(100));
     stop.store(true, Ordering::Relaxed);
     server.join().unwrap();
-    assert_eq!(accepted.load(Ordering::Relaxed), 1, "402 不该产生第二次连接");
+    assert_eq!(
+        accepted.load(Ordering::Relaxed),
+        1,
+        "402 不该产生第二次连接"
+    );
 }
 
 /// 断网：本地一个没人监听的端口。必须在有限次数内报明确错误，
@@ -304,14 +360,21 @@ fn unreachable_port_reports_a_bounded_connect_error() {
     let client = Client::with_config(
         Duration::from_millis(300),
         Duration::from_millis(120),
-        Backoff { base: Duration::from_millis(20), max_attempts: 3 },
+        Backoff {
+            base: Duration::from_millis(20),
+            max_attempts: 3,
+        },
     );
     let cancel = AtomicBool::new(false);
     let start = Instant::now();
     let err = client
-        .post_stream(&format!("http://127.0.0.1:{port}/chat/completions"), "fake-key", b"{}", &cancel, |_| {
-            ControlFlow::Continue(())
-        })
+        .post_stream(
+            &format!("http://127.0.0.1:{port}/chat/completions"),
+            "fake-key",
+            b"{}",
+            &cancel,
+            |_| ControlFlow::Continue(()),
+        )
         .unwrap_err();
     let elapsed = start.elapsed();
 
@@ -320,5 +383,8 @@ fn unreachable_port_reports_a_bounded_connect_error() {
         other => panic!("期望 Connect 错误，拿到 {other:?}"),
     }
     // 3 次尝试 + 退避（20ms、40ms 量级）应该在很短时间内报完，不是卡死。
-    assert!(elapsed < Duration::from_secs(5), "耗时 {elapsed:?}，看起来像在无限重试");
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "耗时 {elapsed:?}，看起来像在无限重试"
+    );
 }

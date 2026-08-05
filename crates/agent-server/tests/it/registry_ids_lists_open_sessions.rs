@@ -10,8 +10,20 @@ fn ids_reflects_opens_and_closes() {
     let registry = agent_server::SessionRegistry::new();
     assert!(registry.ids().is_empty(), "全新表该是空的");
 
-    registry.open(support::open_spec("a", "http://127.0.0.1:1/unused".to_string(), None)).unwrap();
-    registry.open(support::open_spec("b", "http://127.0.0.1:1/unused".to_string(), None)).unwrap();
+    registry
+        .open(support::open_spec(
+            "a",
+            "http://127.0.0.1:1/unused".to_string(),
+            None,
+        ))
+        .unwrap();
+    registry
+        .open(support::open_spec(
+            "b",
+            "http://127.0.0.1:1/unused".to_string(),
+            None,
+        ))
+        .unwrap();
 
     let mut ids: Vec<String> = registry.ids().iter().map(|id| id.to_string()).collect();
     ids.sort();
@@ -29,7 +41,13 @@ fn ids_reflects_opens_and_closes() {
 fn closing_every_id_empties_the_table() {
     let registry = agent_server::SessionRegistry::new();
     for name in ["x", "y", "z"] {
-        registry.open(support::open_spec(name, "http://127.0.0.1:1/unused".to_string(), None)).unwrap();
+        registry
+            .open(support::open_spec(
+                name,
+                "http://127.0.0.1:1/unused".to_string(),
+                None,
+            ))
+            .unwrap();
     }
     for id in registry.ids() {
         registry.close(&id).unwrap();

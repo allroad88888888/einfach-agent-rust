@@ -13,8 +13,12 @@ use support::session::new_session;
 /// root -> child -> grandchild 三层，够覆盖「隔代」和「兄弟」两类关系。
 fn spawn_two_level(session: &mut Session) -> (AgentId, AgentId) {
     let root = session.agent().clone();
-    let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn child");
-    let grandchild = session.spawn_child(&child, ChildConfig::default()).expect("spawn grandchild");
+    let child = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn child");
+    let grandchild = session
+        .spawn_child(&child, ChildConfig::default())
+        .expect("spawn grandchild");
     (child, grandchild)
 }
 
@@ -57,13 +61,22 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
                 upward.push(slot);
             }
             Visibility::Downward => {
-                assert!(down.is_ok(), "{slot:?} 声明 Downward 但父读子失败: {down:?}");
+                assert!(
+                    down.is_ok(),
+                    "{slot:?} 声明 Downward 但父读子失败: {down:?}"
+                );
                 assert!(matches!(up, Err(ReadDenied::NotVisible { .. })));
                 downward.push(slot);
             }
             Visibility::Private => {
-                assert!(matches!(up, Err(ReadDenied::NotVisible { .. })), "{slot:?} 该是 Private");
-                assert!(matches!(down, Err(ReadDenied::NotVisible { .. })), "{slot:?} 该是 Private");
+                assert!(
+                    matches!(up, Err(ReadDenied::NotVisible { .. })),
+                    "{slot:?} 该是 Private"
+                );
+                assert!(
+                    matches!(down, Err(ReadDenied::NotVisible { .. })),
+                    "{slot:?} 该是 Private"
+                );
                 private.push(slot);
             }
         }
@@ -71,7 +84,13 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
 
     assert_eq!(
         upward,
-        vec![Slot::Messages, Slot::SkillsActive, Slot::HostTools, Slot::HostSkills, Slot::DisabledBuiltins]
+        vec![
+            Slot::Messages,
+            Slot::SkillsActive,
+            Slot::HostTools,
+            Slot::HostSkills,
+            Slot::DisabledBuiltins
+        ]
     );
     assert_eq!(downward, vec![Slot::Status, Slot::ToolsAllowed]);
     assert_eq!(
@@ -86,8 +105,12 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
 fn siblings_cannot_read_each_other_and_the_attempt_has_no_side_effect() {
     let mut session = new_session();
     let root = session.agent().clone();
-    let a1 = session.spawn_child(&root, ChildConfig::default()).expect("spawn a1");
-    let a2 = session.spawn_child(&root, ChildConfig::default()).expect("spawn a2");
+    let a1 = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn a1");
+    let a2 = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn a2");
 
     let before = session.primitives();
 
@@ -96,7 +119,11 @@ fn siblings_cannot_read_each_other_and_the_attempt_has_no_side_effect() {
     let r2 = session.read_descendant(&a1, &a2, Slot::Status);
     assert!(matches!(r2, Err(ReadDenied::NotADescendant { .. })));
 
-    assert_eq!(session.primitives(), before, "被拒的跨 agent 读不该改变任何 primitive");
+    assert_eq!(
+        session.primitives(),
+        before,
+        "被拒的跨 agent 读不该改变任何 primitive"
+    );
 }
 
 /// 第二类：自读。`x` 严格意义上既不是自己的祖先也不是自己的后代，所以自读
@@ -158,5 +185,9 @@ fn an_id_from_nowhere_in_this_tree_is_rejected_the_same_way() {
     let r3 = session.read_ancestor(&alien, &root, Slot::Messages);
     assert!(matches!(r3, Err(ReadDenied::NotAnAncestor { .. })));
 
-    assert_eq!(session.primitives(), before, "拒绝的跨会话读不该在 family 里留下任何 atom");
+    assert_eq!(
+        session.primitives(),
+        before,
+        "拒绝的跨会话读不该在 family 里留下任何 atom"
+    );
 }

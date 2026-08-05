@@ -258,7 +258,10 @@ mod tests {
         let entry = Entry {
             seq: 7,
             meta: "append_user_msg".to_string(),
-            changes: vec![change("agent/root/messages", 1, 2), change("agent/root/status", 0, 1)],
+            changes: vec![
+                change("agent/root/messages", 1, 2),
+                change("agent/root/status", 0, 1),
+            ],
         };
         let json = serde_json::to_string(&entry).unwrap();
         let back: Entry<String, i32, String> = serde_json::from_str(&json).unwrap();
@@ -269,7 +272,8 @@ mod tests {
     #[test]
     fn change_serde_roundtrip() {
         let c = change("k", -1, 42);
-        let back: Change<String, i32> = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        let back: Change<String, i32> =
+            serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
         assert_eq!(back, c);
     }
 }

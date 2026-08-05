@@ -128,7 +128,10 @@ mod tests {
         let body: Value = serde_json::from_slice(&out.body).unwrap();
         assert_eq!(body["model"], serde_json::json!("deepseek-v4-pro"));
         assert_eq!(body["tools"][0]["type"], serde_json::json!("function"));
-        assert_eq!(body["stream_options"]["include_usage"], serde_json::json!(true));
+        assert_eq!(
+            body["stream_options"]["include_usage"],
+            serde_json::json!(true)
+        );
         assert_eq!(out.prefix.segments.len(), 3);
     }
 }

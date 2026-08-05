@@ -34,9 +34,15 @@ fn hitting_the_cap_after_tool_convergence_lands_done_truncated_instead_of_callin
 
     let effects = s.step(support::tool_result_event(s.epoch(), "call_1", "内容"));
 
-    assert_eq!(s.status(), TurnStatus::Done { truncated: true }, "撞顶，被截断");
+    assert_eq!(
+        s.status(),
+        TurnStatus::Done { truncated: true },
+        "撞顶，被截断"
+    );
     assert!(
-        !effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })),
+        !effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. })),
         "撞顶之后不该再发 CallProvider：{effects:?}"
     );
     assert_eq!(
@@ -58,7 +64,11 @@ fn answered_and_truncated_are_distinguishable() {
     truncated.set_max_turns(0);
     let effects = truncated.step(support::user_input_event("hi"));
     assert_eq!(truncated.status(), TurnStatus::Done { truncated: true });
-    assert_ne!(answered.status(), truncated.status(), "两种结束方式必须能区分");
+    assert_ne!(
+        answered.status(),
+        truncated.status(),
+        "两种结束方式必须能区分"
+    );
     assert_eq!(
         effects,
         vec![Effect::Emit(Notice::TurnStatusChanged {
@@ -79,7 +89,11 @@ fn zero_max_turns_rejects_the_very_first_attempt() {
     assert_eq!(s.status(), TurnStatus::Done { truncated: true });
     assert_eq!(s.turns_used(), 0, "从没真的发过 CallProvider，不该计数");
     assert_eq!(s.messages().len(), 1, "用户消息仍然进历史");
-    assert!(!effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        !effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 }
 
 /// `turns_used` 精确地随每一次 `CallProvider` 递增。
@@ -126,5 +140,9 @@ fn begin_turn_resets_the_per_turn_budget_and_keeps_the_conversation() {
     // 新一轮能正常开：`Idle + UserInput` 那一格。
     let effects = s.step(support::user_input_event("第二轮"));
     assert_eq!(s.status(), TurnStatus::Thinking);
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 }

@@ -81,20 +81,24 @@ pub fn parse_response(bytes: &[u8]) -> Result<RpcResponse, ProtocolError> {
     if !obj.contains_key("jsonrpc") {
         return Err(ProtocolError::NotJsonRpc("缺 jsonrpc 字段".to_string()));
     }
-    let id = obj.get("id").and_then(Value::as_u64).ok_or_else(|| {
-        ProtocolError::NotJsonRpc("缺 id 字段，或 id 不是非负整数".to_string())
-    })?;
+    let id = obj
+        .get("id")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| ProtocolError::NotJsonRpc("缺 id 字段，或 id 不是非负整数".to_string()))?;
 
     let has_result = obj.contains_key("result");
     let has_error = obj.contains_key("error");
     match (has_result, has_error) {
-        (true, true) => {
-            Err(ProtocolError::Malformed("result 与 error 同时存在".to_string()))
-        }
-        (false, false) => {
-            Err(ProtocolError::Malformed("result 与 error 都不存在".to_string()))
-        }
-        (true, false) => Ok(RpcResponse::Result { id, result: obj["result"].clone() }),
+        (true, true) => Err(ProtocolError::Malformed(
+            "result 与 error 同时存在".to_string(),
+        )),
+        (false, false) => Err(ProtocolError::Malformed(
+            "result 与 error 都不存在".to_string(),
+        )),
+        (true, false) => Ok(RpcResponse::Result {
+            id,
+            result: obj["result"].clone(),
+        }),
         (false, true) => parse_error_object(id, &obj["error"]),
     }
 }
@@ -102,9 +106,12 @@ pub fn parse_response(bytes: &[u8]) -> Result<RpcResponse, ProtocolError> {
 /// 解析 `error` 对象。`code`/`message` 缺失或类型不对 → `Malformed`（信封语义畸形，
 /// 跟 `result`/`error` 互斥校验同一类问题，不单独开变体）。
 fn parse_error_object(id: u64, error_value: &Value) -> Result<RpcResponse, ProtocolError> {
-    let code = error_value.get("code").and_then(Value::as_i64).ok_or_else(|| {
-        ProtocolError::Malformed("error 对象缺 code，或 code 不是整数".to_string())
-    })?;
+    let code = error_value
+        .get("code")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| {
+            ProtocolError::Malformed("error 对象缺 code，或 code 不是整数".to_string())
+        })?;
     let message = error_value
         .get("message")
         .and_then(Value::as_str)
@@ -113,7 +120,14 @@ fn parse_error_object(id: u64, error_value: &Value) -> Result<RpcResponse, Proto
         })?
         .to_string();
     let data = error_value.get("data").cloned();
-    Ok(RpcResponse::Error { id, error: RpcError { code, message, data } })
+    Ok(RpcResponse::Error {
+        id,
+        error: RpcError {
+            code,
+            message,
+            data,
+        },
+    })
 }
 
 #[cfg(test)]
@@ -161,7 +175,10 @@ mod tests {
         let bytes = br#"{"jsonrpc":"2.0","id":1,"result":{"ok":true}}"#;
         assert_eq!(
             parse_response(bytes).unwrap(),
-            RpcResponse::Result { id: 1, result: json!({"ok": true}) }
+            RpcResponse::Result {
+                id: 1,
+                result: json!({"ok": true})
+            }
         );
     }
 
@@ -172,7 +189,11 @@ mod tests {
             parse_response(bytes).unwrap(),
             RpcResponse::Error {
                 id: 2,
-                error: RpcError { code: -32601, message: "not found".to_string(), data: None }
+                error: RpcError {
+                    code: -32601,
+                    message: "not found".to_string(),
+                    data: None
+                }
             }
         );
     }
@@ -196,37 +217,55 @@ mod tests {
     #[test]
     fn parse_response_missing_id_is_not_jsonrpc() {
         let bytes = br#"{"jsonrpc":"2.0","result":{}}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::NotJsonRpc(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::NotJsonRpc(_)
+        ));
     }
 
     #[test]
     fn parse_response_non_integer_id_is_not_jsonrpc() {
         let bytes = br#"{"jsonrpc":"2.0","id":"abc","result":{}}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::NotJsonRpc(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::NotJsonRpc(_)
+        ));
     }
 
     #[test]
     fn parse_response_missing_jsonrpc_field_is_not_jsonrpc() {
         let bytes = br#"{"id":1,"result":{}}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::NotJsonRpc(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::NotJsonRpc(_)
+        ));
     }
 
     #[test]
     fn parse_response_result_and_error_both_present_is_malformed() {
         let bytes = br#"{"jsonrpc":"2.0","id":1,"result":{},"error":{"code":1,"message":"x"}}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::Malformed(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::Malformed(_)
+        ));
     }
 
     #[test]
     fn parse_response_neither_result_nor_error_is_malformed() {
         let bytes = br#"{"jsonrpc":"2.0","id":1}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::Malformed(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::Malformed(_)
+        ));
     }
 
     #[test]
     fn parse_response_error_object_missing_code_is_malformed() {
         let bytes = br#"{"jsonrpc":"2.0","id":1,"error":{"message":"x"}}"#;
-        assert!(matches!(parse_response(bytes).unwrap_err(), ProtocolError::Malformed(_)));
+        assert!(matches!(
+            parse_response(bytes).unwrap_err(),
+            ProtocolError::Malformed(_)
+        ));
     }
 
     /// 未知的额外字段忽略不报错（协议向前兼容）。

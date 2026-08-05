@@ -53,7 +53,11 @@ pub fn undo_nothing() {
 /// 为真时说明这已经是 `/undo!` 越过第一条之后又撞上的下一条——用词要让人
 /// 明白自己在确认什么：**哪一个**不可逆操作挡住了路。
 pub fn undo_blocked(entries: usize, what: &str, forced: bool) {
-    let prefix = if forced { "[仍有阻挡]" } else { "[撤销受阻]" };
+    let prefix = if forced {
+        "[仍有阻挡]"
+    } else {
+        "[撤销受阻]"
+    };
     println!(
         "{prefix} 已经退了 {entries} 条，撞上了一个不可逆操作：{what}，undo 在这里停下不会自动越过。\
          确认要越过它（副作用不会跟着回滚）就输入 /undo!"
@@ -79,7 +83,9 @@ pub fn redo_nothing() {
 /// 启动时从会话文件恢复成功（027）：报一句「接上了」+ 到第几轮，undo 栈的
 /// 存在感在这里第一次向用户交代——不是新会话，是接着聊。
 pub fn session_recovered(turn_id: u64) {
-    println!("[会话已恢复] 接着第 {turn_id} 轮继续（/undo 撤销、/redo 重做、/undo! 越过不可逆操作）");
+    println!(
+        "[会话已恢复] 接着第 {turn_id} 轮继续（/undo 撤销、/redo 重做、/undo! 越过不可逆操作）"
+    );
 }
 
 /// 恢复出来的会话里有一个工具调用「发出去了、还没等到结果」——上一个进程可能
@@ -103,11 +109,15 @@ pub fn recovery_failed(err: &dyn std::fmt::Display) {
 pub fn turn_outcome(status: &TurnStatus) {
     match status {
         TurnStatus::Done { truncated: false } => println!("[本轮完成]"),
-        TurnStatus::Done { truncated: true } => println!("[本轮被截断：撞到了轮数/长度上限，模型本来还想继续]"),
+        TurnStatus::Done { truncated: true } => {
+            println!("[本轮被截断：撞到了轮数/长度上限，模型本来还想继续]")
+        }
         TurnStatus::Failed(failure) => println!("[本轮失败: {failure:?}]"),
         // `run_turn` 只在终态或者「转移表判了 ProtocolViolation 但没给出
         // 终态」两种情况下返回（agent-runtime::runner 模块文档）——后者打
         // 出来提醒这不是正常收尾，不是漏判。
-        other => println!("[本轮没有走到终态，卡在 {other:?}——上面应该已经有一条协议违规通报，可以 /quit 重开]"),
+        other => println!(
+            "[本轮没有走到终态，卡在 {other:?}——上面应该已经有一条协议违规通报，可以 /quit 重开]"
+        ),
     }
 }

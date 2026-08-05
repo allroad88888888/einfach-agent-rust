@@ -19,7 +19,9 @@ fn two_server_config_parses_both_in_order() {
     let ids: Vec<&str> = cfg.servers.iter().map(|(id, _)| id.as_str()).collect();
     assert_eq!(ids, vec!["a", "b"], "保序：a 先 b 后");
 
-    let (_, ServerConfig::Stdio(a)) = &cfg.servers[0] else { panic!("a 应是 stdio") };
+    let (_, ServerConfig::Stdio(a)) = &cfg.servers[0] else {
+        panic!("a 应是 stdio")
+    };
     assert_eq!(a.command, "npx");
     assert_eq!(a.args, vec!["-y", "a-pkg"]);
     assert_eq!(a.env_pairs(), vec![("A".to_string(), "1".to_string())]);
@@ -53,7 +55,9 @@ fn remote_http_entry_parses_as_remote_without_crashing_other_stdio() {
     .unwrap();
     assert_eq!(cfg.servers.len(), 2, "远端条目不该让整份解析失败");
 
-    let (_, ServerConfig::Remote(r)) = &cfg.servers[0] else { panic!("web 应是 remote") };
+    let (_, ServerConfig::Remote(r)) = &cfg.servers[0] else {
+        panic!("web 应是 remote")
+    };
     assert_eq!(r.transport_type, "http");
     assert_eq!(r.url, "https://example/mcp");
 
@@ -67,7 +71,9 @@ fn remote_http_entry_parses_as_remote_without_crashing_other_stdio() {
 #[test]
 fn sse_entry_parses_as_remote() {
     let cfg = parse_config(r#"{"mcpServers":{"s":{"type":"sse","url":"https://x/sse"}}}"#).unwrap();
-    let (_, ServerConfig::Remote(r)) = &cfg.servers[0] else { panic!("应是 remote") };
+    let (_, ServerConfig::Remote(r)) = &cfg.servers[0] else {
+        panic!("应是 remote")
+    };
     assert_eq!(r.transport_type, "sse");
 }
 
@@ -81,8 +87,14 @@ fn host_gate_available_on_expresses_availability() {
         env: Default::default(),
     });
     assert_eq!(stdio.transport_kind(), TransportKind::Stdio);
-    assert!(stdio.available_on(Host::Server), "stdio + server host：可用");
-    assert!(!stdio.available_on(Host::Browser), "stdio + 浏览器：接口能表达不可用");
+    assert!(
+        stdio.available_on(Host::Server),
+        "stdio + server host：可用"
+    );
+    assert!(
+        !stdio.available_on(Host::Browser),
+        "stdio + 浏览器：接口能表达不可用"
+    );
 
     let remote = ServerConfig::Remote(RemoteServer {
         transport_type: "http".into(),
@@ -90,6 +102,12 @@ fn host_gate_available_on_expresses_availability() {
         headers: Default::default(),
     });
     assert_eq!(remote.transport_kind(), TransportKind::Remote);
-    assert!(remote.available_on(Host::Browser), "远端 + 浏览器：延后但形状在（门返回可用）");
-    assert!(remote.available_on(Host::Server), "远端 + server host：门返回可用（M6 不实现是 loader 的判断）");
+    assert!(
+        remote.available_on(Host::Browser),
+        "远端 + 浏览器：延后但形状在（门返回可用）"
+    );
+    assert!(
+        remote.available_on(Host::Server),
+        "远端 + server host：门返回可用（M6 不实现是 loader 的判断）"
+    );
 }

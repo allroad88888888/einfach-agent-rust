@@ -89,7 +89,10 @@ fn build_ctx(port: u16, fs_root: &std::path::Path, registry: SkillRegistry) -> R
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(fs_root).unwrap();
     let session_config = SessionConfig {
@@ -132,7 +135,10 @@ fn the_resident_index_is_in_the_very_first_request_before_any_activation() {
     let mut ctx = build_ctx(server.port, &fs_root, load_registry(&skills_root));
     let mut session = Session::new(AgentId::root());
 
-    assert_eq!(run_turn(&mut session, &mut ctx, "你好"), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        run_turn(&mut session, &mut ctx, "你好"),
+        TurnStatus::Done { truncated: false }
+    );
 
     let call = server.call("").expect("该有且只有一次请求");
     assert!(
@@ -178,10 +184,18 @@ fn activating_mid_turn_injects_body_and_tool_into_the_next_hop_then_undo_removes
     let mut ctx = build_ctx(server.port, &fs_root, registry);
     let mut session = Session::new(AgentId::root());
 
-    assert_eq!(run_turn(&mut session, &mut ctx, "帮我激活 testskill"), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        run_turn(&mut session, &mut ctx, "帮我激活 testskill"),
+        TurnStatus::Done { truncated: false }
+    );
 
     let calls = server.calls();
-    assert_eq!(calls.len(), 2, "一次工具调用 + 一次收敛,该正好两跳请求,实际: {}", calls.len());
+    assert_eq!(
+        calls.len(),
+        2,
+        "一次工具调用 + 一次收敛,该正好两跳请求,实际: {}",
+        calls.len()
+    );
     let after_activation = &calls[1];
     assert!(
         after_activation.body.contains(SKILL_BODY_MARKER),
@@ -189,7 +203,8 @@ fn activating_mid_turn_injects_body_and_tool_into_the_next_hop_then_undo_removes
         after_activation.body
     );
     assert!(
-        after_activation.body.contains("testskill_2Fping") || after_activation.body.contains("testskill/ping"),
+        after_activation.body.contains("testskill_2Fping")
+            || after_activation.body.contains("testskill/ping"),
         "激活之后的下一跳请求体该带上 skill 声明的工具(late_tools): {}",
         after_activation.body
     );

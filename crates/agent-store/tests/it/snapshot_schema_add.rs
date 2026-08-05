@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use agent_store::{capture, restore, AtomFamily, AtomValue, Snapshot, Store};
+use agent_store::{AtomFamily, AtomValue, Snapshot, Store, capture, restore};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Tv(i64);
@@ -58,7 +58,10 @@ fn a_new_atom_keeps_its_default_and_old_keys_restore_with_no_unknowns() {
         unknown.push(k.clone())
     });
 
-    assert!(unknown.is_empty(), "旧快照的两个键都认识，不该叫 on_unknown");
+    assert!(
+        unknown.is_empty(),
+        "旧快照的两个键都认识，不该叫 on_unknown"
+    );
     assert_eq!(
         new_store.get(new_family.get(&"p1".to_string()).unwrap()),
         Tv(5)

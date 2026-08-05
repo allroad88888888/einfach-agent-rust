@@ -28,14 +28,23 @@ fn one_full_turn_leaves_exactly_one_entry_per_transition_that_changed_something(
     let labels: Vec<&str> = s.history().entries().map(|e| e.meta.label).collect();
     assert_eq!(
         labels,
-        vec!["user_input", "provider_done", "tool_result", "provider_done"]
+        vec![
+            "user_input",
+            "provider_done",
+            "tool_result",
+            "provider_done"
+        ]
     );
     assert_eq!(s.history_len(), 4);
     assert_eq!(s.cursor(), 4, "游标在栈顶");
 
     // 整轮的 entry 属于同一个 turn，`epoch` 全程没变（这一轮没有取消也没有 undo）。
     assert!(s.history().entries().all(|e| e.meta.turn_id == 1));
-    assert!(s.history().entries().all(|e| e.meta.epoch == agent_core::Epoch::START));
+    assert!(
+        s.history()
+            .entries()
+            .all(|e| e.meta.epoch == agent_core::Epoch::START)
+    );
     assert!(s.history().entries().all(|e| !e.meta.barrier));
 }
 
@@ -77,11 +86,16 @@ fn the_changes_of_a_single_transition_match_the_transition_semantics() {
     touched.dedup();
     assert_eq!(
         touched,
-        vec![Slot::Messages, Slot::Status, Slot::NextMessageId, Slot::TurnsUsed]
-            .into_iter()
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>()
+        vec![
+            Slot::Messages,
+            Slot::Status,
+            Slot::NextMessageId,
+            Slot::TurnsUsed
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>()
     );
 
     for change in &entry.changes {
@@ -129,7 +143,11 @@ fn recomputing_the_derived_produces_no_entry() {
 
     assert!(s.tools_converged());
     assert!(s.debug_recompute_count() > recomputes, "derived 确实重算了");
-    assert_eq!(s.history_len(), entries_before + 1, "只多了 tool_result 那一条");
+    assert_eq!(
+        s.history_len(),
+        entries_before + 1,
+        "只多了 tool_result 那一条"
+    );
     assert!(
         s.last_entry()
             .unwrap()

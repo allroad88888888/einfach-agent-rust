@@ -41,13 +41,20 @@ fn skills_active_value_for(names: &[&str]) -> AgentValue {
 /// `commit_as`——两条路径分别验证「值形状对不对」和「写入路径对不对」。
 #[test]
 fn a_snapshot_with_skills_active_restores_the_full_id_list() {
-    let snapshot =
-        vec![(AtomKey::Agent(root(), Slot::SkillsActive), skills_active_value_for(&["alpha", "beta"]))];
+    let snapshot = vec![(
+        AtomKey::Agent(root(), Slot::SkillsActive),
+        skills_active_value_for(&["alpha", "beta"]),
+    )];
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| unknown.push(k.clone()))
-        .expect("合法快照该能恢复,不该拒绝");
+    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+        unknown.push(k.clone())
+    })
+    .expect("合法快照该能恢复,不该拒绝");
 
-    assert!(unknown.is_empty(), "SkillsActive 是这一版认识的槽位,不该报进 on_unknown_key");
+    assert!(
+        unknown.is_empty(),
+        "SkillsActive 是这一版认识的槽位,不该报进 on_unknown_key"
+    );
     assert_eq!(
         session.active_skills(),
         vec![SkillId::new("alpha"), SkillId::new("beta")],
@@ -60,7 +67,10 @@ fn a_snapshot_with_skills_active_restores_the_full_id_list() {
 /// 不是 panic 也不是被当成「不认识的槽位」。
 #[test]
 fn an_empty_skills_active_set_restores_to_no_active_skills() {
-    let snapshot = vec![(AtomKey::Agent(root(), Slot::SkillsActive), skills_active_value_for(&[]))];
+    let snapshot = vec![(
+        AtomKey::Agent(root(), Slot::SkillsActive),
+        skills_active_value_for(&[]),
+    )];
     let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |_| {})
         .expect("空集合是合法值,不该被拒绝");
     assert!(session.active_skills().is_empty());
@@ -93,7 +103,11 @@ fn restoring_a_real_sessions_full_log_reproduces_its_active_skills() {
     let entries: Vec<_> = original.history().entries().cloned().collect();
     let cursor = original.cursor();
     let next_seq = entries.len() as u64;
-    assert_eq!(cursor, entries.len(), "这条用例没有 undo 过,游标该跟日志长度一致");
+    assert_eq!(
+        cursor,
+        entries.len(),
+        "这条用例没有 undo 过,游标该跟日志长度一致"
+    );
 
     let restored = Session::restore(root(), None, entries, cursor, next_seq, 100, &mut |_| {})
         .expect("原会话产出的日志必须能被自己重放");

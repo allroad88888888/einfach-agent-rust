@@ -37,8 +37,8 @@ use crate::error::ProtocolError;
 use crate::protocol::{
     McpTool, initialize_params, parse_initialize_result, parse_tools_list, tools_call_params,
 };
-use crate::transport::{StdioTransport, TransportError};
 use crate::translate::translate;
+use crate::transport::{StdioTransport, TransportError};
 use crate::{RpcResponse, encode_notification, encode_request, parse_response};
 
 /// 握手默认超时——留够 `npx` 首次拉包的时间(未缓存时要下载整个包，比常规
@@ -54,7 +54,10 @@ pub enum McpError {
     Transport(TransportError),
     Protocol(ProtocolError),
     /// server 对某次请求回了 JSON-RPC `error` 对象。
-    Rpc { code: i64, message: String },
+    Rpc {
+        code: i64,
+        message: String,
+    },
 }
 
 impl std::fmt::Display for McpError {
@@ -181,13 +184,17 @@ impl McpClient {
         let id = self.next_id;
         self.next_id += 1;
         let bytes = encode_request(id, method, params);
-        self.transport.write_line(&bytes).map_err(McpError::Transport)?;
+        self.transport
+            .write_line(&bytes)
+            .map_err(McpError::Transport)?;
         self.await_response(id, timeout)
     }
 
     fn notify(&mut self, method: &str, params: Option<Value>) -> Result<(), McpError> {
         let bytes = encode_notification(method, params);
-        self.transport.write_line(&bytes).map_err(McpError::Transport)
+        self.transport
+            .write_line(&bytes)
+            .map_err(McpError::Transport)
     }
 
     /// 等一个 `id` 对上的响应，期间跳过 server 插播的通知/不对号的响应
@@ -195,7 +202,10 @@ impl McpClient {
     fn await_response(&mut self, id: u64, timeout: Duration) -> Result<Value, McpError> {
         let deadline = Instant::now() + timeout;
         loop {
-            let line = self.transport.read_line(deadline).map_err(McpError::Transport)?;
+            let line = self
+                .transport
+                .read_line(deadline)
+                .map_err(McpError::Transport)?;
             let raw: Value = match serde_json::from_slice(line.as_bytes()) {
                 Ok(v) => v,
                 Err(e) => return Err(McpError::Protocol(ProtocolError::NotJson(e.to_string()))),
@@ -206,7 +216,10 @@ impl McpClient {
             match parse_response(line.as_bytes()) {
                 Ok(RpcResponse::Result { id: got, result }) if got == id => return Ok(result),
                 Ok(RpcResponse::Error { id: got, error }) if got == id => {
-                    return Err(McpError::Rpc { code: error.code, message: error.message });
+                    return Err(McpError::Rpc {
+                        code: error.code,
+                        message: error.message,
+                    });
                 }
                 Ok(_) => continue, // id 不对号——防御性跳过，见模块文档。
                 Err(e) => return Err(McpError::Protocol(e)),

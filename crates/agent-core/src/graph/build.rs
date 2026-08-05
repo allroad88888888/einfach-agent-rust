@@ -73,9 +73,8 @@ pub fn derived_atom(
     let DerivedKey::ToolsConverged(agent) = key;
     let (agent, store_h, family_h) = (agent.clone(), store.clone(), sources.clone());
     derived.borrow_mut().get_or_create(key.clone(), || {
-        store.create_derived_ctx(move |args| {
-            tools_converged_read(args, &store_h, &family_h, &agent)
-        })
+        store
+            .create_derived_ctx(move |args| tools_converged_read(args, &store_h, &family_h, &agent))
     })
 }
 
@@ -95,7 +94,11 @@ fn tools_converged_read(
     agent: &AgentId,
 ) -> AgentValue {
     // 现查，不捕获 id（孪生条款）。借用在这一行结束。
-    let slots_id = source_atom(store, family, &AtomKey::Agent(agent.clone(), Slot::ToolSlots));
+    let slots_id = source_atom(
+        store,
+        family,
+        &AtomKey::Agent(agent.clone(), Slot::ToolSlots),
+    );
     let value = args.get(slots_id);
     let Some(slots) = value.as_slots() else {
         // 唯一合法的走到这里的路径是 DV-3 的故障占位（超递归预算时 tracked getter
@@ -104,7 +107,10 @@ fn tools_converged_read(
         debug_assert!(args.is_faulted(), "ToolSlots 槽位只可能持 Slots：{value:?}");
         return AgentValue::Null;
     };
-    if slots.iter().any(|slot| matches!(slot.state, SlotState::Pending)) {
+    if slots
+        .iter()
+        .any(|slot| matches!(slot.state, SlotState::Pending))
+    {
         AgentValue::Pending
     } else {
         // 零个槽位也算收敛（没有东西要等）。真正「该不该继续」由转移表决定：
@@ -128,7 +134,12 @@ pub fn build_agent(
     for slot in Slot::ALL {
         let _ = source_atom(store, sources, &AtomKey::Agent(agent.clone(), slot));
     }
-    let converged = derived_atom(store, sources, derived, &DerivedKey::ToolsConverged(agent.clone()));
+    let converged = derived_atom(
+        store,
+        sources,
+        derived,
+        &DerivedKey::ToolsConverged(agent.clone()),
+    );
     // 读一次把反向边装上（`create_derived_ctx` 是 lazy 的）。
     let _ = store.get(converged);
 }

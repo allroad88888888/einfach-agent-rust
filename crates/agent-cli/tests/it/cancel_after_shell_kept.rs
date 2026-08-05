@@ -36,8 +36,12 @@ fn a_cancelled_turn_that_already_ran_a_shell_command_is_kept_not_erased() {
 
     // 第一跳：工具调用真的跑一次 shell；第二跳（收敛之后转移表想再调一次
     // provider）挂住不回，等 Ctrl-C。
-    let port = support::spawn_scripted_server(vec![hop1_shell_call(marker.to_str().unwrap()), ScriptedResponse::HangAfterHeaders]);
-    let mut ctx = support::build_ctx_with_shell(port, &dir).with_provider_timeout(Duration::from_secs(5));
+    let port = support::spawn_scripted_server(vec![
+        hop1_shell_call(marker.to_str().unwrap()),
+        ScriptedResponse::HangAfterHeaders,
+    ]);
+    let mut ctx =
+        support::build_ctx_with_shell(port, &dir).with_provider_timeout(Duration::from_secs(5));
 
     let cancel = ctx.cancel_flag();
     std::thread::spawn(move || {
@@ -54,7 +58,10 @@ fn a_cancelled_turn_that_already_ran_a_shell_command_is_kept_not_erased() {
     undo::after_cancelled_turn(&mut session, &mut ctx);
 
     // 保留：这一轮的用户消息还在（没有被整轮擦掉）。
-    assert!(!session.messages().is_empty(), "已经执行过不可逆工具的取消轮该被保留，不是整轮擦除");
+    assert!(
+        !session.messages().is_empty(),
+        "已经执行过不可逆工具的取消轮该被保留，不是整轮擦除"
+    );
     // 会话没有卡死：`/undo!` 还能接着越过它（不在这里断言到底，
     // `session_undo_redo.rs`/`shell_exec_undo_barrier.rs` 已经钉过那条机制）。
 }

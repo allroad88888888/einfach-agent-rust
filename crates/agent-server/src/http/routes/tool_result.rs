@@ -38,7 +38,9 @@ pub(in crate::http) async fn tool_result(
     ApiJson(body): ApiJson<ToolResultRequest>,
 ) -> Result<StatusCode, ApiError> {
     if body.result.content.len() > MAX_RESULT_BYTES {
-        return Err(ApiError::bad_request(format!("tool result content 不能超过 {MAX_RESULT_BYTES} bytes")));
+        return Err(ApiError::bad_request(format!(
+            "tool result content 不能超过 {MAX_RESULT_BYTES} bytes"
+        )));
     }
     state.dispatch(
         &SessionId::from(id),

@@ -18,10 +18,16 @@ use http_indep_support::server_harness::{HarnessConfig, start_on};
 #[test]
 fn resolve_bind_ip_defaults_to_loopback_and_requires_explicit_opt_in_for_unspecified() {
     let default = resolve_bind_ip(None).expect("None 该有默认值");
-    assert!(default.is_loopback(), "不给 AGENT_BIND 时该是 loopback，实际 {default}");
+    assert!(
+        default.is_loopback(),
+        "不给 AGENT_BIND 时该是 loopback，实际 {default}"
+    );
 
     let explicit = resolve_bind_ip(Some("0.0.0.0")).expect("显式 0.0.0.0 该被接受");
-    assert!(explicit.is_unspecified(), "显式给了才准是全零地址，实际 {explicit}");
+    assert!(
+        explicit.is_unspecified(),
+        "显式给了才准是全零地址，实际 {explicit}"
+    );
 
     let bad = resolve_bind_ip(Some("not-an-ip"));
     assert!(bad.is_err(), "非法输入该硬失败，不是悄悄退回默认值");
@@ -32,7 +38,10 @@ fn resolve_bind_ip_defaults_to_loopback_and_requires_explicit_opt_in_for_unspeci
 /// 默认值同一个结论，只是走的是「读环境变量」这条腿。
 #[test]
 fn default_bind_ip_is_loopback_when_the_env_var_is_unset() {
-    assert!(std::env::var("AGENT_BIND").is_err(), "这个断言的前提是当前进程没设 AGENT_BIND，否则这条测试本身就不成立");
+    assert!(
+        std::env::var("AGENT_BIND").is_err(),
+        "这个断言的前提是当前进程没设 AGENT_BIND，否则这条测试本身就不成立"
+    );
     let ip = default_bind_ip().expect("默认配置该总是能解析出一个地址");
     assert!(ip.is_loopback(), "默认该是 loopback，实际 {ip}");
 }
@@ -49,10 +58,17 @@ async fn a_server_started_with_default_config_only_listens_on_loopback() {
     let bind_addr = SocketAddr::new(default_ip, 0);
 
     let server = start_on(bind_addr, upstream.endpoint(), HarnessConfig::default()).await;
-    assert!(server.addr.ip().is_loopback(), "默认配置起的服务器该绑在 loopback 上，实际 {}", server.addr.ip());
+    assert!(
+        server.addr.ip().is_loopback(),
+        "默认配置起的服务器该绑在 loopback 上，实际 {}",
+        server.addr.ip()
+    );
 
     // 从 127.0.0.1 能连上。
-    let loopback_addr = SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), server.addr.port());
+    let loopback_addr = SocketAddr::new(
+        std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+        server.addr.port(),
+    );
     let connected = TcpStream::connect_timeout(&loopback_addr, Duration::from_millis(500));
     assert!(connected.is_ok(), "从 127.0.0.1 该能连上：{connected:?}");
 
@@ -62,10 +78,15 @@ async fn a_server_started_with_default_config_only_listens_on_loopback() {
         Some(ip) => {
             let other_addr = SocketAddr::new(ip, server.addr.port());
             let result = TcpStream::connect_timeout(&other_addr, Duration::from_millis(500));
-            assert!(result.is_err(), "从非环回地址 {ip} 连同一个端口该被拒，实际 {result:?}");
+            assert!(
+                result.is_err(),
+                "从非环回地址 {ip} 连同一个端口该被拒，实际 {result:?}"
+            );
         }
         None => {
-            eprintln!("这台机器上找不到非环回本机地址，退化成只断言 local_addr().ip().is_loopback()（已经在上面断言过了）");
+            eprintln!(
+                "这台机器上找不到非环回本机地址，退化成只断言 local_addr().ip().is_loopback()（已经在上面断言过了）"
+            );
         }
     }
 }

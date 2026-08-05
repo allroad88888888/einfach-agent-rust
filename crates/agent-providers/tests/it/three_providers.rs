@@ -17,7 +17,9 @@ use agent_providers::deepseek::DeepSeek;
 use agent_providers::glm::Glm;
 use agent_providers::kimi::Kimi;
 
-use support::{assistant_text, ingredients, schema_order_a, schema_order_b, sys_chunk, tool_spec, user_text};
+use support::{
+    assistant_text, ingredients, schema_order_a, schema_order_b, sys_chunk, tool_spec, user_text,
+};
 
 fn config_for(model: &str) -> SessionConfig {
     SessionConfig {
@@ -36,16 +38,44 @@ fn config_for(model: &str) -> SessionConfig {
 fn same_ingredients_three_bodies_pairwise_different() {
     let sys = [sys_chunk("base", "you are a helpful agent")];
     let messages = [user_text(1, "read the file"), assistant_text(2, "ok")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let late_tools: [ToolSpec; 0] = [];
 
     let cfg_ds = config_for("deepseek-v4-pro");
     let cfg_kimi = config_for("kimi-k3");
     let cfg_glm = config_for("glm-5.2");
 
-    let ing_ds = ingredients(&sys, &messages, &tools, &late_tools, &cfg_ds, RequestIntent::Free, None);
-    let ing_kimi = ingredients(&sys, &messages, &tools, &late_tools, &cfg_kimi, RequestIntent::Free, None);
-    let ing_glm = ingredients(&sys, &messages, &tools, &late_tools, &cfg_glm, RequestIntent::Free, None);
+    let ing_ds = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_ds,
+        RequestIntent::Free,
+        None,
+    );
+    let ing_kimi = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_kimi,
+        RequestIntent::Free,
+        None,
+    );
+    let ing_glm = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_glm,
+        RequestIntent::Free,
+        None,
+    );
 
     let body_ds = DeepSeek.encode(&ing_ds).body;
     let body_kimi = Kimi.encode(&ing_kimi).body;
@@ -71,16 +101,52 @@ fn each_provider_encode_is_byte_deterministic() {
     let late_tools: [ToolSpec; 0] = [];
 
     let cfg_ds = config_for("deepseek-v4-pro");
-    let ing_ds = ingredients(&sys, &messages, &tools, &late_tools, &cfg_ds, RequestIntent::Free, None);
-    assert_eq!(DeepSeek.encode(&ing_ds).body, DeepSeek.encode(&ing_ds).body, "DeepSeek 不确定性");
+    let ing_ds = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_ds,
+        RequestIntent::Free,
+        None,
+    );
+    assert_eq!(
+        DeepSeek.encode(&ing_ds).body,
+        DeepSeek.encode(&ing_ds).body,
+        "DeepSeek 不确定性"
+    );
 
     let cfg_kimi = config_for("kimi-k3");
-    let ing_kimi = ingredients(&sys, &messages, &tools, &late_tools, &cfg_kimi, RequestIntent::Free, None);
-    assert_eq!(Kimi.encode(&ing_kimi).body, Kimi.encode(&ing_kimi).body, "Kimi 不确定性");
+    let ing_kimi = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_kimi,
+        RequestIntent::Free,
+        None,
+    );
+    assert_eq!(
+        Kimi.encode(&ing_kimi).body,
+        Kimi.encode(&ing_kimi).body,
+        "Kimi 不确定性"
+    );
 
     let cfg_glm = config_for("glm-5.2");
-    let ing_glm = ingredients(&sys, &messages, &tools, &late_tools, &cfg_glm, RequestIntent::Free, None);
-    assert_eq!(Glm.encode(&ing_glm).body, Glm.encode(&ing_glm).body, "GLM 不确定性");
+    let ing_glm = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &cfg_glm,
+        RequestIntent::Free,
+        None,
+    );
+    assert_eq!(
+        Glm.encode(&ing_glm).body,
+        Glm.encode(&ing_glm).body,
+        "GLM 不确定性"
+    );
 }
 
 /// 三家横向 3：块粒度不同（PROVIDERS.md 速查表 DeepSeek 128 / Kimi 256 / GLM
@@ -98,7 +164,11 @@ fn predicted_cache_floors_to_each_providers_block_size_on_strict_extension() {
 
 fn assert_floors_to_block(provider: &dyn Provider, model: &str, expected: u32) {
     let sys = [sys_chunk("base", "you are a helpful agent")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let late_tools: [ToolSpec; 0] = [];
     let base_messages = [user_text(1, "hello")];
     let extended_messages = [user_text(1, "hello"), assistant_text(2, "hi there")];
@@ -107,7 +177,15 @@ fn assert_floors_to_block(provider: &dyn Provider, model: &str, expected: u32) {
     // 第一轮：拿这家真实的前缀镜像形状（segments 的哈希是 adapter 自己的内部
     // 约定，测试不猜格式），手填 `prompt_tokens`——host 侧就是这么干的：encode
     // 时还不知道真实用量，usage 回来后才回填进 `PrefixImage`。
-    let ing_v1 = ingredients(&sys, &base_messages, &tools, &late_tools, &cfg, RequestIntent::Free, None);
+    let ing_v1 = ingredients(
+        &sys,
+        &base_messages,
+        &tools,
+        &late_tools,
+        &cfg,
+        RequestIntent::Free,
+        None,
+    );
     let mut prefix_v1 = provider.encode(&ing_v1).prefix;
     prefix_v1.prompt_tokens = Some(1000);
 

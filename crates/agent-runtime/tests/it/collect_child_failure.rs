@@ -13,8 +13,7 @@ use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::{ToolTable, run_turn};
 
 use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results,
-    wire_tool_name,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name,
 };
 
 /// 让子先撞完 402 再让 root 醒来去领。
@@ -27,14 +26,23 @@ fn collecting_a_failed_background_child_yields_an_error_result_and_the_turn_goes
     let collect_wire = wire_tool_name(agent_runtime::COLLECT_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_cf", delay: Duration::ZERO, status: 200, lines: sse_text("那件事没成，我换个办法") },
+        Route {
+            needle: "call_cf",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("那件事没成，我换个办法"),
+        },
         Route {
             needle: "call_bg_f",
             delay: ROOT_HOP2,
             status: 200,
             lines: sse_tool_call("call_cf", &collect_wire, r#"{"id":"root/a1"}"#),
         },
-        Route::http_error("FAILTASK", 402, r#"{"error":{"message":"payment required","code":"insufficient_balance"}}"#),
+        Route::http_error(
+            "FAILTASK",
+            402,
+            r#"{"error":{"message":"payment required","code":"insufficient_balance"}}"#,
+        ),
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
@@ -47,22 +55,36 @@ fn collecting_a_failed_background_child_yields_an_error_result_and_the_turn_goes
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
     let status = run_turn(&mut session, &mut ctx, "kickoff 开一个后台的，等会儿去领");
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "父该照常收尾");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "父该照常收尾"
+    );
 
     let child = AgentId::new("root/a1");
-    assert!(matches!(session.status_of(&child), TurnStatus::Failed(_)), "子该落 Failed：{:?}", session.status_of(&child));
+    assert!(
+        matches!(session.status_of(&child), TurnStatus::Failed(_)),
+        "子该落 Failed：{:?}",
+        session.status_of(&child)
+    );
 
     let results = tool_results(&session, &AgentId::root());
     assert_eq!(results.len(), 2, "spawn + collect 各一条：{results:#?}");
     assert_eq!(results[1].0, "call_cf");
-    assert!(results[1].2, "领到一个失败的子，该是 is_error 的 tool_result：{results:#?}");
+    assert!(
+        results[1].2,
+        "领到一个失败的子，该是 is_error 的 tool_result：{results:#?}"
+    );
     assert!(
         results[1].1.contains("子 agent 失败"),
         "措辞该跟阻塞 spawn 那条路一模一样（同一份 `child_outcome`）：{}",
@@ -70,6 +92,12 @@ fn collecting_a_failed_background_child_yields_an_error_result_and_the_turn_goes
     );
 
     // 而且模型确实看到了它并接着往下走：最后一跳的请求体里带着那条失败结果。
-    let last = server.call("call_cf").expect("root 该在拿到失败结果后接着发一跳");
-    assert!(last.body.contains("call_cf"), "失败的 tool_result 该回填进下一跳：{}", last.body);
+    let last = server
+        .call("call_cf")
+        .expect("root 该在拿到失败结果后接着发一跳");
+    assert!(
+        last.body.contains("call_cf"),
+        "失败的 tool_result 该回填进下一跳：{}",
+        last.body
+    );
 }

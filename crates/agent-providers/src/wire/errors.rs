@@ -36,11 +36,17 @@ fn by_body(body: &str) -> Option<ErrorClass> {
 
     // 余额相关的话术优先：它不可重试且要立刻告警到人。
     let message = err.get("message").and_then(Value::as_str).unwrap_or("");
-    if message.to_ascii_lowercase().contains("insufficient balance") {
+    if message
+        .to_ascii_lowercase()
+        .contains("insufficient balance")
+    {
         return Some(ErrorClass::Exhausted);
     }
 
-    let t = err.get("type").and_then(Value::as_str)?.to_ascii_lowercase();
+    let t = err
+        .get("type")
+        .and_then(Value::as_str)?
+        .to_ascii_lowercase();
     // 只认得出的才认，认不出返回 None 交给状态码——把没见过的 type 硬塞进
     // 某一类，就是 402 那种错法。
     if t.contains("auth") {
@@ -109,10 +115,16 @@ mod tests {
         assert_eq!(classify(500, "not json at all"), ErrorClass::Retryable);
         // 没被分配过的 5xx 也是 Retryable：RFC 9110 §15，认不出的状态码按同段
         // 的 x00 处理。5xx 段整体可重试，不因为码没见过就改判。
-        assert_eq!(classify(599, r#"{"error":{"type":"mystery"}}"#), ErrorClass::Retryable);
+        assert_eq!(
+            classify(599, r#"{"error":{"type":"mystery"}}"#),
+            ErrorClass::Retryable
+        );
         // 5xx 之外认不出的既不重试也不当成功——保守。
         assert_eq!(classify(404, ""), ErrorClass::Unknown);
-        assert_eq!(classify(418, r#"{"error":{"type":"teapot"}}"#), ErrorClass::Unknown);
+        assert_eq!(
+            classify(418, r#"{"error":{"type":"teapot"}}"#),
+            ErrorClass::Unknown
+        );
     }
 
     /// type 比状态码更可信：状态码是 400，但 type 说鉴权失败 → Auth。

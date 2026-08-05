@@ -91,7 +91,10 @@ impl fmt::Display for DriftVerdict {
         match self {
             DriftVerdict::Clean => write!(f, "发前比对：该复用的段逐字节没变"),
             DriftVerdict::Expected { segment } => {
-                write!(f, "发前比对：{segment:?} 段变了，本轮本来就打算改前缀（预期内，这一轮全价）")
+                write!(
+                    f,
+                    "发前比对：{segment:?} 段变了，本轮本来就打算改前缀（预期内，这一轮全价）"
+                )
             }
             DriftVerdict::Unexpected { segment } => write!(
                 f,
@@ -109,14 +112,21 @@ mod tests {
     #[test]
     fn classification_is_exhaustive() {
         assert_eq!(check_drift(None, PrefixIntent::Reuse), DriftVerdict::Clean);
-        assert_eq!(check_drift(None, PrefixIntent::Intentional), DriftVerdict::Clean);
+        assert_eq!(
+            check_drift(None, PrefixIntent::Intentional),
+            DriftVerdict::Clean
+        );
         assert_eq!(
             check_drift(Some(Segment::System), PrefixIntent::Reuse),
-            DriftVerdict::Unexpected { segment: Segment::System }
+            DriftVerdict::Unexpected {
+                segment: Segment::System
+            }
         );
         assert_eq!(
             check_drift(Some(Segment::History), PrefixIntent::Intentional),
-            DriftVerdict::Expected { segment: Segment::History }
+            DriftVerdict::Expected {
+                segment: Segment::History
+            }
         );
     }
 

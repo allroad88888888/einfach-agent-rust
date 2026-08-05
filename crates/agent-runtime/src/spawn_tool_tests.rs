@@ -19,15 +19,26 @@ fn task_is_required_and_must_not_be_blank() {
     assert!(parse(&json!({})).is_err());
     assert!(parse(&json!({ "task": "   " })).is_err());
     assert!(parse(&json!({ "task": 7 })).is_err());
-    assert_eq!(&*parse(&json!({ "task": "读一下 a.txt" })).unwrap().task, "读一下 a.txt");
+    assert_eq!(
+        &*parse(&json!({ "task": "读一下 a.txt" })).unwrap().task,
+        "读一下 a.txt"
+    );
 }
 
 /// `tools` 缺省与显式 `null` 是同一件事（模型两种都会写）：交给父的子集兜底。
 #[test]
 fn a_missing_tools_field_means_inherit() {
     assert!(parse(&json!({ "task": "t" })).unwrap().tools.is_none());
-    assert!(parse(&json!({ "task": "t", "tools": null })).unwrap().tools.is_none());
-    let got = parse(&json!({ "task": "t", "tools": ["srv:fs/read"] })).unwrap().tools.unwrap();
+    assert!(
+        parse(&json!({ "task": "t", "tools": null }))
+            .unwrap()
+            .tools
+            .is_none()
+    );
+    let got = parse(&json!({ "task": "t", "tools": ["srv:fs/read"] }))
+        .unwrap()
+        .tools
+        .unwrap();
     assert_eq!(&*got[0], "srv:fs/read");
 }
 
@@ -36,9 +47,21 @@ fn a_missing_tools_field_means_inherit() {
 #[test]
 fn background_defaults_to_false() {
     assert!(!parse(&json!({ "task": "t" })).unwrap().background);
-    assert!(!parse(&json!({ "task": "t", "background": null })).unwrap().background);
-    assert!(!parse(&json!({ "task": "t", "background": false })).unwrap().background);
-    assert!(parse(&json!({ "task": "t", "background": true })).unwrap().background);
+    assert!(
+        !parse(&json!({ "task": "t", "background": null }))
+            .unwrap()
+            .background
+    );
+    assert!(
+        !parse(&json!({ "task": "t", "background": false }))
+            .unwrap()
+            .background
+    );
+    assert!(
+        parse(&json!({ "task": "t", "background": true }))
+            .unwrap()
+            .background
+    );
 }
 
 /// 写错类型要**看得见**：静默当真会让模型以为自己发的是前台 spawn，
@@ -61,7 +84,10 @@ fn a_child_cannot_be_given_a_tool_the_parent_lacks() {
     let err = check_subset(&names(&["srv:shell/exec"]), &names(&["srv:fs/read"])).unwrap_err();
     assert!(err.contains("srv:shell/exec"), "{err}");
     assert!(err.contains("srv:fs/read"), "{err}");
-    let ok = check_subset(&names(&["srv:fs/read"]), &names(&["srv:fs/read", "srv:fs/list"]));
+    let ok = check_subset(
+        &names(&["srv:fs/read"]),
+        &names(&["srv:fs/read", "srv:fs/list"]),
+    );
     assert_eq!(ok.unwrap(), names(&["srv:fs/read"]));
 }
 
@@ -71,7 +97,10 @@ fn a_child_cannot_be_given_a_tool_the_parent_lacks() {
 #[test]
 fn a_wire_escaped_tool_name_is_accepted_and_normalized() {
     let parent = names(&["srv:fs/read", "srv:fs/list", "mcp:everything/echo"]);
-    let got = check_subset(&names(&["srv_3Afs_2Flist", "mcp_3Aeverything_2Fecho"]), &parent);
+    let got = check_subset(
+        &names(&["srv_3Afs_2Flist", "mcp_3Aeverything_2Fecho"]),
+        &parent,
+    );
     assert_eq!(got.unwrap(), names(&["srv:fs/list", "mcp:everything/echo"]));
 }
 
@@ -88,7 +117,9 @@ fn escaping_does_not_let_an_invented_tool_name_through() {
 #[test]
 fn the_tools_param_tells_the_model_to_copy_the_name_verbatim() {
     let spec = spawn_spec(AgentLimits::default());
-    let text = spec.schema["properties"]["tools"]["description"].as_str().unwrap();
+    let text = spec.schema["properties"]["tools"]["description"]
+        .as_str()
+        .unwrap();
     assert!(text.contains("照抄"), "{text}");
 }
 
@@ -102,13 +133,18 @@ fn the_tools_param_tells_the_model_to_copy_the_name_verbatim() {
 fn the_background_option_says_the_answer_will_not_come_back_by_itself() {
     let spec = spawn_spec(AgentLimits::default());
     let text = &*spec.description;
-    assert!(text.contains("background=false"), "缺省那条路得说清是等的：{text}");
+    assert!(
+        text.contains("background=false"),
+        "缺省那条路得说清是等的：{text}"
+    );
     assert!(text.contains("不会自己回到你这里"), "{text}");
     assert!(text.contains(crate::COLLECT_TOOL), "得告诉它去哪领：{text}");
     assert!(text.contains("拆掉"), "不领的下场也得说：{text}");
 
     // 参数那一格自己也要立得住：模型读 schema 时未必回头看长描述。
-    let param = spec.schema["properties"]["background"]["description"].as_str().unwrap();
+    let param = spec.schema["properties"]["background"]["description"]
+        .as_str()
+        .unwrap();
     assert!(param.contains("不会自己回来"), "{param}");
     assert!(param.contains(crate::COLLECT_TOOL), "{param}");
 }

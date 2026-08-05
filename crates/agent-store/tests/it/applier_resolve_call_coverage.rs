@@ -8,8 +8,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use agent_store::{apply_prev, AtomFamily, AtomId, Change, Entry, Store};
-use common::{num, TestValue as V};
+use agent_store::{AtomFamily, AtomId, Change, Entry, Store, apply_prev};
+use common::{TestValue as V, num};
 
 #[test]
 fn every_change_key_goes_through_resolve_no_special_casing() {
@@ -25,14 +25,26 @@ fn every_change_key_goes_through_resolve_no_special_casing() {
         seq: 0,
         meta: (),
         changes: vec![
-            Change { key: "a".to_string(), prev: num(0.0), next: num(1.0) },
-            Change { key: "b".to_string(), prev: num(0.0), next: num(1.0) },
+            Change {
+                key: "a".to_string(),
+                prev: num(0.0),
+                next: num(1.0),
+            },
+            Change {
+                key: "b".to_string(),
+                prev: num(0.0),
+                next: num(1.0),
+            },
         ],
     };
     let entry2: Entry<String, V, ()> = Entry {
         seq: 1,
         meta: (),
-        changes: vec![Change { key: "a".to_string(), prev: num(1.0), next: num(2.0) }],
+        changes: vec![Change {
+            key: "a".to_string(),
+            prev: num(1.0),
+            next: num(2.0),
+        }],
     };
     let entries = [entry1, entry2];
 
@@ -53,7 +65,11 @@ fn every_change_key_goes_through_resolve_no_special_casing() {
         let calls = calls.borrow();
         // "a" 在两条 entry 里各出现一次 change —— 已经存在的 atom 也一样经过
         // resolve，不因为 family 里已经有它就被跳过。
-        assert_eq!(calls.get("a"), Some(&2), "已存在的 atom 也必须每次都经过 resolve");
+        assert_eq!(
+            calls.get("a"),
+            Some(&2),
+            "已存在的 atom 也必须每次都经过 resolve"
+        );
         // "b" 从未存在过，走的是 get-or-create 里创建的那一支，同样经过同一个 resolve。
         assert_eq!(calls.get("b"), Some(&1), "需要重建的 atom 必须经过 resolve");
     }
@@ -62,6 +78,9 @@ fn every_change_key_goes_through_resolve_no_special_casing() {
     // a 先被 entry1 的 change 写回 0，又被 entry2 的 change 写回 1（entry2 在
     // entries 里排在 entry1 之后，同一 atom 后写的生效）。
     assert_eq!(store.get(a), num(1.0));
-    let b_id = family.borrow().get(&"b".to_string()).expect("b 应该被 resolve 现建出来");
+    let b_id = family
+        .borrow()
+        .get(&"b".to_string())
+        .expect("b 应该被 resolve 现建出来");
     assert_eq!(store.get(b_id), num(0.0));
 }

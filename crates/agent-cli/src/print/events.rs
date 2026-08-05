@@ -37,7 +37,10 @@ enum Mode {
 
 impl EventPrinter {
     pub fn new() -> Self {
-        EventPrinter { mode: Mode::None, speaker: None }
+        EventPrinter {
+            mode: Mode::None,
+            speaker: None,
+        }
     }
 
     /// `RunnerCtx` 的事件回调直接调这个方法（`RunnerCtx::with_agent_events`）。
@@ -67,11 +70,23 @@ impl EventPrinter {
                     request.tool, request.input, call_id.0, request.location, request.reversibility
                 );
             }
-            RunnerEvent::ToolExecuted { call_id, tool, output_len, is_error } => {
+            RunnerEvent::ToolExecuted {
+                call_id,
+                tool,
+                output_len,
+                is_error,
+            } => {
                 let verdict = if is_error { "失败" } else { "完成" };
-                println!("{at}      -> {tool} {verdict}，{output_len} 字节（call_id={}）", call_id.0);
+                println!(
+                    "{at}      -> {tool} {verdict}，{output_len} 字节（call_id={}）",
+                    call_id.0
+                );
             }
-            RunnerEvent::TurnGuard { usage, report, adjustments } => {
+            RunnerEvent::TurnGuard {
+                usage,
+                report,
+                adjustments,
+            } => {
                 self.finish_line();
                 print_turn_guard(&at, &usage, &report, &adjustments);
             }
@@ -80,7 +95,11 @@ impl EventPrinter {
             // `child` 里——事件载荷只带事实，句子在这里组（见 `describe_fate`）。
             RunnerEvent::OrphanedChild { child, fate } => {
                 self.finish_line();
-                eprintln!("{at}[后台子未领取] {} {}", child.as_str(), describe_fate(&fate));
+                eprintln!(
+                    "{at}[后台子未领取] {} {}",
+                    child.as_str(),
+                    describe_fate(&fate)
+                );
             }
         }
     }
@@ -100,7 +119,11 @@ impl EventPrinter {
             // 终态，`turn_outcome` 会打一次收尾摘要，这里再打一遍是同一件事
             // 说两遍。
             Notice::TurnStatusChanged { .. } => {}
-            Notice::ToolOutputTruncated { call_id, original_bytes, kept_bytes } => {
+            Notice::ToolOutputTruncated {
+                call_id,
+                original_bytes,
+                kept_bytes,
+            } => {
                 self.finish_line();
                 println!(
                     "{at}[截断] call_id={} 原始 {original_bytes} 字节，模型实际看到 {kept_bytes} 字节",
@@ -111,7 +134,10 @@ impl EventPrinter {
                 self.finish_line();
                 eprintln!("{at}[协议违规] 状态={state:?} 事件={event}");
             }
-            Notice::Retrying { attempt, max_retries } => {
+            Notice::Retrying {
+                attempt,
+                max_retries,
+            } => {
                 self.finish_line();
                 println!("{at}[重试中] {attempt}/{max_retries}");
             }
@@ -203,18 +229,30 @@ fn describe_fate(fate: &OrphanFate) -> String {
             format!("没能在这一轮收尾时拆掉（{reason}），它会以活着的状态留到下一轮。")
         }
         OrphanFate::Discarded { bytes, is_error } => {
-            let how = if *is_error { "失败收场" } else { "干完了" };
+            let how = if *is_error {
+                "失败收场"
+            } else {
+                "干完了"
+            };
             format!("已经{how}，但这一轮结束前没有人 collect 它，{bytes} 字节的结果被丢弃。")
         }
     }
 }
 
-fn print_turn_guard(at: &str, usage: &TokenUsage, report: &GuardReport, adjustments: &[Adjustment]) {
+fn print_turn_guard(
+    at: &str,
+    usage: &TokenUsage,
+    report: &GuardReport,
+    adjustments: &[Adjustment],
+) {
     let cached_str = match usage.cached {
         Some(n) => n.to_string(),
         None => "None（这家没报）".to_string(),
     };
-    println!("{at}--- usage: prompt={} completion={} cached={cached_str}", usage.prompt, usage.completion);
+    println!(
+        "{at}--- usage: prompt={} completion={} cached={cached_str}",
+        usage.prompt, usage.completion
+    );
     println!("{report}");
     if adjustments.is_empty() {
         println!("    adjustments: 无（原样执行了）");
@@ -236,7 +274,10 @@ mod tests {
     fn root_has_no_prefix_and_children_are_told_apart() {
         assert_eq!(prefix(&AgentId::root()), "");
         assert_eq!(prefix(&AgentId::new("root/a1")), "[a1] ");
-        assert_ne!(prefix(&AgentId::new("root/a1/a1")), prefix(&AgentId::new("root/a2/a1")));
+        assert_ne!(
+            prefix(&AgentId::new("root/a1/a1")),
+            prefix(&AgentId::new("root/a2/a1"))
+        );
     }
 
     /// 054：三种收场各说各的话，且**互不相同**——一个 `_ =>` 兜底把三种说成
@@ -246,14 +287,28 @@ mod tests {
     fn each_orphan_fate_reads_differently() {
         let despawned = describe_fate(&OrphanFate::Despawned { descendants: 2 });
         let alone = describe_fate(&OrphanFate::Despawned { descendants: 0 });
-        let kept = describe_fate(&OrphanFate::Kept { reason: "StillRead".to_string() });
-        let discarded = describe_fate(&OrphanFate::Discarded { bytes: 15, is_error: false });
-        let failed = describe_fate(&OrphanFate::Discarded { bytes: 15, is_error: true });
+        let kept = describe_fate(&OrphanFate::Kept {
+            reason: "StillRead".to_string(),
+        });
+        let discarded = describe_fate(&OrphanFate::Discarded {
+            bytes: 15,
+            is_error: false,
+        });
+        let failed = describe_fate(&OrphanFate::Discarded {
+            bytes: 15,
+            is_error: true,
+        });
 
         assert!(despawned.contains("2 个后代"), "{despawned}");
         assert!(!alone.contains("后代"), "没有后代就别说后代：{alone}");
-        assert!(kept.contains("StillRead") && kept.contains("留到下一轮"), "{kept}");
-        assert!(discarded.contains("15 字节") && discarded.contains("干完了"), "{discarded}");
+        assert!(
+            kept.contains("StillRead") && kept.contains("留到下一轮"),
+            "{kept}"
+        );
+        assert!(
+            discarded.contains("15 字节") && discarded.contains("干完了"),
+            "{discarded}"
+        );
         assert!(failed.contains("失败收场"), "{failed}");
 
         let all = [&despawned, &alone, &kept, &discarded, &failed];

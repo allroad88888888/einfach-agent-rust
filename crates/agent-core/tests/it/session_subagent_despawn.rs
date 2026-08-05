@@ -12,7 +12,9 @@ use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DespawnRefused, Sess
 use support::user_input_for;
 
 fn cfg() -> ChildConfig {
-    ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }
+    ChildConfig {
+        tools_allowed: vec![Arc::from("srv:fs/read")],
+    }
 }
 
 /// **019 硬约束 3**：teardown 把活值记成 `prev`，一条 entry 一次记完整棵子树。
@@ -28,7 +30,10 @@ fn the_teardown_entry_carries_every_live_value_as_prev() {
         .filter(|(k, _)| k.agent() == &child)
         .filter(|(k, v)| v != &default_of(k))
         .collect();
-    assert!(live.len() >= 3, "至少 ToolsAllowed / Status / Messages 是非默认值");
+    assert!(
+        live.len() >= 3,
+        "至少 ToolsAllowed / Status / Messages 是非默认值"
+    );
 
     let _ = s.despawn_child(&child).unwrap();
 
@@ -59,7 +64,10 @@ fn the_whole_subtree_comes_apart_leaf_first() {
     let a1_a1_a1 = s.spawn_child(&a1_a1, cfg()).unwrap();
 
     let report = s.despawn_child(&a1).unwrap();
-    assert_eq!(report.agents, vec![a1_a1_a1.clone(), a1_a1.clone(), a1.clone()]);
+    assert_eq!(
+        report.agents,
+        vec![a1_a1_a1.clone(), a1_a1.clone(), a1.clone()]
+    );
     // 每个 agent 留一个 `ToolsAllowed` 墓碑（号不复用 + 它是活名单）。
     assert_eq!(report.atoms_evicted, 3 * (Slot::ALL.len() - 1));
 
@@ -71,7 +79,10 @@ fn the_whole_subtree_comes_apart_leaf_first() {
             .map(|(k, _)| k)
             .filter(|k| k.agent() == agent)
             .collect();
-        assert_eq!(left, vec![AtomKey::Agent((*agent).clone(), Slot::ToolsAllowed)]);
+        assert_eq!(
+            left,
+            vec![AtomKey::Agent((*agent).clone(), Slot::ToolsAllowed)]
+        );
     }
     assert_eq!(s.live_agents(), vec![root]);
 }
@@ -85,9 +96,17 @@ fn a_sibling_subtree_is_untouched() {
     let a2 = s.spawn_child(&root, cfg()).unwrap();
     let _ = s.step(user_input_for(&a2, "兄弟还在干活"));
 
-    let before: Vec<_> = s.primitives().into_iter().filter(|(k, _)| k.agent() == &a2).collect();
+    let before: Vec<_> = s
+        .primitives()
+        .into_iter()
+        .filter(|(k, _)| k.agent() == &a2)
+        .collect();
     let _ = s.despawn_child(&a1).unwrap();
-    let after: Vec<_> = s.primitives().into_iter().filter(|(k, _)| k.agent() == &a2).collect();
+    let after: Vec<_> = s
+        .primitives()
+        .into_iter()
+        .filter(|(k, _)| k.agent() == &a2)
+        .collect();
 
     assert_eq!(before, after);
     assert!(s.is_live(&a2));
@@ -132,7 +151,11 @@ fn events_for_a_despawned_child_are_dropped_silently() {
 
     let before = s.primitives();
     let len = s.history_len();
-    let effects = s.step(support::provider_done_end_turn_for(&child, s.epoch(), "太晚了"));
+    let effects = s.step(support::provider_done_end_turn_for(
+        &child,
+        s.epoch(),
+        "太晚了",
+    ));
 
     assert!(effects.is_empty(), "不发 effect，也不发通报");
     assert_eq!(s.history_len(), len, "不落 entry");

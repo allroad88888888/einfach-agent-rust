@@ -95,12 +95,22 @@ pub(crate) fn start(
         });
     });
 
-    McpCall { agent, epoch, call_id, tool }
+    McpCall {
+        agent,
+        epoch,
+        call_id,
+        tool,
+    }
 }
 
 /// 落地：把背景线程报回的结果翻译成一个 loop 事件。**epoch 从 credential 原样盖回**
 /// ——这就是红线 6 在 MCP 路上的回写点，比对交给 `Session::step` 的 epoch 闸。
-pub(crate) fn finish(ctx: &mut RunnerCtx, call: McpCall, content: Arc<str>, is_error: bool) -> Event {
+pub(crate) fn finish(
+    ctx: &mut RunnerCtx,
+    call: McpCall,
+    content: Arc<str>,
+    is_error: bool,
+) -> Event {
     ctx.emit(
         &call.agent,
         RunnerEvent::ToolExecuted {
@@ -110,11 +120,26 @@ pub(crate) fn finish(ctx: &mut RunnerCtx, call: McpCall, content: Arc<str>, is_e
             is_error,
         },
     );
-    let McpCall { agent, epoch, call_id, .. } = call;
+    let McpCall {
+        agent,
+        epoch,
+        call_id,
+        ..
+    } = call;
     if is_error {
-        Event::ToolFailed { agent, epoch, call_id, error: content }
+        Event::ToolFailed {
+            agent,
+            epoch,
+            call_id,
+            error: content,
+        }
     } else {
-        Event::ToolResult { agent, epoch, call_id, content }
+        Event::ToolResult {
+            agent,
+            epoch,
+            call_id,
+            content,
+        }
     }
 }
 
@@ -125,7 +150,9 @@ pub(crate) fn take(
     agent: &AgentId,
     call_id: &ToolCallId,
 ) -> Option<McpCall> {
-    let at = calls.iter().position(|c| &c.agent == agent && &c.call_id == call_id)?;
+    let at = calls
+        .iter()
+        .position(|c| &c.agent == agent && &c.call_id == call_id)?;
     Some(calls.remove(at))
 }
 
@@ -147,7 +174,10 @@ mod tests {
 
     #[test]
     fn split_name_peels_prefix_and_splits_on_first_slash() {
-        assert_eq!(split_name("mcp:everything/echo"), ("everything".into(), "echo".into()));
+        assert_eq!(
+            split_name("mcp:everything/echo"),
+            ("everything".into(), "echo".into())
+        );
         // 裸工具名里可以再有斜杠（只切第一刀）。
         assert_eq!(split_name("mcp:srv/a/b"), ("srv".into(), "a/b".into()));
     }

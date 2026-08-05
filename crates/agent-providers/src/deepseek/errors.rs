@@ -44,8 +44,14 @@ mod tests {
         assert_eq!(classify(429, ""), ErrorClass::Retryable);
         assert_eq!(classify(503, ""), ErrorClass::Retryable);
         assert_eq!(classify(500, "not json at all"), ErrorClass::Retryable);
-        assert_eq!(classify(599, r#"{"error":{"type":"mystery"}}"#), ErrorClass::Retryable);
+        assert_eq!(
+            classify(599, r#"{"error":{"type":"mystery"}}"#),
+            ErrorClass::Retryable
+        );
         assert_eq!(classify(404, ""), ErrorClass::Unknown);
-        assert_eq!(classify(418, r#"{"error":{"type":"teapot"}}"#), ErrorClass::Unknown);
+        assert_eq!(
+            classify(418, r#"{"error":{"type":"teapot"}}"#),
+            ErrorClass::Unknown
+        );
     }
 }

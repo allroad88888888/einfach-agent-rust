@@ -69,7 +69,9 @@ impl SessionTemplate {
     /// `open_spec` 之前用它判断指定 id 是否已经有可恢复的历史；目录创建仍只
     /// 发生在 [`Self::open_spec`]，因此无效请求不会留下空目录或文件。
     pub(crate) fn default_session_path(&self, id: &SessionId) -> Option<PathBuf> {
-        self.default_sessions_dir.as_ref().map(|dir| dir.join(format!("{}.jsonl", id.as_str())))
+        self.default_sessions_dir
+            .as_ref()
+            .map(|dir| dir.join(format!("{}.jsonl", id.as_str())))
     }
 
     /// 补上 `id`/`store_path`，造一份可以直接喂给
@@ -198,7 +200,10 @@ impl ServerConfig {
 mod tests {
     use super::*;
 
-    fn minimal_template(tools_root: PathBuf, default_sessions_dir: Option<PathBuf>) -> SessionTemplate {
+    fn minimal_template(
+        tools_root: PathBuf,
+        default_sessions_dir: Option<PathBuf>,
+    ) -> SessionTemplate {
         use agent_providers::deepseek::DeepSeek;
         use agent_transport::Client;
 
@@ -222,14 +227,28 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("agent-server-open-spec-test-{name}-{}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "agent-server-open-spec-test-{name}-{}",
+            std::process::id()
+        ))
     }
 
     #[test]
     fn no_default_dir_and_no_explicit_path_stays_memory() {
         let template = minimal_template(temp_dir("tools-a"), None);
-        let spec = template.open_spec(SessionId::from("s-1"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
-        assert_eq!(spec.store_path, None, "没有 default_sessions_dir，也没有显式 session_path，该还是 Memory");
+        let spec = template
+            .open_spec(
+                SessionId::from("s-1"),
+                None,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            spec.store_path, None,
+            "没有 default_sessions_dir，也没有显式 session_path，该还是 Memory"
+        );
     }
 
     #[test]
@@ -237,17 +256,44 @@ mod tests {
         let default_dir = temp_dir("tools-b-default");
         let explicit = temp_dir("tools-b-explicit").join("custom.jsonl");
         let template = minimal_template(temp_dir("tools-b"), Some(default_dir));
-        let spec = template.open_spec(SessionId::from("s-2"), Some(explicit.clone()), Vec::new(), Vec::new(), Vec::new()).unwrap();
-        assert_eq!(spec.store_path, Some(explicit), "客户端显式给的 session_path 该赢");
+        let spec = template
+            .open_spec(
+                SessionId::from("s-2"),
+                Some(explicit.clone()),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            spec.store_path,
+            Some(explicit),
+            "客户端显式给的 session_path 该赢"
+        );
     }
 
     #[test]
     fn missing_session_path_auto_assigns_under_default_dir() {
         let dir = temp_dir("tools-c-sessions");
         let template = minimal_template(temp_dir("tools-c"), Some(dir.clone()));
-        let spec = template.open_spec(SessionId::from("s-3"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
-        assert_eq!(spec.store_path, Some(dir.join("s-3.jsonl")), "该自动分配 <dir>/<id>.jsonl");
-        assert!(dir.is_dir(), "default_sessions_dir 该被现造出来，不能指望 Jsonl 的 IO 线程默默失败");
+        let spec = template
+            .open_spec(
+                SessionId::from("s-3"),
+                None,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            spec.store_path,
+            Some(dir.join("s-3.jsonl")),
+            "该自动分配 <dir>/<id>.jsonl"
+        );
+        assert!(
+            dir.is_dir(),
+            "default_sessions_dir 该被现造出来，不能指望 Jsonl 的 IO 线程默默失败"
+        );
     }
 
     /// 062 作用域那一条在这一层的形状：注入只落进**这一次**的 `OpenSpec`，同一份
@@ -265,13 +311,32 @@ mod tests {
             Reversibility::Pure,
         )];
 
-        let declared = template.open_spec(SessionId::from("s-4"), None, injected, Vec::new(), Vec::new()).unwrap();
+        let declared = template
+            .open_spec(
+                SessionId::from("s-4"),
+                None,
+                injected,
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
         assert_eq!(declared.host_tools.len(), 1);
         assert_eq!(&*declared.host_tools[0].0.name, "web:crm/lookup");
         assert_eq!(declared.host_tools[0].1, Reversibility::Pure);
 
-        let plain = template.open_spec(SessionId::from("s-5"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
-        assert!(plain.host_tools.is_empty(), "同一个 template 的下一个会话不该看见上一个的声明");
+        let plain = template
+            .open_spec(
+                SessionId::from("s-5"),
+                None,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert!(
+            plain.host_tools.is_empty(),
+            "同一个 template 的下一个会话不该看见上一个的声明"
+        );
     }
 
     /// 064：skill 那一半**同一条论证**——注入的 skill 也只骑这一份 `OpenSpec`。
@@ -288,12 +353,35 @@ mod tests {
             tools: Vec::new(),
         }];
 
-        let declared = template.open_spec(SessionId::from("s-6"), None, Vec::new(), injected, Vec::new()).unwrap();
+        let declared = template
+            .open_spec(
+                SessionId::from("s-6"),
+                None,
+                Vec::new(),
+                injected,
+                Vec::new(),
+            )
+            .unwrap();
         assert_eq!(declared.host_skills.len(), 1);
         assert_eq!(declared.host_skills[0].id.as_str(), "crm-flow");
-        assert_eq!(declared.system.len(), template.system.len(), "template 自己的 system 段不该被这次声明改动");
+        assert_eq!(
+            declared.system.len(),
+            template.system.len(),
+            "template 自己的 system 段不该被这次声明改动"
+        );
 
-        let plain = template.open_spec(SessionId::from("s-7"), None, Vec::new(), Vec::new(), Vec::new()).unwrap();
-        assert!(plain.host_skills.is_empty(), "同一个 template 的下一个会话不该看见上一个声明的 skill");
+        let plain = template
+            .open_spec(
+                SessionId::from("s-7"),
+                None,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+            .unwrap();
+        assert!(
+            plain.host_skills.is_empty(),
+            "同一个 template 的下一个会话不该看见上一个声明的 skill"
+        );
     }
 }

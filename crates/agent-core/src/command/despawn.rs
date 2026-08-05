@@ -110,10 +110,14 @@ impl Session {
             return Err(DespawnRefused::Root);
         }
         if !self.in_session(child) {
-            return Err(DespawnRefused::NotInSession { agent: child.clone() });
+            return Err(DespawnRefused::NotInSession {
+                agent: child.clone(),
+            });
         }
         if !self.is_live(child) {
-            return Err(DespawnRefused::NotLive { agent: child.clone() });
+            return Err(DespawnRefused::NotLive {
+                agent: child.clone(),
+            });
         }
 
         let agents = self.live_subtree_leaf_first(child);
@@ -132,7 +136,10 @@ impl Session {
         });
 
         let atoms_evicted = self.evict_subtree(&agents, &keys);
-        Ok(DespawnReport { agents, atoms_evicted })
+        Ok(DespawnReport {
+            agents,
+            atoms_evicted,
+        })
     }
 
     /// 子树占用的全部 family 键，按 `agents` 给的自叶向根顺序分组、组内按键排序。
@@ -141,7 +148,12 @@ impl Session {
     /// （M3 之后子 agent 的工具槽会长在那儿），照槽位表列会漏掉它们——漏掉的那个
     /// atom 既不会被 teardown 记进 `prev`，也不会被逐出，正是「链通、值错」。
     fn subtree_keys(&self, agents: &[AgentId]) -> Vec<AtomKey> {
-        let all: Vec<AtomKey> = self.sources.borrow().iter().map(|(k, _)| k.clone()).collect();
+        let all: Vec<AtomKey> = self
+            .sources
+            .borrow()
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect();
         let mut out = Vec::new();
         for agent in agents {
             let mut mine: Vec<AtomKey> =
@@ -231,7 +243,9 @@ mod tests {
         let child = s
             .spawn_child(
                 &AgentId::root(),
-                ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] },
+                ChildConfig {
+                    tools_allowed: vec![Arc::from("srv:fs/read")],
+                },
             )
             .unwrap();
         (s, child)

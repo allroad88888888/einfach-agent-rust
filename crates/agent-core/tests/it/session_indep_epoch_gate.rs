@@ -19,8 +19,15 @@ fn a_tool_result_from_before_an_undo_is_dropped() {
     let state_after_undo = session.primitives();
     let effects = session.step(tool_result_event(old_epoch, "call_1", "ghost result"));
 
-    assert!(effects.is_empty(), "旧 epoch 的回执必须被闸挡掉，不产出任何 effect");
-    assert_eq!(session.primitives(), state_after_undo, "被挡掉的回执不能改动任何 primitive");
+    assert!(
+        effects.is_empty(),
+        "旧 epoch 的回执必须被闸挡掉，不产出任何 effect"
+    );
+    assert_eq!(
+        session.primitives(),
+        state_after_undo,
+        "被挡掉的回执不能改动任何 primitive"
+    );
 }
 
 #[test]
@@ -36,7 +43,11 @@ fn a_tool_result_from_before_a_cancel_then_undo_is_also_dropped() {
     // 撤销这次取消：undo 会再 bump 一次。
     let report = session.undo_step();
     assert!(matches!(report, UndoReport::Applied { .. }));
-    assert_ne!(session.epoch(), epoch_after_cancel, "undo 是独立于 Cancel 的又一次 bump");
+    assert_ne!(
+        session.epoch(),
+        epoch_after_cancel,
+        "undo 是独立于 Cancel 的又一次 bump"
+    );
 
     let state_after_undo = session.primitives();
     let effects = session.step(tool_result_event(old_epoch, "call_1", "ghost result"));
@@ -53,7 +64,11 @@ fn redo_does_not_bump_epoch_again() {
 
     let report = session.redo_step();
     assert!(matches!(report, UndoReport::Applied { .. }));
-    assert_eq!(session.epoch(), epoch_after_undo, "redo 只是把状态追回去，不该再 bump 一次");
+    assert_eq!(
+        session.epoch(),
+        epoch_after_undo,
+        "redo 只是把状态追回去，不该再 bump 一次"
+    );
 }
 
 #[test]

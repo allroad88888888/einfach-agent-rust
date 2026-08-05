@@ -16,9 +16,23 @@ async fn tool_result_endpoint_queues_a_web_result_for_an_existing_session() {
     let id = support::extract_json_string_field(&create.body, "id");
 
     let body = "{\"agent\":\"root\",\"tool_call_id\":\"x\",\"result\":{\"content\":\"done\"}}";
-    let real_session = http_client::request(server.addr, "POST", &format!("/sessions/{id}/tool_result"), Some(body));
+    let real_session = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/tool_result"),
+        Some(body),
+    );
     assert_eq!(real_session.status, 202, "{}", real_session.body);
 
-    let unknown_session = http_client::request(server.addr, "POST", "/sessions/does-not-exist/tool_result", Some(body));
-    assert_eq!(unknown_session.status, 404, "未知 session 应与其它命令端点一致：{}", unknown_session.body);
+    let unknown_session = http_client::request(
+        server.addr,
+        "POST",
+        "/sessions/does-not-exist/tool_result",
+        Some(body),
+    );
+    assert_eq!(
+        unknown_session.status, 404,
+        "未知 session 应与其它命令端点一致：{}",
+        unknown_session.body
+    );
 }

@@ -30,7 +30,8 @@ async fn create_session_with_sse(addr: std::net::SocketAddr) -> (String, http_cl
 fn next_typed(sse: &mut http_client::SseReader, budget: Duration) -> Frame {
     loop {
         let frame = sse.next_event(budget).expect("该收到一帧");
-        let parsed: Frame = serde_json::from_str(&frame.data).unwrap_or_else(|e| panic!("{e}: {}", frame.data));
+        let parsed: Frame =
+            serde_json::from_str(&frame.data).unwrap_or_else(|e| panic!("{e}: {}", frame.data));
         if matches!(parsed.event, SessionEvent::AgentTree(_)) {
             continue;
         }
@@ -38,12 +39,22 @@ fn next_typed(sse: &mut http_client::SseReader, budget: Duration) -> Frame {
     }
 }
 
-async fn run_one_turn_to_completion(addr: std::net::SocketAddr, id: &str, sse: &mut http_client::SseReader) {
-    let input = http_client::request(addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+async fn run_one_turn_to_completion(
+    addr: std::net::SocketAddr,
+    id: &str,
+    sse: &mut http_client::SseReader,
+) {
+    let input = http_client::request(
+        addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
     loop {
         let frame = next_typed(sse, Duration::from_secs(5));
-        if matches!(&frame.event, SessionEvent::Notice(Notice::TurnStatusChanged { status }) if status.is_terminal()) {
+        if matches!(&frame.event, SessionEvent::Notice(Notice::TurnStatusChanged { status }) if status.is_terminal())
+        {
             return;
         }
     }
@@ -56,11 +67,19 @@ async fn undo_endpoint_reverts_the_last_turn() {
     let (id, mut sse) = create_session_with_sse(server.addr).await;
     run_one_turn_to_completion(server.addr, &id, &mut sse).await;
 
-    let undo = http_client::request(server.addr, "POST", &format!("/sessions/{id}/undo"), Some("{}"));
+    let undo = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/undo"),
+        Some("{}"),
+    );
     assert_eq!(undo.status, 202, "{}", undo.body);
 
     let frame = next_typed(&mut sse, Duration::from_secs(3));
-    assert!(matches!(frame.event, SessionEvent::Undo(UndoOutcome::Applied { .. })), "{frame:?}");
+    assert!(
+        matches!(frame.event, SessionEvent::Undo(UndoOutcome::Applied { .. })),
+        "{frame:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -70,15 +89,26 @@ async fn redo_endpoint_reapplies_the_undone_turn() {
     let (id, mut sse) = create_session_with_sse(server.addr).await;
     run_one_turn_to_completion(server.addr, &id, &mut sse).await;
 
-    let undo = http_client::request(server.addr, "POST", &format!("/sessions/{id}/undo"), Some("{}"));
+    let undo = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/undo"),
+        Some("{}"),
+    );
     assert_eq!(undo.status, 202);
     let frame = next_typed(&mut sse, Duration::from_secs(3));
-    assert!(matches!(frame.event, SessionEvent::Undo(UndoOutcome::Applied { .. })), "{frame:?}");
+    assert!(
+        matches!(frame.event, SessionEvent::Undo(UndoOutcome::Applied { .. })),
+        "{frame:?}"
+    );
 
     let redo = http_client::request(server.addr, "POST", &format!("/sessions/{id}/redo"), None);
     assert_eq!(redo.status, 202, "{}", redo.body);
     let frame = next_typed(&mut sse, Duration::from_secs(3));
-    assert!(matches!(frame.event, SessionEvent::Redo(UndoOutcome::Applied { .. })), "{frame:?}");
+    assert!(
+        matches!(frame.event, SessionEvent::Redo(UndoOutcome::Applied { .. })),
+        "{frame:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -87,20 +117,38 @@ async fn cancel_endpoint_stops_the_flying_turn() {
     let server = support::http_server::start(upstream.endpoint()).await;
     let (id, mut sse) = create_session_with_sse(server.addr).await;
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
-    let cancel = http_client::request(server.addr, "POST", &format!("/sessions/{id}/cancel"), Some("{}"));
+    let cancel = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/cancel"),
+        Some("{}"),
+    );
     assert_eq!(cancel.status, 202, "{}", cancel.body);
 
     let deadline = std::time::Instant::now() + Duration::from_secs(3);
     let mut cancelled = false;
     while std::time::Instant::now() < deadline {
         let frame = next_typed(&mut sse, Duration::from_secs(3));
-        if matches!(frame.event, SessionEvent::Notice(Notice::TurnStatusChanged { status: TurnStatus::Failed(Failure::Cancelled) })) {
+        if matches!(
+            frame.event,
+            SessionEvent::Notice(Notice::TurnStatusChanged {
+                status: TurnStatus::Failed(Failure::Cancelled)
+            })
+        ) {
             cancelled = true;
             break;
         }
     }
-    assert!(cancelled, "POST /cancel 该让在飞的轮次几百毫秒内 Failed(Cancelled)，不用等 provider 超时");
+    assert!(
+        cancelled,
+        "POST /cancel 该让在飞的轮次几百毫秒内 Failed(Cancelled)，不用等 provider 超时"
+    );
 }

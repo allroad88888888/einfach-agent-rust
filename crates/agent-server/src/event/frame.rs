@@ -45,7 +45,10 @@ mod tests {
     /// data 字段最终就长这样（`crate::http::routes::sse::to_sse_event`）。
     #[test]
     fn frame_serializes_as_agent_plus_the_adjacently_tagged_event() {
-        let frame = Frame { agent: AgentId::root(), event: SessionEvent::TextDelta(Arc::from("hi")) };
+        let frame = Frame {
+            agent: AgentId::root(),
+            event: SessionEvent::TextDelta(Arc::from("hi")),
+        };
         let json = serde_json::to_value(&frame).unwrap();
         assert_eq!(json["agent"], "root");
         assert_eq!(json["event"]["type"], "text_delta");
@@ -59,7 +62,10 @@ mod tests {
     /// 不是只有 `"root"` 这一个字面量能用。
     #[test]
     fn a_child_agent_serializes_as_its_path_string() {
-        let frame = Frame { agent: AgentId::root().child(1), event: SessionEvent::Lagged { skipped: 2 } };
+        let frame = Frame {
+            agent: AgentId::root().child(1),
+            event: SessionEvent::Lagged { skipped: 2 },
+        };
         let json = serde_json::to_value(&frame).unwrap();
         assert_eq!(json["agent"], "root/a1");
     }

@@ -62,10 +62,14 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
     };
 
     let registry = agent_server::SessionRegistry::new();
-    let handle = registry.open(spec).expect("open 阶段还没碰到 provider，不该失败");
+    let handle = registry
+        .open(spec)
+        .expect("open 阶段还没碰到 provider，不该失败");
 
     let mut sub = handle.subscribe();
-    handle.send(Command::Input("trigger the panic".to_string())).unwrap();
+    handle
+        .send(Command::Input("trigger the panic".to_string()))
+        .unwrap();
 
     let died_reason = loop {
         let frame = tokio::time::timeout(Duration::from_secs(3), sub.recv())
@@ -79,15 +83,28 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
             break reason;
         }
     };
-    assert!(died_reason.contains("boom-from-test-provider"), "{died_reason}");
+    assert!(
+        died_reason.contains("boom-from-test-provider"),
+        "{died_reason}"
+    );
 
     match registry.get(&id) {
-        Some(SessionQuery::Dead { reason }) => assert!(reason.contains("boom-from-test-provider"), "{reason}"),
-        other => panic!("registry 该报 dead，不是静默移除或者说它还活着：{}", matches!(other, Some(SessionQuery::Alive(_)))),
+        Some(SessionQuery::Dead { reason }) => {
+            assert!(reason.contains("boom-from-test-provider"), "{reason}")
+        }
+        other => panic!(
+            "registry 该报 dead，不是静默移除或者说它还活着：{}",
+            matches!(other, Some(SessionQuery::Alive(_)))
+        ),
     }
 
     match registry.close(&id) {
-        Err(agent_server::CloseError::WasDead { reason }) => assert!(reason.contains("boom-from-test-provider"), "{reason}"),
-        other => panic!("close 该如实报告『它已经死了』，而不是假装关闭成功：{:?}", other.is_ok()),
+        Err(agent_server::CloseError::WasDead { reason }) => {
+            assert!(reason.contains("boom-from-test-provider"), "{reason}")
+        }
+        other => panic!(
+            "close 该如实报告『它已经死了』，而不是假装关闭成功：{:?}",
+            other.is_ok()
+        ),
     }
 }

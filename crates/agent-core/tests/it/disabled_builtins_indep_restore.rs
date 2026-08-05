@@ -31,7 +31,11 @@ fn switch() -> Vec<Arc<str>> {
 }
 
 fn sorted() -> Vec<Arc<str>> {
-    vec![Arc::from("srv:agent/spawn"), Arc::from("srv:fs/list"), Arc::from("srv:shell/exec")]
+    vec![
+        Arc::from("srv:agent/spawn"),
+        Arc::from("srv:fs/list"),
+        Arc::from("srv:shell/exec"),
+    ]
 }
 
 /// 「关过 `switch()`」的会话里 `Slot::DisabledBuiltins` 该有的值——现查一个真实写入
@@ -53,23 +57,38 @@ fn value_of(names: Vec<Arc<str>>) -> AgentValue {
 
 fn restore_with(snapshot: Vec<(AtomKey, AgentValue)>) -> Session {
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| unknown.push(k.clone()))
-        .expect("合法快照该能恢复");
-    assert!(unknown.is_empty(), "DisabledBuiltins 是这一版认识的槽位，不该报进 on_unknown_key：{unknown:?}");
+    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+        unknown.push(k.clone())
+    })
+    .expect("合法快照该能恢复");
+    assert!(
+        unknown.is_empty(),
+        "DisabledBuiltins 是这一版认识的槽位，不该报进 on_unknown_key：{unknown:?}"
+    );
     session
 }
 
 /// 直接注入快照：三个名字一个不差、一个不多（重复那一项已经在写入时去掉了）。
 #[test]
 fn a_snapshot_with_the_switch_restores_every_name() {
-    let session = restore_with(vec![(AtomKey::Agent(root(), Slot::DisabledBuiltins), switch_value())]);
-    assert_eq!(session.disabled_builtins(), sorted(), "写入时排序去重（红线 11），读回就是这一份");
+    let session = restore_with(vec![(
+        AtomKey::Agent(root(), Slot::DisabledBuiltins),
+        switch_value(),
+    )]);
+    assert_eq!(
+        session.disabled_builtins(),
+        sorted(),
+        "写入时排序去重（红线 11），读回就是这一份"
+    );
 }
 
 /// 红线 3 + 红线 11：整份快照 serde 往返，而且**两次序列化逐字节相同**。
 #[test]
 fn the_switch_survives_a_serde_roundtrip_byte_for_byte() {
-    let snapshot = vec![(AtomKey::Agent(root(), Slot::DisabledBuiltins), switch_value())];
+    let snapshot = vec![(
+        AtomKey::Agent(root(), Slot::DisabledBuiltins),
+        switch_value(),
+    )];
 
     let once = serde_json::to_string(&snapshot).expect("快照该可序列化");
     let back: Vec<(AtomKey, AgentValue)> = serde_json::from_str(&once).expect("快照该可反序列化");
@@ -92,13 +111,22 @@ fn the_switch_survives_a_serde_roundtrip_byte_for_byte() {
 #[test]
 fn the_stored_bytes_do_not_depend_on_input_order_or_duplicates() {
     let bytes = |v: &AgentValue| {
-        let AgentValue::Json(json) = v else { panic!("落 Json") };
+        let AgentValue::Json(json) = v else {
+            panic!("落 Json")
+        };
         serde_json::to_string(&**json).expect("值该可序列化")
     };
 
     let canonical = value_of(sorted());
     for (label, names) in [
-        ("倒序", vec![Arc::<str>::from("srv:shell/exec"), Arc::from("srv:fs/list"), Arc::from("srv:agent/spawn")]),
+        (
+            "倒序",
+            vec![
+                Arc::<str>::from("srv:shell/exec"),
+                Arc::from("srv:fs/list"),
+                Arc::from("srv:agent/spawn"),
+            ],
+        ),
         ("乱序 + 重复", switch()),
         ("再来一遍同一份", sorted()),
     ] {
@@ -108,7 +136,10 @@ fn the_stored_bytes_do_not_depend_on_input_order_or_duplicates() {
             "{label}：关闭列表的输入顺序/重复项漏进了会话状态的落盘字节（红线 11）"
         );
     }
-    assert_eq!(bytes(&canonical), r#"["srv:agent/spawn","srv:fs/list","srv:shell/exec"]"#);
+    assert_eq!(
+        bytes(&canonical),
+        r#"["srv:agent/spawn","srv:fs/list","srv:shell/exec"]"#
+    );
 }
 
 /// 日志游标停在开关**之前** → 恢复出来就什么都没关（undo 那一条在核心层的落点）。
@@ -125,12 +156,28 @@ fn a_log_whose_cursor_sits_before_the_switch_restores_without_it() {
     let len = log.len() as u64;
 
     // 正对照：游标在开关之后 → 三个都关着。
-    let after = Session::restore(root(), None, log.clone(), source.cursor(), len, 100, &mut |_| {}).expect("恢复该成功");
-    assert_eq!(after.disabled_builtins(), sorted(), "游标在开关之后，三个都该还关着");
+    let after = Session::restore(
+        root(),
+        None,
+        log.clone(),
+        source.cursor(),
+        len,
+        100,
+        &mut |_| {},
+    )
+    .expect("恢复该成功");
+    assert_eq!(
+        after.disabled_builtins(),
+        sorted(),
+        "游标在开关之后，三个都该还关着"
+    );
 
     // 游标在开关之前 → 一个都没关。
     let before = Session::restore(root(), None, log, 0, len, 100, &mut |_| {}).expect("恢复该成功");
-    assert!(before.disabled_builtins().is_empty(), "游标停在开关之前，这个会话不该关着任何东西");
+    assert!(
+        before.disabled_builtins().is_empty(),
+        "游标停在开关之前，这个会话不该关着任何东西"
+    );
 }
 
 /// **开关跟声明一起回来**：一个会话可以既注入了工具、又关掉了几件内置的，两个槽位
@@ -153,6 +200,10 @@ fn the_switch_and_the_declaration_come_back_together() {
 
     let session = restore_with(source.primitives());
     assert_eq!(session.disabled_builtins(), sorted(), "开关该回来");
-    assert_eq!(session.host_tools().len(), 1, "声明也该回来——两个槽位互不覆盖");
+    assert_eq!(
+        session.host_tools().len(),
+        1,
+        "声明也该回来——两个槽位互不覆盖"
+    );
     assert_eq!(&*session.host_tools()[0].0.name, "web:crm/lookup");
 }

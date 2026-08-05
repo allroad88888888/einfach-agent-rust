@@ -8,7 +8,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::{export_protocol_types, fixtures_path, generated_dir, sample_session_events, write_fixtures};
+use super::{
+    export_protocol_types, fixtures_path, generated_dir, sample_session_events, write_fixtures,
+};
 
 /// `std::env::temp_dir()` 下一个进程内唯一的子目录。pid + 单调计数器 + 纳秒
 /// 时间戳三重去重，避免同一次 `cargo test` 并发跑的多个 `#[test]` 撞名字。
@@ -21,7 +23,10 @@ fn unique_temp_dir(label: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("系统时钟不至于早于 UNIX_EPOCH")
         .as_nanos();
-    std::env::temp_dir().join(format!("agent-server-ts-{label}-{}-{nanos}-{n}", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "agent-server-ts-{label}-{}-{nanos}-{n}",
+        std::process::id()
+    ))
 }
 
 /// 进程内持有临时目录，`Drop` 时删掉——哪怕测试 `assert!` panic 了，栈展开阶段
@@ -38,7 +43,9 @@ impl Drop for TempDirGuard {
 /// 就当空集——调用方会把这解读成「全部文件都少了」，报错信息是对的。
 fn relative_files(root: &Path) -> BTreeSet<PathBuf> {
     fn walk(dir: &Path, root: &Path, out: &mut BTreeSet<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -63,14 +70,21 @@ fn diff_dirs(fresh: &Path, committed: &Path) -> Vec<String> {
     let mut diffs = Vec::new();
 
     for missing in fresh_files.difference(&committed_files) {
-        diffs.push(format!("缺文件：{}（重新生成过，但 packages/protocol/ 里没有）", missing.display()));
+        diffs.push(format!(
+            "缺文件：{}（重新生成过，但 packages/protocol/ 里没有）",
+            missing.display()
+        ));
     }
     for stale in committed_files.difference(&fresh_files) {
-        diffs.push(format!("多文件：{}（packages/protocol/ 里有，但重新生成不会产出它了）", stale.display()));
+        diffs.push(format!(
+            "多文件：{}（packages/protocol/ 里有，但重新生成不会产出它了）",
+            stale.display()
+        ));
     }
     for shared in fresh_files.intersection(&committed_files) {
         let fresh_bytes = fs::read(fresh.join(shared)).expect("fresh 文件刚枚举过，读得到");
-        let committed_bytes = fs::read(committed.join(shared)).expect("committed 文件刚枚举过，读得到");
+        let committed_bytes =
+            fs::read(committed.join(shared)).expect("committed 文件刚枚举过，读得到");
         if fresh_bytes != committed_bytes {
             diffs.push(format!("内容不一致：{}", shared.display()));
         }
@@ -104,7 +118,10 @@ fn fixtures_json_matches_committed_snapshot() {
     // fixtures 只有一个文件，复用目录 diff：临时目录只放这一个文件，
     // `committed` 那边指到 fixtures.json 的父目录，逻辑跟 generated/ 完全一样,
     // 三种情况（多/少/内容差）报法也一致，不用另开一套比较代码。
-    let committed_dir = fixtures_path().parent().expect("fixtures_path 总有父目录").to_path_buf();
+    let committed_dir = fixtures_path()
+        .parent()
+        .expect("fixtures_path 总有父目录")
+        .to_path_buf();
     let diffs = diff_dirs(&temp.0, &committed_dir);
     assert!(
         diffs.is_empty(),
@@ -122,10 +139,18 @@ fn fixtures_json_matches_committed_snapshot() {
 #[test]
 fn sample_events_cover_every_variant_at_least_once() {
     let samples = sample_session_events();
-    assert_eq!(samples.len(), 16, "SessionEvent 目前有 16 个变体，样本数应该跟它一一对应");
+    assert_eq!(
+        samples.len(),
+        16,
+        "SessionEvent 目前有 16 个变体，样本数应该跟它一一对应"
+    );
 
     let kinds: BTreeSet<&'static str> = samples.iter().map(session_event_kind).collect();
-    assert_eq!(kinds.len(), 16, "样本里有重复变体，说明漏了另一个——样本种类：{kinds:?}");
+    assert_eq!(
+        kinds.len(),
+        16,
+        "样本里有重复变体，说明漏了另一个——样本种类：{kinds:?}"
+    );
 }
 
 /// 给样本判别一个 `&'static str`，只给上面那条覆盖率测试用：判断「16 个样本是

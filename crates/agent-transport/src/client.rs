@@ -60,7 +60,11 @@ impl Default for Client {
 
 impl Client {
     pub fn new() -> Self {
-        Self::with_config(DEFAULT_CONNECT_TIMEOUT, DEFAULT_CANCEL_POLL_INTERVAL, Backoff::default())
+        Self::with_config(
+            DEFAULT_CONNECT_TIMEOUT,
+            DEFAULT_CANCEL_POLL_INTERVAL,
+            Backoff::default(),
+        )
     }
 
     /// 供测试/特殊部署调「连接超时」「取消轮询节奏」与退避节奏——默认值走
@@ -68,12 +72,20 @@ impl Client {
     /// （`read_loop` 里 `recv_timeout` 的参数），**不影响** socket 的读超时——
     /// 那个固定是 [`DEFAULT_SOCKET_TIMEOUT`]，是死流的最终兜底，不给外部调，
     /// 调小了就是把 022 那次事故的病根改个数字重新引入一遍。
-    pub fn with_config(connect_timeout: Duration, cancel_poll_interval: Duration, backoff: Backoff) -> Self {
+    pub fn with_config(
+        connect_timeout: Duration,
+        cancel_poll_interval: Duration,
+        backoff: Backoff,
+    ) -> Self {
         let agent = ureq::AgentBuilder::new()
             .timeout_connect(connect_timeout)
             .timeout_read(DEFAULT_SOCKET_TIMEOUT)
             .build();
-        Client { agent, backoff, cancel_poll_interval }
+        Client {
+            agent,
+            backoff,
+            cancel_poll_interval,
+        }
     }
 
     /// 流式 POST。**一律不重试已经开始的流**：`Ok` 之后的行为交给
@@ -99,7 +111,12 @@ impl Client {
             }
             match self.try_connect(url, api_key, body) {
                 Ok(resp) => {
-                    return Ok(read_loop::run(resp.into_reader(), cancel, self.cancel_poll_interval, on_line));
+                    return Ok(read_loop::run(
+                        resp.into_reader(),
+                        cancel,
+                        self.cancel_poll_interval,
+                        on_line,
+                    ));
                 }
                 Err(ConnectAttemptError::Http { status, body }) => {
                     return Err(TransportError::Http { status, body });
@@ -113,7 +130,10 @@ impl Client {
                 }
                 Err(ConnectAttemptError::Connect(message)) => {
                     if attempt >= self.backoff.max_attempts {
-                        return Err(TransportError::Connect { attempts: attempt, message });
+                        return Err(TransportError::Connect {
+                            attempts: attempt,
+                            message,
+                        });
                     }
                     backoff::sleep_cancelable(self.backoff.delay(attempt), cancel);
                 }
@@ -121,7 +141,12 @@ impl Client {
         }
     }
 
-    fn try_connect(&self, url: &str, api_key: &str, body: &[u8]) -> Result<ureq::Response, ConnectAttemptError> {
+    fn try_connect(
+        &self,
+        url: &str,
+        api_key: &str,
+        body: &[u8],
+    ) -> Result<ureq::Response, ConnectAttemptError> {
         match self
             .agent
             .post(url)
@@ -133,9 +158,10 @@ impl Client {
             Ok(resp) => Ok(resp),
             // 收到了响应头，只是状态码 >= 400——这不是连接失败，是这家的
             // 明确答复，不退避。分类交给上层的 `Provider::classify`。
-            Err(ureq::Error::Status(status, resp)) => {
-                Err(ConnectAttemptError::Http { status, body: read_bounded(resp) })
-            }
+            Err(ureq::Error::Status(status, resp)) => Err(ConnectAttemptError::Http {
+                status,
+                body: read_bounded(resp),
+            }),
             Err(ureq::Error::Transport(t)) if is_response_wait_failure(&t) => {
                 Err(ConnectAttemptError::ResponseWaitBroken(t.to_string()))
             }
@@ -162,7 +188,10 @@ fn is_response_wait_failure(t: &ureq::Transport) -> bool {
 }
 
 enum ConnectAttemptError {
-    Http { status: u16, body: String },
+    Http {
+        status: u16,
+        body: String,
+    },
     Connect(String),
     /// 见 [`is_response_wait_failure`]：状态行阶段的错，请求已送达，不重试。
     ResponseWaitBroken(String),
@@ -170,6 +199,9 @@ enum ConnectAttemptError {
 
 fn read_bounded(resp: ureq::Response) -> String {
     let mut buf = Vec::new();
-    let _ = resp.into_reader().take(MAX_ERROR_BODY).read_to_end(&mut buf);
+    let _ = resp
+        .into_reader()
+        .take(MAX_ERROR_BODY)
+        .read_to_end(&mut buf);
     String::from_utf8_lossy(&buf).into_owned()
 }

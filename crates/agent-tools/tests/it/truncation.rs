@@ -30,17 +30,13 @@ fn fs_read_output_is_bounded_after_core_truncation() {
         "executor 必须返回原始未截断输出，截断是 core 的事"
     );
 
-    let truncated =
-        agent_core::truncate_tool_output(&raw, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
+    let truncated = agent_core::truncate_tool_output(&raw, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
 
     assert!(
         truncated.len() < agent_core::DEFAULT_TOOL_OUTPUT_BYTES + 200,
         "截断后长度必须有界（内容部分等于 limit，标记只占几十字节）"
     );
-    assert!(
-        truncated.contains("输出被截断"),
-        "必须带可见截断标记"
-    );
+    assert!(truncated.contains("输出被截断"), "必须带可见截断标记");
     assert!(
         truncated.contains(&original_len.to_string()),
         "标记必须带原始字节数，让模型知道看到的是残缺的"
@@ -57,8 +53,7 @@ fn small_file_survives_truncation_untouched() {
     let raw = exec
         .execute("srv:fs/read", &json!({ "path": "small.txt" }))
         .unwrap();
-    let truncated =
-        agent_core::truncate_tool_output(&raw, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
+    let truncated = agent_core::truncate_tool_output(&raw, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
 
     assert_eq!(truncated, raw);
     assert!(!truncated.contains("输出被截断"));

@@ -106,7 +106,11 @@ impl<V: AtomValue> Inner<V> {
     }
 }
 
-fn pending_value_changed<V: AtomValue>(inner: &Rc<RefCell<Inner<V>>>, id: AtomId, prev: &Option<V>) -> bool {
+fn pending_value_changed<V: AtomValue>(
+    inner: &Rc<RefCell<Inner<V>>>,
+    id: AtomId,
+    prev: &Option<V>,
+) -> bool {
     let inner_ref = inner.borrow();
     if !inner_ref.has(id) {
         return false;

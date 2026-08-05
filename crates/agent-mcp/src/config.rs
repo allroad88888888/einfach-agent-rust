@@ -67,7 +67,10 @@ impl StdioServer {
     /// `env` 摊平成 `transport::spawn` 要的有序键值对（`BTreeMap` 迭代即字典序，
     /// 确定）。
     pub fn env_pairs(&self) -> Vec<(String, String)> {
-        self.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 }
 
@@ -114,7 +117,10 @@ impl fmt::Display for ConfigError {
         match self {
             ConfigError::Parse(m) => write!(f, ".mcp.json 解析失败: {m}"),
             ConfigError::DuplicateServerId(id) => {
-                write!(f, ".mcp.json 里 server id `{id}` 声明了两次（撞名，不静默取后者）")
+                write!(
+                    f,
+                    ".mcp.json 里 server id `{id}` 声明了两次（撞名，不静默取后者）"
+                )
             }
             ConfigError::Io(m) => write!(f, "读 .mcp.json 失败: {m}"),
         }
@@ -136,7 +142,8 @@ impl McpConfig {
 /// 解析一段 `.mcp.json` 文本。保序、保留重复 key（撞名靠这个才查得出），远端形状不
 /// 让整份失败。
 pub fn parse_config(json: &str) -> Result<McpConfig, ConfigError> {
-    let root: RawRoot = serde_json::from_str(json).map_err(|e| ConfigError::Parse(e.to_string()))?;
+    let root: RawRoot =
+        serde_json::from_str(json).map_err(|e| ConfigError::Parse(e.to_string()))?;
 
     let mut seen = BTreeSet::new();
     let mut servers = Vec::with_capacity(root.mcp_servers.0.len());
@@ -209,7 +216,11 @@ fn classify(id: &str, raw: RawServer) -> Result<ServerConfig, ConfigError> {
             let command = raw.command.ok_or_else(|| {
                 ConfigError::Parse(format!("server `{id}` 是 stdio 形状但缺 command 字段"))
             })?;
-            Ok(ServerConfig::Stdio(StdioServer { command, args: raw.args, env: raw.env }))
+            Ok(ServerConfig::Stdio(StdioServer {
+                command,
+                args: raw.args,
+                env: raw.env,
+            }))
         }
         Some(other) => Ok(ServerConfig::Remote(RemoteServer {
             transport_type: other.to_string(),
@@ -230,7 +241,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(cfg.servers.len(), 1);
-        let (id, ServerConfig::Stdio(s)) = &cfg.servers[0] else { panic!("应是 stdio") };
+        let (id, ServerConfig::Stdio(s)) = &cfg.servers[0] else {
+            panic!("应是 stdio")
+        };
         assert_eq!(id, "a");
         assert_eq!(s.command, "npx");
         assert_eq!(s.args, vec!["-y", "pkg"]);
@@ -240,7 +253,9 @@ mod tests {
     #[test]
     fn missing_optional_fields_default_empty() {
         let cfg = parse_config(r#"{"mcpServers":{"a":{"command":"c"}}}"#).unwrap();
-        let (_, ServerConfig::Stdio(s)) = &cfg.servers[0] else { panic!() };
+        let (_, ServerConfig::Stdio(s)) = &cfg.servers[0] else {
+            panic!()
+        };
         assert!(s.args.is_empty());
         assert!(s.env.is_empty());
     }
@@ -254,12 +269,20 @@ mod tests {
     #[test]
     fn empty_or_absent_mcp_servers_is_ok_and_empty() {
         assert!(parse_config("{}").unwrap().servers.is_empty());
-        assert!(parse_config(r#"{"mcpServers":{}}"#).unwrap().servers.is_empty());
+        assert!(
+            parse_config(r#"{"mcpServers":{}}"#)
+                .unwrap()
+                .servers
+                .is_empty()
+        );
     }
 
     #[test]
     fn not_json_is_a_parse_error() {
-        assert!(matches!(parse_config("not json").unwrap_err(), ConfigError::Parse(_)));
+        assert!(matches!(
+            parse_config("not json").unwrap_err(),
+            ConfigError::Parse(_)
+        ));
     }
 
     #[test]

@@ -69,7 +69,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use agent_core::{
-    Adjustment, AgentId, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId, ToolCallRequest,
+    Adjustment, AgentId, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId,
+    ToolCallRequest,
 };
 use agent_runtime::RunnerEvent;
 
@@ -94,11 +95,23 @@ pub enum SessionEvent {
     /// 一次 `post_stream` 调用没能干净收尾的文本描述。
     TransportTrouble(Arc<str>),
     /// 即将真的执行一个工具。
-    ToolExecuting { call_id: ToolCallId, request: ToolCallRequest },
+    ToolExecuting {
+        call_id: ToolCallId,
+        request: ToolCallRequest,
+    },
     /// 工具执行完了。
-    ToolExecuted { call_id: ToolCallId, tool: Arc<str>, output_len: usize, is_error: bool },
+    ToolExecuted {
+        call_id: ToolCallId,
+        tool: Arc<str>,
+        output_len: usize,
+        is_error: bool,
+    },
     /// 一轮 `CallProvider` 成功收尾：三层判读 + usage + adjustments。
-    TurnGuard { usage: TokenUsage, report: GuardReport, adjustments: Vec<Adjustment> },
+    TurnGuard {
+        usage: TokenUsage,
+        report: GuardReport,
+        adjustments: Vec<Adjustment>,
+    },
     /// loop 自己发的通报（含 `TurnStatusChanged`——轮终态从这里广播出去）。
     Notice(Notice),
     /// `/undo` `/undo!` 的结果，以及取消轮结束后自动擦除的结果
@@ -153,15 +166,34 @@ impl From<RunnerEvent> for SessionEvent {
             RunnerEvent::ToolCallStarted { name } => SessionEvent::ToolCallStarted { name },
             RunnerEvent::PreflightDriftAlert(v) => SessionEvent::PreflightDriftAlert(v),
             RunnerEvent::TransportTrouble(text) => SessionEvent::TransportTrouble(text),
-            RunnerEvent::ToolExecuting { call_id, request } => SessionEvent::ToolExecuting { call_id, request },
-            RunnerEvent::ToolExecuted { call_id, tool, output_len, is_error } => {
-                SessionEvent::ToolExecuted { call_id, tool, output_len, is_error }
+            RunnerEvent::ToolExecuting { call_id, request } => {
+                SessionEvent::ToolExecuting { call_id, request }
             }
-            RunnerEvent::TurnGuard { usage, report, adjustments } => SessionEvent::TurnGuard { usage, report, adjustments },
+            RunnerEvent::ToolExecuted {
+                call_id,
+                tool,
+                output_len,
+                is_error,
+            } => SessionEvent::ToolExecuted {
+                call_id,
+                tool,
+                output_len,
+                is_error,
+            },
+            RunnerEvent::TurnGuard {
+                usage,
+                report,
+                adjustments,
+            } => SessionEvent::TurnGuard {
+                usage,
+                report,
+                adjustments,
+            },
             RunnerEvent::Notice(notice) => SessionEvent::Notice(notice),
-            RunnerEvent::OrphanedChild { child, fate } => {
-                SessionEvent::OrphanedChild { child, fate: fate.into() }
-            }
+            RunnerEvent::OrphanedChild { child, fate } => SessionEvent::OrphanedChild {
+                child,
+                fate: fate.into(),
+            },
         }
     }
 }
@@ -175,15 +207,22 @@ mod tests {
     #[test]
     fn from_runner_event_maps_text_delta() {
         let ev = RunnerEvent::TextDelta(Arc::from("hi"));
-        assert_eq!(SessionEvent::from(ev), SessionEvent::TextDelta(Arc::from("hi")));
+        assert_eq!(
+            SessionEvent::from(ev),
+            SessionEvent::TextDelta(Arc::from("hi"))
+        );
     }
 
     #[test]
     fn from_runner_event_maps_notice() {
-        let ev = RunnerEvent::Notice(Notice::TurnStatusChanged { status: agent_core::TurnStatus::Idle });
+        let ev = RunnerEvent::Notice(Notice::TurnStatusChanged {
+            status: agent_core::TurnStatus::Idle,
+        });
         assert_eq!(
             SessionEvent::from(ev),
-            SessionEvent::Notice(Notice::TurnStatusChanged { status: agent_core::TurnStatus::Idle })
+            SessionEvent::Notice(Notice::TurnStatusChanged {
+                status: agent_core::TurnStatus::Idle
+            })
         );
     }
 
@@ -193,13 +232,19 @@ mod tests {
     fn from_runner_event_maps_orphaned_child_and_its_fate() {
         let ev = RunnerEvent::OrphanedChild {
             child: AgentId::new("root/a1"),
-            fate: agent_runtime::OrphanFate::Discarded { bytes: 15, is_error: false },
+            fate: agent_runtime::OrphanFate::Discarded {
+                bytes: 15,
+                is_error: false,
+            },
         };
         assert_eq!(
             SessionEvent::from(ev),
             SessionEvent::OrphanedChild {
                 child: AgentId::new("root/a1"),
-                fate: OrphanFate::Discarded { bytes: 15, is_error: false },
+                fate: OrphanFate::Discarded {
+                    bytes: 15,
+                    is_error: false
+                },
             }
         );
     }
@@ -211,7 +256,9 @@ mod tests {
         let s = serde_json::to_string(&ev).unwrap();
         assert_eq!(serde_json::from_str::<SessionEvent>(&s).unwrap(), ev);
 
-        let died = SessionEvent::SessionDied { reason: "boom".to_string() };
+        let died = SessionEvent::SessionDied {
+            reason: "boom".to_string(),
+        };
         let s = serde_json::to_string(&died).unwrap();
         assert_eq!(serde_json::from_str::<SessionEvent>(&s).unwrap(), died);
     }

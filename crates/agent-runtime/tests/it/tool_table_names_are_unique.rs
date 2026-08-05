@@ -24,7 +24,11 @@ fn duplicates(table: &ToolTable) -> Vec<String> {
     for spec in table.specs() {
         *counts.entry(&spec.name).or_default() += 1;
     }
-    counts.into_iter().filter(|(_, n)| *n > 1).map(|(name, _)| name.to_string()).collect()
+    counts
+        .into_iter()
+        .filter(|(_, n)| *n > 1)
+        .map(|(name, _)| name.to_string())
+        .collect()
 }
 
 /// 五档 + CLI 那条链，逐张表点名。`with_skills`/`with_mcp`/`with_host_tools` 收的
@@ -38,7 +42,10 @@ fn all_tables() -> Vec<(&'static str, ToolTable)> {
         ("standard", ToolTable::standard()),
         (
             "Full（server 第五档）",
-            ToolTable::with_shell().with_spawn(AgentLimits::default()).with_status().with_collect(),
+            ToolTable::with_shell()
+                .with_spawn(AgentLimits::default())
+                .with_status()
+                .with_collect(),
         ),
         (
             "agent-cli 的链",

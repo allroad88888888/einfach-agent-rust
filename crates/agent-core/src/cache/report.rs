@@ -58,9 +58,17 @@ pub enum GuardAlert {
     /// 第 1 层：没打算改前缀，某一段却漂了。**我们自己的 bug，且钱还没花。**
     UnexpectedDrift { segment: Segment },
     /// 第 2 层：实际命中比预测少太多。对这家缓存语义的理解可能是错的。
-    CacheShortfall { predicted: u32, actual: u32, gap: u32 },
+    CacheShortfall {
+        predicted: u32,
+        actual: u32,
+        gap: u32,
+    },
     /// 第 3 层：连续多轮低命中。慢性失效，或者这条会话正在做没料到的事。
-    ChronicMiss { streak: usize, turns: usize, hit_percent: u32 },
+    ChronicMiss {
+        streak: usize,
+        turns: usize,
+        hit_percent: u32,
+    },
 }
 
 impl GuardAlert {
@@ -81,11 +89,22 @@ impl fmt::Display for GuardAlert {
             GuardAlert::UnexpectedDrift { segment } => {
                 write!(f, "{segment:?} 段漂了，本轮并没打算改前缀")
             }
-            GuardAlert::CacheShortfall { predicted, actual, gap } => {
+            GuardAlert::CacheShortfall {
+                predicted,
+                actual,
+                gap,
+            } => {
                 write!(f, "预测命中 {predicted}，实际 {actual}，缺口 {gap}")
             }
-            GuardAlert::ChronicMiss { streak, turns, hit_percent } => {
-                write!(f, "连续 {streak} 轮低命中，最近 {turns} 轮整体命中率 {hit_percent}%")
+            GuardAlert::ChronicMiss {
+                streak,
+                turns,
+                hit_percent,
+            } => {
+                write!(
+                    f,
+                    "连续 {streak} 轮低命中，最近 {turns} 轮整体命中率 {hit_percent}%"
+                )
             }
         }
     }
@@ -132,11 +151,29 @@ impl GuardReport {
         if let DriftVerdict::Unexpected { segment } = self.drift {
             out.push(GuardAlert::UnexpectedDrift { segment });
         }
-        if let ReconcileVerdict::Shortfall { predicted, actual, gap } = self.reconcile {
-            out.push(GuardAlert::CacheShortfall { predicted, actual, gap });
+        if let ReconcileVerdict::Shortfall {
+            predicted,
+            actual,
+            gap,
+        } = self.reconcile
+        {
+            out.push(GuardAlert::CacheShortfall {
+                predicted,
+                actual,
+                gap,
+            });
         }
-        if let WindowVerdict::ChronicMiss { streak, turns, hit_percent } = self.window {
-            out.push(GuardAlert::ChronicMiss { streak, turns, hit_percent });
+        if let WindowVerdict::ChronicMiss {
+            streak,
+            turns,
+            hit_percent,
+        } = self.window
+        {
+            out.push(GuardAlert::ChronicMiss {
+                streak,
+                turns,
+                hit_percent,
+            });
         }
         out
     }
@@ -164,12 +201,29 @@ mod tests {
     #[test]
     fn three_layers_alert_independently() {
         let report = GuardReport {
-            drift: DriftVerdict::Unexpected { segment: Segment::Tools },
-            reconcile: ReconcileVerdict::Shortfall { predicted: 1000, actual: 100, gap: 900 },
-            window: WindowVerdict::ChronicMiss { streak: 3, turns: 10, hit_percent: 4 },
+            drift: DriftVerdict::Unexpected {
+                segment: Segment::Tools,
+            },
+            reconcile: ReconcileVerdict::Shortfall {
+                predicted: 1000,
+                actual: 100,
+                gap: 900,
+            },
+            window: WindowVerdict::ChronicMiss {
+                streak: 3,
+                turns: 10,
+                hit_percent: 4,
+            },
         };
         let layers: Vec<GuardLayer> = report.alerts().iter().map(GuardAlert::layer).collect();
-        assert_eq!(layers, vec![GuardLayer::PreFlight, GuardLayer::Reconcile, GuardLayer::Window]);
+        assert_eq!(
+            layers,
+            vec![
+                GuardLayer::PreFlight,
+                GuardLayer::Reconcile,
+                GuardLayer::Window
+            ]
+        );
         assert!(report.has_alert());
     }
 

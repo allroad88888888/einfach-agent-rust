@@ -31,27 +31,61 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     let server = RoutedServer::start(vec![
         // 越具体的 needle 越靠前：root 的第三跳请求体里同时有 call_r3 和 call_r4，
         // 反过来写的话它会被第二跳那条路由抢先命中，脚本就对不上了。
-        Route { needle: "call_r4", delay: Duration::ZERO, status: 200, lines: sse_text("all done, both branches reported") },
-        Route { needle: "call_r3", delay: Duration::ZERO, status: 200, lines: sse_tool_call("call_r4", &status_wire, "{}") },
-        Route { needle: "TASKALPHA", delay: Duration::from_millis(120), status: 200, lines: sse_text("answer alpha") },
-        Route { needle: "TASKBETA", delay: Duration::from_millis(120), status: 200, lines: sse_text("answer beta") },
+        Route {
+            needle: "call_r4",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("all done, both branches reported"),
+        },
+        Route {
+            needle: "call_r3",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_tool_call("call_r4", &status_wire, "{}"),
+        },
+        Route {
+            needle: "TASKALPHA",
+            delay: Duration::from_millis(120),
+            status: 200,
+            lines: sse_text("answer alpha"),
+        },
+        Route {
+            needle: "TASKBETA",
+            delay: Duration::from_millis(120),
+            status: 200,
+            lines: sse_text("answer beta"),
+        },
         Route {
             needle: "kickoff-status",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_r1", &spawn_wire, r#"{"task":"TASKALPHA read the alpha side"}"#),
-                ("call_r2", &spawn_wire, r#"{"task":"TASKBETA read the beta side"}"#),
+                (
+                    "call_r1",
+                    &spawn_wire,
+                    r#"{"task":"TASKALPHA read the alpha side"}"#,
+                ),
+                (
+                    "call_r2",
+                    &spawn_wire,
+                    r#"{"task":"TASKBETA read the beta side"}"#,
+                ),
                 ("call_r3", &status_wire, "{}"),
             ]),
         },
     ]);
 
-    let tools = agent_runtime::ToolTable::builtin().with_spawn(AgentLimits::default()).with_status();
+    let tools = agent_runtime::ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status();
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff-status split this in two and watch them");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff-status split this in two and watch them",
+    );
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();
@@ -59,14 +93,25 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     // --- 第一次 status：跟两个 spawn 同批，两个子刚被建出来 ---
     let (first, is_error) = tool_result(&session, &root, "call_r3");
     assert!(!is_error, "纯读不该失败：{first}");
-    assert_eq!(listed_ids(&first), vec!["root/a1", "root/a2"], "该恰好列出两个后代：{first}");
-    assert_eq!(listed_activities(&first), vec!["Idle", "Idle"], "同批建出来、还没轮到它们跑：{first}");
+    assert_eq!(
+        listed_ids(&first),
+        vec!["root/a1", "root/a2"],
+        "该恰好列出两个后代：{first}"
+    );
+    assert_eq!(
+        listed_activities(&first),
+        vec!["Idle", "Idle"],
+        "同批建出来、还没轮到它们跑：{first}"
+    );
     // **这一刻它们还没有 task**，而且这不是 bug：任务文本是子 agent 的第一条 user
     // 消息，它由 spawn 截获产出、排在泵的待办队列里，要等下一次 `step` 才写进去
     // （dispatch.rs §「任务文本 = 子 agent 的第一条 user 消息」）。同批派发的 status
     // 撞的正是这个窗口。`task=(无)` 是如实报告，不是拿 id 顶替一个假的任务。
     // 窗口只有这一批那么宽——下面第二次 status 就有了。
-    assert!(first.contains("task=(无)"), "同批新建的子还没有第一条 user 消息：{first}");
+    assert!(
+        first.contains("task=(无)"),
+        "同批新建的子还没有第一条 user 消息：{first}"
+    );
 
     // --- 第二次 status：两个子都收工之后 ---
     let (second, is_error) = tool_result(&session, &root, "call_r4");
@@ -86,11 +131,20 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     // 第二跳时 "answer alpha" 就在同一条历史的隔壁块里（spawn 那次调用的结果），
     // status 正文里仍然不许有它。
     for body in [&first, &second] {
-        assert!(!body.contains("answer alpha"), "status 不该带上子 agent 的回答正文：{body}");
-        assert!(!body.contains("answer beta"), "status 不该带上子 agent 的回答正文：{body}");
+        assert!(
+            !body.contains("answer alpha"),
+            "status 不该带上子 agent 的回答正文：{body}"
+        );
+        assert!(
+            !body.contains("answer beta"),
+            "status 不该带上子 agent 的回答正文：{body}"
+        );
     }
     let spawn_result = tool_result(&session, &root, "call_r1").0;
-    assert!(spawn_result.contains("answer alpha"), "正文走的是 spawn 那条路，这条得确实成立：{spawn_result}");
+    assert!(
+        spawn_result.contains("answer alpha"),
+        "正文走的是 spawn 那条路，这条得确实成立：{spawn_result}"
+    );
 
     // --- 两个子真的是两个活 agent，不是渲染出来的字 ---
     let mut live = session.live_agents();
@@ -106,5 +160,8 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
             _ => None,
         })
         .collect();
-    assert!(root_text.iter().any(|t| t.contains("all done")), "父该正常收尾：{root_text:#?}");
+    assert!(
+        root_text.iter().any(|t| t.contains("all done")),
+        "父该正常收尾：{root_text:#?}"
+    );
 }

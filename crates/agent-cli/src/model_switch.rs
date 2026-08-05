@@ -27,7 +27,10 @@ use crate::{print, provider};
 pub fn switch(name: &str, ctx: &mut RunnerCtx, session: &mut Session, config: &RootConfig) {
     let Some(provider_cfg) = config.providers.get(name) else {
         let names: Vec<&str> = config.providers.keys().map(String::as_str).collect();
-        print::model_switch_error(&format!("未知 provider \"{name}\"。可选：{}", names.join(" / ")));
+        print::model_switch_error(&format!(
+            "未知 provider \"{name}\"。可选：{}",
+            names.join(" / ")
+        ));
         return;
     };
     let adapter = match provider::build_provider(name) {
@@ -44,7 +47,12 @@ pub fn switch(name: &str, ctx: &mut RunnerCtx, session: &mut Session, config: &R
         return;
     };
 
-    ctx.switch_provider(Arc::from(adapter), provider_cfg.endpoint(), api_key, Arc::from(provider_cfg.model.as_str()));
+    ctx.switch_provider(
+        Arc::from(adapter),
+        provider_cfg.endpoint(),
+        api_key,
+        Arc::from(provider_cfg.model.as_str()),
+    );
     // 跨家前缀镜像无意义：不清的话 024 第 1 层会拿新家这次请求的裸字节去比对
     // 旧家上一轮的 PrefixImage，两家的料单形状本来就不同，比出来的「漂移」
     // 只是切换本身造成的噪音，不是真的前缀坏了。
@@ -116,15 +124,26 @@ provider = "deepseek"
     /// 跑一轮转移（`Event::UserInput` → `Event::ProviderDone`）。
     fn session_with_history_and_prefix() -> Session {
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: "之前问过的问题".into() });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: "之前问过的问题".into(),
+        });
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
             epoch: session.epoch(),
             blocks: vec![ContentBlock::Text("之前的回答".into())],
             stop: StopReason::EndTurn,
-            usage: TokenUsage { prompt: 800, completion: 10, cached: None },
+            usage: TokenUsage {
+                prompt: 800,
+                completion: 10,
+                cached: None,
+            },
             prefix: PrefixImage {
-                segments: vec![SegmentImage { segment: Segment::Tools, bytes: 512, hash: 42 }],
+                segments: vec![SegmentImage {
+                    segment: Segment::Tools,
+                    bytes: 512,
+                    hash: 42,
+                }],
                 prompt_tokens: None, // 转移表会用 usage.prompt 回填
             },
             adjustments: Vec::new(),
@@ -144,8 +163,15 @@ provider = "deepseek"
 
         switch("kimi", &mut ctx, &mut session, &config);
 
-        assert_eq!(session.messages().len(), 2, "跨家续聊是合法场景，历史不该被切换动过");
-        assert!(session.prev_prefix().is_none(), "跨家前缀镜像无意义，必须被清掉，否则第 1 层会把切换误报成漂移");
+        assert_eq!(
+            session.messages().len(),
+            2,
+            "跨家续聊是合法场景，历史不该被切换动过"
+        );
+        assert!(
+            session.prev_prefix().is_none(),
+            "跨家前缀镜像无意义，必须被清掉，否则第 1 层会把切换误报成漂移"
+        );
     }
 
     /// 未知名字：不 panic，会话原样不动（没有半途改一半）——用 `primitives()`
@@ -159,7 +185,11 @@ provider = "deepseek"
 
         switch("not-a-real-provider", &mut ctx, &mut session, &config);
 
-        assert_eq!(session.primitives(), before, "未知名字该原样保留当前状态，不是改到一半就中止");
+        assert_eq!(
+            session.primitives(),
+            before,
+            "未知名字该原样保留当前状态，不是改到一半就中止"
+        );
     }
 
     /// 配置段存在、adapter 也认得这个名字，但没配 key：同样不该动会话。
@@ -172,6 +202,10 @@ provider = "deepseek"
 
         switch("glm", &mut ctx, &mut session, &config);
 
-        assert_eq!(session.primitives(), before, "没配 key 该报错保留原状态，不是切换到一半");
+        assert_eq!(
+            session.primitives(),
+            before,
+            "没配 key 该报错保留原状态，不是切换到一半"
+        );
     }
 }

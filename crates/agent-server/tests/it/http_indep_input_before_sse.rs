@@ -22,9 +22,23 @@ use http_indep_support::fake_upstream::{FakeUpstream, Script};
 use http_indep_support::server_harness::{HarnessConfig, start};
 use http_indep_support::sse_client::SseClient;
 
-async fn two_rounds_before_any_sse_connect() -> (http_indep_support::server_harness::TestServer, String, FakeUpstream) {
-    let upstream = FakeUpstream::start(vec![Script::Text("first reply".to_string()), Script::Text("second reply".to_string())]);
-    let server = start(upstream.endpoint(), HarnessConfig { ring_capacity: 256, ..HarnessConfig::default() }).await;
+async fn two_rounds_before_any_sse_connect() -> (
+    http_indep_support::server_harness::TestServer,
+    String,
+    FakeUpstream,
+) {
+    let upstream = FakeUpstream::start(vec![
+        Script::Text("first reply".to_string()),
+        Script::Text("second reply".to_string()),
+    ]);
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            ring_capacity: 256,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let r1 = server.post_input(&id, "hello");
@@ -35,7 +49,11 @@ async fn two_rounds_before_any_sse_connect() -> (http_indep_support::server_harn
     assert_eq!(r2.status, 202);
     tokio::time::sleep(Duration::from_millis(800)).await;
 
-    assert_eq!(server.get_status(&id).json()["status"], "alive", "两轮结束后 session 该还活着");
+    assert_eq!(
+        server.get_status(&id).json()["status"],
+        "alive",
+        "两轮结束后 session 该还活着"
+    );
     (server, id, upstream)
 }
 
@@ -68,14 +86,24 @@ async fn reconnect_without_any_last_event_id_header_should_still_see_buffered_hi
 
     let frames = collect_two_terminals(&mut sse);
 
-    assert_eq!(frames[0].id, Some(1), "全新客户端不带 Last-Event-ID，该从缓冲最早一帧（id 1）开始收");
+    assert_eq!(
+        frames[0].id,
+        Some(1),
+        "全新客户端不带 Last-Event-ID，该从缓冲最早一帧（id 1）开始收"
+    );
     let ids: Vec<u64> = frames.iter().map(|f| f.id.unwrap()).collect();
     for w in ids.windows(2) {
         assert_eq!(w[1], w[0] + 1, "id 该连续无缺口：{ids:?}");
     }
     let joined: String = frames.iter().map(|f| f.data.as_str()).collect();
-    assert!(joined.contains("first reply"), "第一轮的回复该在缓冲里：{joined}");
-    assert!(joined.contains("second reply"), "第二轮的回复该在缓冲里：{joined}");
+    assert!(
+        joined.contains("first reply"),
+        "第一轮的回复该在缓冲里：{joined}"
+    );
+    assert!(
+        joined.contains("second reply"),
+        "第二轮的回复该在缓冲里：{joined}"
+    );
 }
 
 /// 同样两轮历史，换成显式 `Last-Event-ID: 0` 重连——证明补发引擎本身没坏，

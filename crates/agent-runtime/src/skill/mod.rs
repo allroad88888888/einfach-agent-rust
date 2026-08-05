@@ -29,8 +29,8 @@ use std::sync::Arc;
 use agent_core::{SkillId, SystemChunk, ToolSpec};
 
 pub use load::SkillLoadError;
-pub use tool::{SKILL_ACTIVATE, SKILL_DEACTIVATE, activate_spec, deactivate_spec};
 pub(crate) use tool::intercept;
+pub use tool::{SKILL_ACTIVATE, SKILL_DEACTIVATE, activate_spec, deactivate_spec};
 
 /// 常驻索引那段 system 的标签（进日志，不进 prompt——见 `SystemChunk`）。
 const INDEX_LABEL: &str = "skill-index";
@@ -77,7 +77,9 @@ impl SkillRegistry {
 
     /// 空 registry（宿主没开 skill 时的占位；`ToolTable` 的默认值）。
     pub fn empty() -> Self {
-        SkillRegistry { skills: BTreeMap::new() }
+        SkillRegistry {
+            skills: BTreeMap::new(),
+        }
     }
 
     /// 064：**宿主建会话时声明的 skill** 进这一个会话的 registry
@@ -148,7 +150,10 @@ impl SkillRegistry {
             }
             out
         };
-        SystemChunk { label: Arc::from(INDEX_LABEL), text: Arc::from(text) }
+        SystemChunk {
+            label: Arc::from(INDEX_LABEL),
+            text: Arc::from(text),
+        }
     }
 
     /// 这个 skill 装载进来了吗（dispatch 截获激活时先查这个，没有就回 is_error）。

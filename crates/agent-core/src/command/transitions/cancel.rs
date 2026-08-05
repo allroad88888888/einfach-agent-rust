@@ -34,7 +34,9 @@ pub(super) fn on_cancel(txn: &mut Txn, event_desc: &Arc<str>) -> Vec<Effect> {
     txn.set_status(status.clone());
 
     vec![
-        Effect::CancelInFlight { epoch: cancelled_epoch },
+        Effect::CancelInFlight {
+            epoch: cancelled_epoch,
+        },
         Effect::Emit(Notice::TurnStatusChanged { status }),
     ]
 }

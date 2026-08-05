@@ -13,7 +13,13 @@ fn node(id: &str, activity: AgentActivity, task: Option<&str>) -> AgentNode {
     let id = AgentId::new(id);
     let parent = id.parent();
     let depth = id.depth() as u32;
-    AgentNode { id, parent, depth, task: task.map(str::to_string), activity }
+    AgentNode {
+        id,
+        parent,
+        depth,
+        task: task.map(str::to_string),
+        activity,
+    }
 }
 
 /// 两条分支各带一个孙子的一棵树：
@@ -28,11 +34,33 @@ fn node(id: &str, activity: AgentActivity, task: Option<&str>) -> AgentNode {
 fn sample() -> AgentTree {
     AgentTree {
         nodes: vec![
-            node("root", AgentActivity::Working { tools: vec![crate::SPAWN_TOOL.to_string()] }, Some("总任务")),
+            node(
+                "root",
+                AgentActivity::Working {
+                    tools: vec![crate::SPAWN_TOOL.to_string()],
+                },
+                Some("总任务"),
+            ),
             node("root/a1", AgentActivity::Thinking, Some("任务 A")),
-            node("root/a1/a1", AgentActivity::Working { tools: vec!["srv:fs/read".to_string()] }, Some("任务 A1")),
-            node("root/a2", AgentActivity::Done { truncated: false }, Some("任务 B")),
-            node("root/a2/a1", AgentActivity::Failed { reason: "cancelled".to_string() }, Some("任务 B1")),
+            node(
+                "root/a1/a1",
+                AgentActivity::Working {
+                    tools: vec!["srv:fs/read".to_string()],
+                },
+                Some("任务 A1"),
+            ),
+            node(
+                "root/a2",
+                AgentActivity::Done { truncated: false },
+                Some("任务 B"),
+            ),
+            node(
+                "root/a2/a1",
+                AgentActivity::Failed {
+                    reason: "cancelled".to_string(),
+                },
+                Some("任务 B1"),
+            ),
         ],
     }
 }
@@ -41,7 +69,10 @@ fn sample() -> AgentTree {
 /// `body.contains("root/a1")` 这种断言在这棵树上是假绿灯——所以断言一律走这里，
 /// 逐行取第一个字段比集合。
 fn listed_ids(body: &str) -> Vec<&str> {
-    body.lines().skip(1).map(|line| line.split(' ').next().unwrap()).collect()
+    body.lines()
+        .skip(1)
+        .map(|line| line.split(' ').next().unwrap())
+        .collect()
 }
 
 fn observe_ok(tree: &AgentTree, caller: &str, input: Value) -> String {
@@ -55,7 +86,10 @@ fn observe_ok(tree: &AgentTree, caller: &str, input: Value) -> String {
 #[test]
 fn omitting_id_lists_every_strict_descendant_of_the_caller() {
     let body = observe_ok(&sample(), "root", json!({}));
-    assert_eq!(listed_ids(&body), vec!["root/a1", "root/a1/a1", "root/a2", "root/a2/a1"]);
+    assert_eq!(
+        listed_ids(&body),
+        vec!["root/a1", "root/a1/a1", "root/a2", "root/a2/a1"]
+    );
     assert!(body.starts_with("你的子 agent（4 个"), "{body}");
 }
 
@@ -92,8 +126,7 @@ fn an_id_with_surrounding_whitespace_still_resolves() {
 // ── 拒绝：上读 / 横读 / 自读 / 不在树上 ─────────────────────────────────────
 
 fn refusal(caller: &str, id: &str) -> String {
-    observe(&sample(), &AgentId::new(caller), &json!({ "id": id }))
-        .expect_err("该被拒绝")
+    observe(&sample(), &AgentId::new(caller), &json!({ "id": id })).expect_err("该被拒绝")
 }
 
 /// 上读（祖先）、横读（兄弟、兄弟的孩子、别的树）全拒，而且**拒绝文本里带上
@@ -103,7 +136,10 @@ fn reading_upward_or_sideways_is_refused_and_the_refusal_names_what_is_visible()
     for id in ["root", "root/a2", "root/a2/a1", "other/a1"] {
         let err = refusal("root/a1", id);
         assert!(err.contains(id), "拒绝文本该点名是哪个 id：{err}");
-        assert!(err.contains("root/a1/a1"), "拒绝文本该告诉它能看的是哪些：{err}");
+        assert!(
+            err.contains("root/a1/a1"),
+            "拒绝文本该告诉它能看的是哪些：{err}"
+        );
     }
 }
 
@@ -127,8 +163,12 @@ fn an_id_shaped_like_a_descendant_but_absent_from_the_live_tree_says_so() {
 /// 一个后代都没有的调用者被拒时，也得说清「你现在一个都没有」。
 #[test]
 fn a_leaf_that_asks_about_someone_else_is_told_it_has_none() {
-    let err = observe(&sample(), &AgentId::new("root/a1/a1"), &json!({ "id": "root/a2" }))
-        .expect_err("该被拒绝");
+    let err = observe(
+        &sample(),
+        &AgentId::new("root/a1/a1"),
+        &json!({ "id": "root/a2" }),
+    )
+    .expect_err("该被拒绝");
     assert!(err.contains("一个子 agent 都没有"), "{err}");
 }
 
@@ -139,7 +179,13 @@ fn a_leaf_that_asks_about_someone_else_is_told_it_has_none() {
 fn a_missing_or_null_id_means_the_callers_own_subtree() {
     assert!(parse(&json!({})).unwrap().is_none());
     assert!(parse(&json!({ "id": null })).unwrap().is_none());
-    assert_eq!(parse(&json!({ "id": "root/a1" })).unwrap().unwrap().as_str(), "root/a1");
+    assert_eq!(
+        parse(&json!({ "id": "root/a1" }))
+            .unwrap()
+            .unwrap()
+            .as_str(),
+        "root/a1"
+    );
 }
 
 #[test]
@@ -169,12 +215,18 @@ fn a_shuffled_node_order_renders_to_the_very_same_bytes() {
 
     let mut shuffled = sample();
     shuffled.nodes.reverse();
-    assert_eq!(observe_ok(&shuffled, "root", json!({})).as_bytes(), sorted.as_bytes());
+    assert_eq!(
+        observe_ok(&shuffled, "root", json!({})).as_bytes(),
+        sorted.as_bytes()
+    );
 
     let mut rotated = sample();
     rotated.nodes.swap(1, 3);
     rotated.nodes.swap(0, 4);
-    assert_eq!(observe_ok(&rotated, "root", json!({})).as_bytes(), sorted.as_bytes());
+    assert_eq!(
+        observe_ok(&rotated, "root", json!({})).as_bytes(),
+        sorted.as_bytes()
+    );
 }
 
 /// 一个后代一行是这段正文的全部结构：任务文本里带换行也不许把它拆成两行
@@ -184,7 +236,11 @@ fn a_task_with_newlines_is_flattened_to_stay_one_line_per_descendant() {
     let tree = AgentTree {
         nodes: vec![
             node("root", AgentActivity::Idle, None),
-            node("root/a1", AgentActivity::Idle, Some("第一行\n第二行\r\n第三行")),
+            node(
+                "root/a1",
+                AgentActivity::Idle,
+                Some("第一行\n第二行\r\n第三行"),
+            ),
         ],
     };
     let body = observe_ok(&tree, "root", json!({}));
@@ -197,12 +253,19 @@ fn a_task_with_newlines_is_flattened_to_stay_one_line_per_descendant() {
 fn a_long_task_is_truncated_by_characters_with_a_marker() {
     let long = "很".repeat(TASK_CHARS + 20);
     let tree = AgentTree {
-        nodes: vec![node("root", AgentActivity::Idle, None), node("root/a1", AgentActivity::Idle, Some(&long))],
+        nodes: vec![
+            node("root", AgentActivity::Idle, None),
+            node("root/a1", AgentActivity::Idle, Some(&long)),
+        ],
     };
     let body = observe_ok(&tree, "root", json!({}));
     let line = body.lines().nth(1).unwrap();
     let rendered = line.split_once("task=").unwrap().1;
-    assert_eq!(rendered.chars().count(), TASK_CHARS + 1, "{TASK_CHARS} 个字符 + 一个省略号");
+    assert_eq!(
+        rendered.chars().count(),
+        TASK_CHARS + 1,
+        "{TASK_CHARS} 个字符 + 一个省略号"
+    );
     assert!(rendered.ends_with('…'), "{rendered}");
 }
 
@@ -217,22 +280,52 @@ fn every_activity_variant_has_a_stable_spelling() {
             node("root", AgentActivity::Idle, None),
             node("root/a1", AgentActivity::Idle, None),
             node("root/a2", AgentActivity::Thinking, Some("想")),
-            node("root/a3", AgentActivity::Working { tools: vec!["srv:fs/read".into(), "srv:fs/list".into()] }, Some("跑")),
-            node("root/a4", AgentActivity::Working { tools: Vec::new() }, Some("忙")),
-            node("root/a5", AgentActivity::Done { truncated: false }, Some("完")),
-            node("root/a6", AgentActivity::Done { truncated: true }, Some("完")),
-            node("root/a7", AgentActivity::Failed { reason: "provider error: Auth".to_string() }, Some("砸")),
+            node(
+                "root/a3",
+                AgentActivity::Working {
+                    tools: vec!["srv:fs/read".into(), "srv:fs/list".into()],
+                },
+                Some("跑"),
+            ),
+            node(
+                "root/a4",
+                AgentActivity::Working { tools: Vec::new() },
+                Some("忙"),
+            ),
+            node(
+                "root/a5",
+                AgentActivity::Done { truncated: false },
+                Some("完"),
+            ),
+            node(
+                "root/a6",
+                AgentActivity::Done { truncated: true },
+                Some("完"),
+            ),
+            node(
+                "root/a7",
+                AgentActivity::Failed {
+                    reason: "provider error: Auth".to_string(),
+                },
+                Some("砸"),
+            ),
         ],
     };
     let body = observe_ok(&tree, "root", json!({}));
     let lines: Vec<&str> = body.lines().skip(1).collect();
     assert_eq!(lines[0], "root/a1 depth=1 Idle task=(无)");
     assert_eq!(lines[1], "root/a2 depth=1 Thinking task=想");
-    assert_eq!(lines[2], "root/a3 depth=1 Working(srv:fs/read,srv:fs/list) task=跑");
+    assert_eq!(
+        lines[2],
+        "root/a3 depth=1 Working(srv:fs/read,srv:fs/list) task=跑"
+    );
     assert_eq!(lines[3], "root/a4 depth=1 Working task=忙");
     assert_eq!(lines[4], "root/a5 depth=1 Done task=完");
     assert_eq!(lines[5], "root/a6 depth=1 Done(truncated) task=完");
-    assert_eq!(lines[6], "root/a7 depth=1 Failed(provider error: Auth) task=砸");
+    assert_eq!(
+        lines[6],
+        "root/a7 depth=1 Failed(provider error: Auth) task=砸"
+    );
 }
 
 /// 深度是真的深度，不是「1」写死。
@@ -249,7 +342,11 @@ fn the_body_carries_activity_and_task_only() {
     let body = observe_ok(&sample(), "root", json!({}));
     for line in body.lines().skip(1) {
         let fields: Vec<&str> = line.splitn(4, ' ').collect();
-        assert_eq!(fields.len(), 4, "一行只有 id / depth / activity / task 四段：{line}");
+        assert_eq!(
+            fields.len(),
+            4,
+            "一行只有 id / depth / activity / task 四段：{line}"
+        );
         assert!(fields[1].starts_with("depth="), "{line}");
         assert!(fields[3].starts_with("task="), "{line}");
     }
@@ -277,10 +374,19 @@ fn the_spec_tells_the_model_where_a_childs_answer_actually_comes_from() {
     assert_eq!(&*spec.name, STATUS_TOOL);
     assert!(text.contains("不返回子 agent 的回答正文"), "{text}");
     // 两种 spawn 得各说各的，不能只留一句对其中一种成立的话。
-    assert!(text.contains("前台"), "前台那条路（正文从 spawn 槽回来）得说：{text}");
+    assert!(
+        text.contains("前台"),
+        "前台那条路（正文从 spawn 槽回来）得说：{text}"
+    );
     assert!(text.contains("background=true"), "后台那条路得点名：{text}");
     // 后台子的正文只有这一条出路，描述里必须点名它。
-    assert!(text.contains(crate::COLLECT_TOOL), "后台子的正文要用 collect 领：{text}");
+    assert!(
+        text.contains(crate::COLLECT_TOOL),
+        "后台子的正文要用 collect 领：{text}"
+    );
     assert_eq!(spec.schema["properties"]["id"]["type"], "string");
-    assert!(spec.schema["required"].is_null(), "id 是可选的，不该有 required");
+    assert!(
+        spec.schema["required"].is_null(),
+        "id 是可选的，不该有 required"
+    );
 }

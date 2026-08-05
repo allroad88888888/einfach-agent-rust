@@ -21,7 +21,11 @@ fn check_invariants_script_passes_for_whole_repo() {
         .expect("agent-providers 应该在 <repo>/crates/agent-providers 下");
 
     let script = repo_root.join("scripts/check-invariants.sh");
-    assert!(script.is_file(), "scripts/check-invariants.sh 必须存在: {}", script.display());
+    assert!(
+        script.is_file(),
+        "scripts/check-invariants.sh 必须存在: {}",
+        script.display()
+    );
 
     let output = Command::new("bash")
         .arg(&script)

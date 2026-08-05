@@ -13,12 +13,19 @@ mod support;
 use std::sync::Arc;
 
 use agent_core::{AgentId, AgentValue, ChildConfig, ReadDenied, Session, Slot, Visibility};
-use support::{user_input_for, user_input_event};
+use support::{user_input_event, user_input_for};
 
 fn tree() -> (Session, AgentId, AgentId, AgentId) {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
-    let a1 = s.spawn_child(&root, ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }).unwrap();
+    let a1 = s
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec![Arc::from("srv:fs/read")],
+            },
+        )
+        .unwrap();
     let a2 = s.spawn_child(&root, ChildConfig::default()).unwrap();
     (s, root, a1, a2)
 }
@@ -69,11 +76,17 @@ fn siblings_are_refused_in_both_directions() {
 
     assert_eq!(
         s.read_ancestor(&a1, &a2, Slot::Messages),
-        Err(ReadDenied::NotAnAncestor { reader: a1.clone(), target: a2.clone() })
+        Err(ReadDenied::NotAnAncestor {
+            reader: a1.clone(),
+            target: a2.clone()
+        })
     );
     assert_eq!(
         s.read_descendant(&a1, &a2, Slot::Status),
-        Err(ReadDenied::NotADescendant { reader: a1.clone(), target: a2.clone() })
+        Err(ReadDenied::NotADescendant {
+            reader: a1.clone(),
+            target: a2.clone()
+        })
     );
 }
 
@@ -84,11 +97,17 @@ fn the_wrong_direction_is_refused() {
 
     assert_eq!(
         s.read_ancestor(&root, &a1, Slot::Messages),
-        Err(ReadDenied::NotAnAncestor { reader: root.clone(), target: a1.clone() })
+        Err(ReadDenied::NotAnAncestor {
+            reader: root.clone(),
+            target: a1.clone()
+        })
     );
     assert_eq!(
         s.read_descendant(&a1, &root, Slot::Status),
-        Err(ReadDenied::NotADescendant { reader: a1.clone(), target: root.clone() })
+        Err(ReadDenied::NotADescendant {
+            reader: a1.clone(),
+            target: root.clone()
+        })
     );
 }
 
@@ -136,11 +155,17 @@ fn a_private_slot_is_refused_with_a_visibility_reason() {
     let (s, root, a1, _) = tree();
     assert_eq!(
         s.read_ancestor(&a1, &root, Slot::TurnsUsed),
-        Err(ReadDenied::NotVisible { slot: Slot::TurnsUsed, visibility: Visibility::Private })
+        Err(ReadDenied::NotVisible {
+            slot: Slot::TurnsUsed,
+            visibility: Visibility::Private
+        })
     );
     assert_eq!(
         s.read_descendant(&root, &a1, Slot::Messages),
-        Err(ReadDenied::NotVisible { slot: Slot::Messages, visibility: Visibility::Upward })
+        Err(ReadDenied::NotVisible {
+            slot: Slot::Messages,
+            visibility: Visibility::Upward
+        })
     );
 }
 
@@ -161,5 +186,8 @@ fn reading_a_despawned_child_says_so_instead_of_creating_atoms() {
         s.read_descendant(&root, &a1, Slot::ToolsAllowed),
         Ok(AgentValue::Null)
     );
-    assert!(s.primitives().len() < before, "读取路径没有把逐出的 atom 建回来");
+    assert!(
+        s.primitives().len() < before,
+        "读取路径没有把逐出的 atom 建回来"
+    );
 }

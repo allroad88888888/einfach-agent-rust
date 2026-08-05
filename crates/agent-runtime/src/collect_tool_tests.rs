@@ -28,7 +28,10 @@ fn id_is_required_and_must_be_a_non_empty_string() {
     assert!(parse(&json!({ "id": null })).is_err());
     assert!(parse(&json!({ "id": "   " })).is_err());
     assert!(parse(&json!({ "id": 7 })).is_err());
-    assert_eq!(parse(&json!({ "id": " root/a1 " })).unwrap(), AgentId::new("root/a1"));
+    assert_eq!(
+        parse(&json!({ "id": " root/a1 " })).unwrap(),
+        AgentId::new("root/a1")
+    );
 }
 
 // ---------- 工具说明书（071） ----------
@@ -48,9 +51,18 @@ fn the_spec_states_the_facts_the_model_cannot_guess() {
     let text = &*spec.description;
     assert_eq!(&*spec.name, COLLECT_TOOL);
     assert!(text.contains("background=true"), "它只领后台开的子：{text}");
-    assert!(text.contains("只能领一次"), "领取即消费（`take_stashed` 的 remove）：{text}");
-    assert!(text.contains("拆掉"), "轮末没领的下场（`orphan::reap`）：{text}");
-    assert!(text.contains(crate::STATUS_TOOL), "先 status 再 collect 的配合：{text}");
+    assert!(
+        text.contains("只能领一次"),
+        "领取即消费（`take_stashed` 的 remove）：{text}"
+    );
+    assert!(
+        text.contains("拆掉"),
+        "轮末没领的下场（`orphan::reap`）：{text}"
+    );
+    assert!(
+        text.contains(crate::STATUS_TOOL),
+        "先 status 再 collect 的配合：{text}"
+    );
     assert_eq!(spec.schema["required"], json!(["id"]));
 }
 
@@ -67,14 +79,26 @@ fn a_refusal_never_names_agents_outside_the_callers_subtree() {
 
     let caller = AgentId::new("root/a1");
     let text = not_collectable(&AgentId::new("root/a1/b7"), &caller, &subtree);
-    assert!(text.contains("root/a1/b1"), "该告诉它自己那棵子树里能领的：{text}");
-    assert!(!text.contains("root/a2/b9"), "兄弟那棵子树的 id 一个字都不该露出来：{text}");
+    assert!(
+        text.contains("root/a1/b1"),
+        "该告诉它自己那棵子树里能领的：{text}"
+    );
+    assert!(
+        !text.contains("root/a2/b9"),
+        "兄弟那棵子树的 id 一个字都不该露出来：{text}"
+    );
 
     // 拒绝理由本身当然会点名它要领的那个 id；不该露出来的是**清单**那一半。
     let text = not_a_descendant(&caller, &AgentId::new("root/a2/b9"), &subtree);
     let listed = text.split("你现在能领的是：").nth(1).unwrap_or("");
-    assert!(!listed.contains("root/a2/b9"), "清单里不该有兄弟子树的 id：{text}");
-    assert!(listed.contains("root/a1/b1"), "同样要告诉它自己能领哪些：{text}");
+    assert!(
+        !listed.contains("root/a2/b9"),
+        "清单里不该有兄弟子树的 id：{text}"
+    );
+    assert!(
+        listed.contains("root/a1/b1"),
+        "同样要告诉它自己能领哪些：{text}"
+    );
 }
 
 /// 一个都没有时也有话说（跟 `status_tool::you_can_see` 同款）。
@@ -96,11 +120,20 @@ fn a_stashed_result_can_only_be_taken_once() {
     let mut ctx = build_ctx();
     let mut subtree = Subtree::default();
     subtree.detach(child.clone(), AgentId::root(), spawned_at);
-    assert!(subtree.harvest(&session, &mut ctx).is_empty(), "后台子不回写父，只进 stash");
+    assert!(
+        subtree.harvest(&session, &mut ctx).is_empty(),
+        "后台子不回写父，只进 stash"
+    );
 
     assert!(subtree.take_stashed(&child).is_some(), "第一次该领得到");
-    assert!(subtree.take_stashed(&child).is_none(), "第二次该空手——领取即消费");
-    assert!(subtree.collectable().is_empty(), "领完两张表都该干净（轮末不该再报「没人领」）");
+    assert!(
+        subtree.take_stashed(&child).is_none(),
+        "第二次该空手——领取即消费"
+    );
+    assert!(
+        subtree.collectable().is_empty(),
+        "领完两张表都该干净（轮末不该再报「没人领」）"
+    );
 }
 
 // ---------- 红线 6：collect 绑定的世代 ----------
@@ -126,8 +159,16 @@ fn a_collect_binding_write_back_is_dropped_when_the_epoch_moved_on() {
     // 推世代：取消那个诱饵。root 仍在 ToolsPending，child 仍在 Thinking。
     let bound_at = session.epoch();
     let _ = session.step(Event::Cancel { agent: decoy });
-    assert_ne!(session.epoch(), bound_at, "取消该推走世代，否则这条测试是空跑的");
-    assert_eq!(session.status(), TurnStatus::ToolsPending, "root 不该被这次取消碰到");
+    assert_ne!(
+        session.epoch(),
+        bound_at,
+        "取消该推走世代，否则这条测试是空跑的"
+    );
+    assert_eq!(
+        session.status(),
+        TurnStatus::ToolsPending,
+        "root 不该被这次取消碰到"
+    );
 
     finish(&mut session, &child);
     let mut events = subtree.harvest(&session, &mut ctx);
@@ -135,12 +176,23 @@ fn a_collect_binding_write_back_is_dropped_when_the_epoch_moved_on() {
     // 收割**确实产出了**那条回写（否则下面「没落地」对一个根本没发生的回写也成立）。
     assert_eq!(events.len(), 1, "子落终态该产出一条回写：{events:#?}");
     let event = events.remove(0);
-    assert_eq!(event.epoch(), Some(bound_at), "回写该带绑定那一刻的世代，不是现在的");
+    assert_eq!(
+        event.epoch(),
+        Some(bound_at),
+        "回写该带绑定那一刻的世代，不是现在的"
+    );
 
     let effects = session.step(event);
     assert!(effects.is_empty(), "过期世代的回写该被闸整条丢掉（红线 6）");
-    assert_eq!(session.status(), TurnStatus::ToolsPending, "collect 槽该还空着等");
-    assert!(!root_saw("ANSWERCOLLECT", &session), "幽灵结果填了 collect 槽（红线 6）");
+    assert_eq!(
+        session.status(),
+        TurnStatus::ToolsPending,
+        "collect 槽该还空着等"
+    );
+    assert!(
+        !root_saw("ANSWERCOLLECT", &session),
+        "幽灵结果填了 collect 槽（红线 6）"
+    );
 }
 
 /// 上一条的孪生：**不**推世代，同一次收割该老老实实落进父的历史、父的槽收敛。
@@ -156,9 +208,18 @@ fn and_the_very_same_write_back_lands_when_the_epoch_still_matches() {
     assert_eq!(events.len(), 1);
     let effects = session.step(events.remove(0));
     assert!(!effects.is_empty(), "槽收敛该让父接着发下一跳");
-    assert!(root_saw("ANSWERCOLLECT", &session), "世代没变时该落地（否则上一条是空跑的）");
-    assert!(subtree.take_stash().is_empty(), "领到的结果不该再进一次 stash（轮末会误报「没人领」）");
-    assert!(subtree.take_orphans(&session).is_empty(), "领完的子不该再被当孤儿");
+    assert!(
+        root_saw("ANSWERCOLLECT", &session),
+        "世代没变时该落地（否则上一条是空跑的）"
+    );
+    assert!(
+        subtree.take_stash().is_empty(),
+        "领到的结果不该再进一次 stash（轮末会误报「没人领」）"
+    );
+    assert!(
+        subtree.take_orphans(&session).is_empty(),
+        "领完的子不该再被当孤儿"
+    );
 }
 
 // ---------- 夹具 ----------
@@ -170,12 +231,21 @@ fn and_the_very_same_write_back_lands_when_the_epoch_still_matches() {
 fn parked_collect() -> (Session, AgentId, AgentId, ToolCallId) {
     let root = AgentId::root();
     let mut session = Session::new(root.clone());
-    let _ = session.step(Event::UserInput { agent: root.clone(), text: Arc::from("拆一个后台的") });
+    let _ = session.step(Event::UserInput {
+        agent: root.clone(),
+        text: Arc::from("拆一个后台的"),
+    });
 
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: child.clone(), text: Arc::from("BGTASK") });
+    let _ = session.step(Event::UserInput {
+        agent: child.clone(),
+        text: Arc::from("BGTASK"),
+    });
     let decoy = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: decoy.clone(), text: Arc::from("DECOY") });
+    let _ = session.step(Event::UserInput {
+        agent: decoy.clone(),
+        text: Arc::from("DECOY"),
+    });
 
     let call_id = ToolCallId::new("call_collect");
     let _ = session.step(Event::ProviderDone {
@@ -188,10 +258,17 @@ fn parked_collect() -> (Session, AgentId, AgentId, ToolCallId) {
         }],
         stop: StopReason::ToolUse,
         usage: usage(),
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     });
-    assert_eq!(session.status(), TurnStatus::ToolsPending, "root 该停在等 collect 的槽上");
+    assert_eq!(
+        session.status(),
+        TurnStatus::ToolsPending,
+        "root 该停在等 collect 的槽上"
+    );
     (session, child, decoy, call_id)
 }
 
@@ -200,7 +277,13 @@ fn bind_collect(session: &Session, child: &AgentId, call_id: &ToolCallId) -> Sub
     let mut subtree = Subtree::default();
     let root = AgentId::root();
     subtree.detach(child.clone(), root.clone(), session.epoch());
-    subtree.record(child.clone(), root, call_id.clone(), session.epoch(), COLLECT_TOOL);
+    subtree.record(
+        child.clone(),
+        root,
+        call_id.clone(),
+        session.epoch(),
+        COLLECT_TOOL,
+    );
     subtree
 }
 
@@ -212,20 +295,32 @@ fn finish(session: &mut Session, child: &AgentId) {
         blocks: vec![ContentBlock::Text(Arc::from("ANSWERCOLLECT 后台子的答案"))],
         stop: StopReason::EndTurn,
         usage: usage(),
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     });
-    assert_eq!(session.status_of(child), TurnStatus::Done { truncated: false });
+    assert_eq!(
+        session.status_of(child),
+        TurnStatus::Done { truncated: false }
+    );
 }
 
 /// 一个 root 底下挂着一个已经答完的后台子的会话（`Epoch` 是 spawn 那一刻的）。
 fn finished_background_child() -> (Session, AgentId, Epoch) {
     let root = AgentId::root();
     let mut session = Session::new(root.clone());
-    let _ = session.step(Event::UserInput { agent: root.clone(), text: Arc::from("拆一个") });
+    let _ = session.step(Event::UserInput {
+        agent: root.clone(),
+        text: Arc::from("拆一个"),
+    });
     let spawned_at = session.epoch();
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
-    let _ = session.step(Event::UserInput { agent: child.clone(), text: Arc::from("BGTASK") });
+    let _ = session.step(Event::UserInput {
+        agent: child.clone(),
+        text: Arc::from("BGTASK"),
+    });
     finish(&mut session, &child);
     (session, child, spawned_at)
 }
@@ -241,7 +336,11 @@ fn root_saw(needle: &str, session: &Session) -> bool {
 }
 
 fn usage() -> TokenUsage {
-    TokenUsage { prompt: 10, completion: 5, cached: None }
+    TokenUsage {
+        prompt: 10,
+        completion: 5,
+        cached: None,
+    }
 }
 
 /// 收割要一个 `RunnerCtx` 发通报。这里一次网络都不会打（`harvest` 只调 `ctx.emit`），

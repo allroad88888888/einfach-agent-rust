@@ -46,16 +46,16 @@ use tokio::net::TcpListener;
 
 use state::AppState;
 
-#[cfg(feature = "ts")]
-pub(crate) use poll_protocol::PollResponse;
-/// 072：`GET /sessions/{id}/pending_tools` 的响应体——宿主执行一次远端工具之前
-/// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
-#[cfg(feature = "ts")]
-pub(crate) use pending::PendingToolsResponse;
 /// 061：`POST /sessions` 请求体里的 `capabilities`——上行协议的一半，跟下行的
 /// `Frame`/`PollResponse` 一起导出给前端（065 直接用生成的类型，不手写镜像）。
 #[cfg(feature = "ts")]
 pub(crate) use capabilities::Capabilities;
+/// 072：`GET /sessions/{id}/pending_tools` 的响应体——宿主执行一次远端工具之前
+/// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
+#[cfg(feature = "ts")]
+pub(crate) use pending::PendingToolsResponse;
+#[cfg(feature = "ts")]
+pub(crate) use poll_protocol::PollResponse;
 
 /// `AgentServer::new(config)` 之后拿到的东西：路由已经装好，还没绑端口。
 pub struct AgentServer {
@@ -100,7 +100,12 @@ impl AgentServer {
     pub async fn bind(self, addr: SocketAddr) -> io::Result<BoundAgentServer> {
         let listener = TcpListener::bind(addr).await?;
         let local_addr = listener.local_addr()?;
-        Ok(BoundAgentServer { listener, router: self.router, local_addr, state: self.state })
+        Ok(BoundAgentServer {
+            listener,
+            router: self.router,
+            local_addr,
+            state: self.state,
+        })
     }
 
     /// `AgentServer::new(config).serve(addr).await`——ARCHITECTURE.md §传输

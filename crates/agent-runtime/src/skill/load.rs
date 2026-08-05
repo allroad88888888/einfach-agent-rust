@@ -38,7 +38,9 @@ pub enum SkillLoadError {
 impl std::fmt::Display for SkillLoadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SkillLoadError::Io { path, message } => write!(f, "读 skill 目录 {path} 失败：{message}"),
+            SkillLoadError::Io { path, message } => {
+                write!(f, "读 skill 目录 {path} 失败：{message}")
+            }
         }
     }
 }
@@ -71,7 +73,10 @@ pub(super) fn load_dir(
 }
 
 fn io_err(path: &Path, e: &std::io::Error) -> SkillLoadError {
-    SkillLoadError::Io { path: path.display().to_string(), message: e.to_string() }
+    SkillLoadError::Io {
+        path: path.display().to_string(),
+        message: e.to_string(),
+    }
 }
 
 /// 把一份 SKILL.md 文本建成 [`Skill`]。宽容：任何缺失都有兜底。
@@ -79,11 +84,18 @@ fn build_skill(fallback_id: &str, content: &str) -> Skill {
     let (front, body) = split_frontmatter(content);
     let meta = front.map(yaml::parse).unwrap_or(Value::Null);
 
-    let id = meta.get("name").and_then(Value::as_str).unwrap_or(fallback_id);
-    let description = meta.get("description").and_then(Value::as_str).unwrap_or("");
-    let tools = meta.get("tools").and_then(Value::as_array).map(|arr| {
-        arr.iter().filter_map(tool_spec).collect::<Vec<_>>()
-    });
+    let id = meta
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or(fallback_id);
+    let description = meta
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let tools = meta
+        .get("tools")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(tool_spec).collect::<Vec<_>>());
 
     Skill {
         id: SkillId::new(id),
@@ -98,8 +110,14 @@ fn build_skill(fallback_id: &str, content: &str) -> Skill {
 /// `serde_json::Value` 的对象是 `BTreeMap`，逐字节确定）。
 fn tool_spec(item: &Value) -> Option<ToolSpec> {
     let name = item.get("name").and_then(Value::as_str)?;
-    let description = item.get("description").and_then(Value::as_str).unwrap_or("");
-    let schema = item.get("schema").cloned().unwrap_or_else(|| json!({"type": "object"}));
+    let description = item
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let schema = item
+        .get("schema")
+        .cloned()
+        .unwrap_or_else(|| json!({"type": "object"}));
     Some(ToolSpec {
         name: Arc::from(name),
         description: Arc::from(description),
@@ -159,7 +177,10 @@ tools:
         assert_eq!(&*skill.body, "这是正文 BODY。");
         assert_eq!(skill.tools.len(), 1);
         assert_eq!(&*skill.tools[0].name, "srv:testskill/ping");
-        assert_eq!(&*skill.tools[0].schema.to_string(), r#"{"properties":{},"type":"object"}"#);
+        assert_eq!(
+            &*skill.tools[0].schema.to_string(),
+            r#"{"properties":{},"type":"object"}"#
+        );
     }
 
     /// 缺 frontmatter：目录名当 id，全文当正文，没有工具。

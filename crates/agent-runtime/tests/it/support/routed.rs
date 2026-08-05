@@ -45,7 +45,12 @@ impl Route {
 
     /// 非 200：写完状态行和一小段 JSON 体就断开（`TransportError::Http`）。
     pub fn http_error(needle: &'static str, status: u16, body: &str) -> Self {
-        Route { needle, delay: Duration::ZERO, status, lines: vec![body.to_string()] }
+        Route {
+            needle,
+            delay: Duration::ZERO,
+            status,
+            lines: vec![body.to_string()],
+        }
     }
 
     pub fn after(mut self, delay: Duration) -> Self {
@@ -105,7 +110,9 @@ impl RoutedServer {
 
     /// 这两条路由被服务的时间区间**有交叠**吗——并行的证据。
     pub fn overlapped(&self, a: &str, b: &str) -> bool {
-        let (Some(a), Some(b)) = (self.call(a), self.call(b)) else { return false };
+        let (Some(a), Some(b)) = (self.call(a), self.call(b)) else {
+            return false;
+        };
         a.start < b.end && b.start < a.end
     }
 }
@@ -125,7 +132,9 @@ fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
         // 阻塞在 ureq 的 `call()` 里，测出来的是「等满了脚本的睡眠」而不是取消。
         // 顺带这也更像真实的 provider：TTFB 之后才是逐 token 的流。
         stream
-            .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+            )
             .unwrap();
         let _ = stream.flush();
         thread::sleep(route.delay);
@@ -147,7 +156,12 @@ fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
     let _ = stream.flush();
     let end = Instant::now();
 
-    calls.lock().unwrap().push(Call { needle: route.needle, body, start, end });
+    calls.lock().unwrap().push(Call {
+        needle: route.needle,
+        body,
+        start,
+        end,
+    });
 }
 
 /// 读一次 HTTP 请求，返回请求体（按 `Content-Length`）。

@@ -154,7 +154,10 @@ mod tests {
     fn image_is_three_segments_in_render_order() {
         let img = image(&bytes("[]", "sys", "hist"));
         let segs: Vec<Segment> = img.segments.iter().map(|s| s.segment).collect();
-        assert_eq!(segs, vec![Segment::Tools, Segment::System, Segment::History]);
+        assert_eq!(
+            segs,
+            vec![Segment::Tools, Segment::System, Segment::History]
+        );
         assert_eq!(img.segments[1].bytes, 3);
         assert_eq!(img.prompt_tokens, None);
     }
@@ -170,7 +173,10 @@ mod tests {
     fn strict_extension_predicts_floor_of_prev_prompt() {
         let mut prev = image(&bytes("[]", "sys", "abc"));
         prev.prompt_tokens = Some(434);
-        assert_eq!(compare(&bytes("[]", "sys", "abcdef"), Some(&prev), BLOCK, 0), (None, 384));
+        assert_eq!(
+            compare(&bytes("[]", "sys", "abcdef"), Some(&prev), BLOCK, 0),
+            (None, 384)
+        );
     }
 
     /// GLM 的零区：门槛 860 之下不预测（真实两轮实测过 predicted=448/actual=0 的误报）。
@@ -178,10 +184,16 @@ mod tests {
     fn below_min_predict_returns_zero_not_a_rounded_guess() {
         let mut prev = image(&bytes("[]", "sys", "abc"));
         prev.prompt_tokens = Some(461);
-        assert_eq!(compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 64, 860), (None, 0));
+        assert_eq!(
+            compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 64, 860),
+            (None, 0)
+        );
         // 到了门槛就正常按块取整。
         prev.prompt_tokens = Some(900);
-        assert_eq!(compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 64, 860), (None, 896));
+        assert_eq!(
+            compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 64, 860),
+            (None, 896)
+        );
     }
 
     /// 换一个块粒度（Kimi 256）预测值跟着变。
@@ -189,14 +201,20 @@ mod tests {
     fn different_block_size_changes_prediction() {
         let mut prev = image(&bytes("[]", "sys", "abc"));
         prev.prompt_tokens = Some(700);
-        assert_eq!(compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 256, 0), (None, 512));
+        assert_eq!(
+            compare(&bytes("[]", "sys", "abcdef"), Some(&prev), 256, 0),
+            (None, 512)
+        );
     }
 
     /// 上一轮没回填 prompt_tokens → 预测 0，不拿字节数瞎折算。
     #[test]
     fn no_measured_prompt_tokens_means_no_prediction() {
         let prev = image(&bytes("[]", "sys", "abc"));
-        assert_eq!(compare(&bytes("[]", "sys", "abcd"), Some(&prev), BLOCK, 0), (None, 0));
+        assert_eq!(
+            compare(&bytes("[]", "sys", "abcd"), Some(&prev), BLOCK, 0),
+            (None, 0)
+        );
     }
 
     #[test]

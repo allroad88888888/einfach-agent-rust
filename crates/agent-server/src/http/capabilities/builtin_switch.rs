@@ -67,7 +67,10 @@ impl fmt::Display for UnknownBuiltin {
 ///
 /// 第一个不认识的名字就返回——错误是给人看的，一次说清一项即可（同 061 的
 /// [`validate`](super::validate::validate)）。
-pub(in crate::http) fn check_builtin_switch(capabilities: &Capabilities, deployed: ToolTableSpec) -> Result<(), UnknownBuiltin> {
+pub(in crate::http) fn check_builtin_switch(
+    capabilities: &Capabilities,
+    deployed: ToolTableSpec,
+) -> Result<(), UnknownBuiltin> {
     if capabilities.disable_builtin.is_empty() {
         return Ok(());
     }
@@ -76,7 +79,11 @@ pub(in crate::http) fn check_builtin_switch(capabilities: &Capabilities, deploye
         if !table.declares(name) {
             return Err(UnknownBuiltin {
                 name: elide(name),
-                available: table.specs().iter().map(|spec| spec.name.to_string()).collect(),
+                available: table
+                    .specs()
+                    .iter()
+                    .map(|spec| spec.name.to_string())
+                    .collect(),
             });
         }
     }
@@ -88,8 +95,14 @@ pub(in crate::http) fn check_builtin_switch(capabilities: &Capabilities, deploye
 /// 没带 `capabilities`（老调用方）或者列表为空 → 空 `Vec`，下游一路空操作，工具表
 /// 与 076 之前**逐字节相同**。
 pub(in crate::http) fn disabled_builtins(capabilities: Option<&Capabilities>) -> Vec<Arc<str>> {
-    let Some(capabilities) = capabilities else { return Vec::new() };
-    capabilities.disable_builtin.iter().map(|name| Arc::from(name.as_str())).collect()
+    let Some(capabilities) = capabilities else {
+        return Vec::new();
+    };
+    capabilities
+        .disable_builtin
+        .iter()
+        .map(|name| Arc::from(name.as_str()))
+        .collect()
 }
 
 #[cfg(test)]
@@ -104,7 +117,9 @@ mod tests {
     }
 
     fn full() -> ToolTableSpec {
-        ToolTableSpec::Full { spawn_limits: AgentLimits::default() }
+        ToolTableSpec::Full {
+            spawn_limits: AgentLimits::default(),
+        }
     }
 
     /// 装配出来的名字全过——这一档真有的那几件都关得掉。
@@ -123,8 +138,14 @@ mod tests {
         let switch = caps(json!({ "disable_builtin": ["srv:agent/spawnn"] }));
         let rejection = check_builtin_switch(&switch, full()).expect_err("拼错的名字该被拒");
         let message = rejection.to_string();
-        assert!(message.contains("srv:agent/spawnn"), "报文必须点名是哪一个：{message}");
-        assert!(message.contains("srv:agent/spawn"), "报文该附上这个部署实际有的那张名单：{message}");
+        assert!(
+            message.contains("srv:agent/spawnn"),
+            "报文必须点名是哪一个：{message}"
+        );
+        assert!(
+            message.contains("srv:agent/spawn"),
+            "报文该附上这个部署实际有的那张名单：{message}"
+        );
     }
 
     /// **天花板是「这个部署」的表，不是「所有部署的并集」**：`srv:agent/spawn` 是
@@ -135,7 +156,11 @@ mod tests {
     #[test]
     fn a_tool_another_tier_has_is_still_rejected_here() {
         let switch = caps(json!({ "disable_builtin": ["srv:agent/spawn"] }));
-        assert_eq!(check_builtin_switch(&switch, full()), Ok(()), "夹具前提：Full 这一档真有 spawn");
+        assert_eq!(
+            check_builtin_switch(&switch, full()),
+            Ok(()),
+            "夹具前提：Full 这一档真有 spawn"
+        );
         assert!(
             check_builtin_switch(&switch, ToolTableSpec::Builtin).is_err(),
             "Builtin 这一档没装配 spawn，关它就是关一个不存在的东西——静默放过等于让客户端以为关掉了"
@@ -149,14 +174,20 @@ mod tests {
             "tools": [ { "name": "web:crm/lookup" } ],
             "disable_builtin": ["web:crm/lookup"]
         }));
-        assert!(check_builtin_switch(&switch, full()).is_err(), "注入的工具不该能被这个开关关掉——它本来就该由宿主自己决定报不报");
+        assert!(
+            check_builtin_switch(&switch, full()).is_err(),
+            "注入的工具不该能被这个开关关掉——它本来就该由宿主自己决定报不报"
+        );
     }
 
     /// 不带这个字段、以及空数组：什么都不做（老调用方一个字都不用改）。
     #[test]
     fn no_switch_means_nothing_to_check_and_nothing_to_disable() {
         assert_eq!(check_builtin_switch(&caps(json!({})), full()), Ok(()));
-        assert_eq!(check_builtin_switch(&caps(json!({ "disable_builtin": [] })), full()), Ok(()));
+        assert_eq!(
+            check_builtin_switch(&caps(json!({ "disable_builtin": [] })), full()),
+            Ok(())
+        );
         assert!(disabled_builtins(None).is_empty());
         assert!(disabled_builtins(Some(&caps(json!({})))).is_empty());
     }
@@ -166,7 +197,10 @@ mod tests {
     #[test]
     fn the_switch_is_carried_over_as_is() {
         let switch = caps(json!({ "disable_builtin": ["srv:shell/exec", "srv:agent/spawn"] }));
-        let names: Vec<String> = disabled_builtins(Some(&switch)).iter().map(|n| n.to_string()).collect();
+        let names: Vec<String> = disabled_builtins(Some(&switch))
+            .iter()
+            .map(|n| n.to_string())
+            .collect();
         assert_eq!(names, vec!["srv:shell/exec", "srv:agent/spawn"]);
     }
 }

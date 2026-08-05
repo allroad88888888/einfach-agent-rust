@@ -10,7 +10,9 @@
 //! 只在 `ts` feature 后面存在（`Cargo.toml` 的 `required-features`），不开这个
 //! feature 编不出这个二进制。
 
-use agent_server::ts_protocol::{export_protocol_types, fixtures_path, generated_dir, write_fixtures};
+use agent_server::ts_protocol::{
+    export_protocol_types, fixtures_path, generated_dir, write_fixtures,
+};
 
 fn main() {
     let generated = generated_dir();

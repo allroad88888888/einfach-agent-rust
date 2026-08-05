@@ -35,7 +35,11 @@ fn an_injection_only_appends_and_the_shared_head_stays_byte_identical() {
 
         // ── 逐项字节相同：共有的那一段一项都不许动。
         for (n, (only, both)) in base_items.iter().zip(&full_items).enumerate() {
-            assert_same_bytes(&format!("{family}：共有那一段的第 {n} 项被注入挤动了"), only, both);
+            assert_same_bytes(
+                &format!("{family}：共有那一段的第 {n} 项被注入挤动了"),
+                only,
+                both,
+            );
         }
 
         // ── 比逐项更硬的一条：基线整段（去掉收尾的 `]`）必须是注入那一段的**字节前缀**。
@@ -51,13 +55,17 @@ fn an_injection_only_appends_and_the_shared_head_stays_byte_identical() {
         // ── 镜像那一侧：Tools 段只在尾部长了，长出来的字节数跟 wire 上完全对得上
         //（镜像自己短了/长了都说明它算的不是同一份东西）。
         assert_eq!(
-            u64::from(tools_segment(&full.prefix).bytes) - u64::from(tools_segment(&base.prefix).bytes),
+            u64::from(tools_segment(&full.prefix).bytes)
+                - u64::from(tools_segment(&base.prefix).bytes),
             (full_bytes.len() - base_bytes.len()) as u64,
             "{family}：前缀镜像 Tools 段的增量跟 wire 上的增量对不上"
         );
 
         // ── 表尾那一段自己按名字排序（客户端给的顺序进不来，HOST-CAPABILITIES §六）。
-        let tail: Vec<String> = full_items[base_items.len()..].iter().map(|item| declared_name(item)).collect();
+        let tail: Vec<String> = full_items[base_items.len()..]
+            .iter()
+            .map(|item| declared_name(item))
+            .collect();
         let mut sorted = tail.clone();
         sorted.sort();
         assert_eq!(tail, sorted, "{family}：注入的那一段没按名字排序");
@@ -68,5 +76,10 @@ fn an_injection_only_appends_and_the_shared_head_stays_byte_identical() {
 /// 用 provider 自己那把解码器还原，免得把转义规则在测试里抄一遍。
 fn declared_name(item: &[u8]) -> String {
     let parsed: Value = serde_json::from_slice(item).expect("每一项都是合法 JSON");
-    wire_name::from_wire(parsed["function"]["name"].as_str().expect("每一项都有 function.name")).to_string()
+    wire_name::from_wire(
+        parsed["function"]["name"]
+            .as_str()
+            .expect("每一项都有 function.name"),
+    )
+    .to_string()
 }

@@ -11,8 +11,8 @@ mod common;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{apply_prev, record_set, AtomFamily, AtomId, Entry, History, Store, UndoOutcome};
-use common::{num, TestValue as V};
+use agent_store::{AtomFamily, AtomId, Entry, History, Store, UndoOutcome, apply_prev, record_set};
+use common::{TestValue as V, num};
 
 #[derive(Debug, Clone, PartialEq)]
 struct Meta {
@@ -44,12 +44,12 @@ fn evict_two_of_three_primitives_then_undo_turn_fully_recovers() {
 
     // derived：三个 primitive 求和。用 create_derived_ctx（懒），不读就不建依赖边。
     let d = family.borrow_mut().get_or_create("d".to_string(), || {
-        store.create_derived_ctx(move |args| {
-            match (args.get(p1), args.get(p2), args.get(p3)) {
+        store.create_derived_ctx(
+            move |args| match (args.get(p1), args.get(p2), args.get(p3)) {
                 (V::Number(a), V::Number(b), V::Number(c)) => V::Number(a + b + c),
                 _ => num(0.0),
-            }
-        })
+            },
+        )
     });
 
     let mut history: History<String, V, Meta> = History::new();

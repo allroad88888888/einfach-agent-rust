@@ -97,16 +97,30 @@ mod tests {
             tool("web:crm/lookup", Reversibility::Pure),
             tool("desk:clipboard/write", Reversibility::Irreversible),
         ]);
-        assert_eq!(s.history_len(), before + 1, "声明是一条 journaled entry，不是一个不进日志的构造参数");
+        assert_eq!(
+            s.history_len(),
+            before + 1,
+            "声明是一条 journaled entry，不是一个不进日志的构造参数"
+        );
 
-        let names: Vec<String> = s.host_tools().iter().map(|(spec, _)| spec.name.to_string()).collect();
+        let names: Vec<String> = s
+            .host_tools()
+            .iter()
+            .map(|(spec, _)| spec.name.to_string())
+            .collect();
         assert_eq!(names, vec!["desk:clipboard/write", "web:crm/lookup"]);
         assert_eq!(s.host_tools()[1].1, Reversibility::Pure);
 
         // undo 到声明之前：工具表回到没有注入的状态（白拿的那一条）。
         let report = s.undo_step();
-        assert!(matches!(report, crate::command::UndoReport::Applied { .. }), "{report:?}");
-        assert!(s.host_tools().is_empty(), "undo 越过声明那一步之后，这个会话不该还认得那些工具");
+        assert!(
+            matches!(report, crate::command::UndoReport::Applied { .. }),
+            "{report:?}"
+        );
+        assert!(
+            s.host_tools().is_empty(),
+            "undo 越过声明那一步之后，这个会话不该还认得那些工具"
+        );
 
         // redo 追回来——跟别的 primitive 一视同仁。
         let _ = s.redo_step();

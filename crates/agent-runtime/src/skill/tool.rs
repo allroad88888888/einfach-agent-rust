@@ -77,7 +77,13 @@ pub(crate) fn intercept(
     epoch: Epoch,
 ) -> Dispatched {
     let request = ctx.tools.snapshot(tool, Arc::clone(input));
-    ctx.emit(agent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request });
+    ctx.emit(
+        agent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request,
+        },
+    );
 
     let activating = tool == SKILL_ACTIVATE;
     let outcome = run(session, ctx, agent, activating, input);
@@ -86,22 +92,38 @@ pub(crate) fn intercept(
             // 激活/停用是一条命令，落了一条 `Entry`——跟 spawn 一样立刻同步进持久化
             // 后端，否则进程在这之后崩溃，恢复出来的会话里激活集会对不上。
             persist::sync(ctx, session);
-            ctx.emit(agent, RunnerEvent::ToolExecuted {
-                call_id: call_id.clone(),
-                tool: Arc::from(tool),
-                output_len: message.len(),
-                is_error: false,
-            });
-            Dispatched::Event(Event::ToolResult { agent: agent.clone(), epoch, call_id, content: Arc::from(message) })
+            ctx.emit(
+                agent,
+                RunnerEvent::ToolExecuted {
+                    call_id: call_id.clone(),
+                    tool: Arc::from(tool),
+                    output_len: message.len(),
+                    is_error: false,
+                },
+            );
+            Dispatched::Event(Event::ToolResult {
+                agent: agent.clone(),
+                epoch,
+                call_id,
+                content: Arc::from(message),
+            })
         }
         Err(message) => {
-            ctx.emit(agent, RunnerEvent::ToolExecuted {
-                call_id: call_id.clone(),
-                tool: Arc::from(tool),
-                output_len: message.len(),
-                is_error: true,
-            });
-            Dispatched::Event(Event::ToolFailed { agent: agent.clone(), epoch, call_id, error: Arc::from(message) })
+            ctx.emit(
+                agent,
+                RunnerEvent::ToolExecuted {
+                    call_id: call_id.clone(),
+                    tool: Arc::from(tool),
+                    output_len: message.len(),
+                    is_error: true,
+                },
+            );
+            Dispatched::Event(Event::ToolFailed {
+                agent: agent.clone(),
+                epoch,
+                call_id,
+                error: Arc::from(message),
+            })
         }
     }
 }
@@ -123,7 +145,11 @@ fn run(
             let known = ctx.tools.skill_registry().known_ids().join("、");
             return Err(format!(
                 "激活失败：没有叫「{id}」的 skill。可用的是：{}。",
-                if known.is_empty() { "（当前没有装载任何 skill）".to_string() } else { known }
+                if known.is_empty() {
+                    "（当前没有装载任何 skill）".to_string()
+                } else {
+                    known
+                }
             ));
         }
         session
@@ -161,10 +187,16 @@ fn refusal(err: &SkillError) -> String {
         // 下面两条是宿主侧的异常（agent 不在树上/不活着），不是模型能收敛的——照样
         // 如实回给它，让这一轮有个结果而不是卡住。
         SkillError::NotInSession { agent } => {
-            format!("skill 工具失败：agent（{}）不在这个会话的 agent 树上。", agent.as_str())
+            format!(
+                "skill 工具失败：agent（{}）不在这个会话的 agent 树上。",
+                agent.as_str()
+            )
         }
         SkillError::NotLive { agent } => {
-            format!("skill 工具失败：agent（{}）已经不在活名单上了。", agent.as_str())
+            format!(
+                "skill 工具失败：agent（{}）已经不在活名单上了。",
+                agent.as_str()
+            )
         }
     }
 }

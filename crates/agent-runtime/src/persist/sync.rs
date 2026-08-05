@@ -128,7 +128,12 @@ mod tests {
             fs,
             ToolTable::builtin(),
             Vec::new(),
-            agent_core::SessionConfig { model: Arc::from("m"), temperature: None, max_tokens: None, context_window: None },
+            agent_core::SessionConfig {
+                model: Arc::from("m"),
+                temperature: None,
+                max_tokens: None,
+                context_window: None,
+            },
             store,
             Box::new(|_| {}),
         )
@@ -140,10 +145,17 @@ mod tests {
         let mut ctx = ctx();
         let mut session = Session::new(AgentId::root());
 
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("hi") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("hi"),
+        });
         sync(&mut ctx, &mut session);
 
-        let loaded = ctx.session_store.load().loaded().expect("写过东西不该是 None");
+        let loaded = ctx
+            .session_store
+            .load()
+            .loaded()
+            .expect("写过东西不该是 None");
         assert_eq!(loaded.entries.len(), 1);
         assert_eq!(loaded.cursor, 1);
         assert_eq!(ctx.persisted_seq, Some(0));
@@ -155,7 +167,10 @@ mod tests {
     fn undo_moves_the_cursor_without_a_new_entry_and_sync_still_forwards_it() {
         let mut ctx = ctx();
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("hi") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("hi"),
+        });
         sync(&mut ctx, &mut session);
 
         let _ = session.undo_turn();
@@ -174,16 +189,25 @@ mod tests {
     fn overwriting_a_redo_tail_does_not_resend_seqs_already_told_to_the_store() {
         let mut ctx = ctx();
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("first") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("first"),
+        });
         sync(&mut ctx, &mut session);
         let _ = session.undo_turn();
         sync(&mut ctx, &mut session);
 
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("second") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("second"),
+        });
         sync(&mut ctx, &mut session);
 
         let loaded = ctx.session_store.load().loaded().unwrap();
-        assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![1]);
+        assert_eq!(
+            loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![1]
+        );
         assert_eq!(loaded.cursor, 1);
     }
 }

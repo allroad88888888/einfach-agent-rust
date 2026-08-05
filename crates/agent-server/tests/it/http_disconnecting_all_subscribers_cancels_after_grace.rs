@@ -28,13 +28,16 @@ const GRACE: Duration = Duration::from_millis(200);
 const WAIT_FOR_CANCELLED: Duration = Duration::from_secs(3);
 
 fn config(c: ServerConfig) -> ServerConfig {
-    c.with_ring_capacity(5).with_cancel_grace(GRACE).with_sse_keep_alive(Duration::from_millis(100))
+    c.with_ring_capacity(5)
+        .with_cancel_grace(GRACE)
+        .with_sse_keep_alive(Duration::from_millis(100))
 }
 
 async fn start_with_slow_provider_timeout(endpoint: String) -> support::http_server::TestServer {
     let mut template = support::http_server::session_template(endpoint);
     template.provider_timeout = Some(PROVIDER_NEVER_TIMES_OUT);
-    support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, config).await
+    support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, config)
+        .await
 }
 
 async fn create_session(addr: std::net::SocketAddr) -> String {
@@ -48,7 +51,12 @@ async fn create_session(addr: std::net::SocketAddr) -> String {
 fn is_cancelled(data: &str) -> bool {
     matches!(
         serde_json::from_str::<Frame>(data),
-        Ok(Frame { event: SessionEvent::Notice(Notice::TurnStatusChanged { status: TurnStatus::Failed(Failure::Cancelled) }), .. })
+        Ok(Frame {
+            event: SessionEvent::Notice(Notice::TurnStatusChanged {
+                status: TurnStatus::Failed(Failure::Cancelled)
+            }),
+            ..
+        })
     )
 }
 
@@ -59,8 +67,14 @@ async fn disconnecting_the_only_subscriber_cancels_the_flying_turn_after_the_gra
     let server = start_with_slow_provider_timeout(upstream.endpoint()).await;
     let id = create_session(server.addr).await;
 
-    let (_, _, sse) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let (_, _, sse) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     drop(sse); // 唯一的订阅者断开——宽限计时器该从这一刻开始倒数。
@@ -77,7 +91,8 @@ async fn disconnecting_the_only_subscriber_cancels_the_flying_turn_after_the_gra
     // 这一次重连（带 `Last-Event-ID: 0` 拿到从头开始的完整补发）确认真的被
     // 取消了——顺带证明了 hub 在没有订阅者的这段时间里仍然继续录像
     // （ARCHITECTURE.md 的既有取消传播语义：不白烧 token）。
-    let (status, _, mut reconnected) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), Some(0));
+    let (status, _, mut reconnected) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), Some(0));
     assert_eq!(status, 200);
     let mut saw_cancelled = false;
     while let Some(frame) = reconnected.next_event(Duration::from_secs(3)) {
@@ -86,7 +101,10 @@ async fn disconnecting_the_only_subscriber_cancels_the_flying_turn_after_the_gra
             break;
         }
     }
-    assert!(saw_cancelled, "断开所有订阅、过了宽限期，在飞的轮次该被取消（不是等 provider 自然超时）");
+    assert!(
+        saw_cancelled,
+        "断开所有订阅、过了宽限期，在飞的轮次该被取消（不是等 provider 自然超时）"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -95,21 +113,33 @@ async fn reconnecting_within_the_grace_period_keeps_the_turn_alive() {
     let server = start_with_slow_provider_timeout(upstream.endpoint()).await;
     let id = create_session(server.addr).await;
 
-    let (_, _, first) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"hi\"}"));
+    let (_, _, first) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"hi\"}"),
+    );
     assert_eq!(input.status, 202);
 
     drop(first);
     tokio::time::sleep(Duration::from_millis(30)).await; // 宽限期是 200ms，这里远没到，重连该来得及打断倒计时。
-    let (status, _, mut second) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
-    assert_eq!(status, 200, "宽限期内重连该成功接上（不是被拒绝或者一个已经死掉的 session）");
+    let (status, _, mut second) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    assert_eq!(
+        status, 200,
+        "宽限期内重连该成功接上（不是被拒绝或者一个已经死掉的 session）"
+    );
 
     // 等一段远超原本宽限期截止时间、又远小于 provider 超时的时长，确认没有被
     // 取消——重连已经打断了倒计时。
     let mut saw_cancelled = false;
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     while std::time::Instant::now() < deadline {
-        let Some(frame) = second.next_event(Duration::from_millis(300)) else { continue };
+        let Some(frame) = second.next_event(Duration::from_millis(300)) else {
+            continue;
+        };
         if is_cancelled(&frame.data) {
             saw_cancelled = true;
             break;

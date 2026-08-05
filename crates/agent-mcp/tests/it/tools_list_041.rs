@@ -22,7 +22,10 @@ fn returns_all_tools_in_original_order() {
     assert_eq!(tools[2].name, "printEnv");
     assert_eq!(tools[3].name, "sendEmail");
 
-    assert_eq!(tools[0].description.as_deref(), Some("Echoes back the input"));
+    assert_eq!(
+        tools[0].description.as_deref(),
+        Some("Echoes back the input")
+    );
     assert_eq!(
         tools[0].annotations.as_ref().and_then(|a| a.read_only_hint),
         Some(true)

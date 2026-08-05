@@ -36,7 +36,11 @@ pub fn decode(body: &Value, cached_paths: &[&[&str]]) -> Decoded {
         usage: usage::find(body).map_or(
             // 响应里没有 usage：`cached: None` = 这轮没人报，跟 `Some(0)`
             // （报了、确实没命中）不是一回事。
-            TokenUsage { prompt: 0, completion: 0, cached: None },
+            TokenUsage {
+                prompt: 0,
+                completion: 0,
+                cached: None,
+            },
             |u| usage::parse(u, cached_paths),
         ),
     }
@@ -96,7 +100,14 @@ mod tests {
         });
         let d = decode(&body, DEEPSEEK);
         assert_eq!(d.stop, StopReason::ToolUse);
-        assert_eq!(d.usage, TokenUsage { prompt: 100, completion: 20, cached: Some(64) });
+        assert_eq!(
+            d.usage,
+            TokenUsage {
+                prompt: 100,
+                completion: 20,
+                cached: Some(64)
+            }
+        );
         assert_eq!(d.blocks.len(), 4, "思考 + 文本 + 两次调用：{:?}", d.blocks);
         assert!(matches!(d.blocks[0], ContentBlock::Thinking(_)));
         assert!(matches!(d.blocks[1], ContentBlock::Text(_)));
@@ -135,10 +146,23 @@ mod tests {
             DEEPSEEK,
         );
         assert!(d.blocks.is_empty(), "{:?}", d.blocks);
-        assert_eq!(d.stop, StopReason::Other(Arc::from("insufficient_system_resource")));
-        assert_eq!(d.usage, TokenUsage { prompt: 0, completion: 0, cached: None });
+        assert_eq!(
+            d.stop,
+            StopReason::Other(Arc::from("insufficient_system_resource"))
+        );
+        assert_eq!(
+            d.usage,
+            TokenUsage {
+                prompt: 0,
+                completion: 0,
+                cached: None
+            }
+        );
 
-        let d = decode(&json!({"choices": [{"message": {"content": "x"}}]}), DEEPSEEK);
+        let d = decode(
+            &json!({"choices": [{"message": {"content": "x"}}]}),
+            DEEPSEEK,
+        );
         assert_eq!(d.stop, StopReason::Other(Arc::from("missing")));
 
         // 空响应体也不许 panic，也不许猜成正常结束。

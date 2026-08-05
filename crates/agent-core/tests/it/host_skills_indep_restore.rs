@@ -59,16 +59,24 @@ fn host_skills_value() -> AgentValue {
 
 fn restore_with(snapshot: Vec<(AtomKey, AgentValue)>) -> Session {
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| unknown.push(k.clone()))
-        .expect("合法快照该能恢复");
-    assert!(unknown.is_empty(), "HostSkills 是这一版认识的槽位，不该报进 on_unknown_key：{unknown:?}");
+    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+        unknown.push(k.clone())
+    })
+    .expect("合法快照该能恢复");
+    assert!(
+        unknown.is_empty(),
+        "HostSkills 是这一版认识的槽位，不该报进 on_unknown_key：{unknown:?}"
+    );
     session
 }
 
 /// 直接注入快照：四个字段一个不差（含自带工具的 schema 那段自由 JSON）。
 #[test]
 fn a_snapshot_with_host_skills_restores_every_field_of_every_declaration() {
-    let session = restore_with(vec![(AtomKey::Agent(root(), Slot::HostSkills), host_skills_value())]);
+    let session = restore_with(vec![(
+        AtomKey::Agent(root(), Slot::HostSkills),
+        host_skills_value(),
+    )]);
     let restored = session.host_skills();
 
     assert_eq!(restored.len(), 2);
@@ -76,12 +84,24 @@ fn a_snapshot_with_host_skills_restores_every_field_of_every_declaration() {
     assert_eq!(restored[0].id.as_str(), "crm-flow");
     assert_eq!(restored[1].id.as_str(), "mail-flow");
 
-    assert_eq!(&*restored[0].description, "处理客户工单的标准流程", "描述丢了 = 恢复出来的索引行变一行空的");
-    assert_eq!(&*restored[0].body, "先查档案再关单。", "正文丢了 = 激活之后模型什么都读不到，且不报错");
+    assert_eq!(
+        &*restored[0].description, "处理客户工单的标准流程",
+        "描述丢了 = 恢复出来的索引行变一行空的"
+    );
+    assert_eq!(
+        &*restored[0].body, "先查档案再关单。",
+        "正文丢了 = 激活之后模型什么都读不到，且不报错"
+    );
     assert_eq!(restored[0].tools.len(), 1);
     assert_eq!(&*restored[0].tools[0].name, "web:crm/close");
-    assert_eq!(restored[0].tools[0].schema["properties"]["ticket"]["type"], serde_json::json!("string"));
-    assert!(restored[1].tools.is_empty(), "不带工具的 skill 恢复出来也不该凭空长出工具");
+    assert_eq!(
+        restored[0].tools[0].schema["properties"]["ticket"]["type"],
+        serde_json::json!("string")
+    );
+    assert!(
+        restored[1].tools.is_empty(),
+        "不带工具的 skill 恢复出来也不该凭空长出工具"
+    );
 }
 
 /// 红线 3 + 红线 11：整份快照 serde 往返，而且**两次序列化逐字节相同**。
@@ -91,14 +111,21 @@ fn a_snapshot_with_host_skills_restores_every_field_of_every_declaration() {
 /// 会话第一轮就 system 段前缀全断，功能一切正常，只是每一轮都全价。
 #[test]
 fn the_declaration_survives_a_serde_roundtrip_byte_for_byte() {
-    let snapshot = vec![(AtomKey::Agent(root(), Slot::HostSkills), host_skills_value())];
+    let snapshot = vec![(
+        AtomKey::Agent(root(), Slot::HostSkills),
+        host_skills_value(),
+    )];
 
     let once = serde_json::to_string(&snapshot).expect("快照该可序列化");
     let back: Vec<(AtomKey, AgentValue)> = serde_json::from_str(&once).expect("快照该可反序列化");
     let twice = serde_json::to_string(&back).expect("往返之后仍该可序列化");
     assert_eq!(once, twice, "同一份声明两次序列化必须逐字节相同（红线 11）");
 
-    assert_eq!(restore_with(back).host_skills(), declaration_sorted(), "往返之后每个字段都该一模一样");
+    assert_eq!(
+        restore_with(back).host_skills(),
+        declaration_sorted(),
+        "往返之后每个字段都该一模一样"
+    );
 }
 
 /// 日志游标停在声明**之前** → 恢复出来就没有这些 skill（undo 那一条在核心层的落点）。
@@ -115,12 +142,28 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
     let len = log.len() as u64;
 
     // 正对照：游标在声明之后 → 两个 skill 都在。
-    let after = Session::restore(root(), None, log.clone(), source.cursor(), len, 100, &mut |_| {}).expect("恢复该成功");
-    assert_eq!(after.host_skills().len(), 2, "游标在声明之后，两个 skill 都该回来");
+    let after = Session::restore(
+        root(),
+        None,
+        log.clone(),
+        source.cursor(),
+        len,
+        100,
+        &mut |_| {},
+    )
+    .expect("恢复该成功");
+    assert_eq!(
+        after.host_skills().len(),
+        2,
+        "游标在声明之后，两个 skill 都该回来"
+    );
 
     // 游标在声明之前 → 一个都没有。
     let before = Session::restore(root(), None, log, 0, len, 100, &mut |_| {}).expect("恢复该成功");
-    assert!(before.host_skills().is_empty(), "游标停在声明之前，这个会话不该认得任何注入的 skill");
+    assert!(
+        before.host_skills().is_empty(),
+        "游标停在声明之前，这个会话不该认得任何注入的 skill"
+    );
 }
 
 /// **skill 这一路特有的那格**：激活集（`SkillsActive`）和声明（`HostSkills`）必须
@@ -129,13 +172,22 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
 fn the_active_set_and_the_declaration_come_back_together() {
     let mut source = Session::new(root());
     source.declare_host_skills(declaration());
-    source.activate_skill(&root(), SkillId::new("crm-flow")).expect("激活一个声明过的 skill");
+    source
+        .activate_skill(&root(), SkillId::new("crm-flow"))
+        .expect("激活一个声明过的 skill");
     let snapshot = source.primitives();
 
     let session = restore_with(snapshot);
-    assert_eq!(session.active_skills(), vec![SkillId::new("crm-flow")], "激活集该回来（039 既有机制）");
+    assert_eq!(
+        session.active_skills(),
+        vec![SkillId::new("crm-flow")],
+        "激活集该回来（039 既有机制）"
+    );
     assert!(
-        session.host_skills().iter().any(|s| s.id.as_str() == "crm-flow"),
+        session
+            .host_skills()
+            .iter()
+            .any(|s| s.id.as_str() == "crm-flow"),
         "激活集里那个 id 必须在声明里查得到——查不到就是悬空引用：状态说它激活着、正文却取不到，而模型的历史里写着它读过"
     );
 }

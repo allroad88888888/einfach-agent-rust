@@ -21,7 +21,11 @@ const TASK_DISPLAY_MAX_CHARS: usize = 60;
 /// 渲染整棵树成多行文本（行间用 `\n` 分隔，不带结尾换行——调用方 `println!` 自己
 /// 补一个）。空树（理论上不会发生：`live_agents` 至少有 root）渲成空字符串。
 pub fn render_agent_tree(tree: &AgentTree) -> String {
-    tree.nodes.iter().map(render_line).collect::<Vec<_>>().join("\n")
+    tree.nodes
+        .iter()
+        .map(render_line)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn render_line(node: &AgentNode) -> String {
@@ -87,14 +91,24 @@ mod tests {
     fn node(id: AgentId, task: Option<&str>, activity: AgentActivity) -> AgentNode {
         let parent = id.parent();
         let depth = id.depth() as u32;
-        AgentNode { id, parent, depth, task: task.map(str::to_string), activity }
+        AgentNode {
+            id,
+            parent,
+            depth,
+            task: task.map(str::to_string),
+            activity,
+        }
     }
 
     /// 只有 root 一格：一行，短 id 就是 `root`，没有缩进。
     #[test]
     fn root_only_renders_a_single_unindented_line() {
         let tree = AgentTree {
-            nodes: vec![node(AgentId::root(), Some("帮我读一下这个文件"), AgentActivity::Idle)],
+            nodes: vec![node(
+                AgentId::root(),
+                Some("帮我读一下这个文件"),
+                AgentActivity::Idle,
+            )],
         };
         assert_eq!(render_agent_tree(&tree), "root [Idle] · 帮我读一下这个文件");
     }
@@ -109,7 +123,11 @@ mod tests {
             nodes: vec![
                 node(root, Some("总任务"), AgentActivity::Thinking),
                 node(c1, Some("子任务一"), AgentActivity::Idle),
-                node(c2, Some("子任务二"), AgentActivity::Done { truncated: false }),
+                node(
+                    c2,
+                    Some("子任务二"),
+                    AgentActivity::Done { truncated: false },
+                ),
             ],
         };
         let rendered = render_agent_tree(&tree);
@@ -144,9 +162,14 @@ mod tests {
     fn activity_variants_render_as_expected() {
         assert_eq!(describe_activity(&AgentActivity::Idle), "Idle");
         assert_eq!(describe_activity(&AgentActivity::Thinking), "Thinking");
-        assert_eq!(describe_activity(&AgentActivity::Working { tools: vec![] }), "Working");
         assert_eq!(
-            describe_activity(&AgentActivity::Working { tools: vec!["srv:shell/exec".to_string()] }),
+            describe_activity(&AgentActivity::Working { tools: vec![] }),
+            "Working"
+        );
+        assert_eq!(
+            describe_activity(&AgentActivity::Working {
+                tools: vec!["srv:shell/exec".to_string()]
+            }),
             "Working(srv:shell/exec)"
         );
         assert_eq!(
@@ -155,10 +178,18 @@ mod tests {
             }),
             "Working(a, b)"
         );
-        assert_eq!(describe_activity(&AgentActivity::Done { truncated: false }), "Done");
-        assert_eq!(describe_activity(&AgentActivity::Done { truncated: true }), "Done(truncated)");
         assert_eq!(
-            describe_activity(&AgentActivity::Failed { reason: "cancelled".to_string() }),
+            describe_activity(&AgentActivity::Done { truncated: false }),
+            "Done"
+        );
+        assert_eq!(
+            describe_activity(&AgentActivity::Done { truncated: true }),
+            "Done(truncated)"
+        );
+        assert_eq!(
+            describe_activity(&AgentActivity::Failed {
+                reason: "cancelled".to_string()
+            }),
             "Failed(cancelled)"
         );
     }
@@ -185,6 +216,9 @@ mod tests {
     /// 多行 task（首条 user 消息本身带换行）折叠成一行，不撑爆树的排版。
     #[test]
     fn multiline_task_collapses_into_a_single_line() {
-        assert_eq!(describe_task(Some("第一行\n第二行\n\n第三行")), "第一行 第二行 第三行");
+        assert_eq!(
+            describe_task(Some("第一行\n第二行\n\n第三行")),
+            "第一行 第二行 第三行"
+        );
     }
 }

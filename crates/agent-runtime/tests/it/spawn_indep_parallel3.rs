@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name};
+use spawn_indep_support::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+};
 
 const SLOW: Duration = Duration::from_millis(350);
 const FAST: Duration = Duration::from_millis(250);
@@ -36,10 +38,30 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
         // 最具体的先判：hop2 的请求体里带着子的 call_id（tool_call_id 回填）
         // 和三个 task 文本，hop1 都不带；顺序反了 hop1 会被下面更宽的路由抢先
         // 命中，hop2 也会被 "TASKA" 那条路由抢先命中（它一样出现在 hop2 里）。
-        Route { needle: "call_a", delay: Duration::ZERO, status: 200, lines: sse_text("all three are back, summary done") },
-        Route { needle: "TASKA", delay: SLOW, status: 200, lines: sse_text("answer A") },
-        Route { needle: "TASKB", delay: FAST, status: 200, lines: sse_text("answer B") },
-        Route { needle: "TASKC", delay: FAST, status: 200, lines: sse_text("answer C") },
+        Route {
+            needle: "call_a",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("all three are back, summary done"),
+        },
+        Route {
+            needle: "TASKA",
+            delay: SLOW,
+            status: 200,
+            lines: sse_text("answer A"),
+        },
+        Route {
+            needle: "TASKB",
+            delay: FAST,
+            status: 200,
+            lines: sse_text("answer B"),
+        },
+        Route {
+            needle: "TASKC",
+            delay: FAST,
+            status: 200,
+            lines: sse_text("answer C"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
@@ -57,7 +79,11 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "kickoff please split into three parallel workers");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff please split into three parallel workers",
+    );
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
@@ -90,8 +116,15 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
     assert!(b.end < a.end, "B 该比压尾的 A 先完工");
     assert!(c.end < a.end, "C 该比压尾的 A 先完工");
 
-    let hop2_call = server.call("call_a").expect("root's second hop must have been called");
-    assert!(hop2_call.start > a.end, "父该等到最慢的 A 完工才发第二跳: hop2.start={:?} a.end={:?}", hop2_call.start, a.end);
+    let hop2_call = server
+        .call("call_a")
+        .expect("root's second hop must have been called");
+    assert!(
+        hop2_call.start > a.end,
+        "父该等到最慢的 A 完工才发第二跳: hop2.start={:?} a.end={:?}",
+        hop2_call.start,
+        a.end
+    );
 
     // --- 消息树完整 ---
     let messages = session.messages();
@@ -110,15 +143,26 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
         .iter()
         .flat_map(|m| m.blocks.iter())
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { content, is_error, .. } => Some((content.clone(), *is_error)),
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => Some((content.clone(), *is_error)),
             _ => None,
         })
         .collect();
-    assert_eq!(tool_results.len(), 3, "三个子都该回一条 tool_result: {messages:#?}");
-    assert!(tool_results.iter().all(|(_, is_error)| !is_error), "三个子都成功，不该有 is_error");
+    assert_eq!(
+        tool_results.len(),
+        3,
+        "三个子都该回一条 tool_result: {messages:#?}"
+    );
+    assert!(
+        tool_results.iter().all(|(_, is_error)| !is_error),
+        "三个子都成功，不该有 is_error"
+    );
     for expect in ["answer A", "answer B", "answer C"] {
         assert!(
-            tool_results.iter().any(|(content, _)| content.contains(expect)),
+            tool_results
+                .iter()
+                .any(|(content, _)| content.contains(expect)),
             "该找到子的回答 {expect:?}: {tool_results:#?}"
         );
     }
@@ -131,9 +175,16 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
             _ => None,
         })
         .collect();
-    assert!(final_text.iter().any(|t| t.contains("summary done")), "父的收尾文本该在场: {final_text:#?}");
+    assert!(
+        final_text.iter().any(|t| t.contains("summary done")),
+        "父的收尾文本该在场: {final_text:#?}"
+    );
 
-    assert_eq!(session.live_agents().len(), 4, "root + 三个子都该在活名单上");
+    assert_eq!(
+        session.live_agents().len(),
+        4,
+        "root + 三个子都该在活名单上"
+    );
 
     // --- turn_id 全树一致：唯一可从公开 API 拿到的强证据是 undo_turn 一次
     // 性吞光整棵树——如果子的 entry 带着别的 turn_id，游标会在 turn 边界停下，
@@ -142,11 +193,24 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
     let report = session.undo_turn();
     match report {
         UndoReport::Applied { entries, turn_id } => {
-            assert_eq!(turn_id, 1, "只跑过一轮，没调过 begin_turn，turn_id 该恒为 1");
-            assert_eq!(entries, history_len_before, "一次 undo_turn 该吞掉整棵树在这一轮里留下的全部 entry: {report:?}");
+            assert_eq!(
+                turn_id, 1,
+                "只跑过一轮，没调过 begin_turn，turn_id 该恒为 1"
+            );
+            assert_eq!(
+                entries, history_len_before,
+                "一次 undo_turn 该吞掉整棵树在这一轮里留下的全部 entry: {report:?}"
+            );
         }
         other => panic!("期望 Applied，拿到 {other:?}"),
     }
-    assert_eq!(session.live_agents(), vec![AgentId::root()], "undo 之后三个子都该从活名单上消失");
-    assert!(session.messages().is_empty(), "undo 之后 root 的消息也该清空");
+    assert_eq!(
+        session.live_agents(),
+        vec![AgentId::root()],
+        "undo 之后三个子都该从活名单上消失"
+    );
+    assert!(
+        session.messages().is_empty(),
+        "undo 之后 root 的消息也该清空"
+    );
 }

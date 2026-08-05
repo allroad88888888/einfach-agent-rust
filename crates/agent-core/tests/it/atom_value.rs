@@ -8,8 +8,8 @@ use std::sync::Arc;
 use imbl::Vector;
 
 use agent_core::engine::state::{ToolSlot, TurnStatus};
-use agent_core::seam::PrefixImage;
 use agent_core::ids::{MessageId, ToolCallId};
+use agent_core::seam::PrefixImage;
 use agent_core::value::atom_value::AgentValue;
 use agent_core::value::message::{ContentBlock, Message, Role};
 
@@ -110,7 +110,10 @@ fn different_variants_are_never_equal() {
         AgentValue::Json(Arc::new(serde_json::Value::Null)),
         AgentValue::Messages(Vector::new()),
         AgentValue::Status(TurnStatus::Idle),
-        AgentValue::Prefix(PrefixImage { segments: Vec::new(), prompt_tokens: None }),
+        AgentValue::Prefix(PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        }),
         AgentValue::Slots(Arc::new(Vec::new())),
     ];
     assert_eq!(all.len(), 10, "变体集合是封闭的：十个，一个不多");
@@ -136,7 +139,10 @@ fn every_variant_survives_a_serde_roundtrip() {
         AgentValue::Json(Arc::new(serde_json::json!({"path": "/tmp/a"}))),
         AgentValue::Messages(history),
         AgentValue::Status(TurnStatus::Done { truncated: true }),
-        AgentValue::Prefix(PrefixImage { segments: Vec::new(), prompt_tokens: Some(42) }),
+        AgentValue::Prefix(PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: Some(42),
+        }),
         AgentValue::Slots(slots(2)),
     ];
     let s = serde_json::to_string(&all).unwrap();
@@ -155,10 +161,20 @@ fn accessors_answer_none_on_a_variant_mismatch() {
     assert_eq!(AgentValue::U64(7).as_u64(), Some(7));
     assert_eq!(AgentValue::Bool(true).as_u64(), None);
     assert_eq!(AgentValue::Bool(true).as_bool(), Some(true));
-    assert_eq!(AgentValue::Text(Arc::from("x")).as_text().map(|t| &**t), Some("x"));
-    assert!(AgentValue::Json(Arc::new(serde_json::json!(1))).as_json().is_some());
+    assert_eq!(
+        AgentValue::Text(Arc::from("x")).as_text().map(|t| &**t),
+        Some("x")
+    );
+    assert!(
+        AgentValue::Json(Arc::new(serde_json::json!(1)))
+            .as_json()
+            .is_some()
+    );
     assert!(AgentValue::Messages(Vector::new()).as_messages().is_some());
-    assert_eq!(AgentValue::Status(TurnStatus::Idle).as_status(), Some(&TurnStatus::Idle));
+    assert_eq!(
+        AgentValue::Status(TurnStatus::Idle).as_status(),
+        Some(&TurnStatus::Idle)
+    );
     assert!(AgentValue::Slots(Arc::new(Vec::new())).as_slots().is_some());
     assert!(AgentValue::Null.as_prefix().is_none());
     assert!(AgentValue::Pending.is_pending());

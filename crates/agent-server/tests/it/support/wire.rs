@@ -5,5 +5,7 @@
 /// 一段纯文本回复：一帧 `content` + `finish_reason: stop`，随后 `[DONE]`。
 pub fn text_reply(text: &str) -> String {
     let content = serde_json::to_string(text).expect("json string");
-    format!("data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n")
+    format!(
+        "data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n"
+    )
 }

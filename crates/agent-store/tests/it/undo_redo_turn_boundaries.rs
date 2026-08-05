@@ -5,7 +5,7 @@
 mod common;
 use common::*;
 
-use agent_store::{record_set, AtomId, History, Store, UndoOutcome};
+use agent_store::{AtomId, History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M {
@@ -22,7 +22,11 @@ fn no_barrier(_: &M) -> bool {
 
 /// 调用方闭包：undo 方向——entries 已倒序，条目内 changes 也倒序，写 prev。
 /// 返回本次实际弹出的 entry 数，供断言用。
-fn apply_undo(store: &Store<TestValue>, atom: AtomId, outcome: UndoOutcome<String, TestValue, M>) -> usize {
+fn apply_undo(
+    store: &Store<TestValue>,
+    atom: AtomId,
+    outcome: UndoOutcome<String, TestValue, M>,
+) -> usize {
     let entries = match outcome {
         UndoOutcome::Applied(e) => e,
         UndoOutcome::Blocked { .. } => panic!("expected Applied, got Blocked"),

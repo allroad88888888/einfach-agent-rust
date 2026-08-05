@@ -46,7 +46,9 @@ fn drain_request(stream: &mut TcpStream) {
 
 fn write_sse_headers(stream: &mut TcpStream) {
     stream
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n")
+        .write_all(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+        )
         .unwrap();
     stream.flush().unwrap();
 }
@@ -78,7 +80,9 @@ pub fn spawn_scripted_server(responses: Vec<ScriptedResponse>) -> u16 {
     let port = listener.local_addr().unwrap().port();
     std::thread::spawn(move || {
         for resp in responses {
-            let Ok((mut stream, _)) = listener.accept() else { return };
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
             std::thread::spawn(move || {
                 drain_request(&mut stream);
                 write_sse_headers(&mut stream);
@@ -115,7 +119,10 @@ pub fn build_ctx(port: u16, root: &std::path::Path) -> RunnerCtx {
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        agent_transport::Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        agent_transport::Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     let session_config = SessionConfig {
@@ -145,7 +152,10 @@ pub fn build_ctx_with_shell(port: u16, root: &std::path::Path) -> RunnerCtx {
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        agent_transport::Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        agent_transport::Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     let session_config = SessionConfig {

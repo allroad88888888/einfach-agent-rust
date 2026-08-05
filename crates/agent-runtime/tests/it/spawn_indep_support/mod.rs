@@ -40,7 +40,13 @@ pub use routed::{Route, RoutedServer};
 /// 独立测试脚本 SSE 帧要自己拼工具名，这个映射是编造响应的必需品。
 pub fn wire_tool_name(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c.to_string() } else { format!("_{:02X}", c as u32) })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c.to_string()
+            } else {
+                format!("_{:02X}", c as u32)
+            }
+        })
         .collect()
 }
 
@@ -60,11 +66,18 @@ pub fn temp_dir(name: &str) -> PathBuf {
 /// 装一个指向本地假服务器的 `RunnerCtx`，事件回调带 agent 归属
 /// （`with_agent_events`，029 的多 agent 形状）。provider 用 DeepSeek——
 /// 跟实现方同一家，三家里已经有録制帧验证过 wire 形状的那家。
-pub fn build_ctx(port: u16, root: &std::path::Path, tools: ToolTable) -> (RunnerCtx, Rc<RefCell<Vec<AgentEvent>>>) {
+pub fn build_ctx(
+    port: u16,
+    root: &std::path::Path,
+    tools: ToolTable,
+) -> (RunnerCtx, Rc<RefCell<Vec<AgentEvent>>>) {
     let client = Client::with_config(
         Duration::from_secs(5),
         Duration::from_millis(50),
-        Backoff { base: Duration::from_millis(10), max_attempts: 1 },
+        Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 1,
+        },
     );
     let fs = ToolExecutor::new(root).unwrap();
     let session_config = SessionConfig {
@@ -119,7 +132,11 @@ pub fn sse_tool_call(call_id: &str, wire_tool: &str, input_json: &str) -> Vec<St
         "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "tool_calls"}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 10}
     });
-    vec![format!("data: {chunk1}"), format!("data: {chunk2}"), "data: [DONE]".to_string()]
+    vec![
+        format!("data: {chunk1}"),
+        format!("data: {chunk2}"),
+        "data: [DONE]".to_string(),
+    ]
 }
 
 /// 两个并行 `tool_calls`（`index` 0/1）在同一帧里一次给全，收尾帧
@@ -151,7 +168,11 @@ pub fn sse_tool_calls(calls: &[(&str, &str, &str)]) -> Vec<String> {
         "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "tool_calls"}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 10}
     });
-    vec![format!("data: {chunk1}"), format!("data: {chunk2}"), "data: [DONE]".to_string()]
+    vec![
+        format!("data: {chunk1}"),
+        format!("data: {chunk2}"),
+        "data: [DONE]".to_string(),
+    ]
 }
 
 /// 一次 SSE 帧：纯文本收尾（`StopReason::EndTurn`）。
@@ -163,7 +184,11 @@ pub fn sse_text(text: &str) -> Vec<String> {
         "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "stop"}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 10}
     });
-    vec![format!("data: {chunk1}"), format!("data: {chunk2}"), "data: [DONE]".to_string()]
+    vec![
+        format!("data: {chunk1}"),
+        format!("data: {chunk2}"),
+        "data: [DONE]".to_string(),
+    ]
 }
 
 #[cfg(test)]
@@ -187,7 +212,9 @@ mod tests {
         assert_eq!(lines.len(), 3);
         let first = lines[0].strip_prefix("data: ").unwrap();
         let v: serde_json::Value = serde_json::from_str(first).unwrap();
-        let args = v["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"].as_str().unwrap();
+        let args = v["choices"][0]["delta"]["tool_calls"][0]["function"]["arguments"]
+            .as_str()
+            .unwrap();
         assert_eq!(args, r#"{"task":"do it"}"#);
         assert_eq!(lines[2], "data: [DONE]");
     }
@@ -197,6 +224,9 @@ mod tests {
         let lines = sse_text("hello \"world\"");
         let first = lines[0].strip_prefix("data: ").unwrap();
         let v: serde_json::Value = serde_json::from_str(first).unwrap();
-        assert_eq!(v["choices"][0]["delta"]["content"].as_str().unwrap(), "hello \"world\"");
+        assert_eq!(
+            v["choices"][0]["delta"]["content"].as_str().unwrap(),
+            "hello \"world\""
+        );
     }
 }

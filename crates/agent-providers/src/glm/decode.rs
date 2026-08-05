@@ -26,7 +26,14 @@ mod tests {
             "usage": {"prompt_tokens": 460, "completion_tokens": 3,
                       "prompt_tokens_details": {"cached_tokens": 0}}
         });
-        assert_eq!(decode(&body).usage, TokenUsage { prompt: 460, completion: 3, cached: Some(0) });
+        assert_eq!(
+            decode(&body).usage,
+            TokenUsage {
+                prompt: 460,
+                completion: 3,
+                cached: Some(0)
+            }
+        );
     }
 
     #[test]

@@ -16,16 +16,23 @@ mod support;
 
 use std::sync::Arc;
 
-use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport};
-use support::user_input_for;
+use agent_core::{
+    AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
+};
 use support::user_input_event;
+use support::user_input_for;
 
 fn subtree_of(s: &Session, agent: &AgentId) -> Vec<(AtomKey, AgentValue)> {
-    s.primitives().into_iter().filter(|(k, _)| k.agent() == agent).collect()
+    s.primitives()
+        .into_iter()
+        .filter(|(k, _)| k.agent() == agent)
+        .collect()
 }
 
 fn cfg() -> ChildConfig {
-    ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }
+    ChildConfig {
+        tools_allowed: vec![Arc::from("srv:fs/read")],
+    }
 }
 
 /// 一轮里：root 说话 → spawn 一个子 → 子干活。`undo_turn` 一次全退。
@@ -39,7 +46,13 @@ fn one_undo_turn_takes_the_whole_subtree_with_it() {
     let _ = s.step(user_input_for(&child, "子任务：读文件"));
 
     assert!(s.is_live(&child));
-    assert_eq!(s.read_descendant(&root, &child, Slot::Status).unwrap().as_status().unwrap(), &TurnStatus::Thinking);
+    assert_eq!(
+        s.read_descendant(&root, &child, Slot::Status)
+            .unwrap()
+            .as_status()
+            .unwrap(),
+        &TurnStatus::Thinking
+    );
     let live = subtree_of(&s, &child);
 
     // 三条 entry 全在同一个 root turn 里（决策 5：子 agent 继承 turn_id）。
@@ -127,7 +140,11 @@ fn undoing_a_despawn_rebuilds_the_subtree_with_its_live_values() {
 
     s.begin_turn(); // 让 despawn 落在下一轮，undo_turn 只退它
     let report = s.despawn_child(&child).unwrap();
-    assert_eq!(report.agents, vec![grandchild.clone(), child.clone()], "自叶向根");
+    assert_eq!(
+        report.agents,
+        vec![grandchild.clone(), child.clone()],
+        "自叶向根"
+    );
 
     // 逐出真的发生了：每个 agent 只剩一个墓碑槽位。
     assert_eq!(subtree_of(&s, &child).len(), 1);
@@ -140,7 +157,10 @@ fn undoing_a_despawn_rebuilds_the_subtree_with_its_live_values() {
     assert_eq!(subtree_of(&s, &grandchild), grand_live, "孙的槽位逐值回来");
     assert!(s.is_live(&child) && s.is_live(&grandchild));
     assert_eq!(
-        s.read_descendant(&root, &child, Slot::Status).unwrap().as_status().unwrap(),
+        s.read_descendant(&root, &child, Slot::Status)
+            .unwrap()
+            .as_status()
+            .unwrap(),
         &TurnStatus::Thinking,
         "重建出来的 atom 接回了图，读得到活值"
     );
@@ -159,10 +179,17 @@ fn a_rebuilt_child_keeps_working() {
     let _ = s.despawn_child(&child).unwrap();
     let _ = s.undo_turn();
 
-    let effects = s.step(support::provider_done_end_turn_for(&child, s.epoch(), "干完了"));
+    let effects = s.step(support::provider_done_end_turn_for(
+        &child,
+        s.epoch(),
+        "干完了",
+    ));
     assert!(!effects.is_empty());
     assert_eq!(
-        s.read_descendant(&root, &child, Slot::Status).unwrap().as_status().unwrap(),
+        s.read_descendant(&root, &child, Slot::Status)
+            .unwrap()
+            .as_status()
+            .unwrap(),
         &TurnStatus::Done { truncated: false }
     );
 }

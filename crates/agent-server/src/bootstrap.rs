@@ -102,7 +102,9 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
     let provider_cfg = config::default_provider(&root).map_err(BootstrapError::Config)?;
     let provider_name = root.default.provider.clone();
     let provider = resolve_provider(&provider_name).map_err(BootstrapError::UnknownProvider)?;
-    let api_key = provider_cfg.resolve_key().ok_or(BootstrapError::MissingApiKey)?;
+    let api_key = provider_cfg
+        .resolve_key()
+        .ok_or(BootstrapError::MissingApiKey)?;
 
     Ok(Bootstrapped {
         template: SessionTemplate {

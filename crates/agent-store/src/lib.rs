@@ -16,21 +16,18 @@
 //!   （`Memory`）。真正落盘的 `Jsonl` 做 IO，红线 7 不许它进这个 crate，住在
 //!   `agent-runtime`。
 
-pub mod ids;
-pub mod store;
 pub mod family;
 pub mod history;
+pub mod ids;
 pub mod persist;
+pub mod store;
 
 // Re-exports for convenience
-pub use ids::AtomId;
-pub use store::{
-    AtomValue, Store, CellListener, ReadArgs, WriteArgs,
-    SubscriptionId,
-};
 pub use family::AtomFamily;
 pub use history::{
     Change, DropEvent, Entry, History, InvalidHistory, Snapshot, UndoOutcome, apply_next,
     apply_prev, capture, record_set, restore,
 };
+pub use ids::AtomId;
 pub use persist::{LoadOutcome, LoadedSession, Memory, SessionStore};
+pub use store::{AtomValue, CellListener, ReadArgs, Store, SubscriptionId, WriteArgs};

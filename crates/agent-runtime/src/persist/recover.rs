@@ -70,12 +70,24 @@ pub fn recover(
     let mut entries = Vec::with_capacity(loaded.entries.len());
     for e in loaded.entries {
         let meta = agent_core::EntryMeta::try_from(e.meta).map_err(RecoverError::UnknownLabel)?;
-        entries.push(PersistedEntry { seq: e.seq, meta, changes: e.changes });
+        entries.push(PersistedEntry {
+            seq: e.seq,
+            meta,
+            changes: e.changes,
+        });
     }
     let snapshot = loaded.snapshot.map(|s| s.values);
 
-    let session = Session::restore(agent, snapshot, entries, loaded.cursor, loaded.next_seq, history_cap, on_unknown_key)
-        .map_err(RecoverError::InvalidHistory)?;
+    let session = Session::restore(
+        agent,
+        snapshot,
+        entries,
+        loaded.cursor,
+        loaded.next_seq,
+        history_cap,
+        on_unknown_key,
+    )
+    .map_err(RecoverError::InvalidHistory)?;
     Ok(Some(session))
 }
 
@@ -118,7 +130,12 @@ mod tests {
             fs,
             ToolTable::builtin(),
             Vec::new(),
-            agent_core::SessionConfig { model: Arc::from("m"), temperature: None, max_tokens: None, context_window: None },
+            agent_core::SessionConfig {
+                model: Arc::from("m"),
+                temperature: None,
+                max_tokens: None,
+                context_window: None,
+            },
             store,
             Box::new(|_| {}),
         )
@@ -128,7 +145,13 @@ mod tests {
     #[test]
     fn a_backend_that_was_never_written_to_recovers_to_none() {
         let ctx = ctx();
-        let got = recover(ctx.session_store.as_ref(), AgentId::root(), 100, &mut |_| {}).unwrap();
+        let got = recover(
+            ctx.session_store.as_ref(),
+            AgentId::root(),
+            100,
+            &mut |_| {},
+        )
+        .unwrap();
         assert!(got.is_none());
     }
 
@@ -140,23 +163,36 @@ mod tests {
     /// 自己的翻译逻辑，端到端版本（真 `Jsonl` + 真 CLI 子进程 + 断言原文件字节
     /// 不变）在 `agent-cli/tests/indep_corrupt_session.rs`。
     struct AlwaysRefuses;
-    impl agent_store::SessionStore<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta> for AlwaysRefuses {
-        fn append(&self, _: &agent_store::Entry<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>) {}
+    impl agent_store::SessionStore<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>
+        for AlwaysRefuses
+    {
+        fn append(
+            &self,
+            _: &agent_store::Entry<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>,
+        ) {
+        }
         fn drop_oldest(&self, _: usize) {}
         fn drop_after(&self, _: u64, _: usize) {}
         fn set_cursor(&self, _: usize) {}
-        fn snapshot(&self, _: &agent_store::Snapshot<agent_core::AtomKey, agent_core::AgentValue>) {}
+        fn snapshot(&self, _: &agent_store::Snapshot<agent_core::AtomKey, agent_core::AgentValue>) {
+        }
         fn load(&self) -> LoadOutcome<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta> {
-            LoadOutcome::Refused { reason: "会话文件第 1 行损坏（非法记录），拒绝加载".to_string() }
+            LoadOutcome::Refused {
+                reason: "会话文件第 1 行损坏（非法记录），拒绝加载".to_string(),
+            }
         }
     }
 
     #[test]
     fn a_refused_load_is_a_hard_error_not_an_empty_session() {
         let store = AlwaysRefuses;
-        let result = recover(&store, AgentId::root(), 100, &mut |_| panic!("不该有不认识的键"));
+        let result = recover(&store, AgentId::root(), 100, &mut |_| {
+            panic!("不该有不认识的键")
+        });
         match result {
-            Err(RecoverError::Refused(reason)) => assert!(reason.contains('1'), "理由该带行号：{reason}"),
+            Err(RecoverError::Refused(reason)) => {
+                assert!(reason.contains('1'), "理由该带行号：{reason}")
+            }
             Err(other) => panic!("该是 RecoverError::Refused，实际：{other:?}"),
             Ok(_) => panic!("Refused 必须变成 Err，不能被当成 Ok(None)（没有会话）悄悄放过"),
         }
@@ -168,22 +204,37 @@ mod tests {
         let mut ctx = ctx();
         let mut session = Session::new(AgentId::root());
 
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("hi") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("hi"),
+        });
         sync(&mut ctx, &mut session);
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
             epoch: session.epoch(),
             blocks: vec![ContentBlock::Text(Arc::from("ok"))],
             stop: agent_core::StopReason::EndTurn,
-            usage: agent_core::TokenUsage { prompt: 1, completion: 1, cached: None },
-            prefix: agent_core::PrefixImage { segments: Vec::new(), prompt_tokens: Some(1) },
+            usage: agent_core::TokenUsage {
+                prompt: 1,
+                completion: 1,
+                cached: None,
+            },
+            prefix: agent_core::PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: Some(1),
+            },
             adjustments: Vec::new(),
         });
         sync(&mut ctx, &mut session);
 
-        let mut recovered = recover(ctx.session_store.as_ref(), AgentId::root(), 100, &mut |_| panic!("不该有不认识的键"))
-            .unwrap()
-            .expect("写过东西该恢复出 Some");
+        let mut recovered = recover(
+            ctx.session_store.as_ref(),
+            AgentId::root(),
+            100,
+            &mut |_| panic!("不该有不认识的键"),
+        )
+        .unwrap()
+        .expect("写过东西该恢复出 Some");
 
         assert_eq!(recovered.status(), session.status());
         assert_eq!(recovered.messages().len(), session.messages().len());
@@ -198,7 +249,10 @@ mod tests {
     #[test]
     fn unresolved_tool_calls_are_detected() {
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: Arc::from("hi") });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: Arc::from("hi"),
+        });
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
             epoch: session.epoch(),
@@ -208,8 +262,15 @@ mod tests {
                 input: Arc::new(serde_json::json!({"cmd": "echo hi"})),
             }],
             stop: agent_core::StopReason::ToolUse,
-            usage: agent_core::TokenUsage { prompt: 1, completion: 1, cached: None },
-            prefix: agent_core::PrefixImage { segments: Vec::new(), prompt_tokens: Some(1) },
+            usage: agent_core::TokenUsage {
+                prompt: 1,
+                completion: 1,
+                cached: None,
+            },
+            prefix: agent_core::PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: Some(1),
+            },
             adjustments: Vec::new(),
         });
 

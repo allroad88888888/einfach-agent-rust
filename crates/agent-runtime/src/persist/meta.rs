@@ -10,7 +10,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use agent_core::{Epoch, EntryMeta, known_label};
+use agent_core::{EntryMeta, Epoch, known_label};
 
 /// `agent_core::EntryMeta` 的可落盘姊妹类型。字段一一对应，只有 `label` 换了类型。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -41,7 +41,11 @@ pub struct UnknownLabel(pub String);
 
 impl std::fmt::Display for UnknownLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "会话文件里的日志标签 \"{}\" 这一版代码不认识（可能是更新版本写的文件）", self.0)
+        write!(
+            f,
+            "会话文件里的日志标签 \"{}\" 这一版代码不认识（可能是更新版本写的文件）",
+            self.0
+        )
     }
 }
 
@@ -52,7 +56,12 @@ impl TryFrom<PersistedMeta> for EntryMeta {
 
     fn try_from(meta: PersistedMeta) -> Result<Self, Self::Error> {
         let label = known_label(&meta.label).ok_or_else(|| UnknownLabel(meta.label.clone()))?;
-        Ok(EntryMeta { turn_id: meta.turn_id, epoch: Epoch(meta.epoch), label, barrier: meta.barrier })
+        Ok(EntryMeta {
+            turn_id: meta.turn_id,
+            epoch: Epoch(meta.epoch),
+            label,
+            barrier: meta.barrier,
+        })
     }
 }
 
@@ -62,9 +71,22 @@ mod tests {
 
     #[test]
     fn a_known_label_round_trips_through_the_persisted_form() {
-        let meta = EntryMeta { turn_id: 3, epoch: Epoch(7), label: "tool_result", barrier: true };
+        let meta = EntryMeta {
+            turn_id: 3,
+            epoch: Epoch(7),
+            label: "tool_result",
+            barrier: true,
+        };
         let persisted = PersistedMeta::from(&meta);
-        assert_eq!(persisted, PersistedMeta { turn_id: 3, epoch: 7, label: "tool_result".to_string(), barrier: true });
+        assert_eq!(
+            persisted,
+            PersistedMeta {
+                turn_id: 3,
+                epoch: 7,
+                label: "tool_result".to_string(),
+                barrier: true
+            }
+        );
 
         let back = EntryMeta::try_from(persisted).unwrap();
         assert_eq!(back, meta);
@@ -72,7 +94,12 @@ mod tests {
 
     #[test]
     fn an_unrecognized_label_is_rejected_not_guessed() {
-        let persisted = PersistedMeta { turn_id: 1, epoch: 0, label: "some_future_label".to_string(), barrier: false };
+        let persisted = PersistedMeta {
+            turn_id: 1,
+            epoch: 0,
+            label: "some_future_label".to_string(),
+            barrier: false,
+        };
         let err = EntryMeta::try_from(persisted).unwrap_err();
         assert_eq!(err, UnknownLabel("some_future_label".to_string()));
     }

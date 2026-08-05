@@ -39,7 +39,8 @@ fn getter_returns_current_value() {
 fn getter_computes_derived_value() {
     let store = Store::new();
     let count = store.create_atom(num(0.0));
-    let double = store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
+    let double =
+        store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
     assert_eq!(store.get(double).as_number(), Some(0.0));
     store.set(count, num(5.0));
     assert_eq!(store.get(double).as_number(), Some(10.0));
@@ -83,7 +84,8 @@ fn sub_notifies_on_change_and_unsub_stops() {
 fn sub_on_derived_notifies_on_dep_change() {
     let store = Store::new();
     let count = store.create_atom(num(0.0));
-    let double = store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
+    let double =
+        store.create_derived_ctx(move |args| num(args.get(count).as_number().unwrap() * 2.0));
     let calls = Rc::new(Cell::new(0u32));
     let c = calls.clone();
     let sub = store.sub(double, move || c.set(c.get() + 1));

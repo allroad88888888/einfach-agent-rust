@@ -41,7 +41,13 @@ pub(super) fn retry_or_fail(txn: &mut Txn, class: ErrorClass) -> Vec<Effect> {
         let max_retries = txn.max_retries();
         let mut effects = super::try_call_provider(txn);
         if matches!(effects.last(), Some(Effect::CallProvider { .. })) {
-            effects.insert(0, Effect::Emit(Notice::Retrying { attempt, max_retries }));
+            effects.insert(
+                0,
+                Effect::Emit(Notice::Retrying {
+                    attempt,
+                    max_retries,
+                }),
+            );
         }
         return effects;
     }

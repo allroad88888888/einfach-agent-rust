@@ -16,7 +16,14 @@ fn hit(prompt: u32, cached: u32) -> TurnHit {
 fn ten_warm_turns_do_not_alert() {
     let history = vec![hit(5000, 4800); 10];
     let v = check_window(&history, WindowParams::default());
-    assert_eq!(v, WindowVerdict::Healthy { turns: 10, hit_percent: 96, low_streak: 0 });
+    assert_eq!(
+        v,
+        WindowVerdict::Healthy {
+            turns: 10,
+            hit_percent: 96,
+            low_streak: 0
+        }
+    );
     assert!(!v.to_string().contains("告警"), "{v}");
 }
 
@@ -25,7 +32,14 @@ fn ten_warm_turns_do_not_alert() {
 fn three_consecutive_zero_hit_turns_alert() {
     let history = vec![hit(5000, 0); 3];
     let v = check_window(&history, WindowParams::default());
-    assert_eq!(v, WindowVerdict::ChronicMiss { streak: 3, turns: 3, hit_percent: 0 });
+    assert_eq!(
+        v,
+        WindowVerdict::ChronicMiss {
+            streak: 3,
+            turns: 3,
+            hit_percent: 0
+        }
+    );
     assert!(v.to_string().contains("告警"), "{v}");
 }
 
@@ -35,7 +49,14 @@ fn three_consecutive_zero_hit_turns_alert() {
 fn two_low_turns_are_not_yet_chronic() {
     let history = vec![hit(5000, 4800), hit(5000, 0), hit(5000, 0)];
     let v = check_window(&history, WindowParams::default());
-    assert_eq!(v, WindowVerdict::Healthy { turns: 3, hit_percent: 32, low_streak: 2 });
+    assert_eq!(
+        v,
+        WindowVerdict::Healthy {
+            turns: 3,
+            hit_percent: 32,
+            low_streak: 2
+        }
+    );
     // 还没告警，但要说得出「已经连着两轮了」。
     assert!(v.to_string().contains('2'), "{v}");
 }
@@ -55,15 +76,28 @@ fn blind_turns_never_enter_the_window() {
     mixed.extend(vec![TurnHit::Blind; 3]);
     assert_eq!(
         check_window(&mixed, WindowParams::default()),
-        WindowVerdict::Healthy { turns: 10, hit_percent: 96, low_streak: 0 }
+        WindowVerdict::Healthy {
+            turns: 10,
+            hit_percent: 96,
+            low_streak: 0
+        }
     );
 
     // 3. 失明轮夹在中间，不打断「连续三轮低命中」：它对这一层是不存在的。
-    let interleaved =
-        vec![hit(5000, 0), TurnHit::Blind, hit(5000, 0), TurnHit::Blind, hit(5000, 0)];
+    let interleaved = vec![
+        hit(5000, 0),
+        TurnHit::Blind,
+        hit(5000, 0),
+        TurnHit::Blind,
+        hit(5000, 0),
+    ];
     assert_eq!(
         check_window(&interleaved, WindowParams::default()),
-        WindowVerdict::ChronicMiss { streak: 3, turns: 3, hit_percent: 0 }
+        WindowVerdict::ChronicMiss {
+            streak: 3,
+            turns: 3,
+            hit_percent: 0
+        }
     );
 }
 
@@ -74,14 +108,21 @@ fn window_only_looks_at_the_last_n_turns() {
     history.extend(vec![hit(5000, 5000); 10]); // 之后十轮全命中
     assert_eq!(
         check_window(&history, WindowParams::default()),
-        WindowVerdict::Healthy { turns: 10, hit_percent: 100, low_streak: 0 }
+        WindowVerdict::Healthy {
+            turns: 10,
+            hit_percent: 100,
+            low_streak: 0
+        }
     );
 }
 
 /// 空历史、`prompt == 0` 的退化轮：不判，也不许 panic 或除零。
 #[test]
 fn degenerate_inputs_do_not_panic() {
-    assert_eq!(check_window(&[], WindowParams::default()), WindowVerdict::NoData { skipped: 0 });
+    assert_eq!(
+        check_window(&[], WindowParams::default()),
+        WindowVerdict::NoData { skipped: 0 }
+    );
     assert_eq!(
         check_window(&[hit(0, 0)], WindowParams::default()),
         WindowVerdict::NoData { skipped: 1 }
@@ -95,35 +136,70 @@ fn degenerate_inputs_do_not_panic() {
 #[test]
 fn window_thresholds_are_parameters() {
     let history = vec![hit(5000, 4800), hit(5000, 0), hit(5000, 0)];
-    let k2 = WindowParams { consecutive_alert: 2, ..WindowParams::default() };
+    let k2 = WindowParams {
+        consecutive_alert: 2,
+        ..WindowParams::default()
+    };
     assert_eq!(
         check_window(&history, k2),
-        WindowVerdict::ChronicMiss { streak: 2, turns: 3, hit_percent: 32 }
+        WindowVerdict::ChronicMiss {
+            streak: 2,
+            turns: 3,
+            hit_percent: 32
+        }
     );
 
     // 低命中门槛提到 97%：96% 的十轮全变成「低命中」。
-    let strict = WindowParams { low_hit_percent: 97, ..WindowParams::default() };
+    let strict = WindowParams {
+        low_hit_percent: 97,
+        ..WindowParams::default()
+    };
     assert_eq!(
         check_window(&[hit(5000, 4800); 10], strict),
-        WindowVerdict::ChronicMiss { streak: 10, turns: 10, hit_percent: 96 }
+        WindowVerdict::ChronicMiss {
+            streak: 10,
+            turns: 10,
+            hit_percent: 96
+        }
     );
 
     // 窗口缩到 2：只看最近两轮，更早的那轮好成绩进不来。
-    let small = WindowParams { window: 2, ..WindowParams::default() };
+    let small = WindowParams {
+        window: 2,
+        ..WindowParams::default()
+    };
     assert_eq!(
         check_window(&history, small),
-        WindowVerdict::Healthy { turns: 2, hit_percent: 0, low_streak: 2 }
+        WindowVerdict::Healthy {
+            turns: 2,
+            hit_percent: 0,
+            low_streak: 2
+        }
     );
 }
 
 /// usage 到观测的映射：`None` → 失明，`Some(0)` → 真的没命中，两条路。
 #[test]
 fn turn_hit_from_usage_splits_none_and_zero() {
-    let none = TokenUsage { prompt: 500, completion: 10, cached: None };
-    let zero = TokenUsage { prompt: 500, completion: 10, cached: Some(0) };
+    let none = TokenUsage {
+        prompt: 500,
+        completion: 10,
+        cached: None,
+    };
+    let zero = TokenUsage {
+        prompt: 500,
+        completion: 10,
+        cached: Some(0),
+    };
     assert_eq!(TurnHit::from_usage(&none), TurnHit::Blind);
     assert_eq!(TurnHit::from_usage(&none).hit_percent(), None);
-    assert_eq!(TurnHit::from_usage(&zero), TurnHit::Observed { prompt: 500, cached: 0 });
+    assert_eq!(
+        TurnHit::from_usage(&zero),
+        TurnHit::Observed {
+            prompt: 500,
+            cached: 0
+        }
+    );
     assert_eq!(TurnHit::from_usage(&zero).hit_percent(), Some(0));
     assert_ne!(TurnHit::from_usage(&none), TurnHit::from_usage(&zero));
 }
@@ -131,7 +207,13 @@ fn turn_hit_from_usage_splits_none_and_zero() {
 /// 窗口按**轮次**计数不按时间：同一份历史重放两次结果必须一模一样（红线 1）。
 #[test]
 fn layer3_is_pure() {
-    let history = vec![hit(5000, 4800), TurnHit::Blind, hit(5000, 0), hit(0, 0), hit(300, 0)];
+    let history = vec![
+        hit(5000, 4800),
+        TurnHit::Blind,
+        hit(5000, 0),
+        hit(0, 0),
+        hit(300, 0),
+    ];
     let first = check_window(&history, WindowParams::default());
     for _ in 0..1_000 {
         assert_eq!(check_window(&history, WindowParams::default()), first);

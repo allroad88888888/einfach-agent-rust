@@ -196,28 +196,28 @@ impl Slot {
             // 「没有激活任何 skill」= 一个**空的有序数组**，不是 `Null`：SkillsActive
             // 永远持一个数组（跟 ToolSlots 永远持 Slots 同一个道理），读取点因此不必
             // 区分「空」和「类型错」。空数组序列化成 `[]`，逐字节确定（红线 11）。
-            Slot::SkillsActive => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
-                Vec::new(),
-            ))),
+            Slot::SkillsActive => {
+                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
+            }
             // 「这个会话没有任何注入」= 空数组，同 `SkillsActive` 那条理由：槽位
             // 永远持一个数组，读取点不必区分「空」和「类型错」。**默认值必须是空**
             // ——019 的按需重建拿的就是它，若默认成别的，undo 路径上凭空重建出来的
             // atom 会给一个从没声明过的会话平添几个工具，而工具表在 prompt 最前面。
-            Slot::HostTools => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
-                Vec::new(),
-            ))),
+            Slot::HostTools => {
+                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
+            }
             // 同 `HostTools`：空数组而不是 `Null`。默认值必须是空——019 的按需重建
             // 拿的就是它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没
             // 声明过的会话平添几行常驻索引，而索引跟工具表一样在 prompt 最前面。
-            Slot::HostSkills => AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(
-                Vec::new(),
-            ))),
+            Slot::HostSkills => {
+                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
+            }
             // 「一个内置工具都没关」= 空数组，同上两条理由。这一条的默认值格外要紧：
             // 它是**减法**，默认成非空就等于给一个从没提过要求的会话偷偷少几个工具，
             // 而少掉的那些模型压根不知道存在过——查起来没有任何线索。
-            Slot::DisabledBuiltins => AgentValue::Json(std::sync::Arc::new(
-                serde_json::Value::Array(Vec::new()),
-            )),
+            Slot::DisabledBuiltins => {
+                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
+            }
         }
     }
 

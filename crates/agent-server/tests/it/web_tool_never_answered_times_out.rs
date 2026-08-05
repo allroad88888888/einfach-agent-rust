@@ -46,15 +46,26 @@ async fn a_web_tool_the_host_never_answers_is_failed_at_its_deadline() {
     let mut template = support::http_server::session_template(upstream.endpoint());
     template.tools = ToolTableSpec::Standard;
     template.remote_tool_timeout = Some(Duration::from_millis(300));
-    let server = support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, |config| config).await;
+    let server = support::http_server::start_at_with_template(
+        "127.0.0.1:0".parse().unwrap(),
+        template,
+        |config| config,
+    )
+    .await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     assert_eq!(create.status, 201, "{}", create.body);
     let id = support::extract_json_string_field(&create.body, "id");
-    let (status, _, mut sse) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status, _, mut sse) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
     assert_eq!(status, 200);
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"展示卡片\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"展示卡片\"}"),
+    );
     assert_eq!(input.status, 202, "{}", input.body);
 
     // 这一段**故意什么都不做**：没有 `POST /tool_result`，没有 `POST /cancel`。
@@ -83,5 +94,9 @@ async fn a_web_tool_the_host_never_answers_is_failed_at_its_deadline() {
         saw_timeout,
         "远端调用该在截止线上被判失败（is_error），而不是无声无息地永远等下去（本轮 {ending} 结束）",
     );
-    assert_eq!(upstream.request_count(), 2, "超时结果该像真回传一样触发同一轮的第二次 provider 调用");
+    assert_eq!(
+        upstream.request_count(),
+        2,
+        "超时结果该像真回传一样触发同一轮的第二次 provider 调用"
+    );
 }

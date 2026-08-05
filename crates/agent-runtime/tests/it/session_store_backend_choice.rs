@@ -16,21 +16,36 @@ use agent_runtime::Jsonl;
 use session_store_support::{Val, collecting_on_error, temp_path};
 
 fn entry(seq: u64, value: i64) -> Entry<String, Val, u32> {
-    Entry { seq, meta: 7, changes: vec![Change { key: "a".to_string(), prev: Val(value - 1), next: Val(value) }] }
+    Entry {
+        seq,
+        meta: 7,
+        changes: vec![Change {
+            key: "a".to_string(),
+            prev: Val(value - 1),
+            next: Val(value),
+        }],
+    }
 }
 
 /// 唯一一份调用方逻辑：写 3 条、落一张快照、再写 1 条，返回 `load()` 的结果。
 /// 类型参数只要求 `SessionStore<..>`——这段代码本身不知道、也不需要知道自己在跟
 /// `Memory` 还是 `Jsonl`打交道。
-fn drive_session<S: SessionStore<String, Val, u32>>(backend: &S) -> agent_store::persist::LoadedSession<String, Val, u32> {
+fn drive_session<S: SessionStore<String, Val, u32>>(
+    backend: &S,
+) -> agent_store::persist::LoadedSession<String, Val, u32> {
     for seq in 0..3 {
         backend.append(&entry(seq, seq as i64 + 1));
         backend.set_cursor(seq as usize + 1);
     }
-    backend.snapshot(&Snapshot { values: vec![("a".to_string(), Val(3))] });
+    backend.snapshot(&Snapshot {
+        values: vec![("a".to_string(), Val(3))],
+    });
     backend.append(&entry(3, 4));
     backend.set_cursor(1);
-    backend.load().loaded().expect("drive_session 写过东西之后 load 不该是 None")
+    backend
+        .load()
+        .loaded()
+        .expect("drive_session 写过东西之后 load 不该是 None")
 }
 
 #[test]
@@ -43,9 +58,16 @@ fn the_same_generic_call_site_produces_the_same_shape_for_both_backends() {
     let from_jsonl = drive_session(&jsonl);
     assert!(errors.lock().unwrap().is_empty());
 
-    assert_eq!(from_memory.snapshot.is_some(), from_jsonl.snapshot.is_some());
     assert_eq!(
-        from_memory.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        from_memory.snapshot.is_some(),
+        from_jsonl.snapshot.is_some()
+    );
+    assert_eq!(
+        from_memory
+            .entries
+            .iter()
+            .map(|e| e.seq)
+            .collect::<Vec<_>>(),
         from_jsonl.entries.iter().map(|e| e.seq).collect::<Vec<_>>()
     );
     assert_eq!(from_memory.cursor, from_jsonl.cursor);
@@ -59,7 +81,10 @@ fn per_session_the_backend_can_be_chosen_at_construction_time() {
     let (_errors, on_error) = collecting_on_error();
     let backends: Vec<Box<dyn SessionStore<String, Val, u32>>> = vec![
         Box::new(Memory::<String, Val, u32>::new()),
-        Box::new(Jsonl::<String, Val, u32>::new(temp_path("backend-choice-dyn"), on_error)),
+        Box::new(Jsonl::<String, Val, u32>::new(
+            temp_path("backend-choice-dyn"),
+            on_error,
+        )),
     ];
     for backend in &backends {
         backend.append(&entry(0, 1));

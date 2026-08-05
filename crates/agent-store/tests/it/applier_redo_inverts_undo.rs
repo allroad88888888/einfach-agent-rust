@@ -11,8 +11,8 @@ mod common;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{apply_next, apply_prev, AtomFamily, AtomId, Change, Entry, Store};
-use common::{num, TestValue as V};
+use agent_store::{AtomFamily, AtomId, Change, Entry, Store, apply_next, apply_prev};
+use common::{TestValue as V, num};
 
 #[test]
 fn apply_next_replayed_in_redo_order_restores_the_pre_undo_state() {
@@ -32,16 +32,32 @@ fn apply_next_replayed_in_redo_order_restores_the_pre_undo_state() {
         seq: 0,
         meta: (),
         changes: vec![
-            Change { key: "a".to_string(), prev: num(0.0), next: num(1.0) },
-            Change { key: "b".to_string(), prev: num(0.0), next: num(10.0) },
+            Change {
+                key: "a".to_string(),
+                prev: num(0.0),
+                next: num(1.0),
+            },
+            Change {
+                key: "b".to_string(),
+                prev: num(0.0),
+                next: num(10.0),
+            },
         ],
     };
     let entry_new: Entry<String, V, ()> = Entry {
         seq: 1,
         meta: (),
         changes: vec![
-            Change { key: "a".to_string(), prev: num(1.0), next: num(2.0) },
-            Change { key: "b".to_string(), prev: num(10.0), next: num(20.0) },
+            Change {
+                key: "a".to_string(),
+                prev: num(1.0),
+                next: num(2.0),
+            },
+            Change {
+                key: "b".to_string(),
+                prev: num(10.0),
+                next: num(20.0),
+            },
         ],
     };
 
@@ -58,12 +74,20 @@ fn apply_next_replayed_in_redo_order_restores_the_pre_undo_state() {
     };
 
     // undo 序：新的先来。
-    apply_prev(&store, &mut resolve, &[entry_new.clone(), entry_old.clone()]);
+    apply_prev(
+        &store,
+        &mut resolve,
+        &[entry_new.clone(), entry_old.clone()],
+    );
     assert_eq!(store.get(a), num(0.0));
     assert_eq!(store.get(b), num(0.0));
 
     // redo 序：同一批 entries，旧的先来——apply_next 的顺序契约与 apply_prev 相反。
-    apply_next(&store, &mut resolve, &[entry_old.clone(), entry_new.clone()]);
+    apply_next(
+        &store,
+        &mut resolve,
+        &[entry_old.clone(), entry_new.clone()],
+    );
 
     // 值全部回到 undo 之前。
     assert_eq!(store.get(a), num(2.0));

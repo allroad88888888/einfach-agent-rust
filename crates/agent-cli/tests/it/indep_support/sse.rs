@@ -10,7 +10,9 @@ pub const SHELL_EXEC_WIRE_NAME: &str = "srv_3Ashell_2Fexec";
 /// 一段纯文本回复：一帧 `content` + `finish_reason: stop`，随后 `[DONE]`。
 pub fn text_reply(text: &str) -> String {
     let content = serde_json::to_string(text).expect("json string");
-    format!("data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n")
+    format!(
+        "data: {{\"choices\":[{{\"delta\":{{\"content\":{content}}},\"finish_reason\":\"stop\"}}]}}\n\ndata: [DONE]\n\n"
+    )
 }
 
 /// 一次工具调用：三帧（角色+函数名开头、参数追加、`finish_reason: tool_calls`）

@@ -74,19 +74,30 @@ pub fn parse_initialize_result(result: &Value) -> Result<InitializeResult, Proto
         .and_then(Value::as_str)
         .map(str::to_string);
 
-    Ok(InitializeResult { protocol_version, capabilities, server_name })
+    Ok(InitializeResult {
+        protocol_version,
+        capabilities,
+        server_name,
+    })
 }
 
 /// 解析 `tools/list` 的 result → 工具列表，**顺序原样保留**（红线 11：进 prompt 的东西
 /// 逐字节确定，顺序不能靠 HashMap 打乱）。result 里没有 `tools` 数组 → `UnexpectedShape`。
 pub fn parse_tools_list(result: &Value) -> Result<Vec<McpTool>, ProtocolError> {
-    let tools = result.get("tools").and_then(Value::as_array).ok_or_else(|| {
-        ProtocolError::UnexpectedShape("tools/list result 缺 tools 数组".to_string())
-    })?;
+    let tools = result
+        .get("tools")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            ProtocolError::UnexpectedShape("tools/list result 缺 tools 数组".to_string())
+        })?;
 
     // `Vec` 上的 `.iter()` 按数组原有顺序走——JSON 数组本身就是有序容器，跟顶层
     // `serde_json::Map` 是否 preserve_order 无关，保序不需要额外动作。
-    tools.iter().enumerate().map(|(index, item)| parse_one_tool(index, item)).collect()
+    tools
+        .iter()
+        .enumerate()
+        .map(|(index, item)| parse_one_tool(index, item))
+        .collect()
 }
 
 /// 解析 `tools/list` result 里的一项。`name`/`inputSchema` 缺了报
@@ -99,18 +110,29 @@ fn parse_one_tool(index: usize, item: &Value) -> Result<McpTool, ProtocolError> 
         .ok_or_else(|| ProtocolError::UnexpectedShape(format!("tools[{index}] 缺 name")))?
         .to_string();
 
-    let description = item.get("description").and_then(Value::as_str).map(str::to_string);
+    let description = item
+        .get("description")
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
     let input_schema = item
         .get("inputSchema")
         .cloned()
         .ok_or_else(|| ProtocolError::UnexpectedShape(format!("tools[{index}] 缺 inputSchema")))?;
 
-    let annotations = item.get("annotations").and_then(Value::as_object).map(|annotations| {
-        Annotations { read_only_hint: annotations.get("readOnlyHint").and_then(Value::as_bool) }
-    });
+    let annotations = item
+        .get("annotations")
+        .and_then(Value::as_object)
+        .map(|annotations| Annotations {
+            read_only_hint: annotations.get("readOnlyHint").and_then(Value::as_bool),
+        });
 
-    Ok(McpTool { name, description, input_schema, annotations })
+    Ok(McpTool {
+        name,
+        description,
+        input_schema,
+        annotations,
+    })
 }
 
 /// 构造 `tools/call` 的 params（`name` + `arguments`）。`tool_name` 是**裸的 MCP 工具名**
@@ -230,7 +252,12 @@ mod tests {
         });
         let tools = parse_tools_list(&result).unwrap();
         assert_eq!(tools[0].description, Some("echoes".to_string()));
-        assert_eq!(tools[0].annotations, Some(Annotations { read_only_hint: Some(true) }));
+        assert_eq!(
+            tools[0].annotations,
+            Some(Annotations {
+                read_only_hint: Some(true)
+            })
+        );
     }
 
     #[test]

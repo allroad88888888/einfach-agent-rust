@@ -42,7 +42,11 @@ impl Session {
     pub fn barrier_info(&self, seq: u64) -> Option<BarrierInfo> {
         let entry = self.history.entries().find(|e| e.seq == seq)?;
         let (tool, call_id) = tool_barrier_of(entry);
-        Some(BarrierInfo { label: entry.meta.label, tool, call_id })
+        Some(BarrierInfo {
+            label: entry.meta.label,
+            tool,
+            call_id,
+        })
     }
 }
 
@@ -52,9 +56,13 @@ impl Session {
 /// `(None, None)`，不 panic。
 fn tool_barrier_of(entry: &AgentEntry) -> (Option<Arc<str>>, Option<ToolCallId>) {
     for change in &entry.changes {
-        let (Some(prev), Some(next)) = (change.prev.as_slots(), change.next.as_slots()) else { continue };
+        let (Some(prev), Some(next)) = (change.prev.as_slots(), change.next.as_slots()) else {
+            continue;
+        };
         for (p, n) in prev.iter().zip(next.iter()) {
-            if matches!(p.state, SlotState::Pending) && matches!(n.state, SlotState::Finished { .. }) {
+            if matches!(p.state, SlotState::Pending)
+                && matches!(n.state, SlotState::Finished { .. })
+            {
                 return (Some(n.tool.clone()), Some(n.call_id.clone()));
             }
         }
@@ -79,7 +87,10 @@ mod tests {
     /// 真的能从一条 barrier entry 里抠出工具名和 call_id——搬迁没有改变行为。
     fn session_with_a_barrier_entry() -> Session {
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: "跑个命令".into() });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: "跑个命令".into(),
+        });
         let call_id = ToolCallId::new("call_shell_1");
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
@@ -90,8 +101,15 @@ mod tests {
                 input: Arc::new(serde_json::json!({"cmd": "echo hi"})),
             }],
             stop: StopReason::ToolUse,
-            usage: TokenUsage { prompt: 10, completion: 5, cached: None },
-            prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+            usage: TokenUsage {
+                prompt: 10,
+                completion: 5,
+                cached: None,
+            },
+            prefix: PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: None,
+            },
             adjustments: Vec::new(),
         });
         session.mark_irreversible(call_id.clone());
@@ -108,11 +126,19 @@ mod tests {
     fn barrier_info_extracts_the_tool_name_and_call_id() {
         let session = session_with_a_barrier_entry();
         let entry = session.last_entry().unwrap();
-        assert!(entry.meta.barrier, "标记过 mark_irreversible，这条 entry 该带 barrier");
+        assert!(
+            entry.meta.barrier,
+            "标记过 mark_irreversible，这条 entry 该带 barrier"
+        );
 
-        let info = session.barrier_info(entry.seq).expect("这条 seq 真的在 history 里");
+        let info = session
+            .barrier_info(entry.seq)
+            .expect("这条 seq 真的在 history 里");
         assert_eq!(info.tool.as_deref(), Some("srv:shell/exec"));
-        assert_eq!(info.call_id.map(|c| c.0.to_string()), Some("call_shell_1".to_string()));
+        assert_eq!(
+            info.call_id.map(|c| c.0.to_string()),
+            Some("call_shell_1".to_string())
+        );
     }
 
     #[test]

@@ -55,7 +55,10 @@ impl McpRegistry {
     /// 才死，而不是被从脚下抽走。
     pub fn insert(&self, server_id: impl Into<String>, client: McpClient) {
         let handle = Arc::new(Mutex::new(client));
-        self.clients.lock().unwrap().insert(server_id.into(), handle);
+        self.clients
+            .lock()
+            .unwrap()
+            .insert(server_id.into(), handle);
     }
 
     /// 摘掉一个 server（比如要重连）。表当场忘掉它；返回的是**共享句柄**而不是独占
@@ -81,7 +84,11 @@ impl McpRegistry {
     /// §「host 能力差异」）。
     ///
     /// `f` 里**不要**再对同一个 server 调 `with_client`：两把锁都不可重入，会自死锁。
-    pub fn with_client<T>(&self, server_id: &str, f: impl FnOnce(&mut McpClient) -> T) -> Option<T> {
+    pub fn with_client<T>(
+        &self,
+        server_id: &str,
+        f: impl FnOnce(&mut McpClient) -> T,
+    ) -> Option<T> {
         let handle = {
             let clients = self.clients.lock().unwrap();
             Arc::clone(clients.get(server_id)?)

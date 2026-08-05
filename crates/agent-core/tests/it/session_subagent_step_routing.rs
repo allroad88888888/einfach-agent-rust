@@ -11,7 +11,9 @@ use agent_core::{AgentId, ChildConfig, Effect, Session, Slot, TurnStatus};
 use support::{provider_done_tool_use_for, tool_result_for, user_input_event, user_input_for};
 
 fn cfg() -> ChildConfig {
-    ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }
+    ChildConfig {
+        tools_allowed: vec![Arc::from("srv:fs/read")],
+    }
 }
 
 fn status_of(s: &Session, agent: &AgentId) -> TurnStatus {
@@ -49,15 +51,27 @@ fn each_agent_keeps_its_own_turn_state() {
 
     let _ = s.step(user_input_event("root 自己也在跑"));
     let _ = s.step(user_input_for(&a1, "a1 的活"));
-    let _ = s.step(provider_done_tool_use_for(&a1, s.epoch(), &[("c1", "srv:fs/read")]));
+    let _ = s.step(provider_done_tool_use_for(
+        &a1,
+        s.epoch(),
+        &[("c1", "srv:fs/read")],
+    ));
 
     assert_eq!(s.status(), TurnStatus::Thinking);
     assert_eq!(status_of(&s, &a1), TurnStatus::ToolsPending);
-    assert_eq!(status_of(&s, &a2), TurnStatus::Idle, "没被喂过事件的 agent 停在起点");
+    assert_eq!(
+        status_of(&s, &a2),
+        TurnStatus::Idle,
+        "没被喂过事件的 agent 停在起点"
+    );
 
     // a1 的工具槽收敛之后只有 a1 变，root 和 a2 不变。
     let _ = s.step(tool_result_for(&a1, s.epoch(), "c1", "结果"));
-    assert_eq!(status_of(&s, &a1), TurnStatus::Thinking, "收敛后 a1 自己发下一次调用");
+    assert_eq!(
+        status_of(&s, &a1),
+        TurnStatus::Thinking,
+        "收敛后 a1 自己发下一次调用"
+    );
     assert_eq!(s.status(), TurnStatus::Thinking);
     assert_eq!(status_of(&s, &a2), TurnStatus::Idle);
 }
@@ -89,8 +103,16 @@ fn every_entry_inherits_the_root_minted_turn_id() {
 
     s.begin_turn();
     assert_eq!(s.turn_id(), 2);
-    assert_eq!(status_of(&s, &child), TurnStatus::Thinking, "root 翻页不动子的轮状态");
-    let _ = s.step(support::provider_done_end_turn_for(&child, s.epoch(), "干完了"));
+    assert_eq!(
+        status_of(&s, &child),
+        TurnStatus::Thinking,
+        "root 翻页不动子的轮状态"
+    );
+    let _ = s.step(support::provider_done_end_turn_for(
+        &child,
+        s.epoch(),
+        "干完了",
+    ));
 
     let turns: Vec<u64> = s.history().entries().map(|e| e.meta.turn_id).collect();
     assert_eq!(turns.first(), Some(&1), "spawn 落在第一轮");
@@ -108,13 +130,23 @@ fn epoch_stays_session_wide() {
     let stale = s.epoch();
     let _ = s.step(user_input_for(&child, "子也在飞"));
 
-    let effects = s.step(agent_core::Event::Cancel { agent: child.clone() });
-    assert!(effects.iter().any(|e| matches!(e, Effect::CancelInFlight { .. })));
+    let effects = s.step(agent_core::Event::Cancel {
+        agent: child.clone(),
+    });
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CancelInFlight { .. }))
+    );
     assert_ne!(s.epoch(), stale, "取消 bump 的是会话的世代");
 
     // 旧世代的回执被 epoch 闸挡掉——不管它是谁的。
     let before = s.primitives();
-    let _ = s.step(support::provider_done_end_turn_for(&AgentId::root(), stale, "幽灵"));
+    let _ = s.step(support::provider_done_end_turn_for(
+        &AgentId::root(),
+        stale,
+        "幽灵",
+    ));
     assert_eq!(s.primitives(), before);
 }
 

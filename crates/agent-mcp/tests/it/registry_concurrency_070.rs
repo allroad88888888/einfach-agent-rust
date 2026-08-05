@@ -92,11 +92,16 @@ fn a_slow_server_does_not_block_a_call_to_another_server() {
             entered_tx.send(()).expect("主线程还在等这个信号");
             c.call("echo", json!({}), CALL_TIMEOUT)
         });
-        let text = text.expect("slow 该在表里").ok().map(|v| flatten_tool_result(&v).text);
+        let text = text
+            .expect("slow 该在表里")
+            .ok()
+            .map(|v| flatten_tool_result(&v).text);
         (started.elapsed(), text)
     });
 
-    entered_rx.recv().expect("慢调用该进到 with_client 的闭包里");
+    entered_rx
+        .recv()
+        .expect("慢调用该进到 with_client 的闭包里");
 
     let started = Instant::now();
     let fast = call_text(&registry, "fast");
@@ -139,15 +144,21 @@ fn two_concurrent_calls_to_the_same_server_stay_serialized() {
                     .with_client("one", |c| {
                         let entered = Instant::now();
                         let out = c.call("echo", json!({}), CALL_TIMEOUT);
-                        (entered, Instant::now(), out.ok().map(|v| flatten_tool_result(&v).text))
+                        (
+                            entered,
+                            Instant::now(),
+                            out.ok().map(|v| flatten_tool_result(&v).text),
+                        )
                     })
                     .expect("one 该在表里")
             })
         })
         .collect();
 
-    let mut spans: Vec<(Instant, Instant, Option<String>)> =
-        threads.into_iter().map(|t| t.join().expect("调用线程不该 panic")).collect();
+    let mut spans: Vec<(Instant, Instant, Option<String>)> = threads
+        .into_iter()
+        .map(|t| t.join().expect("调用线程不该 panic"))
+        .collect();
     spans.sort_by_key(|(entered, ..)| *entered);
 
     let (a_in, a_out, a_text) = spans[0].clone();
@@ -158,7 +169,11 @@ fn two_concurrent_calls_to_the_same_server_stay_serialized() {
         b_text.expect("后跑的那次该成功"),
     ];
     texts.sort();
-    assert_eq!(texts, vec!["first".to_string(), "second".to_string()], "两次应答不该串号");
+    assert_eq!(
+        texts,
+        vec!["first".to_string(), "second".to_string()],
+        "两次应答不该串号"
+    );
 
     assert!(
         a_out - a_in >= Duration::from_millis(250) && b_out - b_in >= Duration::from_millis(250),

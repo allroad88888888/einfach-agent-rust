@@ -13,7 +13,10 @@ fn root_a1_is_not_an_ancestor_of_root_a10() {
     let a1 = root.child(1);
     let a10 = root.child(10);
 
-    assert!(!a1.is_ancestor_of(&a10), "纯前缀匹配会把 a1 误判成 a10 的祖先");
+    assert!(
+        !a1.is_ancestor_of(&a10),
+        "纯前缀匹配会把 a1 误判成 a10 的祖先"
+    );
     assert!(!a10.is_ancestor_of(&a1));
     assert!(root.is_ancestor_of(&a1));
     assert!(root.is_ancestor_of(&a10));
@@ -53,7 +56,12 @@ fn nobody_is_their_own_ancestor_or_descendant() {
     let root = AgentId::root();
     let deep = root.child(1).child(2).child(3);
 
-    for id in [root.clone(), root.child(1), root.child(1).child(2), deep.clone()] {
+    for id in [
+        root.clone(),
+        root.child(1),
+        root.child(1).child(2),
+        deep.clone(),
+    ] {
         assert!(!id.is_ancestor_of(&id), "{id:?} 不该是自己的祖先");
         assert!(!id.is_descendant_of(&id), "{id:?} 不该是自己的后代");
     }

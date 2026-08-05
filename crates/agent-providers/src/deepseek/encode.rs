@@ -139,7 +139,10 @@ mod tests {
     #[test]
     fn same_ingredients_encode_byte_identical() {
         let t = [spec("srv:fs/read"), spec("srv:fs/write")];
-        let s = [SystemChunk { label: Arc::from("base"), text: Arc::from("你是助手") }];
+        let s = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("你是助手"),
+        }];
         let mut a = ing();
         a.tools = &t;
         a.system = &s;
@@ -153,7 +156,10 @@ mod tests {
         assert!(body.get("tool_choice").is_none());
         assert!(body.get("thinking").is_none());
         assert_eq!(body["stream"], json!(true));
-        assert!(encode(&ing()).adjustments.is_empty(), "没妥协就不该有 Adjustment");
+        assert!(
+            encode(&ing()).adjustments.is_empty(),
+            "没妥协就不该有 Adjustment"
+        );
     }
 
     /// `MustUseTool` / `MustUse(name)` 都必须同请求显式关思考，并报一条
@@ -175,7 +181,10 @@ mod tests {
             let body: Value = serde_json::from_slice(&out.body).unwrap();
             assert_eq!(body["tool_choice"], expected);
             assert_eq!(body["thinking"], json!({"type": "disabled"}));
-            assert_eq!(out.adjustments, vec![Adjustment::ThinkingDisabledForToolChoice]);
+            assert_eq!(
+                out.adjustments,
+                vec![Adjustment::ThinkingDisabledForToolChoice]
+            );
         }
     }
 
@@ -193,8 +202,14 @@ mod tests {
         assert_eq!(
             out.adjustments,
             vec![
-                Adjustment::LateToolsForcedIntoPrefix { count: 1, est_cost_multiple: 120.0 },
-                Adjustment::ToolsTruncated { kept: 128, dropped: 1 },
+                Adjustment::LateToolsForcedIntoPrefix {
+                    count: 1,
+                    est_cost_multiple: 120.0
+                },
+                Adjustment::ToolsTruncated {
+                    kept: 128,
+                    dropped: 1
+                },
                 Adjustment::ToolChoiceDowngraded {
                     wanted: Arc::from("srv:late/a"),
                     used: Arc::from("required"),
@@ -210,8 +225,14 @@ mod tests {
     /// 冷启动不算漂；换掉 system 后漂在 System 段。
     #[test]
     fn drift_points_at_the_changed_segment() {
-        let s1 = [SystemChunk { label: Arc::from("base"), text: Arc::from("一") }];
-        let s2 = [SystemChunk { label: Arc::from("base"), text: Arc::from("二") }];
+        let s1 = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("一"),
+        }];
+        let s2 = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("二"),
+        }];
         let mut first = ing();
         first.system = &s1;
         let cold = encode(&first);

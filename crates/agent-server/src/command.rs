@@ -45,7 +45,10 @@ pub enum Command {
     /// `undo_step` 的 force 变体，`Granularity::Step` 时这个字段被忽略，见
     /// `crate::actor::commands::handle_undo` 模块文档），`false` 撞屏障就停
     /// （对应 `/undo`）。
-    Undo { granularity: Granularity, force: bool },
+    Undo {
+        granularity: Granularity,
+        force: bool,
+    },
     /// 反演一次 undo（turn 粒度——ARCHITECTURE.md §传输 的 `POST .../redo` 请求体
     /// 是空对象，没有 `granularity` 字段，031 原样照办）。
     Redo,
@@ -53,7 +56,12 @@ pub enum Command {
     Cancel,
     /// Web 宿主确认一个先前已派发的远端工具。actor 会再次核验精确调用槽位，
     /// 因而 HTTP 客户端不能借此填充任意本地工具调用。
-    RemoteToolResult { agent: AgentId, call_id: ToolCallId, content: String, is_error: bool },
+    RemoteToolResult {
+        agent: AgentId,
+        call_id: ToolCallId,
+        content: String,
+        is_error: bool,
+    },
     /// 优雅关闭：处理完队列里排在它前面的命令后，落最后一次持久化、退出线程。
     Shutdown,
 }

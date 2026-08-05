@@ -94,7 +94,10 @@ impl fmt::Display for CapabilityRejection {
                 "skill id \"{id}\" 只能包含 ASCII 字母、数字、连字符和下划线，且不能为空，最多 {MAX_SKILL_ID_LEN} 字节"
             ),
             CapabilityRejection::DuplicateSkill { id } => {
-                write!(f, "skill id \"{id}\" 被重复声明——重名一律拒绝，不做「后来居上」")
+                write!(
+                    f,
+                    "skill id \"{id}\" 被重复声明——重名一律拒绝，不做「后来居上」"
+                )
             }
         }
     }
@@ -112,10 +115,14 @@ pub(in crate::http) fn validate(capabilities: &Capabilities) -> Result<(), Capab
     let mut skill_ids: BTreeSet<&str> = BTreeSet::new();
     for skill in &capabilities.skills {
         if !is_valid_skill_id(&skill.id) {
-            return Err(CapabilityRejection::SkillIdShape { id: elide(&skill.id) });
+            return Err(CapabilityRejection::SkillIdShape {
+                id: elide(&skill.id),
+            });
         }
         if !skill_ids.insert(skill.id.as_str()) {
-            return Err(CapabilityRejection::DuplicateSkill { id: elide(&skill.id) });
+            return Err(CapabilityRejection::DuplicateSkill {
+                id: elide(&skill.id),
+            });
         }
         let origin = Origin::Skill(skill.id.clone());
         for tool in &skill.tools {
@@ -133,17 +140,31 @@ fn check_tool<'a>(
     seen: &mut BTreeSet<&'a str>,
 ) -> Result<(), CapabilityRejection> {
     let name = tool.name.as_str();
-    let Some(rest) = TOOL_PREFIXES.iter().find_map(|prefix| name.strip_prefix(prefix)) else {
-        return Err(CapabilityRejection::ToolPrefix { origin: origin.clone(), name: elide(name) });
+    let Some(rest) = TOOL_PREFIXES
+        .iter()
+        .find_map(|prefix| name.strip_prefix(prefix))
+    else {
+        return Err(CapabilityRejection::ToolPrefix {
+            origin: origin.clone(),
+            name: elide(name),
+        });
     };
     let shape_ok = !rest.is_empty()
         && name.len() <= MAX_TOOL_NAME_LEN
-        && rest.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/'));
+        && rest
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/'));
     if !shape_ok {
-        return Err(CapabilityRejection::ToolNameShape { origin: origin.clone(), name: elide(name) });
+        return Err(CapabilityRejection::ToolNameShape {
+            origin: origin.clone(),
+            name: elide(name),
+        });
     }
     if !seen.insert(name) {
-        return Err(CapabilityRejection::DuplicateTool { origin: origin.clone(), name: elide(name) });
+        return Err(CapabilityRejection::DuplicateTool {
+            origin: origin.clone(),
+            name: elide(name),
+        });
     }
     Ok(())
 }
@@ -153,7 +174,9 @@ fn check_tool<'a>(
 fn is_valid_skill_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_SKILL_ID_LEN
-        && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 /// 回显用的截断（按字符边界，不切碎 UTF-8）。076 的
@@ -183,17 +206,34 @@ mod tests {
     /// 合法的两种前缀 + 允许的字符集全过。
     #[test]
     fn host_side_prefixes_are_accepted() {
-        let ok = tools(&["web:crm/lookup", "desk:clipboard/write", "web:mcp-figma/get_file", "web:a_b-c/d/e", "desk:X9"]);
+        let ok = tools(&[
+            "web:crm/lookup",
+            "desk:clipboard/write",
+            "web:mcp-figma/get_file",
+            "web:a_b-c/d/e",
+            "desk:X9",
+        ]);
         assert_eq!(validate(&ok), Ok(()));
     }
 
     /// 服务端前缀、无前缀、空名——一律拒，且拒的是「前缀」这一条。
     #[test]
     fn server_side_and_prefixless_names_are_rejected() {
-        for name in ["srv:x/y", "mcp:everything/echo", "nopfx", "", "web/x", "WEB:x", " web:x"] {
+        for name in [
+            "srv:x/y",
+            "mcp:everything/echo",
+            "nopfx",
+            "",
+            "web/x",
+            "WEB:x",
+            " web:x",
+        ] {
             assert_eq!(
                 validate(&tools(&[name])),
-                Err(CapabilityRejection::ToolPrefix { origin: Origin::TopLevel, name: name.to_string() }),
+                Err(CapabilityRejection::ToolPrefix {
+                    origin: Origin::TopLevel,
+                    name: name.to_string()
+                }),
                 "{name:?} 该因为前缀被拒"
             );
         }
@@ -203,9 +243,21 @@ mod tests {
     #[test]
     fn the_part_after_the_prefix_is_whitelisted() {
         let too_long = format!("web:{}", "a".repeat(MAX_TOOL_NAME_LEN));
-        for name in ["web:", "desk:", "web:a b", "web:a:b", "web:a.b", "web:客户", "web:a\nb", &too_long] {
+        for name in [
+            "web:",
+            "desk:",
+            "web:a b",
+            "web:a:b",
+            "web:a.b",
+            "web:客户",
+            "web:a\nb",
+            &too_long,
+        ] {
             assert!(
-                matches!(validate(&tools(&[name])), Err(CapabilityRejection::ToolNameShape { .. })),
+                matches!(
+                    validate(&tools(&[name])),
+                    Err(CapabilityRejection::ToolNameShape { .. })
+                ),
                 "{name:?} 该因为字符集/长度被拒"
             );
         }
@@ -227,8 +279,12 @@ mod tests {
                 name: "srv:crm/lookup".to_string(),
             })
         );
-        let shape = caps(json!({ "skills": [ { "id": "crm-flow", "tools": [ { "name": "web:a b" } ] } ] }));
-        assert!(matches!(validate(&shape), Err(CapabilityRejection::ToolNameShape { .. })));
+        let shape =
+            caps(json!({ "skills": [ { "id": "crm-flow", "tools": [ { "name": "web:a b" } ] } ] }));
+        assert!(matches!(
+            validate(&shape),
+            Err(CapabilityRejection::ToolNameShape { .. })
+        ));
     }
 
     /// 重名：顶层内部、skill 之间、以及 skill 与顶层之间——工具名在整份声明里全局唯一。
@@ -236,7 +292,10 @@ mod tests {
     fn duplicate_tool_names_are_rejected_everywhere() {
         assert_eq!(
             validate(&tools(&["web:a/b", "web:a/b"])),
-            Err(CapabilityRejection::DuplicateTool { origin: Origin::TopLevel, name: "web:a/b".to_string() })
+            Err(CapabilityRejection::DuplicateTool {
+                origin: Origin::TopLevel,
+                name: "web:a/b".to_string()
+            })
         );
         let across = caps(json!({
             "tools": [ { "name": "web:a/b" } ],
@@ -244,7 +303,10 @@ mod tests {
         }));
         assert_eq!(
             validate(&across),
-            Err(CapabilityRejection::DuplicateTool { origin: Origin::Skill("s1".to_string()), name: "web:a/b".to_string() })
+            Err(CapabilityRejection::DuplicateTool {
+                origin: Origin::Skill("s1".to_string()),
+                name: "web:a/b".to_string()
+            })
         );
         let between_skills = caps(json!({
             "skills": [
@@ -252,7 +314,10 @@ mod tests {
                 { "id": "s2", "tools": [ { "name": "web:a/b" } ] }
             ]
         }));
-        assert!(matches!(validate(&between_skills), Err(CapabilityRejection::DuplicateTool { .. })));
+        assert!(matches!(
+            validate(&between_skills),
+            Err(CapabilityRejection::DuplicateTool { .. })
+        ));
     }
 
     /// skill id 的字符集与重名。
@@ -265,10 +330,17 @@ mod tests {
                 "{id:?} 该被拒"
             );
         }
-        assert_eq!(validate(&caps(json!({ "skills": [ { "id": "crm-flow_2" } ] }))), Ok(()));
         assert_eq!(
-            validate(&caps(json!({ "skills": [ { "id": "s1" }, { "id": "s1" } ] }))),
-            Err(CapabilityRejection::DuplicateSkill { id: "s1".to_string() })
+            validate(&caps(json!({ "skills": [ { "id": "crm-flow_2" } ] }))),
+            Ok(())
+        );
+        assert_eq!(
+            validate(&caps(
+                json!({ "skills": [ { "id": "s1" }, { "id": "s1" } ] })
+            )),
+            Err(CapabilityRejection::DuplicateSkill {
+                id: "s1".to_string()
+            })
         );
     }
 
@@ -276,20 +348,29 @@ mod tests {
     #[test]
     fn an_empty_declaration_is_valid() {
         assert_eq!(validate(&Capabilities::default()), Ok(()));
-        assert_eq!(validate(&caps(json!({ "tools": [], "skills": [] }))), Ok(()));
+        assert_eq!(
+            validate(&caps(json!({ "tools": [], "skills": [] }))),
+            Ok(())
+        );
     }
 
     /// 错误文案要说得清「哪一项、为什么」，且**不原样回显任意长的输入**。
     #[test]
     fn the_message_names_the_offending_item_and_stays_bounded() {
-        let message = validate(&tools(&["srv:crm/lookup"])).unwrap_err().to_string();
+        let message = validate(&tools(&["srv:crm/lookup"]))
+            .unwrap_err()
+            .to_string();
         assert!(message.contains("capabilities.tools"), "{message}");
         assert!(message.contains("srv:crm/lookup"), "{message}");
         assert!(message.contains("web:"), "{message}");
 
         let huge = format!("srv:{}", "x".repeat(10_000));
         let message = validate(&tools(&[&huge])).unwrap_err().to_string();
-        assert!(message.len() < 400, "错误文案不该把请求体原样弹回去：{} 字节", message.len());
+        assert!(
+            message.len() < 400,
+            "错误文案不该把请求体原样弹回去：{} 字节",
+            message.len()
+        );
         assert!(message.contains('…'), "截断该留个记号：{message}");
     }
 }

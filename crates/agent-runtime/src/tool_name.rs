@@ -68,10 +68,15 @@ mod tests {
     use super::*;
 
     fn known() -> Vec<Arc<str>> {
-        ["srv:fs/list", "srv:agent/spawn", "mcp:everything/echo", "read_file"]
-            .iter()
-            .map(|n| Arc::from(*n))
-            .collect()
+        [
+            "srv:fs/list",
+            "srv:agent/spawn",
+            "mcp:everything/echo",
+            "read_file",
+        ]
+        .iter()
+        .map(|n| Arc::from(*n))
+        .collect()
     }
 
     /// 规范名原样通过——模型写对了的那条路一个字节都没变。
@@ -86,8 +91,14 @@ mod tests {
     /// （M6 的工具也是被同一份 `to_wire` 转义的）。
     #[test]
     fn a_wire_name_resolves_back_to_the_canonical_one() {
-        assert_eq!(&**resolve("srv_3Afs_2Flist", &known()).unwrap(), "srv:fs/list");
-        assert_eq!(&**resolve("srv_3Aagent_2Fspawn", &known()).unwrap(), "srv:agent/spawn");
+        assert_eq!(
+            &**resolve("srv_3Afs_2Flist", &known()).unwrap(),
+            "srv:fs/list"
+        );
+        assert_eq!(
+            &**resolve("srv_3Aagent_2Fspawn", &known()).unwrap(),
+            "srv:agent/spawn"
+        );
         assert_eq!(
             &**resolve("mcp_3Aeverything_2Fecho", &known()).unwrap(),
             "mcp:everything/echo"
@@ -101,7 +112,11 @@ mod tests {
     fn every_known_name_round_trips_through_its_wire_form() {
         for name in known() {
             let wire = wire_name::to_wire(&name);
-            assert_eq!(resolve(&wire, &known()).unwrap(), &name, "{name} 的 wire 名解不回来");
+            assert_eq!(
+                resolve(&wire, &known()).unwrap(),
+                &name,
+                "{name} 的 wire 名解不回来"
+            );
         }
     }
 

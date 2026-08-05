@@ -10,7 +10,10 @@
 #[path = "../spawn_indep_support/mod.rs"]
 pub mod base;
 
-pub use base::{Route, RoutedServer, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir, wire_tool_name};
+pub use base::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
+    wire_tool_name,
+};
 
 use agent_core::{AgentId, ContentBlock, Session};
 
@@ -24,12 +27,19 @@ pub fn tool_result(session: &Session, agent: &AgentId, call_id: &str) -> (String
         .iter()
         .flat_map(|m| m.blocks.iter())
         .find_map(|block| match block {
-            ContentBlock::ToolResult { id, content, is_error } if &*id.0 == call_id => {
-                Some((content.to_string(), *is_error))
-            }
+            ContentBlock::ToolResult {
+                id,
+                content,
+                is_error,
+            } if &*id.0 == call_id => Some((content.to_string(), *is_error)),
             _ => None,
         })
-        .unwrap_or_else(|| panic!("{} 的历史里没有 call_id={call_id} 的 tool_result：{messages:#?}", agent.as_str()))
+        .unwrap_or_else(|| {
+            panic!(
+                "{} 的历史里没有 call_id={call_id} 的 tool_result：{messages:#?}",
+                agent.as_str()
+            )
+        })
 }
 
 /// status 正文里每一行开头那个 agent id（跳过标题行）。
@@ -38,10 +48,16 @@ pub fn tool_result(session: &Session, agent: &AgentId, call_id: &str) -> (String
 /// 在 agent 树上那是个假绿灯——「兄弟不该出现」这类断言必须逐行取第一个字段比
 /// 集合，否则红线 10 破了测试还是绿的。
 pub fn listed_ids(body: &str) -> Vec<&str> {
-    body.lines().skip(1).map(|line| line.split(' ').next().unwrap()).collect()
+    body.lines()
+        .skip(1)
+        .map(|line| line.split(' ').next().unwrap())
+        .collect()
 }
 
 /// status 正文里每一行的 activity 字段（`id depth=N <activity> task=...` 的第三段）。
 pub fn listed_activities(body: &str) -> Vec<&str> {
-    body.lines().skip(1).map(|line| line.split(' ').nth(2).unwrap()).collect()
+    body.lines()
+        .skip(1)
+        .map(|line| line.split(' ').nth(2).unwrap())
+        .collect()
 }

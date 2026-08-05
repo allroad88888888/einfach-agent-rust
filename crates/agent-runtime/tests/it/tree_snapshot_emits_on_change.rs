@@ -14,7 +14,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use agent_core::{AgentActivity, AgentId, AgentLimits, AgentTree, ErrorClass, Failure, Session, TurnStatus};
+use agent_core::{
+    AgentActivity, AgentId, AgentLimits, AgentTree, ErrorClass, Failure, Session, TurnStatus,
+};
 use agent_runtime::{ToolTable, run_turn};
 
 use support::routed::{Route, RoutedServer};
@@ -25,7 +27,9 @@ fn text_reply(needle: &'static str, content: &str) -> Route {
     Route::sse(
         needle,
         vec![
-            format!(r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#),
+            format!(
+                r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{content}"}},"finish_reason":null}}]}}"#
+            ),
             USAGE_STOP.to_string(),
             "data: [DONE]".to_string(),
         ],
@@ -33,7 +37,9 @@ fn text_reply(needle: &'static str, content: &str) -> Route {
 }
 
 /// 收集一条 `RunnerCtx::with_tree_events` 的树快照序列，供两条测试共用装配。
-fn collect_trees(ctx: agent_runtime::RunnerCtx) -> (agent_runtime::RunnerCtx, Rc<RefCell<Vec<AgentTree>>>) {
+fn collect_trees(
+    ctx: agent_runtime::RunnerCtx,
+) -> (agent_runtime::RunnerCtx, Rc<RefCell<Vec<AgentTree>>>) {
     let trees = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&trees);
     let ctx = ctx.with_tree_events(Box::new(move |tree| sink.borrow_mut().push(tree)));
@@ -68,7 +74,10 @@ fn spawning_a_child_emits_a_tree_snapshot_that_includes_it() {
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let trees = trees.borrow();
-    assert!(!trees.is_empty(), "开了 with_tree_events 就该至少收到一棵树");
+    assert!(
+        !trees.is_empty(),
+        "开了 with_tree_events 就该至少收到一棵树"
+    );
 
     // 该有一帧恰好在子 agent 刚生出来、还没落终态那一刻：root 在等（ToolsPending
     // 的呈现层投影是 `Working`），子已经在树上、正在 `Thinking`。
@@ -81,13 +90,22 @@ fn spawning_a_child_emits_a_tree_snapshot_that_includes_it() {
     assert_eq!(with_live_child.nodes[1].id, child);
     assert_eq!(with_live_child.nodes[1].parent, Some(AgentId::root()));
     assert_eq!(with_live_child.nodes[1].depth, 1);
-    assert_eq!(with_live_child.nodes[1].task.as_deref(), Some("任务X：查天气"));
+    assert_eq!(
+        with_live_child.nodes[1].task.as_deref(),
+        Some("任务X：查天气")
+    );
 
     // 最后一帧是收尾终态：两个都 Done。
     let last = trees.last().expect("至少有一帧");
     assert_eq!(last.nodes.len(), 2);
-    assert!(matches!(last.nodes[0].activity, AgentActivity::Done { .. }), "{last:#?}");
-    assert!(matches!(last.nodes[1].activity, AgentActivity::Done { .. }), "{last:#?}");
+    assert!(
+        matches!(last.nodes[0].activity, AgentActivity::Done { .. }),
+        "{last:#?}"
+    );
+    assert!(
+        matches!(last.nodes[1].activity, AgentActivity::Done { .. }),
+        "{last:#?}"
+    );
 
     // change 检测生效的直接证据：连续两帧不该完全相同（每一帧都代表一次真实
     // 变化，不是无脑逐 step 重推）。
@@ -114,15 +132,26 @@ fn a_provider_timeout_retry_that_leaves_status_unchanged_does_not_re_emit() {
     session.set_max_retries(1);
 
     let status = run_turn(&mut session, &mut ctx, "你好");
-    assert_eq!(status, TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable)));
+    assert_eq!(
+        status,
+        TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable))
+    );
 
     let trees = trees.borrow();
     // 该恰好两帧：`UserInput` 把 root 推进 `Thinking`（第一帧），重试那次
     // `Timeout` 状态原地不动（不该多推一帧），耗尽预算的第二次 `Timeout` 把
     // root 推进 `Failed`（第二帧）。多于两帧就说明「没变的 step」也被推了。
-    assert_eq!(trees.len(), 2, "该恰好两帧（Thinking 一次、Failed 一次），重试那步不该重复推同一棵树：{trees:#?}");
+    assert_eq!(
+        trees.len(),
+        2,
+        "该恰好两帧（Thinking 一次、Failed 一次），重试那步不该重复推同一棵树：{trees:#?}"
+    );
     assert_eq!(trees[0].nodes.len(), 1);
     assert_eq!(trees[0].nodes[0].activity, AgentActivity::Thinking);
     assert_eq!(trees[1].nodes.len(), 1);
-    assert!(matches!(trees[1].nodes[0].activity, AgentActivity::Failed { .. }), "{:?}", trees[1]);
+    assert!(
+        matches!(trees[1].nodes[0].activity, AgentActivity::Failed { .. }),
+        "{:?}",
+        trees[1]
+    );
 }

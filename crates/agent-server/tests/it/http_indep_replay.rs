@@ -34,14 +34,24 @@ fn drain_until_terminal(sse: &mut SseClient) -> Vec<SseFrame> {
 #[tokio::test(flavor = "multi_thread")]
 async fn reconnect_with_last_event_id_replays_missed_frames_byte_for_byte() {
     let upstream = FakeUpstream::start(vec![Script::Text("hello".to_string())]);
-    let server = start(upstream.endpoint(), HarnessConfig { ring_capacity: 256, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            ring_capacity: 256,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let mut first = SseClient::connect(server.addr, &id, None);
     let resp = server.post_input(&id, "hi");
     assert_eq!(resp.status, 202);
     let original_frames = drain_until_terminal(&mut first);
-    assert!(original_frames.len() >= 3, "这轮至少该有 notice/text_delta/终态几帧：{original_frames:?}");
+    assert!(
+        original_frames.len() >= 3,
+        "这轮至少该有 notice/text_delta/终态几帧：{original_frames:?}"
+    );
     drop(first);
 
     // 从中间一帧断开重连——用倒数第二帧的 id 当 Last-Event-ID。
@@ -52,7 +62,9 @@ async fn reconnect_with_last_event_id_replays_missed_frames_byte_for_byte() {
     let mut reconnected = SseClient::connect(server.addr, &id, Some(last_seen_id));
     let mut replayed = Vec::new();
     for _ in 0..expected_next.len() {
-        let frame = reconnected.next_frame(Duration::from_secs(3)).unwrap_or_else(|| panic!("补发帧超时，已收到 {replayed:?}"));
+        let frame = reconnected
+            .next_frame(Duration::from_secs(3))
+            .unwrap_or_else(|| panic!("补发帧超时，已收到 {replayed:?}"));
         replayed.push(frame);
     }
 
@@ -61,7 +73,11 @@ async fn reconnect_with_last_event_id_replays_missed_frames_byte_for_byte() {
         assert_eq!(got.id, want.id, "补发帧的 id 该跟首播完全一致");
         assert_eq!(got.data, want.data, "补发帧的内容该跟首播逐字节相同");
     }
-    assert_eq!(replayed[0].id, Some(last_seen_id + 1), "首帧 id 该是 Last-Event-ID + 1");
+    assert_eq!(
+        replayed[0].id,
+        Some(last_seen_id + 1),
+        "首帧 id 该是 Last-Event-ID + 1"
+    );
 }
 
 /// 重连带一个超出缓冲的旧 id（缓冲已经把它挤掉了）→ 首帧是显式的 `gap` 帧，
@@ -70,9 +86,19 @@ async fn reconnect_with_last_event_id_replays_missed_frames_byte_for_byte() {
 /// 数会随 provider adapter 的内部实现细节变化，不该是这个测试的前提假设）。
 #[tokio::test(flavor = "multi_thread")]
 async fn reconnect_past_the_ring_buffer_gets_an_exact_gap_frame() {
-    let upstream = FakeUpstream::start(vec![Script::Text("one".to_string()), Script::Text("two".to_string())]);
+    let upstream = FakeUpstream::start(vec![
+        Script::Text("one".to_string()),
+        Script::Text("two".to_string()),
+    ]);
     // 容量给得很小，逼两轮下来早期的帧必然被挤出缓冲。
-    let server = start(upstream.endpoint(), HarnessConfig { ring_capacity: 2, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            ring_capacity: 2,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let mut first = SseClient::connect(server.addr, &id, None);
@@ -84,23 +110,40 @@ async fn reconnect_past_the_ring_buffer_gets_an_exact_gap_frame() {
 
     // 带一个必然早就被挤出去的 id（0：从来没有过的最早位置）重连。
     let mut gapped = SseClient::connect(server.addr, &id, Some(0));
-    let gap = gapped.next_frame(Duration::from_secs(3)).expect("该有一帧 gap");
-    assert!(gap.data.starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"gap\""), "首帧该是 gap，实际：{}", gap.data);
+    let gap = gapped
+        .next_frame(Duration::from_secs(3))
+        .expect("该有一帧 gap");
+    assert!(
+        gap.data
+            .starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"gap\""),
+        "首帧该是 gap，实际：{}",
+        gap.data
+    );
     let gap_json: serde_json::Value = serde_json::from_str(&gap.data).unwrap();
     assert_eq!(gap_json["agent"], "root");
-    let skipped = gap_json["event"]["data"]["skipped"].as_u64().expect("gap 帧该带精确的 skipped 数值");
+    let skipped = gap_json["event"]["data"]["skipped"]
+        .as_u64()
+        .expect("gap 帧该带精确的 skipped 数值");
 
     // 独立探测连接：用 gap 帧自己报的 id 当 Last-Event-ID 重连，缓冲区此刻
     // 最老的一帧就会作为首帧发回——这证明 `skipped` 精确对应
     // `oldest_available_id - 0 - 1`，不是估计值。
     let mut probe = SseClient::connect(server.addr, &id, Some(gap.id.expect("gap 帧也带 id")));
-    let oldest_still_buffered = probe.next_frame(Duration::from_secs(3)).expect("gap.id 是精确值，用它重连不该再触发一次 gap");
+    let oldest_still_buffered = probe
+        .next_frame(Duration::from_secs(3))
+        .expect("gap.id 是精确值，用它重连不该再触发一次 gap");
     assert!(
-        !oldest_still_buffered.data.starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"gap\""),
+        !oldest_still_buffered
+            .data
+            .starts_with("{\"agent\":\"root\",\"event\":{\"type\":\"gap\""),
         "用 gap.id 重连该正常补发，不该再 gap 一次"
     );
     let oldest_id = oldest_still_buffered.id.expect("补发帧带 id");
-    assert_eq!(skipped, oldest_id - 1, "skipped 必须精确等于 oldest_available_id - last_event_id(0) - 1");
+    assert_eq!(
+        skipped,
+        oldest_id - 1,
+        "skipped 必须精确等于 oldest_available_id - last_event_id(0) - 1"
+    );
 
     // 分歧记录（如实写在测试里，不是只讲给人听）：issue 031 原文「重连带 id →
     // 先补积压再接直播；缓冲被冲掉（id 太旧）→ 发一帧显式 gap 事件」的自然读法
@@ -113,8 +156,11 @@ async fn reconnect_past_the_ring_buffer_gets_an_exact_gap_frame() {
     // 维护者判断是不是刻意简化。
     let mut post_gap = Vec::new();
     let saw_buffered_tail_on_gapped_connection = loop {
-        let Some(frame) = gapped.next_frame(Duration::from_millis(500)) else { break false };
-        let matches_buffered_tail = frame.id == Some(oldest_id) && frame.data == oldest_still_buffered.data;
+        let Some(frame) = gapped.next_frame(Duration::from_millis(500)) else {
+            break false;
+        };
+        let matches_buffered_tail =
+            frame.id == Some(oldest_id) && frame.data == oldest_still_buffered.data;
         post_gap.push(frame);
         if matches_buffered_tail {
             break true;
@@ -131,7 +177,12 @@ async fn reconnect_past_the_ring_buffer_gets_an_exact_gap_frame() {
 
     // 当前实测行为：gap 之后没有重放剩余尾部，直接接上后续的直播事件。
     server.post_input(&id, "third");
-    let live_frame = gapped.next_frame(Duration::from_secs(3)).expect("gap 之后这条连接至少该接得上新的直播事件");
+    let live_frame = gapped
+        .next_frame(Duration::from_secs(3))
+        .expect("gap 之后这条连接至少该接得上新的直播事件");
     let live_id = live_frame.id.expect("直播帧带 id");
-    assert!(live_id > oldest_id, "跳过重放之后收到的该是新一轮的直播帧，id 该比缓冲尾部还新：{live_id} vs {oldest_id}");
+    assert!(
+        live_id > oldest_id,
+        "跳过重放之后收到的该是新一轮的直播帧，id 该比缓冲尾部还新：{live_id} vs {oldest_id}"
+    );
 }

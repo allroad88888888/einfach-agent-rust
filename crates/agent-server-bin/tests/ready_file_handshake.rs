@@ -105,7 +105,8 @@ fn wait_until<T>(what: &str, mut probe: impl FnMut() -> Option<T>) -> T {
 /// 极简 HTTP/1.1：一次请求一条连接，`Connection: close` 之后读到 EOF。
 fn http(port: u16, request_line: &str, body: Option<&str>) -> String {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
-    let mut request = format!("{request_line} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
+    let mut request =
+        format!("{request_line} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
     if let Some(body) = body {
         request.push_str(&format!(
             "Content-Type: application/json\r\nContent-Length: {}\r\n",
@@ -148,12 +149,18 @@ fn ready_file_publishes_the_listening_port_and_sigterm_exits_gracefully() {
     let mut child = fixture.spawn(Some(&ready_file));
 
     let record = wait_until("就绪文件出现", || {
-        fs::read_to_string(&ready_file).ok().filter(|r| r.ends_with('\n'))
+        fs::read_to_string(&ready_file)
+            .ok()
+            .filter(|r| r.ends_with('\n'))
     });
 
     // 契约三个字段都在，且 pid 就是这个子进程——Java 侧靠它交叉校验，
     // 确认读到的不是上一次启动留下的陈旧文件。
-    assert_eq!(field(&record, "\"pid\":"), child.id().to_string(), "{record}");
+    assert_eq!(
+        field(&record, "\"pid\":"),
+        child.id().to_string(),
+        "{record}"
+    );
     assert!(!field(&record, "\"version\":").is_empty(), "{record}");
     let port: u16 = field(&record, "\"port\":").parse().unwrap();
     assert_ne!(port, 0, "--port 0 必须发布操作系统实际分配的端口：{record}");
@@ -191,13 +198,19 @@ fn without_the_flag_nothing_is_published_and_startup_is_unchanged() {
 
     let log = wait_until("启动横幅", || {
         let log = fixture.log();
-        log.contains("agent-server 监听 http://127.0.0.1:").then_some(log)
+        log.contains("agent-server 监听 http://127.0.0.1:")
+            .then_some(log)
     });
-    assert!(!log.contains("就绪文件="), "没给 --ready-file 就不该提它：{log}");
     assert!(
-        fs::read_dir(&fixture.dir)
+        !log.contains("就绪文件="),
+        "没给 --ready-file 就不该提它：{log}"
+    );
+    assert!(
+        fs::read_dir(&fixture.dir).unwrap().all(|entry| !entry
             .unwrap()
-            .all(|entry| !entry.unwrap().file_name().to_string_lossy().contains("ready")),
+            .file_name()
+            .to_string_lossy()
+            .contains("ready")),
         "没给 --ready-file 时不该写出任何就绪文件"
     );
 

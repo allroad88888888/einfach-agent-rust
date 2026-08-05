@@ -17,7 +17,10 @@ use support::mcp;
 fn tool_result_block(session: &Session) -> (String, bool) {
     for message in session.messages() {
         for block in &message.blocks {
-            if let ContentBlock::ToolResult { content, is_error, .. } = block {
+            if let ContentBlock::ToolResult {
+                content, is_error, ..
+            } = block
+            {
                 return (content.to_string(), *is_error);
             }
         }
@@ -33,8 +36,13 @@ fn mcp_call_takes_the_fourth_path_and_becomes_a_tool_result() {
         mcp::hop_tool_use("mcp_3Aeverything_2Fecho", "call_echo"),
         mcp::hop_end_turn(),
     ]);
-    let (mut ctx, events) =
-        mcp::build_ctx(port, &dir, "everything", vec![mcp::tool_entry("everything", "echo", true)], &script);
+    let (mut ctx, events) = mcp::build_ctx(
+        port,
+        &dir,
+        "everything",
+        vec![mcp::tool_entry("everything", "echo", true)],
+        &script,
+    );
     let mut session = Session::new(AgentId::root());
 
     let status = run_turn(&mut session, &mut ctx, "echo 一下");
@@ -66,8 +74,13 @@ fn mcp_server_error_becomes_an_is_error_tool_result_and_the_loop_continues() {
         mcp::hop_tool_use("mcp_3Aeverything_2Fecho", "call_echo"),
         mcp::hop_end_turn(),
     ]);
-    let (mut ctx, _events) =
-        mcp::build_ctx(port, &dir, "everything", vec![mcp::tool_entry("everything", "echo", true)], &script);
+    let (mut ctx, _events) = mcp::build_ctx(
+        port,
+        &dir,
+        "everything",
+        vec![mcp::tool_entry("everything", "echo", true)],
+        &script,
+    );
     let mut session = Session::new(AgentId::root());
 
     // server 报错不该 panic 也不该卡死——loop 照常走到 hop2 的 EndTurn。
@@ -76,5 +89,8 @@ fn mcp_server_error_becomes_an_is_error_tool_result_and_the_loop_continues() {
 
     let (content, is_error) = tool_result_block(&session);
     assert!(is_error, "server 返回 error 该落 is_error 的 tool_result");
-    assert!(content.contains("boom from server"), "错误内容该带上 server 的 message：{content}");
+    assert!(
+        content.contains("boom from server"),
+        "错误内容该带上 server 的 message：{content}"
+    );
 }

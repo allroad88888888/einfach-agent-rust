@@ -50,7 +50,11 @@ pub(crate) fn sweep(
             continue;
         }
         let call = calls.remove(i);
-        pending.push_back(Event::Timeout { agent: call.agent, epoch: call.epoch, call_id: None });
+        pending.push_back(Event::Timeout {
+            agent: call.agent,
+            epoch: call.epoch,
+            call_id: None,
+        });
     }
     pending.extend(expired(ctx, now));
 }
@@ -64,7 +68,10 @@ pub(crate) fn sweep(
 ///
 /// 多个槽同时过期时逐个恢复：每次 [`runner::resume`] 把泵驱动到静止，剩下的槽
 /// 让下一次继续——`Session::step` 一次只吃一条事件，攒成一批喂进去也是同一条路。
-pub fn sweep_remote_tool_deadlines(session: &mut Session, ctx: &mut RunnerCtx) -> Option<TurnStatus> {
+pub fn sweep_remote_tool_deadlines(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+) -> Option<TurnStatus> {
     let events = expired(ctx, Instant::now());
     let mut status = None;
     for event in events {

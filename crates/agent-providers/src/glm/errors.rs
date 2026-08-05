@@ -19,13 +19,19 @@ mod tests {
     /// 兜底判成 `BadRequest`。
     #[test]
     fn model_name_error_is_400_bad_request() {
-        assert_eq!(classify(400, r#"{"error":{"message":"model not found"}}"#), ErrorClass::BadRequest);
+        assert_eq!(
+            classify(400, r#"{"error":{"message":"model not found"}}"#),
+            ErrorClass::BadRequest
+        );
     }
 
     /// key 无效：401，靠状态码兜底判成 `Auth`。
     #[test]
     fn invalid_key_is_401_auth() {
-        assert_eq!(classify(401, r#"{"error":{"message":"invalid api key"}}"#), ErrorClass::Auth);
+        assert_eq!(
+            classify(401, r#"{"error":{"message":"invalid api key"}}"#),
+            ErrorClass::Auth
+        );
     }
 
     /// 如果这家的 `type` 恰好带上通用关键词，一样能被共享逻辑判对——不需要

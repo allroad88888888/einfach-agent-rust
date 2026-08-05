@@ -83,7 +83,13 @@ impl RunnerCtx {
             return;
         }
         let deadline = Instant::now() + self.remote_tool_timeout;
-        self.pending_remote_tools.0.push(PendingRemoteTool { agent, call_id, epoch, request, deadline });
+        self.pending_remote_tools.0.push(PendingRemoteTool {
+            agent,
+            call_id,
+            epoch,
+            request,
+            deadline,
+        });
         self.publish_pending_remote_tools();
     }
 
@@ -131,7 +137,11 @@ impl RunnerCtx {
     /// 等待的会话一分钱开销都不多付）；`Some(t)` → 至多等到 `t`，到点调
     /// [`crate::sweep_remote_tool_deadlines`]。
     pub fn next_remote_deadline(&self) -> Option<Instant> {
-        self.pending_remote_tools.0.iter().map(|pending| pending.deadline).min()
+        self.pending_remote_tools
+            .0
+            .iter()
+            .map(|pending| pending.deadline)
+            .min()
     }
 
     /// 还有几个远端调用在等回传。宿主/测试用来判断「这次派发到底有没有进等待
@@ -175,7 +185,10 @@ impl RunnerCtx {
     /// 回调收到的是**变化之后**的整份快照，不是增量：一份小 `Vec` 的整体重写比
     /// 「加了一条 / 减了一条」两种消息好——接收方只要照单覆盖，不必自己维护一份
     /// 会跟服务端漂移的镜像（048 的树快照同一条判据）。
-    pub fn with_pending_remote_tools(mut self, on_change: Box<dyn FnMut(Vec<RemoteToolWaiting>)>) -> Self {
+    pub fn with_pending_remote_tools(
+        mut self,
+        on_change: Box<dyn FnMut(Vec<RemoteToolWaiting>)>,
+    ) -> Self {
         self.on_pending_remote_tools = Some(on_change);
         self
     }

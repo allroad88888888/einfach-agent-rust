@@ -77,7 +77,11 @@ impl<K: Clone, V: Clone, M: Clone> History<K, V, M> {
         same_turn: impl Fn(&M, &M) -> bool,
         barrier: impl Fn(&M) -> bool,
     ) -> UndoOutcome<K, V, M> {
-        let Some(first) = self.cursor.checked_sub(1).map(|i| self.entries[i].meta.clone()) else {
+        let Some(first) = self
+            .cursor
+            .checked_sub(1)
+            .map(|i| self.entries[i].meta.clone())
+        else {
             return UndoOutcome::Nothing;
         };
         self.undo_while(barrier, |m| same_turn(m, &first))
@@ -163,18 +167,41 @@ mod tests {
     type Log = History<String, i32, Meta>;
 
     /// 普通一步 / 不可逆一步 / 判同 turn / 判屏障 / 全放行。
-    fn m(turn: u32) -> Meta { Meta { turn, irreversible: false } }
-    fn boom(turn: u32) -> Meta { Meta { turn, irreversible: true } }
-    fn same_turn(a: &Meta, b: &Meta) -> bool { a.turn == b.turn }
-    fn barrier(m: &Meta) -> bool { m.irreversible }
-    fn open(_: &Meta) -> bool { false }
+    fn m(turn: u32) -> Meta {
+        Meta {
+            turn,
+            irreversible: false,
+        }
+    }
+    fn boom(turn: u32) -> Meta {
+        Meta {
+            turn,
+            irreversible: true,
+        }
+    }
+    fn same_turn(a: &Meta, b: &Meta) -> bool {
+        a.turn == b.turn
+    }
+    fn barrier(m: &Meta) -> bool {
+        m.irreversible
+    }
+    fn open(_: &Meta) -> bool {
+        false
+    }
 
     /// 每条 entry 一处变更，值无关紧要 —— 这个文件只测游标怎么动。
     fn log_of(metas: &[Meta]) -> Log {
         let mut h = Log::new();
         for (i, meta) in metas.iter().enumerate() {
             let i = i as i32;
-            h.append(meta.clone(), vec![Change { key: "a".to_string(), prev: i, next: i + 1 }]);
+            h.append(
+                meta.clone(),
+                vec![Change {
+                    key: "a".to_string(),
+                    prev: i,
+                    next: i + 1,
+                }],
+            );
         }
         h
     }
@@ -230,7 +257,10 @@ mod tests {
     #[test]
     fn a_barrier_right_under_the_cursor_blocks_without_moving_it() {
         let mut h = log_of(&[m(1), boom(1)]);
-        let blocked = UndoOutcome::Blocked { applied: vec![], barrier_seq: 1 };
+        let blocked = UndoOutcome::Blocked {
+            applied: vec![],
+            barrier_seq: 1,
+        };
 
         assert_eq!(h.undo_one(barrier), blocked);
         assert_eq!(h.cursor(), 2); // 一动不动
@@ -261,7 +291,10 @@ mod tests {
 
         let outcome = h.undo_turn(same_turn, barrier);
         assert_eq!(applied_seqs(&outcome), vec![2]);
-        assert!(matches!(outcome, UndoOutcome::Blocked { barrier_seq: 1, .. }));
+        assert!(matches!(
+            outcome,
+            UndoOutcome::Blocked { barrier_seq: 1, .. }
+        ));
         assert_eq!(h.cursor(), 2); // 停在屏障后一格：屏障本身没被越过
 
         // 被挡住那一半仍然能 redo 回去。
@@ -296,5 +329,4 @@ mod tests {
         assert_eq!(applied_seqs(&h.undo_turn(|_, _| true, open)), vec![2, 1, 0]);
         assert_eq!(h.cursor(), 0);
     }
-
 }

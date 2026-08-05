@@ -6,7 +6,7 @@
 mod common;
 use common::*;
 
-use agent_store::{record_set, History, Store, UndoOutcome};
+use agent_store::{History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M;

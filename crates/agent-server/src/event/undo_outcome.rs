@@ -52,13 +52,21 @@ impl UndoOutcome {
         match report {
             UndoReport::Applied { entries, turn_id } => UndoOutcome::Applied { entries, turn_id },
             UndoReport::Nothing => UndoOutcome::Nothing,
-            UndoReport::Blocked { entries, barrier_seq } => {
+            UndoReport::Blocked {
+                entries,
+                barrier_seq,
+            } => {
                 let info = session.barrier_info(barrier_seq);
                 UndoOutcome::Blocked {
                     entries,
                     barrier_seq,
-                    label: info.as_ref().map(|i| i.label.to_string()).unwrap_or_default(),
-                    tool: info.as_ref().and_then(|i| i.tool.as_deref().map(str::to_string)),
+                    label: info
+                        .as_ref()
+                        .map(|i| i.label.to_string())
+                        .unwrap_or_default(),
+                    tool: info
+                        .as_ref()
+                        .and_then(|i| i.tool.as_deref().map(str::to_string)),
                     call_id: info.and_then(|i| i.call_id.map(|c| c.0.to_string())),
                 }
             }
@@ -70,7 +78,9 @@ impl UndoOutcome {
 mod tests {
     use std::sync::Arc;
 
-    use agent_core::{AgentId, ContentBlock, Event, PrefixImage, StopReason, TokenUsage, ToolCallId};
+    use agent_core::{
+        AgentId, ContentBlock, Event, PrefixImage, StopReason, TokenUsage, ToolCallId,
+    };
 
     use super::*;
 
@@ -78,10 +88,22 @@ mod tests {
     fn from_report_applied_and_nothing_translate_field_for_field() {
         let session = Session::new(AgentId::root());
         assert_eq!(
-            UndoOutcome::from_report(UndoReport::Applied { entries: 3, turn_id: 2 }, &session),
-            UndoOutcome::Applied { entries: 3, turn_id: 2 }
+            UndoOutcome::from_report(
+                UndoReport::Applied {
+                    entries: 3,
+                    turn_id: 2
+                },
+                &session
+            ),
+            UndoOutcome::Applied {
+                entries: 3,
+                turn_id: 2
+            }
         );
-        assert_eq!(UndoOutcome::from_report(UndoReport::Nothing, &session), UndoOutcome::Nothing);
+        assert_eq!(
+            UndoOutcome::from_report(UndoReport::Nothing, &session),
+            UndoOutcome::Nothing
+        );
     }
 
     /// 同 `agent-cli::undo` / `agent_core::command::barrier` 那份夹具：一次
@@ -89,7 +111,10 @@ mod tests {
     /// barrier entry。
     fn session_with_a_barrier_entry() -> Session {
         let mut session = Session::new(AgentId::root());
-        let _ = session.step(Event::UserInput { agent: AgentId::root(), text: "跑个命令".into() });
+        let _ = session.step(Event::UserInput {
+            agent: AgentId::root(),
+            text: "跑个命令".into(),
+        });
         let call_id = ToolCallId::new("call_shell_1");
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),
@@ -100,8 +125,15 @@ mod tests {
                 input: Arc::new(serde_json::json!({"cmd": "echo hi"})),
             }],
             stop: StopReason::ToolUse,
-            usage: TokenUsage { prompt: 10, completion: 5, cached: None },
-            prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+            usage: TokenUsage {
+                prompt: 10,
+                completion: 5,
+                cached: None,
+            },
+            prefix: PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: None,
+            },
             adjustments: Vec::new(),
         });
         session.mark_irreversible(call_id.clone());
@@ -124,7 +156,13 @@ mod tests {
         assert!(matches!(report, UndoReport::Blocked { .. }), "{report:?}");
 
         let outcome = UndoOutcome::from_report(report, &session);
-        let UndoOutcome::Blocked { tool, call_id, label, .. } = outcome else {
+        let UndoOutcome::Blocked {
+            tool,
+            call_id,
+            label,
+            ..
+        } = outcome
+        else {
             panic!("该是 Blocked：{outcome:?}");
         };
         assert_eq!(tool.as_deref(), Some("srv:shell/exec"));

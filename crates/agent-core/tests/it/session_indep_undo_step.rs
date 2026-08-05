@@ -23,7 +23,10 @@ fn undo_step_flips_convergence_back_immediately_without_a_step_call() {
     assert!(matches!(report, UndoReport::Applied { entries: 1, .. }));
 
     // 没有调用任何 step()：derived 是现查出来的，不是维护出来的缓存。
-    assert!(!session.tools_converged(), "回滚之后立刻应该看到 Pending 那个槽回来了");
+    assert!(
+        !session.tools_converged(),
+        "回滚之后立刻应该看到 Pending 那个槽回来了"
+    );
     assert_eq!(session.status(), agent_core::TurnStatus::ToolsPending);
 }
 
@@ -41,10 +44,26 @@ fn undo_step_reverts_exactly_one_entry_leaving_earlier_entries_intact() {
     assert!(matches!(report, UndoReport::Applied { entries: 1, .. }));
 
     assert_eq!(session.cursor(), cursor_before - 1, "游标恰好退一步");
-    assert_eq!(session.history_len(), history_len_before, "undo 不物理删条目，日志长度不变");
-    assert_eq!(session.status(), agent_core::TurnStatus::Thinking, "只退了 ProviderDone 那一条，不是整轮");
-    assert_eq!(session.messages().len(), 1, "ProviderDone 追加的助手消息被退掉了");
-    assert_eq!(session.messages().get(0).cloned(), first_message_before, "更早的 entry（用户消息）原封不动");
+    assert_eq!(
+        session.history_len(),
+        history_len_before,
+        "undo 不物理删条目，日志长度不变"
+    );
+    assert_eq!(
+        session.status(),
+        agent_core::TurnStatus::Thinking,
+        "只退了 ProviderDone 那一条，不是整轮"
+    );
+    assert_eq!(
+        session.messages().len(),
+        1,
+        "ProviderDone 追加的助手消息被退掉了"
+    );
+    assert_eq!(
+        session.messages().get(0).cloned(),
+        first_message_before,
+        "更早的 entry（用户消息）原封不动"
+    );
 }
 
 #[test]

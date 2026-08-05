@@ -23,8 +23,10 @@ use crate::value::atom_value::AgentValue;
 pub(crate) fn to_value(mut items: Vec<Arc<str>>) -> AgentValue {
     items.sort();
     items.dedup();
-    let arr: Vec<serde_json::Value> =
-        items.into_iter().map(|s| serde_json::Value::String(s.to_string())).collect();
+    let arr: Vec<serde_json::Value> = items
+        .into_iter()
+        .map(|s| serde_json::Value::String(s.to_string()))
+        .collect();
     AgentValue::Json(Arc::new(serde_json::Value::Array(arr)))
 }
 
@@ -35,7 +37,10 @@ pub(crate) fn from_value(value: &AgentValue) -> Vec<Arc<str>> {
     let Some(array) = value.as_json().and_then(|j| j.as_array()) else {
         return Vec::new();
     };
-    array.iter().filter_map(|v| v.as_str().map(Arc::from)).collect()
+    array
+        .iter()
+        .filter_map(|v| v.as_str().map(Arc::from))
+        .collect()
 }
 
 #[cfg(test)]
@@ -48,7 +53,9 @@ mod tests {
         let a = to_value(vec![Arc::from("b"), Arc::from("a"), Arc::from("b")]);
         let b = to_value(vec![Arc::from("a"), Arc::from("b")]);
         assert_eq!(a, b);
-        let AgentValue::Json(v) = &a else { panic!("落 Json") };
+        let AgentValue::Json(v) = &a else {
+            panic!("落 Json")
+        };
         assert_eq!(serde_json::to_string(&**v).unwrap(), r#"["a","b"]"#);
     }
 

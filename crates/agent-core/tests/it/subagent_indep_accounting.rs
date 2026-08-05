@@ -29,14 +29,19 @@ fn turn_ids_touching(session: &Session, agent: &AgentId) -> Vec<u64> {
 fn a_childs_entries_carry_the_turn_id_root_was_on_when_they_were_written() {
     let mut session = new_session();
     let root = session.agent().clone();
-    let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn");
+    let child = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn");
 
     let turn_at_spawn = session.turn_id();
     session.step(user_input_for(&child, "第一轮"));
 
     let turns = turn_ids_touching(&session, &child);
     assert!(!turns.is_empty(), "spawn + 子的写入总该留下点什么");
-    assert!(turns.iter().all(|t| *t == turn_at_spawn), "子的 entry 该继承 root 当时那一轮的 turn_id");
+    assert!(
+        turns.iter().all(|t| *t == turn_at_spawn),
+        "子的 entry 该继承 root 当时那一轮的 turn_id"
+    );
 }
 
 /// root 开新一轮之后，子在新一轮里写的 entry 该盖新的 `turn_id`——子自己的
@@ -46,7 +51,9 @@ fn a_childs_entries_carry_the_turn_id_root_was_on_when_they_were_written() {
 fn a_new_root_turn_changes_the_turn_id_the_childs_later_entries_carry() {
     let mut session = new_session();
     let root = session.agent().clone();
-    let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn");
+    let child = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn");
     session.step(user_input_for(&child, "开始思考")); // 子: Idle -> Thinking，落在 turn_one
     let turn_one = session.turn_id();
 
@@ -59,6 +66,12 @@ fn a_new_root_turn_changes_the_turn_id_the_childs_later_entries_carry() {
     session.step(provider_done_end_turn_for(&child, session.epoch(), "答案"));
 
     let touched = turn_ids_touching(&session, &child);
-    assert!(touched.contains(&turn_one), "子出生 + 开始思考那批 entry 盖的是 turn_one");
-    assert!(touched.contains(&turn_two), "子在 turn_two 里写的新 entry 该盖 turn_two，不是沿用 turn_one");
+    assert!(
+        touched.contains(&turn_one),
+        "子出生 + 开始思考那批 entry 盖的是 turn_one"
+    );
+    assert!(
+        touched.contains(&turn_two),
+        "子在 turn_two 里写的新 entry 该盖 turn_two，不是沿用 turn_one"
+    );
 }

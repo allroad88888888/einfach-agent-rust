@@ -104,7 +104,13 @@ pub(crate) fn intercept(
 ) -> Dispatched {
     // status 也是一次工具调用，该跟别的工具一样看得见「调了什么、参数是什么」。
     let request = ctx.tools.snapshot(STATUS_TOOL, Arc::clone(input));
-    ctx.emit(agent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request });
+    ctx.emit(
+        agent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request,
+        },
+    );
 
     match observe(&session.agent_tree(), agent, input) {
         Ok(body) => reply::ok(ctx, agent, call_id, epoch, STATUS_TOOL, body),
@@ -149,9 +155,7 @@ pub(crate) fn parse(input: &Value) -> Result<Option<AgentId>, String> {
             Err("status 失败：id 是空的。要看自己的全部后代就把 id 省掉。".to_string())
         }
         Some(Value::String(id)) => Ok(Some(AgentId::new(id.trim()))),
-        Some(_) => {
-            Err("status 失败：id 得是字符串（agent 的路径 id，比如 root/a1）。".to_string())
-        }
+        Some(_) => Err("status 失败：id 得是字符串（agent 的路径 id，比如 root/a1）。".to_string()),
     }
 }
 
@@ -164,8 +168,11 @@ pub(crate) fn parse(input: &Value) -> Result<Option<AgentId>, String> {
 /// （`BTreeSet` + `sort()`），但那是**被调方**的实现承诺——它哪天改了，坏的是
 /// 这段进 prompt 的字节而不是它自己的测试。确定性要在用得着它的地方自己保证。
 fn descendants<'a>(tree: &'a AgentTree, caller: &AgentId) -> Vec<&'a AgentNode> {
-    let mut out: Vec<&AgentNode> =
-        tree.nodes.iter().filter(|node| node.id.is_descendant_of(caller)).collect();
+    let mut out: Vec<&AgentNode> = tree
+        .nodes
+        .iter()
+        .filter(|node| node.id.is_descendant_of(caller))
+        .collect();
     out.sort_by(|a, b| a.id.cmp(&b.id));
     out
 }
@@ -226,7 +233,9 @@ fn task(task: Option<&str>) -> String {
 /// 压成一行：控制字符（换行/回车/制表）一律换成空格。**一个后代一行**是这段正文
 /// 的全部结构，任务文本里带个换行就能把它拆成两行、让模型读出一个不存在的 agent。
 fn one_line(text: &str) -> String {
-    text.chars().map(|c| if c.is_control() { ' ' } else { c }).collect()
+    text.chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 /// 横读/上读被拒。**说清是谁、并把「你能看的是哪些」一并给出**——模型才知道下一步
@@ -257,7 +266,10 @@ fn you_can_see(mine: &[&AgentNode]) -> String {
     }
     format!(
         "你能看的是：{}。省略 id 可以一次看全。",
-        mine.iter().map(|node| node.id.as_str()).collect::<Vec<_>>().join("、"),
+        mine.iter()
+            .map(|node| node.id.as_str())
+            .collect::<Vec<_>>()
+            .join("、"),
     )
 }
 

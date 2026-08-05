@@ -32,17 +32,28 @@ fn off(list: &[&str]) -> Vec<Arc<str>> {
 /// 一个它从没见过的名字照样能凭空长出一棵子 agent 树。
 #[test]
 fn a_disabled_name_leaves_the_table_entirely() {
-    let full = ToolTable::with_shell().with_spawn(agent_core::AgentLimits::default()).with_status();
-    assert!(full.declares("srv:agent/spawn"), "夹具前提：这一档本来有 spawn");
+    let full = ToolTable::with_shell()
+        .with_spawn(agent_core::AgentLimits::default())
+        .with_status();
+    assert!(
+        full.declares("srv:agent/spawn"),
+        "夹具前提：这一档本来有 spawn"
+    );
 
     let reduced = ToolTable::with_shell()
         .with_spawn(agent_core::AgentLimits::default())
         .with_status()
         .without_builtins(&off(&["srv:agent/spawn"]));
 
-    assert!(!reduced.declares("srv:agent/spawn"), "关掉之后 declares 必须为假——spawn 的截获闸问的就是它");
+    assert!(
+        !reduced.declares("srv:agent/spawn"),
+        "关掉之后 declares 必须为假——spawn 的截获闸问的就是它"
+    );
     assert!(!names(&reduced).contains(&"srv:agent/spawn".to_string()));
-    assert!(reduced.declares("srv:agent/status"), "只关点名的那一个，别的一件不许少");
+    assert!(
+        reduced.declares("srv:agent/status"),
+        "只关点名的那一个，别的一件不许少"
+    );
 }
 
 /// 幸存下来的那些**保持五档原有的相对次序**（红线 11：既有顺序是契约）。
@@ -51,8 +62,15 @@ fn the_survivors_keep_their_original_order() {
     let baseline = names(&ToolTable::standard());
     let reduced = names(&ToolTable::standard().without_builtins(&off(&["read_file", "save_file"])));
 
-    let expected: Vec<String> = baseline.iter().filter(|n| *n != "read_file" && *n != "save_file").cloned().collect();
-    assert_eq!(reduced, expected, "剔除不许顺带重排——工具表在 prompt 最前面（红线 11）");
+    let expected: Vec<String> = baseline
+        .iter()
+        .filter(|n| *n != "read_file" && *n != "save_file")
+        .cloned()
+        .collect();
+    assert_eq!(
+        reduced, expected,
+        "剔除不许顺带重排——工具表在 prompt 最前面（红线 11）"
+    );
 }
 
 /// 空开关 = 空操作：表跟没调过这个函数**完全一样**。
@@ -61,8 +79,17 @@ fn the_survivors_keep_their_original_order() {
 /// `tests/disabled_builtins_are_byte_deterministic.rs`）。
 #[test]
 fn an_empty_switch_changes_nothing() {
-    for build in [ToolTable::builtin as fn() -> ToolTable, ToolTable::with_shell, ToolTable::standard_local, ToolTable::standard] {
-        assert_eq!(names(&build().without_builtins(&[])), names(&build()), "空开关不该动任何一项");
+    for build in [
+        ToolTable::builtin as fn() -> ToolTable,
+        ToolTable::with_shell,
+        ToolTable::standard_local,
+        ToolTable::standard,
+    ] {
+        assert_eq!(
+            names(&build().without_builtins(&[])),
+            names(&build()),
+            "空开关不该动任何一项"
+        );
     }
 }
 
@@ -71,8 +98,13 @@ fn an_empty_switch_changes_nothing() {
 #[test]
 fn an_unknown_name_is_silently_ignored_here() {
     let baseline = names(&ToolTable::with_shell());
-    let reduced = names(&ToolTable::with_shell().without_builtins(&off(&["srv:nope/nope", "web:crm/lookup"])));
-    assert_eq!(reduced, baseline, "认不出的名字不该改变任何东西，也不该 panic");
+    let reduced = names(
+        &ToolTable::with_shell().without_builtins(&off(&["srv:nope/nope", "web:crm/lookup"])),
+    );
+    assert_eq!(
+        reduced, baseline,
+        "认不出的名字不该改变任何东西，也不该 panic"
+    );
 }
 
 /// 判据是**集合成员关系**：同一份名单换个顺序、或者多写一个重复项，出来的表一样。
@@ -80,11 +112,27 @@ fn an_unknown_name_is_silently_ignored_here() {
 /// 红线 11 在这一层的形状——列表顺序不可以泄漏进工具表（进而泄漏进 prompt 字节）。
 #[test]
 fn a_shuffled_or_duplicated_switch_gives_the_same_table() {
-    let one = names(&ToolTable::standard().without_builtins(&off(&["read_file", "save_file", "list_files"])));
-    let two = names(&ToolTable::standard().without_builtins(&off(&["save_file", "list_files", "read_file"])));
-    let three = names(&ToolTable::standard().without_builtins(&off(&["list_files", "read_file", "read_file", "save_file"])));
+    let one = names(&ToolTable::standard().without_builtins(&off(&[
+        "read_file",
+        "save_file",
+        "list_files",
+    ])));
+    let two = names(&ToolTable::standard().without_builtins(&off(&[
+        "save_file",
+        "list_files",
+        "read_file",
+    ])));
+    let three = names(&ToolTable::standard().without_builtins(&off(&[
+        "list_files",
+        "read_file",
+        "read_file",
+        "save_file",
+    ])));
 
-    assert_eq!(one, two, "关闭列表换个顺序就换一张表 = 顺序泄漏进 prompt（红线 11）");
+    assert_eq!(
+        one, two,
+        "关闭列表换个顺序就换一张表 = 顺序泄漏进 prompt（红线 11）"
+    );
     assert_eq!(one, three, "同一个名字写两遍跟写一遍是同一个意思");
 }
 
@@ -107,7 +155,9 @@ fn the_reversibility_maps_lose_the_same_names() {
 
     assert!(!table.declares("web:crm/lookup"));
     assert_eq!(
-        table.snapshot("web:crm/lookup", Arc::new(serde_json::json!({}))).reversibility,
+        table
+            .snapshot("web:crm/lookup", Arc::new(serde_json::json!({})))
+            .reversibility,
         Reversibility::Irreversible,
         "spec 剔了、可逆性映射还留着 = 一条查得到却调不出来的幽灵记录"
     );

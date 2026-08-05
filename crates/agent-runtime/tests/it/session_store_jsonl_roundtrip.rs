@@ -24,25 +24,29 @@ struct World {
 }
 
 fn slot(w: &World, key: &str) -> AtomId {
-    w.fam.borrow_mut().get_or_create(key.to_string(), || w.store.create_atom(Val(0)))
+    w.fam
+        .borrow_mut()
+        .get_or_create(key.to_string(), || w.store.create_atom(Val(0)))
 }
 
 fn build(keys: &'static [&'static str]) -> World {
     let store: Store<Val> = Store::new();
     let fam: Rc<RefCell<AtomFamily<String>>> = Rc::new(RefCell::new(AtomFamily::new()));
     for key in keys {
-        fam.borrow_mut().get_or_create((*key).to_string(), || store.create_atom(Val(0)));
+        fam.borrow_mut()
+            .get_or_create((*key).to_string(), || store.create_atom(Val(0)));
     }
     let (st, fm) = (store.clone(), fam.clone());
     let total = store.create_derived_ctx(move |args| {
-        Val(
-            keys.iter()
-                .map(|key| {
-                    let id = fm.borrow_mut().get_or_create((*key).to_string(), || st.create_atom(Val(0)));
-                    args.get(id).0
-                })
-                .sum::<i64>(),
-        )
+        Val(keys
+            .iter()
+            .map(|key| {
+                let id = fm
+                    .borrow_mut()
+                    .get_or_create((*key).to_string(), || st.create_atom(Val(0)));
+                args.get(id).0
+            })
+            .sum::<i64>())
     });
     let w = World { store, fam, total };
     let _ = w.store.get(w.total);
@@ -64,13 +68,20 @@ fn command(w: &World, log: &mut Log, backend: &Backend, turn: u32, writes: &[(&s
     for ev in log.take_drop_events() {
         match ev {
             agent_store::DropEvent::Oldest { count } => backend.drop_oldest(count),
-            agent_store::DropEvent::RedoTail { first_seq, count } => backend.drop_after(first_seq, count),
+            agent_store::DropEvent::RedoTail { first_seq, count } => {
+                backend.drop_after(first_seq, count)
+            }
         }
     }
 }
 
 fn capture_all(w: &World) -> Snapshot<String, Val> {
-    let mut pairs: Vec<(String, AtomId)> = w.fam.borrow().iter().map(|(k, id)| (k.clone(), id)).collect();
+    let mut pairs: Vec<(String, AtomId)> = w
+        .fam
+        .borrow()
+        .iter()
+        .map(|(k, id)| (k.clone(), id))
+        .collect();
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     capture(&w.store, pairs.into_iter())
 }
@@ -78,7 +89,9 @@ fn capture_all(w: &World) -> Snapshot<String, Val> {
 fn restore_into(w: &World, snap: &Snapshot<String, Val>) -> Vec<String> {
     let mut unknown = Vec::new();
     let mut resolve = |k: &String| w.fam.borrow().get(k);
-    restore(&w.store, &mut resolve, snap, &mut |k: &String| unknown.push(k.clone()));
+    restore(&w.store, &mut resolve, snap, &mut |k: &String| {
+        unknown.push(k.clone())
+    });
     unknown
 }
 
@@ -106,12 +119,21 @@ fn three_entries_a_snapshot_two_more_entries_load_matches_the_issues_acceptance_
     command(&world, &mut log, &backend, 4, &[("a", Val(4))]); // seq 3
     command(&world, &mut log, &backend, 5, &[("b", Val(5))]); // seq 4
 
-    let loaded = backend.load().loaded().expect("写过东西之后 load 不该是 None");
+    let loaded = backend
+        .load()
+        .loaded()
+        .expect("写过东西之后 load 不该是 None");
     assert!(loaded.snapshot.is_some());
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![3, 4]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![3, 4]
+    );
     assert_eq!(loaded.cursor, 2); // 没 undo 过，顶
     assert_eq!(loaded.next_seq, 5);
-    assert!(errors.lock().unwrap().is_empty(), "正常路径不该报任何 on_error");
+    assert!(
+        errors.lock().unwrap().is_empty(),
+        "正常路径不该报任何 on_error"
+    );
 
     // 用它重建：新 world + restore 快照 + apply_next 剩下两条 —— 与原 world 逐值相等。
     let fresh = build(KEYS);

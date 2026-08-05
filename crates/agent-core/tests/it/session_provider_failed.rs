@@ -53,7 +53,11 @@ fn exhausted_never_retries_even_with_ample_budget() {
         TurnStatus::Failed(Failure::Provider(ErrorClass::Exhausted))
     );
     assert_eq!(s.retries_used(), 0);
-    assert!(!effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        !effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 }
 
 /// `Retryable`：重试到预算耗尽为止，耗尽的那一次才落 `Failed`。
@@ -70,7 +74,11 @@ fn retryable_retries_until_budget_exhausted_then_fails() {
             "第 {expected_attempt} 次重试还留在 Thinking"
         );
         assert_eq!(s.retries_used(), expected_attempt);
-        assert_eq!(effects.len(), 2, "第 {expected_attempt} 次：Retrying 通报 + CallProvider");
+        assert_eq!(
+            effects.len(),
+            2,
+            "第 {expected_attempt} 次：Retrying 通报 + CallProvider"
+        );
         assert!(matches!(
             effects[0],
             Effect::Emit(Notice::Retrying { attempt, max_retries: 2 }) if attempt == expected_attempt
@@ -124,7 +132,9 @@ fn retry_blocked_by_max_turns_falls_back_to_done_truncated() {
         })]
     );
     assert!(
-        !effects.iter().any(|e| matches!(e, Effect::Emit(Notice::Retrying { .. }))),
+        !effects
+            .iter()
+            .any(|e| matches!(e, Effect::Emit(Notice::Retrying { .. }))),
         "没有真的重试，不该报 Retrying"
     );
 }

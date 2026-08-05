@@ -42,7 +42,10 @@ pub struct LoadTimeouts {
 
 impl Default for LoadTimeouts {
     fn default() -> Self {
-        Self { handshake: DEFAULT_HANDSHAKE_TIMEOUT, call: DEFAULT_CALL_TIMEOUT }
+        Self {
+            handshake: DEFAULT_HANDSHAKE_TIMEOUT,
+            call: DEFAULT_CALL_TIMEOUT,
+        }
     }
 }
 
@@ -67,7 +70,11 @@ pub struct LoadOutcome {
 impl LoadOutcome {
     /// 连上的 server id（`/mcp` 与诊断用）。
     pub fn connected_ids(&self) -> Vec<&str> {
-        self.servers.iter().filter(|s| s.is_connected()).map(|s| s.id.as_str()).collect()
+        self.servers
+            .iter()
+            .filter(|s| s.is_connected())
+            .map(|s| s.id.as_str())
+            .collect()
     }
 
     /// 每个 server 的状态——「谁连上了、谁没有、为什么」。等价于验收里说的
@@ -107,10 +114,17 @@ pub fn load_servers(
             &mut tools,
             &mut warnings,
         );
-        servers.push(ServerStatus { id: id.clone(), availability });
+        servers.push(ServerStatus {
+            id: id.clone(),
+            availability,
+        });
     }
 
-    LoadOutcome { tools, servers, warnings }
+    LoadOutcome {
+        tools,
+        servers,
+        warnings,
+    }
 }
 
 /// 装载单个 server。远端 → 暂不支持；host 门不通过 → 不可用；stdio 且门通过 → 真连。
@@ -145,7 +159,16 @@ fn load_one(
         };
     }
 
-    connect_stdio(id, stdio, registry, timeouts, client_name, client_version, tools, warnings)
+    connect_stdio(
+        id,
+        stdio,
+        registry,
+        timeouts,
+        client_name,
+        client_version,
+        tools,
+        warnings,
+    )
 }
 
 /// 真连一个 stdio server：spawn + 握手 + `tools/list`。任何一步失败都干净落
@@ -172,12 +195,20 @@ fn connect_stdio(
         timeouts.handshake,
     ) {
         Ok(c) => c,
-        Err(e) => return Availability::Unavailable { reason: format!("连接失败: {e}") },
+        Err(e) => {
+            return Availability::Unavailable {
+                reason: format!("连接失败: {e}"),
+            };
+        }
     };
 
     let (batch, dup_warnings) = match client.list_tools(id, timeouts.call) {
         Ok(v) => v,
-        Err(e) => return Availability::Unavailable { reason: format!("tools/list 失败: {e}") },
+        Err(e) => {
+            return Availability::Unavailable {
+                reason: format!("tools/list 失败: {e}"),
+            };
+        }
     };
 
     let tool_count = batch.len();

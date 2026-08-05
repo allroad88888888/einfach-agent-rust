@@ -34,13 +34,27 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
 
     let server = RoutedServer::start(vec![
         // 父的第二跳：立刻答完收尾，压根不管那个后台子。
-        Route { needle: "call_bg", delay: Duration::ZERO, status: 200, lines: sse_text("我自己答完了") },
-        Route { needle: "ORPHANTASK", delay: CHILD, status: 200, lines: sse_text("LATEORPHANANSWER 迟到的孤儿答案") },
+        Route {
+            needle: "call_bg",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("我自己答完了"),
+        },
+        Route {
+            needle: "ORPHANTASK",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("LATEORPHANANSWER 迟到的孤儿答案"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
-            lines: sse_tool_call("call_bg", &spawn_wire, r#"{"task":"ORPHANTASK 后台慢活","background":true}"#),
+            lines: sse_tool_call(
+                "call_bg",
+                &spawn_wire,
+                r#"{"task":"ORPHANTASK 后台慢活","background":true}"#,
+            ),
         },
     ]);
 
@@ -54,7 +68,10 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
 
     // ① 真的返回了，而且有界（泵还要等那条在飞的凭据落地，所以 >= CHILD 是对的，
     //    但不该久到看起来像挂住）。
-    assert!(elapsed < Duration::from_secs(8), "该在有界时间内收尾：实际 {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(8),
+        "该在有界时间内收尾：实际 {elapsed:?}"
+    );
 
     // ② root 的正常终态，**不是** Failed(Cancelled)。
     assert_eq!(
@@ -66,8 +83,15 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
     // ③ 孤儿已经非活：树上没了，活名单上也没了。
     let root = AgentId::root();
     let orphan = AgentId::new("root/a1");
-    assert!(!session.is_live(&orphan), "没人领的后台子该被 despawn_child 拆掉");
-    assert_eq!(session.live_agents(), vec![root.clone()], "活名单上该只剩 root");
+    assert!(
+        !session.is_live(&orphan),
+        "没人领的后台子该被 despawn_child 拆掉"
+    );
+    assert_eq!(
+        session.live_agents(),
+        vec![root.clone()],
+        "活名单上该只剩 root"
+    );
     assert!(
         !session.agent_tree().nodes.iter().any(|n| n.id == orphan),
         "活树上不该还有这个孤儿：{:#?}",
@@ -82,7 +106,11 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
         "孤儿那条在飞的结果该真的回来过（否则这条测试没测到闸）：{streamed:?}"
     );
     assert!(
-        !any_message_mentions(&session, &[root.clone(), orphan.clone()], "LATEORPHANANSWER"),
+        !any_message_mentions(
+            &session,
+            &[root.clone(), orphan.clone()],
+            "LATEORPHANANSWER"
+        ),
         "迟到的孤儿结果被写进了已经收尾的世界 —— 活性闸没挡住：root={:#?} orphan={:#?}",
         session.messages_of(&root),
         session.messages_of(&orphan),
@@ -101,7 +129,10 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
     match session.undo_turn() {
         UndoReport::Applied { entries, turn_id } => {
             assert_eq!(turn_id, 1);
-            assert_eq!(entries, before, "这一轮的全部 entry（含 despawn 的 teardown）该一次退光");
+            assert_eq!(
+                entries, before,
+                "这一轮的全部 entry（含 despawn 的 teardown）该一次退光"
+            );
         }
         other => panic!("期望 Applied，拿到 {other:?}"),
     }

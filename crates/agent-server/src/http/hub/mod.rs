@@ -93,8 +93,8 @@ use crate::handle::CancelHandle;
 use crate::registry::SessionId;
 
 pub(super) use guard::SubscriberGuard;
-pub(super) use ring::BufferedFrame;
 use replay::frames;
+pub(super) use ring::BufferedFrame;
 use ring::RingState;
 
 /// 每条转发任务发进 `mpsc` 通道的容量——只是给下游一点缓冲，不代表任何协议
@@ -171,7 +171,10 @@ impl SseHub {
     /// drop 的 `Stream` 对象上**（本文件模块文档「`SubscriberGuard` 为什么不能
     /// 活在转发任务里」），不能自己另外找个地方存着，也不能索性丢弃不用。
     #[must_use = "SubscriberGuard 必须绑定到会被 axum 在客户端断开时 drop 的 Stream 上，见 crate::http::hub 模块文档"]
-    pub(super) fn spawn_forwarder(self: &Arc<Self>, last_event_id: Option<u64>) -> (mpsc::Receiver<BufferedFrame>, SubscriberGuard) {
+    pub(super) fn spawn_forwarder(
+        self: &Arc<Self>,
+        last_event_id: Option<u64>,
+    ) -> (mpsc::Receiver<BufferedFrame>, SubscriberGuard) {
         let (tx, rx) = mpsc::channel(FORWARD_CHANNEL_CAPACITY);
 
         let (frames, live_rx) = self.replay_and_subscribe(last_event_id);
@@ -193,7 +196,10 @@ impl SseHub {
     ///
     /// 先订阅再释放锁保证 drain 任务不会在「快照已读、订阅还没建」之间塞进一
     /// 帧，因而两种传输都不会漏掉快照之后紧跟到达的事件。
-    pub(super) fn replay_and_subscribe(&self, last_event_id: Option<u64>) -> (Vec<BufferedFrame>, broadcast::Receiver<BufferedFrame>) {
+    pub(super) fn replay_and_subscribe(
+        &self,
+        last_event_id: Option<u64>,
+    ) -> (Vec<BufferedFrame>, broadcast::Receiver<BufferedFrame>) {
         let ring = self.ring.lock().unwrap();
         let live_rx = self.live.subscribe();
         (frames(ring.replay(last_event_id)), live_rx)
@@ -215,7 +221,10 @@ async fn send_frames(tx: &mpsc::Sender<BufferedFrame>, frames: Vec<BufferedFrame
 }
 
 /// 补发完了，接上直播：把 `live` 广播的每一帧转发进这条连接专属的 `tx`。
-async fn forward_live(mut live_rx: broadcast::Receiver<BufferedFrame>, tx: &mpsc::Sender<BufferedFrame>) {
+async fn forward_live(
+    mut live_rx: broadcast::Receiver<BufferedFrame>,
+    tx: &mpsc::Sender<BufferedFrame>,
+) {
     loop {
         match live_rx.recv().await {
             Ok(frame) => {

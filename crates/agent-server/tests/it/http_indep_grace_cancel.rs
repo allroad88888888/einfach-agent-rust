@@ -26,7 +26,14 @@ fn is_done_terminal(data: &str) -> bool {
 async fn disconnecting_all_subscribers_cancels_the_in_flight_turn_after_grace() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(200);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let mut sse = SseClient::connect(server.addr, &id, None);
@@ -34,8 +41,14 @@ async fn disconnecting_all_subscribers_cancels_the_in_flight_turn_after_grace() 
     assert_eq!(resp.status, 202);
 
     // 确认轮真的在飞（先看到 Thinking 通报），再断开。
-    let thinking = sse.next_frame(Duration::from_secs(2)).expect("该先看到 Thinking 通报");
-    assert!(thinking.data.contains("Thinking"), "第一帧该是 Thinking：{}", thinking.data);
+    let thinking = sse
+        .next_frame(Duration::from_secs(2))
+        .expect("该先看到 Thinking 通报");
+    assert!(
+        thinking.data.contains("Thinking"),
+        "第一帧该是 Thinking：{}",
+        thinking.data
+    );
     drop(sse);
 
     // 安静等一段远超宽限期的时长，只重连这一次。
@@ -57,10 +70,18 @@ async fn disconnecting_all_subscribers_cancels_the_in_flight_turn_after_grace() 
             panic!("帧数超限还没等到终态：{frames:?}");
         }
     };
-    assert_eq!(outcome, (true, false), "断开宽限期后该看到 Cancelled 终态，不是 Done：{frames:?}");
+    assert_eq!(
+        outcome,
+        (true, false),
+        "断开宽限期后该看到 Cancelled 终态，不是 Done：{frames:?}"
+    );
 
     let status = server.get_status(&id);
-    assert_eq!(status.json()["status"], "alive", "取消是轮失败，不是 session 死——session 该还活着");
+    assert_eq!(
+        status.json()["status"],
+        "alive",
+        "取消是轮失败，不是 session 死——session 该还活着"
+    );
 }
 
 /// 反例：宽限期内重连，轮不该被杀——继续跑，最终能正常收到（我们主动发出
@@ -71,13 +92,22 @@ async fn disconnecting_all_subscribers_cancels_the_in_flight_turn_after_grace() 
 async fn reconnecting_within_grace_keeps_the_turn_alive() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(400);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     let mut sse = SseClient::connect(server.addr, &id, None);
     let resp = server.post_input(&id, "hi");
     assert_eq!(resp.status, 202);
-    let thinking = sse.next_frame(Duration::from_secs(2)).expect("该先看到 Thinking 通报");
+    let thinking = sse
+        .next_frame(Duration::from_secs(2))
+        .expect("该先看到 Thinking 通报");
     assert!(thinking.data.contains("Thinking"));
     drop(sse);
 
@@ -89,7 +119,10 @@ async fn reconnecting_within_grace_keeps_the_turn_alive() {
     // 被杀了；如果打断了，轮还在飞，这段时间里不该出现 Cancelled。
     let quiet = reconnected.next_frame(grace * 3);
     if let Some(frame) = &quiet {
-        assert!(!is_cancelled_terminal(&frame.data), "宽限期内重连之后不该被取消：{frame:?}");
+        assert!(
+            !is_cancelled_terminal(&frame.data),
+            "宽限期内重连之后不该被取消：{frame:?}"
+        );
     }
 
     let status = server.get_status(&id);
@@ -110,5 +143,8 @@ async fn reconnecting_within_grace_keeps_the_turn_alive() {
             break;
         }
     }
-    assert!(frames.iter().any(|f| is_cancelled_terminal(&f.data)), "主动 cancel 该照常生效：{frames:?}");
+    assert!(
+        frames.iter().any(|f| is_cancelled_terminal(&f.data)),
+        "主动 cancel 该照常生效：{frames:?}"
+    );
 }

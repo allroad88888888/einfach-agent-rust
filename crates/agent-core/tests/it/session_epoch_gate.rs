@@ -8,9 +8,7 @@ mod support;
 
 use std::sync::Arc;
 
-use agent_core::{
-    Effect, Epoch, ErrorClass, Event, Session, StopReason, TokenUsage, TurnStatus,
-};
+use agent_core::{Effect, Epoch, ErrorClass, Event, Session, StopReason, TokenUsage, TurnStatus};
 
 use support::session::{new_session, observe, session_with_pending_tools};
 
@@ -23,7 +21,11 @@ fn epoch_bearing_event(label: &str, epoch: Epoch) -> Event {
             epoch,
             blocks: vec![],
             stop: StopReason::EndTurn,
-            usage: TokenUsage { prompt: 1, completion: 1, cached: None },
+            usage: TokenUsage {
+                prompt: 1,
+                completion: 1,
+                cached: None,
+            },
             prefix: support::prefix_image(),
             adjustments: vec![],
         },
@@ -45,7 +47,11 @@ fn epoch_bearing_event(label: &str, epoch: Epoch) -> Event {
             call_id: support::call_id(),
             error: Arc::from("nope"),
         },
-        "Timeout" => Event::Timeout { agent, epoch, call_id: None },
+        "Timeout" => Event::Timeout {
+            agent,
+            epoch,
+            call_id: None,
+        },
         other => panic!("未知的测试标签：{other}"),
     }
 }
@@ -96,7 +102,11 @@ fn future_epoch_is_also_dropped_for_every_epoch_bearing_event() {
 
         let effects = s.step(epoch_bearing_event(label, future));
 
-        assert_eq!(effects, Vec::<Effect>::new(), "{label}: 未来 epoch 同样该被丢弃");
+        assert_eq!(
+            effects,
+            Vec::<Effect>::new(),
+            "{label}: 未来 epoch 同样该被丢弃"
+        );
         assert_eq!(observe(&s), before, "{label}: 未来 epoch 事件不该改动状态");
     }
 }
@@ -121,7 +131,11 @@ fn a_tool_result_from_before_an_undo_is_dropped_but_the_same_one_lands_after_a_r
     // 迟到的回执带着旧世代：被闸挡掉，一个字节都不写。
     let effects = s.step(support::tool_result_event(in_flight, "call_1", "幽灵结果"));
     assert!(effects.is_empty());
-    assert_eq!(observe(&s), after_undo, "旧世代的回执不该写进已经回滚掉的世界");
+    assert_eq!(
+        observe(&s),
+        after_undo,
+        "旧世代的回执不该写进已经回滚掉的世界"
+    );
 
     // 同一条回执换成当前世代：这次过闸了（虽然状态对不上，判协议违规）——
     // 证明挡住上一条的确实是 epoch 闸，不是「Idle 收不到 ToolResult」这条。
@@ -160,8 +174,18 @@ fn user_intent_never_goes_through_the_gate() {
 
     let effects = s.step(support::user_input_event("接着聊"));
     assert_eq!(s.status(), TurnStatus::Thinking);
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 
-    let effects = s.step(Event::Cancel { agent: support::agent() });
-    assert!(effects.iter().any(|e| matches!(e, Effect::CancelInFlight { .. })));
+    let effects = s.step(Event::Cancel {
+        agent: support::agent(),
+    });
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CancelInFlight { .. }))
+    );
 }

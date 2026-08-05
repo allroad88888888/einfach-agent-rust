@@ -4,10 +4,10 @@
 
 use std::path::PathBuf;
 
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use agent_core::AgentTree;
@@ -159,12 +159,21 @@ enum CreateSessionOutcome {
 /// 上面 073 那条闸对它同样一视同仁：`capabilities` 是整体判断的，只带
 /// `disable_builtin` 的请求撞上有历史的会话照样 **400 `session_has_history`**——
 /// 开关跟声明一样是会话状态，那段历史就是在**那一份减过的表**下产生的。
-pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body): ApiJson<CreateSessionRequest>) -> Result<Response, ApiError> {
-    let CreateSessionRequest { id: requested_id, session_path, capabilities } = body;
+pub(in crate::http) async fn create(
+    State(state): State<AppState>,
+    ApiJson(body): ApiJson<CreateSessionRequest>,
+) -> Result<Response, ApiError> {
+    let CreateSessionRequest {
+        id: requested_id,
+        session_path,
+        capabilities,
+    } = body;
     let (id, client_supplied_id) = match requested_id {
         Some(id) => {
             if !is_valid_client_session_id(&id) {
-                return Err(ApiError::bad_request("id 只能包含 ASCII 字母、数字、连字符和下划线，长度最多 128"));
+                return Err(ApiError::bad_request(
+                    "id 只能包含 ASCII 字母、数字、连字符和下划线，长度最多 128",
+                ));
             }
             (SessionId::from(id), true)
         }
@@ -189,7 +198,8 @@ pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body)
     // 061：拒绝发生在 `open_spec`/`open` **之前**——坏声明不留下会话，也不留下
     // 工具监狱目录/会话文件（跟上面 chatid 那条拒在同一段）。
     if let Some(declared) = &capabilities {
-        capabilities::validate(declared).map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
+        capabilities::validate(declared)
+            .map_err(|rejection| ApiError::bad_request(rejection.to_string()))?;
         // 076：关闭列表里的名字必须在**这个部署实际装配出来的表**里。判据是
         // `template().tools` 这一档（部署方定的天花板），不是装配完的最终表——
         // 理由（以及为什么这一条必须报错而不是静默忽略）见
@@ -211,10 +221,25 @@ pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body)
         Some(SessionQuery::Dead { .. }) | None => {
             let spec = state
                 .template()
-                .open_spec(id.clone(), session_path, host_tools, host_skills, disable_builtin)
-                .map_err(|e| ApiError::conflict(format!("session \"{id}\" 的工具根目录建不起来：{e}")))?;
-            state.registry().open(spec).map_err(|e| ApiError::conflict(e.to_string()))?;
-            if has_persisted_history { CreateSessionOutcome::Recovered } else { CreateSessionOutcome::Created }
+                .open_spec(
+                    id.clone(),
+                    session_path,
+                    host_tools,
+                    host_skills,
+                    disable_builtin,
+                )
+                .map_err(|e| {
+                    ApiError::conflict(format!("session \"{id}\" 的工具根目录建不起来：{e}"))
+                })?;
+            state
+                .registry()
+                .open(spec)
+                .map_err(|e| ApiError::conflict(e.to_string()))?;
+            if has_persisted_history {
+                CreateSessionOutcome::Recovered
+            } else {
+                CreateSessionOutcome::Created
+            }
         }
     };
     // 立刻把 SSE hub 造出来（不等第一次 `GET /events` 才现造）——不然「先
@@ -228,8 +253,19 @@ pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body)
         CreateSessionOutcome::Created => StatusCode::CREATED,
         CreateSessionOutcome::Existing | CreateSessionOutcome::Recovered => StatusCode::OK,
     };
-    let outcome = if client_supplied_id { Some(outcome) } else { None };
-    Ok((status, Json(CreateSessionResponse { id: id.to_string(), outcome })).into_response())
+    let outcome = if client_supplied_id {
+        Some(outcome)
+    } else {
+        None
+    };
+    Ok((
+        status,
+        Json(CreateSessionResponse {
+            id: id.to_string(),
+            outcome,
+        }),
+    )
+        .into_response())
 }
 
 /// 白名单：非空、`[A-Za-z0-9_-]`、≤128 字节。点号也不在表里，于是 `.`/`..`
@@ -238,14 +274,18 @@ pub(in crate::http) async fn create(State(state): State<AppState>, ApiJson(body)
 fn is_valid_client_session_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= MAX_CLIENT_SESSION_ID_LEN
-        && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case", tag = "status")]
 pub(in crate::http) enum SessionStatusResponse {
     Alive,
-    Dead { reason: String },
+    Dead {
+        reason: String,
+    },
     /// 073：registry 里没有它，但**磁盘上有它的会话文件**——`POST /sessions` 会走
     /// 恢复那条路（`outcome: "recovered"`）。
     ///
@@ -270,15 +310,24 @@ pub(in crate::http) enum SessionStatusResponse {
 /// `dormant` 只认默认会话目录下的 `<chatid>.jsonl`——调用方在 `POST /sessions` 里
 /// 显式给 `session_path` 的那种用法这里看不见（GET 没有请求体）。那条用法本来就
 /// 是「调用方自己管着文件在哪」，它自己知道有没有历史。
-pub(in crate::http) async fn status(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<SessionStatusResponse>, ApiError> {
+pub(in crate::http) async fn status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<SessionStatusResponse>, ApiError> {
     let id = SessionId::from(id);
     match state.registry().get(&id) {
         Some(SessionQuery::Alive(_)) => Ok(Json(SessionStatusResponse::Alive)),
         Some(SessionQuery::Dead { reason }) => Ok(Json(SessionStatusResponse::Dead { reason })),
-        None if state.template().default_session_path(&id).is_some_and(|path| path.is_file()) => {
+        None if state
+            .template()
+            .default_session_path(&id)
+            .is_some_and(|path| path.is_file()) =>
+        {
             Ok(Json(SessionStatusResponse::Dormant))
         }
-        None => Err(ApiError::not_found(format!("session \"{id}\" 不存在（从没 open 过，也没有留下会话文件）"))),
+        None => Err(ApiError::not_found(format!(
+            "session \"{id}\" 不存在（从没 open 过，也没有留下会话文件）"
+        ))),
     }
 }
 
@@ -293,7 +342,10 @@ pub(in crate::http) async fn status(State(state): State<AppState>, Path(id): Pat
 /// session_handle` 这一个函数——见该方法文档），不像 [`status`] 那样把
 /// `dead` 当成 200 的一种正常结果：那是「问问这个 id 现在死没死」,这里
 /// 问的是「给我看现在的活树」,树只在活着的 actor 手上才有意义。
-pub(in crate::http) async fn agents(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<AgentTree>, ApiError> {
+pub(in crate::http) async fn agents(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<AgentTree>, ApiError> {
     let handle = state.session_handle(&SessionId::from(id))?;
     Ok(Json(handle.agent_tree()))
 }

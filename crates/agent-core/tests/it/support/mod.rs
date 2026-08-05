@@ -47,13 +47,21 @@ pub fn call_id() -> ToolCallId {
 
 pub fn prefix_image() -> PrefixImage {
     PrefixImage {
-        segments: vec![SegmentImage { segment: Segment::Tools, bytes: 128, hash: 7 }],
+        segments: vec![SegmentImage {
+            segment: Segment::Tools,
+            bytes: 128,
+            hash: 7,
+        }],
         prompt_tokens: Some(100),
     }
 }
 
 pub fn assistant_message() -> Message {
-    Message { id: MessageId(1), role: Role::Assistant, blocks: vec![ContentBlock::Text(Arc::from("hi"))] }
+    Message {
+        id: MessageId(1),
+        role: Role::Assistant,
+        blocks: vec![ContentBlock::Text(Arc::from("hi"))],
+    }
 }
 
 // 002 转移表测试专用的事件构造函数。只负责「造一份确定的输入」，跟文件顶部
@@ -67,7 +75,10 @@ pub fn user_input_event(text: &str) -> Event {
 /// 028：同一件事，但**指名道姓给哪个 agent**。事件的 `agent` 字段从 028 起真正
 /// 路由（`Session::step`），多 agent 的测试全部经这一批构造函数。
 pub fn user_input_for(agent: &AgentId, text: &str) -> Event {
-    Event::UserInput { agent: agent.clone(), text: Arc::from(text) }
+    Event::UserInput {
+        agent: agent.clone(),
+        text: Arc::from(text),
+    }
 }
 
 /// `stop = EndTurn` 的 `ProviderDone`：纯文本回复，没有工具调用。
@@ -81,8 +92,15 @@ pub fn provider_done_end_turn_for(agent: &AgentId, epoch: Epoch, text: &str) -> 
         epoch,
         blocks: vec![ContentBlock::Text(Arc::from(text))],
         stop: StopReason::EndTurn,
-        usage: TokenUsage { prompt: 42, completion: 7, cached: None },
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        usage: TokenUsage {
+            prompt: 42,
+            completion: 7,
+            cached: None,
+        },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     }
 }
@@ -107,8 +125,15 @@ pub fn provider_done_tool_use_for(agent: &AgentId, epoch: Epoch, calls: &[(&str,
         epoch,
         blocks,
         stop: StopReason::ToolUse,
-        usage: TokenUsage { prompt: 42, completion: 7, cached: None },
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        usage: TokenUsage {
+            prompt: 42,
+            completion: 7,
+            cached: None,
+        },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     }
 }
@@ -121,8 +146,15 @@ pub fn provider_done_tool_use_claimed_but_no_blocks(epoch: Epoch) -> Event {
         epoch,
         blocks: vec![ContentBlock::Text(Arc::from("我这就去调用工具"))],
         stop: StopReason::ToolUse,
-        usage: TokenUsage { prompt: 1, completion: 1, cached: None },
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        usage: TokenUsage {
+            prompt: 1,
+            completion: 1,
+            cached: None,
+        },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     }
 }
@@ -133,8 +165,15 @@ pub fn provider_done_with_stop(epoch: Epoch, stop: StopReason) -> Event {
         epoch,
         blocks: Vec::new(),
         stop,
-        usage: TokenUsage { prompt: 1, completion: 1, cached: None },
-        prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+        usage: TokenUsage {
+            prompt: 1,
+            completion: 1,
+            cached: None,
+        },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
         adjustments: Vec::new(),
     }
 }
@@ -153,7 +192,12 @@ pub fn tool_result_for(agent: &AgentId, epoch: Epoch, id: &str, content: &str) -
 }
 
 pub fn tool_failed_event(epoch: Epoch, id: &str, error: &str) -> Event {
-    Event::ToolFailed { agent: agent(), epoch, call_id: ToolCallId::new(id), error: Arc::from(error) }
+    Event::ToolFailed {
+        agent: agent(),
+        epoch,
+        call_id: ToolCallId::new(id),
+        error: Arc::from(error),
+    }
 }
 
 pub fn cancel_event() -> Event {
@@ -161,7 +205,11 @@ pub fn cancel_event() -> Event {
 }
 
 pub fn timeout_event(epoch: Epoch, call_id: Option<ToolCallId>) -> Event {
-    Event::Timeout { agent: agent(), epoch, call_id }
+    Event::Timeout {
+        agent: agent(),
+        epoch,
+        call_id,
+    }
 }
 
 pub fn provider_failed_event(epoch: Epoch) -> Event {
@@ -171,7 +219,12 @@ pub fn provider_failed_event(epoch: Epoch) -> Event {
 /// 跟 [`provider_failed_event`] 一样，但 `class` 可选——016 的错误分流测试要
 /// 覆盖 `Retryable` 之外的四个变体（`BadRequest`/`Auth`/`Exhausted`/`Unknown`）。
 pub fn provider_failed_event_with_class(epoch: Epoch, class: ErrorClass) -> Event {
-    Event::ProviderFailed { agent: agent(), epoch, class, message: Arc::from("boom") }
+    Event::ProviderFailed {
+        agent: agent(),
+        epoch,
+        class,
+        message: Arc::from("boom"),
+    }
 }
 
 /// 一个待定的工具槽——`ToolsPending` 状态下测试用。

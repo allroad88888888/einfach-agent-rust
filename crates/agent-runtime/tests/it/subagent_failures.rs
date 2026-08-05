@@ -46,10 +46,7 @@ fn spawn_batch(needle: &'static str, count: usize) -> Route {
     Route::sse(needle, lines)
 }
 
-fn ctx_and_session(
-    port: u16,
-    dir: &std::path::Path,
-) -> (agent_runtime::RunnerCtx, Session) {
+fn ctx_and_session(port: u16, dir: &std::path::Path) -> (agent_runtime::RunnerCtx, Session) {
     let (ctx, _events) = support::build_ctx_agent_aware(
         port,
         dir,
@@ -64,7 +61,9 @@ fn tool_results(session: &Session) -> Vec<(String, bool)> {
         .iter()
         .flat_map(|m| m.blocks.clone())
         .filter_map(|b| match b {
-            ContentBlock::ToolResult { content, is_error, .. } => Some((content.to_string(), is_error)),
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => Some((content.to_string(), is_error)),
             _ => None,
         })
         .collect()
@@ -97,13 +96,24 @@ fn one_child_failing_becomes_an_is_error_tool_result_and_the_parent_carries_on()
     let (mut ctx, mut session) = ctx_and_session(server.port, &dir);
 
     let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙");
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "一个子 agent 挂了不该拖垮这一轮");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "一个子 agent 挂了不该拖垮这一轮"
+    );
 
     let results = tool_results(&session);
     assert_eq!(results.len(), 2, "{results:#?}");
     assert_eq!(results[0], ("结果A：甲是 1。".to_string(), false));
-    assert!(results[1].1, "挂掉的那个子 agent 该是 is_error：{results:#?}");
-    assert!(results[1].0.contains("Exhausted"), "错误摘要该说清是哪一类：{}", results[1].0);
+    assert!(
+        results[1].1,
+        "挂掉的那个子 agent 该是 is_error：{results:#?}"
+    );
+    assert!(
+        results[1].0.contains("Exhausted"),
+        "错误摘要该说清是哪一类：{}",
+        results[1].0
+    );
 
     assert_eq!(
         session.status_of(&AgentId::new("root/a2")),
@@ -124,11 +134,19 @@ fn the_ninth_child_is_refused_as_an_is_error_tool_result_and_the_loop_keeps_goin
     let (mut ctx, mut session) = ctx_and_session(server.port, &dir);
 
     let status = run_turn(&mut session, &mut ctx, "把活拆成九份");
-    assert_eq!(status, TurnStatus::Done { truncated: false }, "撞上限不该让 loop 断掉");
+    assert_eq!(
+        status,
+        TurnStatus::Done { truncated: false },
+        "撞上限不该让 loop 断掉"
+    );
 
     let results = tool_results(&session);
     assert_eq!(results.len(), 9, "九个槽位全都收敛了：{results:#?}");
-    assert_eq!(results.iter().filter(|(_, is_error)| *is_error).count(), 1, "只有第九个该失败");
+    assert_eq!(
+        results.iter().filter(|(_, is_error)| *is_error).count(),
+        1,
+        "只有第九个该失败"
+    );
     let refused = &results[8];
     assert!(refused.1);
     assert!(
@@ -138,7 +156,10 @@ fn the_ninth_child_is_refused_as_an_is_error_tool_result_and_the_loop_keeps_goin
     );
     assert_eq!(session.agent_limits().max_children, 8);
     assert!(session.is_live(&AgentId::new("root/a8")));
-    assert!(!session.is_live(&AgentId::new("root/a9")), "第九个压根没被建出来");
+    assert!(
+        !session.is_live(&AgentId::new("root/a9")),
+        "第九个压根没被建出来"
+    );
 }
 
 /// 轮内 Ctrl-C：两个子 agent 的在飞流被取消标志斩断，会话落 `Failed(Cancelled)`。

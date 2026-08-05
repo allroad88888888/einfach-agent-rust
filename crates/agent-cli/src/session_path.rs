@@ -34,19 +34,29 @@ mod tests {
 
     #[test]
     fn two_token_form_is_recognized() {
-        assert_eq!(resolve(&args(&["agent-cli", "--session", "/tmp/x.jsonl"])), Some(PathBuf::from("/tmp/x.jsonl")));
+        assert_eq!(
+            resolve(&args(&["agent-cli", "--session", "/tmp/x.jsonl"])),
+            Some(PathBuf::from("/tmp/x.jsonl"))
+        );
     }
 
     #[test]
     fn equals_form_is_recognized() {
-        assert_eq!(resolve(&args(&["agent-cli", "--session=/tmp/y.jsonl"])), Some(PathBuf::from("/tmp/y.jsonl")));
+        assert_eq!(
+            resolve(&args(&["agent-cli", "--session=/tmp/y.jsonl"])),
+            Some(PathBuf::from("/tmp/y.jsonl"))
+        );
     }
 
     #[test]
     fn neither_flag_nor_env_var_is_none() {
         // 依赖测试环境没有设 AGENT_SESSION_PATH——CI/本地跑这条测试的账户
         // 都不该设这个变量，跟 `agent-transport::config` 测试同一个假设。
-        assert_eq!(std::env::var("AGENT_SESSION_PATH").ok(), None, "测试环境不该预设这个变量");
+        assert_eq!(
+            std::env::var("AGENT_SESSION_PATH").ok(),
+            None,
+            "测试环境不该预设这个变量"
+        );
         assert_eq!(resolve(&args(&["agent-cli"])), None);
     }
 }

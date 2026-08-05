@@ -112,6 +112,9 @@ mod tests {
 
     #[test]
     fn an_unrecognized_label_is_none_not_a_guess() {
-        assert_eq!(known_label("some_future_label_this_build_does_not_know"), None);
+        assert_eq!(
+            known_label("some_future_label_this_build_does_not_know"),
+            None
+        );
     }
 }

@@ -52,7 +52,14 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let (drift, predicted_cache) = prefix::compare(&seg, ing.prev_prefix, CACHE_BLOCK, 0);
 
     Encoded {
-        body: canonical(&body(ing, &built, tool_choice, temperature, system, history)),
+        body: canonical(&body(
+            ing,
+            &built,
+            tool_choice,
+            temperature,
+            system,
+            history,
+        )),
         prefix: prefix::image(&seg),
         drift,
         predicted_cache,
@@ -139,7 +146,10 @@ mod tests {
     #[test]
     fn same_ingredients_encode_byte_identical() {
         let t = [spec("srv:fs/read"), spec("srv:fs/write")];
-        let s = [SystemChunk { label: Arc::from("base"), text: Arc::from("你是助手") }];
+        let s = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("你是助手"),
+        }];
         let mut a = ing();
         a.tools = &t;
         a.system = &s;
@@ -192,7 +202,10 @@ mod tests {
         assert_eq!(body["temperature"], json!(1.0));
         assert_eq!(
             out.adjustments,
-            vec![Adjustment::TemperatureOverridden { wanted: 0.3, used: 1.0 }]
+            vec![Adjustment::TemperatureOverridden {
+                wanted: 0.3,
+                used: 1.0
+            }]
         );
     }
 
@@ -220,7 +233,10 @@ mod tests {
         let messages = body["messages"].as_array().unwrap();
         let tail = messages.last().unwrap();
         assert_eq!(tail["role"], json!("system"));
-        assert!(tail.get("content").is_none(), "late tools 消息不该有 content 字段");
+        assert!(
+            tail.get("content").is_none(),
+            "late tools 消息不该有 content 字段"
+        );
         assert_eq!(
             tail["tools"][0]["function"]["name"],
             json!("srv_3Alate_2Fa")
@@ -266,8 +282,14 @@ mod tests {
     /// 冷启动不算漂；换掉 system 后漂在 System 段。
     #[test]
     fn drift_points_at_the_changed_segment() {
-        let s1 = [SystemChunk { label: Arc::from("base"), text: Arc::from("一") }];
-        let s2 = [SystemChunk { label: Arc::from("base"), text: Arc::from("二") }];
+        let s1 = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("一"),
+        }];
+        let s2 = [SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("二"),
+        }];
         let mut first = ing();
         first.system = &s1;
         let cold = encode(&first);

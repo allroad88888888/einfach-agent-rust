@@ -138,7 +138,11 @@ mod tests {
         let mut seen = Vec::new();
         let outcome = run(reader, &cancel, FAST_POLL, |line| {
             seen.push(line.to_string());
-            if line == "data: b" { ControlFlow::Break(()) } else { ControlFlow::Continue(()) }
+            if line == "data: b" {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
         });
         assert_eq!(seen, vec!["data: a", "data: b"]);
         assert_eq!(outcome, StreamOutcome::Cancelled);

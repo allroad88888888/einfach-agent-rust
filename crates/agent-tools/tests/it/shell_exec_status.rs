@@ -31,8 +31,14 @@ fn stderr_is_appended_as_a_separate_marked_block() {
     let out = exec
         .execute("srv:shell/exec", &json!({ "cmd": "echo err >&2" }))
         .expect("写 stderr 不是执行失败，必须是 Ok");
-    assert!(out.contains("[stderr]"), "必须有 [stderr] 标记，实际输出：{out:?}");
-    assert!(out.contains("err"), "stderr 的原文必须出现在输出里，实际输出：{out:?}");
+    assert!(
+        out.contains("[stderr]"),
+        "必须有 [stderr] 标记，实际输出：{out:?}"
+    );
+    assert!(
+        out.contains("err"),
+        "stderr 的原文必须出现在输出里，实际输出：{out:?}"
+    );
 }
 
 #[test]

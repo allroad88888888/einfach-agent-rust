@@ -6,7 +6,9 @@ mod support;
 
 use agent_core::{AgentValue, AtomKey};
 use support::session::new_session;
-use support::{provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event};
+use support::{
+    provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
+};
 
 /// 槽位表的条数**写死在这里**，不从 `Slot::ALL.len()` 取：这个数字就是这个测试
 /// 的全部价值——顺手加一个槽位而没想清楚它进不进快照时，这里会红。
@@ -30,9 +32,16 @@ const EXPECTED_SLOT_COUNT: usize = 14;
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {
     let session = new_session();
     let primitives = session.primitives();
-    assert_eq!(primitives.len(), EXPECTED_SLOT_COUNT, "槽位表恰好这么多，一个不多一个不少");
+    assert_eq!(
+        primitives.len(),
+        EXPECTED_SLOT_COUNT,
+        "槽位表恰好这么多，一个不多一个不少"
+    );
     for (key, _) in &primitives {
-        assert!(matches!(key, AtomKey::Agent(_, _)), "会话刚建好，不该有任何 ToolCall 键");
+        assert!(
+            matches!(key, AtomKey::Agent(_, _)),
+            "会话刚建好，不该有任何 ToolCall 键"
+        );
     }
 }
 
@@ -43,7 +52,10 @@ fn tool_calls_do_not_add_extra_atoms_to_the_snapshot() {
     let mut session = new_session();
     let _ = session.step(user_input_event("hi"));
     let epoch = session.epoch();
-    let _ = session.step(provider_done_tool_use(epoch, &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")]));
+    let _ = session.step(provider_done_tool_use(
+        epoch,
+        &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")],
+    ));
     let _ = session.step(tool_result_event(epoch, "call_1", "r1"));
     let _ = session.step(tool_result_event(epoch, "call_2", "r2"));
     let _ = session.step(provider_done_end_turn(epoch, "done"));
@@ -69,16 +81,28 @@ fn the_snapshot_of_a_real_conversation_survives_a_serde_roundtrip() {
     let mut session = new_session();
     let _ = session.step(user_input_event("你好，帮我读一下文件"));
     let epoch = session.epoch();
-    let _ = session.step(provider_done_tool_use(epoch, &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")]));
+    let _ = session.step(provider_done_tool_use(
+        epoch,
+        &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")],
+    ));
     let _ = session.step(tool_result_event(epoch, "call_1", "内容一"));
-    let _ = session.step(tool_result_event(epoch, "call_2", "内容二，带换行\n和引号\""));
+    let _ = session.step(tool_result_event(
+        epoch,
+        "call_2",
+        "内容二，带换行\n和引号\"",
+    ));
     let _ = session.step(provider_done_end_turn(epoch, "读完了，两个文件都是空的"));
 
     let snapshot = session.primitives();
     assert_eq!(snapshot.len(), EXPECTED_SLOT_COUNT);
 
-    let encoded = serde_json::to_string(&snapshot).expect("primitive atom 的值必须全部可序列化（红线 3）");
-    let decoded: Vec<(AtomKey, AgentValue)> = serde_json::from_str(&encoded).expect("必须能原样解回来");
+    let encoded =
+        serde_json::to_string(&snapshot).expect("primitive atom 的值必须全部可序列化（红线 3）");
+    let decoded: Vec<(AtomKey, AgentValue)> =
+        serde_json::from_str(&encoded).expect("必须能原样解回来");
 
-    assert_eq!(decoded, snapshot, "整份快照 to_string/from_str 之后逐值相等");
+    assert_eq!(
+        decoded, snapshot,
+        "整份快照 to_string/from_str 之后逐值相等"
+    );
 }

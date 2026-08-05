@@ -44,8 +44,8 @@ mod protocol;
 mod registry;
 mod status;
 mod tool_result;
-mod transport;
 mod translate;
+mod transport;
 
 pub use availability::{Host, TransportKind};
 pub use client::{
@@ -63,8 +63,8 @@ pub use protocol::{
 pub use registry::{ClientHandle, McpRegistry};
 pub use status::{Availability, ServerStatus};
 pub use tool_result::{ToolCallOutput, flatten_tool_result};
-pub use transport::TransportError;
 pub use translate::translate;
+pub use transport::TransportError;
 
 /// 本仓 MCP client 在握手时向 server 声明的协议版本。server 在 `initialize` 响应里回一个
 /// 它将采用的版本（可能不同）——真正采用哪个由 042 的握手按 server 回值定，这个常量只是

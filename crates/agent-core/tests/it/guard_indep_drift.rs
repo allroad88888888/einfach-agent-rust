@@ -9,8 +9,8 @@
 //! 这份测试是独立测试 agent 写的，没有读过 `src/cache/` 的实现或
 //! `cache_guard_*.rs`——只信 rustdoc 和 issue 文档。
 
-use agent_core::cache::{check_drift, DriftVerdict, PrefixIntent};
 use agent_core::Segment;
+use agent_core::cache::{DriftVerdict, PrefixIntent, check_drift};
 
 #[test]
 fn tools_drift_reuse_is_unexpected_and_names_segment() {

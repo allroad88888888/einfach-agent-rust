@@ -98,7 +98,13 @@ pub(crate) fn intercept(
 ) -> Dispatched {
     // collect 也是一次工具调用，该跟别的工具一样看得见「调了什么、参数是什么」。
     let request = ctx.tools.snapshot(COLLECT_TOOL, Arc::clone(input));
-    ctx.emit(agent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request });
+    ctx.emit(
+        agent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request,
+        },
+    );
 
     let child = match parse(input) {
         Ok(child) => child,
@@ -114,7 +120,15 @@ pub(crate) fn intercept(
     // 因此落到下面那条「领不了」的路上，拿到 `is_error`：一份结果只能领一次。
     if let Some(done) = subtree.take_stashed(&child) {
         let body = done.content.to_string();
-        return reply::settle(ctx, agent, call_id, epoch, COLLECT_TOOL, body, done.is_error);
+        return reply::settle(
+            ctx,
+            agent,
+            call_id,
+            epoch,
+            COLLECT_TOOL,
+            body,
+            done.is_error,
+        );
     }
 
     // 二：还在跑 —— 绑到这次 collect 的槽上，返回 `Nothing`（不产出任何事件），
@@ -172,7 +186,11 @@ pub(crate) fn parse(input: &Value) -> Result<AgentId, String> {
 /// 排的）。红线 10 由构造保证：清单本身就是「我的后代」这一个集合，拒绝文本
 /// 放不大视野。
 fn mine<'a>(subtree: &'a Subtree, caller: &AgentId) -> Vec<&'a AgentId> {
-    subtree.collectable().into_iter().filter(|id| id.is_descendant_of(caller)).collect()
+    subtree
+        .collectable()
+        .into_iter()
+        .filter(|id| id.is_descendant_of(caller))
+        .collect()
 }
 
 /// 横读/上读被拒。**说清是谁、并把「你能领的是哪些」一并给出**——模型才知道下一步
@@ -220,7 +238,10 @@ fn you_can_collect(mine: &[&AgentId]) -> String {
     }
     format!(
         "你现在能领的是：{}。",
-        mine.iter().map(|id| id.as_str()).collect::<Vec<_>>().join("、"),
+        mine.iter()
+            .map(|id| id.as_str())
+            .collect::<Vec<_>>()
+            .join("、"),
     )
 }
 

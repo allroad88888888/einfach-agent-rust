@@ -45,7 +45,10 @@ fn collect(text: &str) -> Vec<Line> {
             if body.is_empty() || body.starts_with('#') {
                 return None;
             }
-            Some(Line { indent, text: body.to_string() })
+            Some(Line {
+                indent,
+                text: body.to_string(),
+            })
         })
         .collect()
 }
@@ -89,10 +92,16 @@ fn parse_item(lines: &[Line], indent0: usize) -> Value {
     let head = lines[0].text[1..].trim_start(); // 去掉开头的 '-'
     let mut sub: Vec<Line> = Vec::new();
     if !head.is_empty() {
-        sub.push(Line { indent: indent0 + 2, text: head.to_string() });
+        sub.push(Line {
+            indent: indent0 + 2,
+            text: head.to_string(),
+        });
     }
     for line in &lines[1..] {
-        sub.push(Line { indent: line.indent, text: line.text.clone() });
+        sub.push(Line {
+            indent: line.indent,
+            text: line.text.clone(),
+        });
     }
     parse_node(&sub)
 }

@@ -145,18 +145,28 @@ impl Session {
         config: ChildConfig,
     ) -> Result<AgentId, SpawnRefused> {
         if !self.in_session(parent) {
-            return Err(SpawnRefused::NotInSession { parent: parent.clone() });
+            return Err(SpawnRefused::NotInSession {
+                parent: parent.clone(),
+            });
         }
         if !self.is_live(parent) {
-            return Err(SpawnRefused::ParentNotLive { parent: parent.clone() });
+            return Err(SpawnRefused::ParentNotLive {
+                parent: parent.clone(),
+            });
         }
         let depth = parent.depth() + 1;
         if depth > self.limits.max_depth {
-            return Err(SpawnRefused::DepthExceeded { depth, max: self.limits.max_depth });
+            return Err(SpawnRefused::DepthExceeded {
+                depth,
+                max: self.limits.max_depth,
+            });
         }
         let live = self.children_of(parent).len();
         if live >= self.limits.max_children {
-            return Err(SpawnRefused::TooManyChildren { live, max: self.limits.max_children });
+            return Err(SpawnRefused::TooManyChildren {
+                live,
+                max: self.limits.max_children,
+            });
         }
 
         let child = parent.child(self.next_child_seq(parent));
@@ -202,7 +212,9 @@ mod tests {
     }
 
     fn cfg(tools: &[&str]) -> ChildConfig {
-        ChildConfig { tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect() }
+        ChildConfig {
+            tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect(),
+        }
     }
 
     /// 红线 11 的最小实检：入参顺序不同、含重复，落进槽位的值逐字节相同。
@@ -217,7 +229,9 @@ mod tests {
             Arc::from("srv:fs/read"),
         ]);
         assert_eq!(a, b);
-        let crate::value::atom_value::AgentValue::Json(v) = &a else { panic!("工具子集落 Json") };
+        let crate::value::atom_value::AgentValue::Json(v) = &a else {
+            panic!("工具子集落 Json")
+        };
         assert_eq!(
             serde_json::to_string(&**v).unwrap(),
             r#"["srv:fs/read","srv:shell/exec"]"#

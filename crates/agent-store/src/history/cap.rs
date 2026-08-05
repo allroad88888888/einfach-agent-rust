@@ -130,7 +130,10 @@ mod tests {
         }
         for _ in 0..100 {
             let outcome = h.undo_one(|_| false);
-            assert!(!applied_of(&outcome).is_empty(), "前 100 次 undo 必须都有效");
+            assert!(
+                !applied_of(&outcome).is_empty(),
+                "前 100 次 undo 必须都有效"
+            );
         }
         assert_eq!(h.cursor(), 0);
         // 第 101 次：明确报「到头」，不 panic。
@@ -196,7 +199,13 @@ mod tests {
         assert!(!h.can_redo()); // 被丢的分支回不去了
 
         let events = h.take_drop_events();
-        assert_eq!(events, vec![DropEvent::RedoTail { first_seq: 1, count: 2 }]);
+        assert_eq!(
+            events,
+            vec![DropEvent::RedoTail {
+                first_seq: 1,
+                count: 2
+            }]
+        );
     }
 
     // —— 验收：take_drop_events 取走即清空，多次事件按序累积 ————————————
@@ -217,7 +226,10 @@ mod tests {
             events,
             vec![
                 DropEvent::Oldest { count: 1 },
-                DropEvent::RedoTail { first_seq: 2, count: 1 },
+                DropEvent::RedoTail {
+                    first_seq: 2,
+                    count: 1
+                },
             ]
         );
         // 取走即清空。

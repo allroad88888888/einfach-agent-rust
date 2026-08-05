@@ -22,14 +22,21 @@ fn poll(addr: SocketAddr, id: &str, last: Option<u64>, wait: Option<u64>) -> ser
         headers.push(("X-Poll-Wait-Ms", value.as_str()));
     }
     let response = request(addr, "GET", &path, &headers, None);
-    assert_eq!(response.status, 200, "poll should succeed: {}", response.body_str());
+    assert_eq!(
+        response.status,
+        200,
+        "poll should succeed: {}",
+        response.body_str()
+    );
     response.json()
 }
 
 fn drain_until_terminal(sse: &mut SseClient) -> Vec<SseFrame> {
     let mut frames = Vec::new();
     loop {
-        let frame = sse.next_frame(Duration::from_secs(3)).unwrap_or_else(|| panic!("timed out after {frames:?}"));
+        let frame = sse
+            .next_frame(Duration::from_secs(3))
+            .unwrap_or_else(|| panic!("timed out after {frames:?}"));
         let done = frame.data.contains("TurnStatusChanged") && frame.data.contains("Done");
         frames.push(frame);
         if done {
@@ -49,8 +56,18 @@ async fn poll_replays_the_same_frames_as_sse_without_duplicates() {
     let streamed = drain_until_terminal(&mut sse);
 
     let replay = poll(server.addr, &id, None, None);
-    let replayed_ids: Vec<_> = replay["frames"].as_array().unwrap().iter().map(|frame| frame["id"].as_u64().unwrap()).collect();
-    let replayed_events: Vec<_> = replay["frames"].as_array().unwrap().iter().map(|frame| frame["event"].clone()).collect();
+    let replayed_ids: Vec<_> = replay["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|frame| frame["id"].as_u64().unwrap())
+        .collect();
+    let replayed_events: Vec<_> = replay["frames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|frame| frame["event"].clone())
+        .collect();
     let streamed_ids: Vec<_> = streamed.iter().map(|frame| frame.id.unwrap()).collect();
     let streamed_events: Vec<serde_json::Value> = streamed
         .iter()
@@ -70,7 +87,10 @@ async fn poll_replays_the_same_frames_as_sse_without_duplicates() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn poll_synthesizes_the_same_gap_envelope_as_sse() {
-    let upstream = FakeUpstream::start(vec![Script::Text("one".to_string()), Script::Text("two".to_string())]);
+    let upstream = FakeUpstream::start(vec![
+        Script::Text("one".to_string()),
+        Script::Text("two".to_string()),
+    ]);
     let server = start(
         upstream.endpoint(),
         HarnessConfig {
@@ -89,7 +109,10 @@ async fn poll_synthesizes_the_same_gap_envelope_as_sse() {
 
     let gapped = poll(server.addr, &id, Some(0), None);
     let frames = gapped["frames"].as_array().unwrap();
-    assert!(frames.len() > 1, "a gap must retain the buffered tail: {gapped}");
+    assert!(
+        frames.len() > 1,
+        "a gap must retain the buffered tail: {gapped}"
+    );
     assert_eq!(frames[0]["event"]["agent"], "root");
     assert_eq!(frames[0]["event"]["event"]["type"], "gap");
     let gap_id = frames[0]["id"].as_u64().unwrap();
@@ -110,7 +133,12 @@ async fn poll_long_wait_returns_when_a_new_event_arrives() {
 
     // Build the hub before starting the turn, so the only response the long poll
     // can receive is the event produced after it begins waiting.
-    assert!(poll(server.addr, &id, None, None)["frames"].as_array().unwrap().is_empty());
+    assert!(
+        poll(server.addr, &id, None, None)["frames"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     let addr = server.addr;
     let poll_id = id.clone();
     let started = Instant::now();
@@ -119,7 +147,10 @@ async fn poll_long_wait_returns_when_a_new_event_arrives() {
     assert_eq!(server.post_input(&id, "hi").status, 202);
 
     let result = pending.await.expect("poll task should not panic");
-    assert!(started.elapsed() < Duration::from_millis(900), "poll should wake before its timeout");
+    assert!(
+        started.elapsed() < Duration::from_millis(900),
+        "poll should wake before its timeout"
+    );
     assert!(!result["frames"].as_array().unwrap().is_empty());
 }
 
@@ -127,40 +158,76 @@ async fn poll_long_wait_returns_when_a_new_event_arrives() {
 async fn a_completed_poll_starts_the_shared_grace_cancellation() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(150);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     // The request creates then releases the sole subscriber.  A following hanging
     // turn must use the very same grace path as an SSE disconnect.
-    assert!(poll(server.addr, &id, None, None)["frames"].as_array().unwrap().is_empty());
+    assert!(
+        poll(server.addr, &id, None, None)["frames"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(server.post_input(&id, "hang").status, 202);
     tokio::time::sleep(grace * 4).await;
 
     let after_grace = poll(server.addr, &id, None, None);
-    assert!(after_grace.to_string().contains("Cancelled"), "poll release should cancel the hanging turn: {after_grace}");
+    assert!(
+        after_grace.to_string().contains("Cancelled"),
+        "poll release should cancel the hanging turn: {after_grace}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_waiting_poll_keeps_a_hanging_turn_alive() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(150);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
-    assert!(poll(server.addr, &id, None, None)["frames"].as_array().unwrap().is_empty());
+    assert!(
+        poll(server.addr, &id, None, None)["frames"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(server.post_input(&id, "hang").status, 202);
     let first = poll(server.addr, &id, None, Some(500));
-    let cursor = first["next"].as_u64().expect("the hanging turn should publish Thinking");
+    let cursor = first["next"]
+        .as_u64()
+        .expect("the hanging turn should publish Thinking");
 
     let addr = server.addr;
     let poll_id = id.clone();
-    let waiting = tokio::task::spawn_blocking(move || poll(addr, &poll_id, Some(cursor), Some(1_000)));
+    let waiting =
+        tokio::task::spawn_blocking(move || poll(addr, &poll_id, Some(cursor), Some(1_000)));
     tokio::time::sleep(grace * 3).await;
-    assert!(!waiting.is_finished(), "a live long-poll must hold the shared SubscriberGuard");
+    assert!(
+        !waiting.is_finished(),
+        "a live long-poll must hold the shared SubscriberGuard"
+    );
 
     assert_eq!(server.post_cancel(&id).status, 202);
     let result = waiting.await.expect("waiting poll should not panic");
-    assert!(result.to_string().contains("Cancelled"), "explicit cancellation should wake the poll: {result}");
+    assert!(
+        result.to_string().contains("Cancelled"),
+        "explicit cancellation should wake the poll: {result}"
+    );
 }
 
 /// Pull and SSE share one subscriber count, so neither transport can evict the
@@ -174,7 +241,14 @@ async fn a_waiting_poll_keeps_a_hanging_turn_alive() {
 async fn polling_and_sse_share_one_subscriber_count() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(150);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     // A browser watches the whole time; the gateway polls once and leaves.
@@ -214,11 +288,23 @@ async fn polling_and_sse_share_one_subscriber_count() {
 async fn re_polling_within_the_grace_period_aborts_the_countdown() {
     let upstream = FakeUpstream::start(vec![Script::Hang]);
     let grace = Duration::from_millis(300);
-    let server = start(upstream.endpoint(), HarnessConfig { cancel_grace: grace, ..HarnessConfig::default() }).await;
+    let server = start(
+        upstream.endpoint(),
+        HarnessConfig {
+            cancel_grace: grace,
+            ..HarnessConfig::default()
+        },
+    )
+    .await;
     let id = server.create_session();
 
     // 这次 poll 建 hub、attach 又 drop：第一轮倒计时从这里开始跑，`grace` 之后到点。
-    assert!(poll(server.addr, &id, None, None)["frames"].as_array().unwrap().is_empty());
+    assert!(
+        poll(server.addr, &id, None, None)["frames"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(server.post_input(&id, "hang").status, 202);
 
     // 每 0.4 个宽限回来一次，共 2.4 个宽限——每次 attach 都该 abort 掉上一次 drop
@@ -227,7 +313,10 @@ async fn re_polling_within_the_grace_period_aborts_the_countdown() {
     for _ in 0..6 {
         tokio::time::sleep(grace * 2 / 5).await;
         let batch = poll(server.addr, &id, None, None);
-        assert!(!batch.to_string().contains("Cancelled"), "宽限内又来拉了，倒计时该被 abort：{batch}");
+        assert!(
+            !batch.to_string().contains("Cancelled"),
+            "宽限内又来拉了，倒计时该被 abort：{batch}"
+        );
     }
 }
 
@@ -245,9 +334,18 @@ async fn a_long_poll_with_no_traffic_returns_an_empty_batch_at_its_deadline() {
     let idle = poll(server.addr, &id, Some(7), Some(wait.as_millis() as u64));
     let elapsed = started.elapsed();
 
-    assert!(elapsed >= wait - Duration::from_millis(50), "该等满 wait 才返回，实际 {elapsed:?}");
-    assert!(elapsed < wait * 3, "到点就该返回，不该拖到读超时，实际 {elapsed:?}");
-    assert!(idle["frames"].as_array().unwrap().is_empty(), "等待期间一帧都没有：{idle}");
+    assert!(
+        elapsed >= wait - Duration::from_millis(50),
+        "该等满 wait 才返回，实际 {elapsed:?}"
+    );
+    assert!(
+        elapsed < wait * 3,
+        "到点就该返回，不该拖到读超时，实际 {elapsed:?}"
+    );
+    assert!(
+        idle["frames"].as_array().unwrap().is_empty(),
+        "等待期间一帧都没有：{idle}"
+    );
     assert_eq!(idle["next"].as_u64(), Some(7), "空批不能推进游标：{idle}");
 }
 
@@ -263,9 +361,28 @@ async fn a_malformed_poll_wait_header_degrades_to_an_immediate_poll() {
 
     for garbage in ["not-a-number", "-1", "1.5", ""] {
         let started = Instant::now();
-        let response = request(server.addr, "GET", &path, &[("X-Poll-Wait-Ms", garbage)], None);
-        assert_eq!(response.status, 200, "{garbage:?} 不该让请求失败：{}", response.body_str());
-        assert!(started.elapsed() < Duration::from_millis(500), "{garbage:?} 该立刻返回，实际 {:?}", started.elapsed());
-        assert!(response.json()["frames"].as_array().unwrap().is_empty(), "{garbage:?}：{}", response.body_str());
+        let response = request(
+            server.addr,
+            "GET",
+            &path,
+            &[("X-Poll-Wait-Ms", garbage)],
+            None,
+        );
+        assert_eq!(
+            response.status,
+            200,
+            "{garbage:?} 不该让请求失败：{}",
+            response.body_str()
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "{garbage:?} 该立刻返回，实际 {:?}",
+            started.elapsed()
+        );
+        assert!(
+            response.json()["frames"].as_array().unwrap().is_empty(),
+            "{garbage:?}：{}",
+            response.body_str()
+        );
     }
 }

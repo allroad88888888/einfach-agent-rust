@@ -33,7 +33,10 @@ pub enum TransportError {
     WriteFailed(String),
     /// stdout 提前 EOF——子进程退出，或者主动关了 stdout。带上退出状态（能拿到
     /// 的话）和 stderr 尾巴，方便定位「是不是 npx 拉包失败」这类启动期问题。
-    StreamClosed { exit_status: Option<i32>, stderr_tail: String },
+    StreamClosed {
+        exit_status: Option<i32>,
+        stderr_tail: String,
+    },
     /// 读一行响应等过了预算。
     Timeout { waited: Duration },
 }
@@ -43,7 +46,10 @@ impl std::fmt::Display for TransportError {
         match self {
             TransportError::Spawn(m) => write!(f, "子进程起不来: {m}"),
             TransportError::WriteFailed(m) => write!(f, "写子进程 stdin 失败: {m}"),
-            TransportError::StreamClosed { exit_status, stderr_tail } => write!(
+            TransportError::StreamClosed {
+                exit_status,
+                stderr_tail,
+            } => write!(
                 f,
                 "子进程 stdout 提前 EOF（退出码: {exit_status:?}）。stderr 尾巴:\n{stderr_tail}"
             ),
@@ -89,7 +95,9 @@ impl StdioTransport {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(|e| TransportError::Spawn(e.to_string()))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| TransportError::Spawn(e.to_string()))?;
 
         let stdin = child.stdin.take().expect("spawn 时已 Stdio::piped()");
         let stdout = child.stdout.take().expect("spawn 时已 Stdio::piped()");
@@ -125,7 +133,12 @@ impl StdioTransport {
             }
         });
 
-        Ok(StdioTransport { child, stdin, stdout_rx, stderr_tail })
+        Ok(StdioTransport {
+            child,
+            stdin,
+            stdout_rx,
+            stderr_tail,
+        })
     }
 
     /// 写一行（自动补换行）到子进程 stdin，立刻 flush——不攒批，子进程不会因为
@@ -157,9 +170,18 @@ impl StdioTransport {
             Ok(Some(status)) => status.code(),
             _ => None,
         };
-        let stderr_tail =
-            self.stderr_tail.lock().unwrap().iter().cloned().collect::<Vec<_>>().join("\n");
-        TransportError::StreamClosed { exit_status, stderr_tail }
+        let stderr_tail = self
+            .stderr_tail
+            .lock()
+            .unwrap()
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        TransportError::StreamClosed {
+            exit_status,
+            stderr_tail,
+        }
     }
 
     #[cfg(test)]
@@ -202,8 +224,8 @@ mod tests {
 
     #[test]
     fn read_line_reports_stream_closed_when_process_exits_immediately() {
-        let mut t = StdioTransport::spawn("sh", &["-c".to_string(), "exit 0".to_string()], &[])
-            .unwrap();
+        let mut t =
+            StdioTransport::spawn("sh", &["-c".to_string(), "exit 0".to_string()], &[]).unwrap();
         let err = t.read_line(deadline(5)).unwrap_err();
         match err {
             TransportError::StreamClosed { exit_status, .. } => {
@@ -225,7 +247,10 @@ mod tests {
             "EOF 应该在远小于 sleep 时长内被发现，实际 {:?}",
             started.elapsed()
         );
-        assert!(matches!(err, TransportError::StreamClosed { .. }), "期望 StreamClosed，实际 {err:?}");
+        assert!(
+            matches!(err, TransportError::StreamClosed { .. }),
+            "期望 StreamClosed，实际 {err:?}"
+        );
     }
 
     #[test]
@@ -233,8 +258,13 @@ mod tests {
         let mut t =
             StdioTransport::spawn("sh", &["-c".to_string(), "sleep 5".to_string()], &[]).unwrap();
         let started = Instant::now();
-        let err = t.read_line(Instant::now() + Duration::from_millis(200)).unwrap_err();
-        assert!(matches!(err, TransportError::Timeout { .. }), "期望 Timeout，实际 {err:?}");
+        let err = t
+            .read_line(Instant::now() + Duration::from_millis(200))
+            .unwrap_err();
+        assert!(
+            matches!(err, TransportError::Timeout { .. }),
+            "期望 Timeout，实际 {err:?}"
+        );
         assert!(
             started.elapsed() < Duration::from_secs(2),
             "超时应该在远小于原命令耗时内返回，实际 {:?}",
@@ -244,8 +274,8 @@ mod tests {
 
     #[test]
     fn drop_kills_and_reaps_child_leaving_no_zombie() {
-        let t = StdioTransport::spawn("sh", &["-c".to_string(), "sleep 100".to_string()], &[])
-            .unwrap();
+        let t =
+            StdioTransport::spawn("sh", &["-c".to_string(), "sleep 100".to_string()], &[]).unwrap();
         let pid = t.child_id();
         drop(t);
 
@@ -256,7 +286,10 @@ mod tests {
             .arg(pid.to_string())
             .status()
             .expect("kill -0 本身应该能跑起来");
-        assert!(!status.success(), "子进程应该已经被杀干净并收尸，pid {pid} 不该还存在");
+        assert!(
+            !status.success(),
+            "子进程应该已经被杀干净并收尸，pid {pid} 不该还存在"
+        );
     }
 
     #[test]

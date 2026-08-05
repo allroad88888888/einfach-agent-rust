@@ -56,13 +56,16 @@ impl ToolTable {
         if disabled.is_empty() {
             return self;
         }
-        self.specs.retain(|spec| !disabled.iter().any(|name| **name == *spec.name));
+        self.specs
+            .retain(|spec| !disabled.iter().any(|name| **name == *spec.name));
         // 两张可逆性映射同步剔——理论上此刻它们都还是空的（这个 `with_*` 排在
         // `with_mcp`/`with_host_tools` **之前**），但「表里没有 spec、映射里却还
         // 留着一条」正是 075 的 `push_spec` 花了一整段说明去避免的那种隐式耦合，
         // 不能靠「调用顺序目前是对的」来免掉。
-        self.mcp_reversibility.retain(|name, _| !disabled.iter().any(|off| off == name));
-        self.host_reversibility.retain(|name, _| !disabled.iter().any(|off| off == name));
+        self.mcp_reversibility
+            .retain(|name, _| !disabled.iter().any(|off| off == name));
+        self.host_reversibility
+            .retain(|name, _| !disabled.iter().any(|off| off == name));
         self
     }
 }

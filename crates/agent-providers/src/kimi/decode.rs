@@ -26,7 +26,14 @@ mod tests {
             "usage": {"prompt_tokens": 100, "completion_tokens": 5}
         });
         let d = decode(&body);
-        assert_eq!(d.usage, TokenUsage { prompt: 100, completion: 5, cached: None });
+        assert_eq!(
+            d.usage,
+            TokenUsage {
+                prompt: 100,
+                completion: 5,
+                cached: None
+            }
+        );
     }
 
     /// 命中时正常解析出来。

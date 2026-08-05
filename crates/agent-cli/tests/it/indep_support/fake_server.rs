@@ -24,7 +24,11 @@ pub enum Script {
     /// 先发 `first`，睡 `stall` 模拟“流卡住了”，睡醒后尝试发 `rest`（这时
     /// 客户端多半已经因为取消标志断开，发送失败就静默忽略——测试不关心
     /// 这条连接最终怎么收场，只关心取消发生前收到的那部分）。
-    StallThenFinish { first: String, stall: Duration, rest: String },
+    StallThenFinish {
+        first: String,
+        stall: Duration,
+        rest: String,
+    },
 }
 
 pub struct FakeServer {
@@ -39,7 +43,9 @@ impl FakeServer {
     pub fn start(scripts: Vec<Script>) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake server");
         let port = listener.local_addr().unwrap().port();
-        listener.set_nonblocking(true).expect("nonblocking accept loop");
+        listener
+            .set_nonblocking(true)
+            .expect("nonblocking accept loop");
 
         let bodies = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
@@ -97,7 +103,9 @@ impl Drop for FakeServer {
 
 fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts: &[Script]) {
     // 没带请求的连接不记账、也不消耗脚本槽位（issue 077）。
-    let Some(body) = read_request_body(&mut stream) else { return };
+    let Some(body) = read_request_body(&mut stream) else {
+        return;
+    };
     // 用“推进 bodies 之后的新长度 - 1”当脚本下标，保证下标严格对应
     // “这是第几个真正到达的请求”，不受 accept 顺序和处理线程调度的影响。
     let idx = {
@@ -144,7 +152,9 @@ fn read_request_body(stream: &mut TcpStream) -> Option<String> {
 }
 
 fn write_sse_headers(stream: &mut TcpStream) {
-    let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+    );
     let _ = stream.flush();
 }
 

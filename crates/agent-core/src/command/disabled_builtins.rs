@@ -87,7 +87,11 @@ mod tests {
     use super::*;
 
     fn names(session: &Session) -> Vec<String> {
-        session.disabled_builtins().iter().map(|n| n.to_string()).collect()
+        session
+            .disabled_builtins()
+            .iter()
+            .map(|n| n.to_string())
+            .collect()
     }
 
     /// 关掉 → 读回（排序去重）；这是**一条 journaled entry**，undo 一下工具就回来了
@@ -95,7 +99,10 @@ mod tests {
     #[test]
     fn a_switch_is_journaled_and_undo_takes_it_back() {
         let mut s = Session::new(AgentId::root());
-        assert!(s.disabled_builtins().is_empty(), "全新会话一个内置工具都没关");
+        assert!(
+            s.disabled_builtins().is_empty(),
+            "全新会话一个内置工具都没关"
+        );
 
         let before = s.history_len();
         s.disable_builtins(vec![
@@ -103,12 +110,26 @@ mod tests {
             Arc::from("srv:agent/spawn"),
             Arc::from("srv:shell/exec"),
         ]);
-        assert_eq!(s.history_len(), before + 1, "开关是一条 journaled entry，不是一个不进日志的构造参数");
-        assert_eq!(names(&s), vec!["srv:agent/spawn", "srv:shell/exec"], "排序去重（红线 11）");
+        assert_eq!(
+            s.history_len(),
+            before + 1,
+            "开关是一条 journaled entry，不是一个不进日志的构造参数"
+        );
+        assert_eq!(
+            names(&s),
+            vec!["srv:agent/spawn", "srv:shell/exec"],
+            "排序去重（红线 11）"
+        );
 
         let report = s.undo_step();
-        assert!(matches!(report, crate::command::UndoReport::Applied { .. }), "{report:?}");
-        assert!(s.disabled_builtins().is_empty(), "undo 越过开关那一步之后，这个会话不该还关着任何东西");
+        assert!(
+            matches!(report, crate::command::UndoReport::Applied { .. }),
+            "{report:?}"
+        );
+        assert!(
+            s.disabled_builtins().is_empty(),
+            "undo 越过开关那一步之后，这个会话不该还关着任何东西"
+        );
 
         let _ = s.redo_step();
         assert_eq!(names(&s), vec!["srv:agent/spawn", "srv:shell/exec"]);

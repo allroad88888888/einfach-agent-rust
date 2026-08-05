@@ -53,19 +53,34 @@ fn a_timeout_that_fires_after_an_undo_is_dropped_by_the_epoch_gate() {
 
     let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片");
     assert_eq!(parked, TurnStatus::ToolsPending);
-    assert_eq!(ctx.pending_remote_tool_count(), 1, "槽得真的在，不然后面扫了个空");
+    assert_eq!(
+        ctx.pending_remote_tool_count(),
+        1,
+        "槽得真的在，不然后面扫了个空"
+    );
     let registered_epoch = session.epoch();
 
     // 用户 `/undo`：这一轮回滚，世代被推走。
     let report = session.undo_turn();
-    assert!(matches!(report, UndoReport::Applied { .. }), "这一轮该被干净地撤掉：{report:?}");
-    assert_ne!(session.epoch(), registered_epoch, "undo 必须 bump epoch——闸才有可比的对象（红线 6）");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "这一轮该被干净地撤掉：{report:?}"
+    );
+    assert_ne!(
+        session.epoch(),
+        registered_epoch,
+        "undo 必须 bump epoch——闸才有可比的对象（红线 6）"
+    );
 
     // 到点：扫描真的跑了（返回 Some、槽被消费），产出的事件带的是 epoch 0。
     std::thread::sleep(BUDGET + Duration::from_millis(20));
-    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx).expect("到点该有槽过期——没有的话这条测试是空的");
+    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx)
+        .expect("到点该有槽过期——没有的话这条测试是空的");
     assert_eq!(ctx.pending_remote_tool_count(), 0, "过期槽取走即消费");
-    assert!(!status.is_terminal(), "undo 回到了轮次之前，超时事件被丢弃后状态该还是 Idle：{status:?}");
+    assert!(
+        !status.is_terminal(),
+        "undo 回到了轮次之前，超时事件被丢弃后状态该还是 Idle：{status:?}"
+    );
 
     let events = events.borrow();
     // 探针：幽灵事件在闸前就死了 —— 宿主一声都没听到。
@@ -79,7 +94,13 @@ fn a_timeout_that_fires_after_an_undo_is_dropped_by_the_epoch_gate() {
     );
     // 同一件事的另一面：回滚掉的世界里没有长出任何工具结果。
     let wrote_ghost = session.messages().iter().any(|m| {
-        m.blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { .. }))
+        m.blocks
+            .iter()
+            .any(|b| matches!(b, ContentBlock::ToolResult { .. }))
     });
-    assert!(!wrote_ghost, "幽灵结果被写进了已回滚的世界：{:#?}", session.messages());
+    assert!(
+        !wrote_ghost,
+        "幽灵结果被写进了已回滚的世界：{:#?}",
+        session.messages()
+    );
 }

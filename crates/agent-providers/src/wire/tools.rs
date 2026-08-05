@@ -24,7 +24,11 @@ pub fn build(tools: &[ToolSpec], late: &[ToolSpec], max: usize) -> Built {
     let all: Vec<&ToolSpec> = tools.iter().chain(late).collect();
     let kept = all.len().min(max);
     let value = Value::Array(all[..kept].iter().map(|t| one(t)).collect());
-    Built { value, kept, dropped: all.len() - kept }
+    Built {
+        value,
+        kept,
+        dropped: all.len() - kept,
+    }
 }
 
 pub fn one(spec: &ToolSpec) -> Value {

@@ -147,7 +147,8 @@ impl Txn {
     /// 独立），能写就一定有人写。
     pub(crate) fn set_key(&mut self, key: AtomKey, next: AgentValue) {
         let atom = source_atom(&self.store, &self.sources, &key);
-        self.changes.extend(record_set(&self.store, key, atom, next));
+        self.changes
+            .extend(record_set(&self.store, key, atom, next));
     }
 
     // —— 类型化读写 ————————————————————————————————————————

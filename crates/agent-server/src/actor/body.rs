@@ -28,7 +28,10 @@ pub(super) type ReadyMsg = Result<Arc<AtomicBool>, String>;
 /// 快照里认不出的键之类），标 [`AgentId::root`]（034：`crate::event::frame`
 /// 模块文档同一条判据）。
 fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
-    let _ = events_tx.send(Frame { agent: AgentId::root(), event });
+    let _ = events_tx.send(Frame {
+        agent: AgentId::root(),
+        event,
+    });
 }
 
 pub(super) fn run(
@@ -47,13 +50,17 @@ pub(super) fn run(
     // 出了岔子，文本里有细节」是同一件事，不管这条通道是 HTTP 还是本地文件。
     let events_for_store_errors = events_tx.clone();
     let store = agent_runtime::open_backend(spec.store_path.clone(), move |e| {
-        emit_root(&events_for_store_errors, SessionEvent::TransportTrouble(Arc::from(e.to_string())));
+        emit_root(
+            &events_for_store_errors,
+            SessionEvent::TransportTrouble(Arc::from(e.to_string())),
+        );
     });
 
     let mut unknown_keys: Vec<String> = Vec::new();
-    let recovered = agent_runtime::recover(store.as_ref(), agent.clone(), history_cap, &mut |key| {
-        unknown_keys.push(format!("{key:?}"));
-    });
+    let recovered =
+        agent_runtime::recover(store.as_ref(), agent.clone(), history_cap, &mut |key| {
+            unknown_keys.push(format!("{key:?}"));
+        });
 
     // `restored` = 这个会话是从日志里回放出来的（不是全新建的）。073 用它分辨
     // 「注入的声明从哪来」——**新建看这次请求，恢复看回放出来的状态**。
@@ -105,7 +112,9 @@ pub(super) fn run(
     for key in &unknown_keys {
         emit_root(
             &events_tx,
-            SessionEvent::TransportTrouble(Arc::from(format!("会话文件里有一个这一版不认识的键，已忽略：{key}"))),
+            SessionEvent::TransportTrouble(Arc::from(format!(
+                "会话文件里有一个这一版不认识的键，已忽略：{key}"
+            ))),
         );
     }
 
@@ -149,7 +158,12 @@ pub(super) fn run(
         // 声明时两者都是空操作，跟 062/064 之前逐字节相同。
         assembled.tools,
         assembled.system,
-        SessionConfig { model: Arc::clone(&spec.model), temperature: None, max_tokens: None, context_window: None },
+        SessionConfig {
+            model: Arc::clone(&spec.model),
+            temperature: None,
+            max_tokens: None,
+            context_window: None,
+        },
         store,
         // `new` 收的这条不带归属的回调不用——034 换 `with_agent_events`（下面），
         // 跟 `agent_cli::main` 装配 `RunnerCtx` 的手法同一个模式（`with_agent_events`
@@ -157,7 +171,10 @@ pub(super) fn run(
         Box::new(|_| {}),
     )
     .with_agent_events(Box::new(move |ev: AgentEvent| {
-        let _ = events_for_callback.send(Frame { agent: ev.agent, event: ev.event.into() });
+        let _ = events_for_callback.send(Frame {
+            agent: ev.agent,
+            event: ev.event.into(),
+        });
     }))
     // 048：树快照变化——独立回调，不走上面那条 `AgentEvent` 通道（048 issue
     // 范围条款 1：树是整棵状态的投影，不是 `RunnerEvent` 的第十个变体）。每次
@@ -209,15 +226,32 @@ pub(super) fn run(
     drop(ready_tx);
 
     loop {
-        let Some(cmd) = next_command(&rx, &mut session, &mut ctx, &events_tx) else { return };
+        let Some(cmd) = next_command(&rx, &mut session, &mut ctx, &events_tx) else {
+            return;
+        };
         match cmd {
-            Command::Input(text) => commands::handle_input(&mut session, &mut ctx, &events_tx, &text),
-            Command::Undo { granularity, force } => commands::handle_undo(&mut session, &mut ctx, &events_tx, granularity, force),
+            Command::Input(text) => {
+                commands::handle_input(&mut session, &mut ctx, &events_tx, &text)
+            }
+            Command::Undo { granularity, force } => {
+                commands::handle_undo(&mut session, &mut ctx, &events_tx, granularity, force)
+            }
             Command::Redo => commands::handle_redo(&mut session, &mut ctx, &events_tx),
             Command::Cancel => commands::handle_cancel(&mut session, &mut ctx, &events_tx),
-            Command::RemoteToolResult { agent, call_id, content, is_error } => {
-                commands::handle_remote_tool_result(&mut session, &mut ctx, &events_tx, agent, call_id, content, is_error)
-            }
+            Command::RemoteToolResult {
+                agent,
+                call_id,
+                content,
+                is_error,
+            } => commands::handle_remote_tool_result(
+                &mut session,
+                &mut ctx,
+                &events_tx,
+                agent,
+                call_id,
+                content,
+                is_error,
+            ),
             Command::Shutdown => break,
         }
     }

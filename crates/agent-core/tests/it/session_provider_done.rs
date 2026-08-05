@@ -38,7 +38,11 @@ fn end_turn_finishes_the_turn_and_backfills_prefix() {
     // 送进去的 `prefix.prompt_tokens` 是 `None`（fixture），回填后必须变成那次
     // usage 的 prompt——不是别的数、也不能还是 None。
     let prefix = s.prev_prefix().expect("prev_prefix 应该被存下来");
-    assert_eq!(prefix.prompt_tokens, Some(42), "usage.prompt 在 fixture 里是 42");
+    assert_eq!(
+        prefix.prompt_tokens,
+        Some(42),
+        "usage.prompt 在 fixture 里是 42"
+    );
 }
 
 /// `ToolUse` 且有 `ToolUse` 块：为每个块开一个 `Pending` 槽，顺序等于模型请求的
@@ -61,12 +65,21 @@ fn tool_use_with_blocks_opens_slots_in_request_order() {
     // 002 合并后的契约：槽只存名字+输入，不存编造的 location/reversibility。
     assert_eq!(&*slots[0].tool, "srv:fs/read");
     assert_eq!(&*slots[1].tool, "srv:fs/list");
-    assert!(!s.tools_converged(), "两个槽都 Pending，derived 必须答未收敛");
+    assert!(
+        !s.tools_converged(),
+        "两个槽都 Pending，derived 必须答未收敛"
+    );
 
-    assert_eq!(effects.len(), 3, "1 条 TurnStatusChanged + 2 条 ExecuteTool");
+    assert_eq!(
+        effects.len(),
+        3,
+        "1 条 TurnStatusChanged + 2 条 ExecuteTool"
+    );
     assert!(matches!(
         effects[0],
-        Effect::Emit(Notice::TurnStatusChanged { status: TurnStatus::ToolsPending })
+        Effect::Emit(Notice::TurnStatusChanged {
+            status: TurnStatus::ToolsPending
+        })
     ));
     let call_ids: Vec<_> = effects[1..]
         .iter()
@@ -88,9 +101,15 @@ fn tool_use_claimed_without_blocks_is_a_protocol_violation() {
     let mut s = thinking_session();
     let before = s.messages().len();
 
-    let effects = s.step(support::provider_done_tool_use_claimed_but_no_blocks(s.epoch()));
+    let effects = s.step(support::provider_done_tool_use_claimed_but_no_blocks(
+        s.epoch(),
+    ));
 
-    assert_eq!(s.status(), TurnStatus::Thinking, "不知道该往哪走，status 不动");
+    assert_eq!(
+        s.status(),
+        TurnStatus::Thinking,
+        "不知道该往哪走，status 不动"
+    );
     assert_eq!(s.messages().len(), before + 1, "历史仍然无条件落地");
     assert!(matches!(
         effects.as_slice(),
@@ -106,7 +125,10 @@ fn tool_use_claimed_without_blocks_is_a_protocol_violation() {
 #[test]
 fn max_tokens_finishes_the_turn_truncated() {
     let mut s = thinking_session();
-    let effects = s.step(support::provider_done_with_stop(s.epoch(), StopReason::MaxTokens));
+    let effects = s.step(support::provider_done_with_stop(
+        s.epoch(),
+        StopReason::MaxTokens,
+    ));
 
     assert_eq!(s.status(), TurnStatus::Done { truncated: true });
     assert_eq!(
@@ -121,7 +143,10 @@ fn max_tokens_finishes_the_turn_truncated() {
 #[test]
 fn stop_sequence_finishes_the_turn_not_truncated() {
     let mut s = thinking_session();
-    let effects = s.step(support::provider_done_with_stop(s.epoch(), StopReason::StopSequence));
+    let effects = s.step(support::provider_done_with_stop(
+        s.epoch(),
+        StopReason::StopSequence,
+    ));
 
     assert_eq!(s.status(), TurnStatus::Done { truncated: false });
     assert_eq!(
@@ -156,7 +181,9 @@ fn unknown_stop_reason_fails_the_turn_as_unknown_provider_error() {
 #[test]
 fn the_reply_lands_in_history_verbatim_even_on_the_contradictory_branch() {
     let mut s = thinking_session();
-    let _ = s.step(support::provider_done_tool_use_claimed_but_no_blocks(s.epoch()));
+    let _ = s.step(support::provider_done_tool_use_claimed_but_no_blocks(
+        s.epoch(),
+    ));
 
     let msg = s.messages().back().unwrap().clone();
     assert_eq!(msg.role, Role::Assistant);

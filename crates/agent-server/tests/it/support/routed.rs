@@ -34,14 +34,32 @@ pub struct Route {
 impl Route {
     /// 一次性写完，段间不等待——大多数路由用这个。
     pub fn sse(needle: &'static str, lines: Vec<impl Into<String>>) -> Self {
-        Route { needle, segments: lines.into_iter().map(|line| Segment { delay: Duration::ZERO, line: line.into() }).collect() }
+        Route {
+            needle,
+            segments: lines
+                .into_iter()
+                .map(|line| Segment {
+                    delay: Duration::ZERO,
+                    line: line.into(),
+                })
+                .collect(),
+        }
     }
 
     /// 分段带节奏地写——每个 `(delay, line)` 里的 `delay` 是「写完上一段之后
     /// 再等多久」。用来让两条并发路由的多个 chunk 在 wall-clock 上真的交替
     /// 抵达客户端，而不是各自成块。
     pub fn paced(needle: &'static str, segments: Vec<(Duration, &str)>) -> Self {
-        Route { needle, segments: segments.into_iter().map(|(delay, line)| Segment { delay, line: line.to_string() }).collect() }
+        Route {
+            needle,
+            segments: segments
+                .into_iter()
+                .map(|(delay, line)| Segment {
+                    delay,
+                    line: line.to_string(),
+                })
+                .collect(),
+        }
     }
 }
 
@@ -94,7 +112,9 @@ impl RoutedServer {
 
     /// 这两条路由被服务的时间区间**有交叠**吗——并行的证据。
     pub fn overlapped(&self, a: &str, b: &str) -> bool {
-        let (Some(a), Some(b)) = (self.call(a), self.call(b)) else { return false };
+        let (Some(a), Some(b)) = (self.call(a), self.call(b)) else {
+            return false;
+        };
         a.start < b.end && b.start < a.end
     }
 }
@@ -106,7 +126,9 @@ fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
         return; // 没有路由认领：直接断开。
     };
 
-    let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n");
+    let _ = stream.write_all(
+        b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+    );
     let _ = stream.flush();
     for seg in &route.segments {
         if !seg.delay.is_zero() {
@@ -118,7 +140,12 @@ fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
     }
     let end = Instant::now();
 
-    calls.lock().unwrap().push(Call { needle: route.needle, body, start, end });
+    calls.lock().unwrap().push(Call {
+        needle: route.needle,
+        body,
+        start,
+        end,
+    });
 }
 
 /// 读一次 HTTP 请求，返回请求体（按 `Content-Length`）。

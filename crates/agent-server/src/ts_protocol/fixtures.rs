@@ -28,7 +28,9 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
     let skeletons = [
         SessionEvent::TextDelta(Arc::from("")),
         SessionEvent::ThinkingDelta(Arc::from("")),
-        SessionEvent::ToolCallStarted { name: Arc::from("") },
+        SessionEvent::ToolCallStarted {
+            name: Arc::from(""),
+        },
         SessionEvent::PreflightDriftAlert(DriftVerdict::Clean),
         SessionEvent::TransportTrouble(Arc::from("")),
         SessionEvent::ToolExecuting {
@@ -47,7 +49,11 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
             is_error: false,
         },
         SessionEvent::TurnGuard {
-            usage: TokenUsage { prompt: 0, completion: 0, cached: None },
+            usage: TokenUsage {
+                prompt: 0,
+                completion: 0,
+                cached: None,
+            },
             report: GuardReport {
                 drift: DriftVerdict::Clean,
                 reconcile: ReconcileVerdict::NoPrediction { actual: 0 },
@@ -55,11 +61,22 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
             },
             adjustments: Vec::new(),
         },
-        SessionEvent::Notice(Notice::Retrying { attempt: 0, max_retries: 0 }),
-        SessionEvent::Undo(UndoOutcome::Blocked { entries: 0, barrier_seq: 0, label: String::new(), tool: None, call_id: None }),
+        SessionEvent::Notice(Notice::Retrying {
+            attempt: 0,
+            max_retries: 0,
+        }),
+        SessionEvent::Undo(UndoOutcome::Blocked {
+            entries: 0,
+            barrier_seq: 0,
+            label: String::new(),
+            tool: None,
+            call_id: None,
+        }),
         SessionEvent::Redo(UndoOutcome::Nothing),
         SessionEvent::Lagged { skipped: 0 },
-        SessionEvent::SessionDied { reason: String::new() },
+        SessionEvent::SessionDied {
+            reason: String::new(),
+        },
         SessionEvent::Gap { skipped: 0 },
         SessionEvent::AgentTree(AgentTree { nodes: Vec::new() }),
         SessionEvent::OrphanedChild {
@@ -79,11 +96,13 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
         SessionEvent::ThinkingDelta(_) => {
             SessionEvent::ThinkingDelta(Arc::from("considering which tool to call"))
         }
-        SessionEvent::ToolCallStarted { .. } => {
-            SessionEvent::ToolCallStarted { name: Arc::from("srv:fs/read") }
-        }
+        SessionEvent::ToolCallStarted { .. } => SessionEvent::ToolCallStarted {
+            name: Arc::from("srv:fs/read"),
+        },
         SessionEvent::PreflightDriftAlert(_) => {
-            SessionEvent::PreflightDriftAlert(DriftVerdict::Unexpected { segment: Segment::Tools })
+            SessionEvent::PreflightDriftAlert(DriftVerdict::Unexpected {
+                segment: Segment::Tools,
+            })
         }
         SessionEvent::TransportTrouble(_) => {
             SessionEvent::TransportTrouble(Arc::from("post_stream ended without a stop reason"))
@@ -104,17 +123,31 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
             is_error: false,
         },
         SessionEvent::TurnGuard { .. } => SessionEvent::TurnGuard {
-            usage: TokenUsage { prompt: 1000, completion: 64, cached: Some(900) },
+            usage: TokenUsage {
+                prompt: 1000,
+                completion: 64,
+                cached: Some(900),
+            },
             report: GuardReport {
                 drift: DriftVerdict::Clean,
-                reconcile: ReconcileVerdict::Match { predicted: 900, actual: 900 },
-                window: WindowVerdict::Healthy { turns: 4, hit_percent: 92, low_streak: 0 },
+                reconcile: ReconcileVerdict::Match {
+                    predicted: 900,
+                    actual: 900,
+                },
+                window: WindowVerdict::Healthy {
+                    turns: 4,
+                    hit_percent: 92,
+                    low_streak: 0,
+                },
             },
-            adjustments: vec![Adjustment::TemperatureOverridden { wanted: 0.7, used: 1.0 }],
+            adjustments: vec![Adjustment::TemperatureOverridden {
+                wanted: 0.7,
+                used: 1.0,
+            }],
         },
-        SessionEvent::Notice(_) => {
-            SessionEvent::Notice(Notice::TurnStatusChanged { status: TurnStatus::Idle })
-        }
+        SessionEvent::Notice(_) => SessionEvent::Notice(Notice::TurnStatusChanged {
+            status: TurnStatus::Idle,
+        }),
         // 034：样本挑 `Blocked`（不是 `Applied`）——这是唯一带富化字段
         // （label/tool/call_id）的分支，选它才能让 TS 的 `satisfies` 检查真的
         // 照到这三个新字段的形状，而不是让协议改动躲过 fixtures 这道实检。
@@ -127,9 +160,9 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
         }),
         SessionEvent::Redo(_) => SessionEvent::Redo(UndoOutcome::Nothing),
         SessionEvent::Lagged { .. } => SessionEvent::Lagged { skipped: 7 },
-        SessionEvent::SessionDied { .. } => {
-            SessionEvent::SessionDied { reason: "actor panicked: boom".to_string() }
-        }
+        SessionEvent::SessionDied { .. } => SessionEvent::SessionDied {
+            reason: "actor panicked: boom".to_string(),
+        },
         SessionEvent::Gap { .. } => SessionEvent::Gap { skipped: 3 },
         // 048：样本挑「root + 一个子 agent」而不是只有 root——`AgentNode` 的
         // `parent`/`depth` 两个字段在单节点样本上永远是 `None`/`0`，选一个
@@ -142,7 +175,9 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
                     parent: None,
                     depth: 0,
                     task: Some("帮我查一下今天的天气".to_string()),
-                    activity: AgentActivity::Working { tools: vec!["srv:agent/spawn".to_string()] },
+                    activity: AgentActivity::Working {
+                        tools: vec!["srv:agent/spawn".to_string()],
+                    },
                 },
                 AgentNode {
                     id: AgentId::root().child(1),
@@ -160,7 +195,10 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
         // 就不可能是 root（`despawn_child` 拒绝拆 root）。
         SessionEvent::OrphanedChild { .. } => SessionEvent::OrphanedChild {
             child: AgentId::root().child(1),
-            fate: OrphanFate::Discarded { bytes: 128, is_error: false },
+            fate: OrphanFate::Discarded {
+                bytes: 128,
+                is_error: false,
+            },
         },
     }
 }
@@ -175,15 +213,17 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
 pub fn sample_frames() -> Vec<Frame> {
     sample_session_events()
         .into_iter()
-        .map(|event| Frame { agent: AgentId::root(), event })
+        .map(|event| Frame {
+            agent: AgentId::root(),
+            event,
+        })
         .collect()
 }
 
 /// 每个生成文件顶部多加的一行，跟 [`super::export::export_protocol_types`] 那边
 /// 同一句话——两处各写各的常量而不是共享一个，是因为 JSON 文件不能有注释
 /// （下面这一份不会被用到），没有值得抽的公共逻辑。
-const REGEN_COMMENT: &str =
-    "// issue 032：本文件由 Rust 生成，勿手改。重新生成：cargo run -p agent-server --features ts --example gen_protocol_ts\n";
+const REGEN_COMMENT: &str = "// issue 032：本文件由 Rust 生成，勿手改。重新生成：cargo run -p agent-server --features ts --example gen_protocol_ts\n";
 
 /// 把 [`sample_frames`] 写成两份，`path`（`events.json`）与它的 `.ts`
 /// 兄弟文件（同目录、同名换扩展名），**同一份内存数据**，不会跑偏。
@@ -219,6 +259,9 @@ pub fn write_fixtures(path: &Path) -> std::io::Result<()> {
     // 语句开头一个裸标识符 `as`，`tsc` 直接语法错误（parser 层面，不是类型层面）。
     // `as const` 必须跟 `]` 同一行。
     let json_str = String::from_utf8(json).expect("serde_json 输出总是合法 UTF-8");
-    let ts = format!("{REGEN_COMMENT}export const events = {} as const;\n", json_str.trim_end());
+    let ts = format!(
+        "{REGEN_COMMENT}export const events = {} as const;\n",
+        json_str.trim_end()
+    );
     fs::write(path.with_extension("ts"), ts)
 }

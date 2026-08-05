@@ -1,5 +1,5 @@
-use agent_core::Location; // 076：名字规则搬进 `tool_table_names.rs` 之后不再白拿。
 use super::*;
+use agent_core::Location; // 076：名字规则搬进 `tool_table_names.rs` 之后不再白拿。
 
 #[test]
 fn standard_local_exposes_the_safe_local_standard_set_in_stable_order() {
@@ -69,13 +69,35 @@ fn standard_local_reversibility_only_marks_verified_reads_as_pure() {
 fn standard_adds_only_the_three_web_interaction_tools() {
     let table = ToolTable::standard();
     let names: Vec<&str> = table.specs().iter().map(|spec| &*spec.name).collect();
-    assert_eq!(&names[17..], ["ask_user_question", "browser_action", "save_file"]);
+    assert_eq!(
+        &names[17..],
+        ["ask_user_question", "browser_action", "save_file"]
+    );
     for tool in ["ask_user_question", "browser_action", "save_file"] {
         let snapshot = table.snapshot(tool, Arc::new(Value::Null));
         assert_eq!(snapshot.location, Location::Web, "{tool}");
     }
-    assert_eq!(table.snapshot("ask_user_question", Arc::new(Value::Null)).reversibility, Reversibility::Pure);
-    assert_eq!(table.snapshot("browser_action", Arc::new(Value::Null)).reversibility, Reversibility::Irreversible);
-    assert_eq!(table.snapshot("save_file", Arc::new(Value::Null)).reversibility, Reversibility::Irreversible);
-    assert!(!names.iter().any(|name| name.starts_with("srv:agent/") || name.starts_with("srv:mcp/")));
+    assert_eq!(
+        table
+            .snapshot("ask_user_question", Arc::new(Value::Null))
+            .reversibility,
+        Reversibility::Pure
+    );
+    assert_eq!(
+        table
+            .snapshot("browser_action", Arc::new(Value::Null))
+            .reversibility,
+        Reversibility::Irreversible
+    );
+    assert_eq!(
+        table
+            .snapshot("save_file", Arc::new(Value::Null))
+            .reversibility,
+        Reversibility::Irreversible
+    );
+    assert!(
+        !names
+            .iter()
+            .any(|name| name.starts_with("srv:agent/") || name.starts_with("srv:mcp/"))
+    );
 }

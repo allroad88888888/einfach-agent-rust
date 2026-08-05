@@ -84,6 +84,9 @@ mod tests {
         // restore 的「后写覆盖先写」因此是可预测的。
         let s = snap(&[("k", 1), ("k", 2)]);
         let back: Snap = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
-        assert_eq!(back.values, vec![("k".to_string(), 1), ("k".to_string(), 2)]);
+        assert_eq!(
+            back.values,
+            vec![("k".to_string(), 1), ("k".to_string(), 2)]
+        );
     }
 }

@@ -10,7 +10,9 @@ mod support;
 
 use agent_core::{Effect, Epoch, Failure, Notice, TurnStatus};
 
-use support::session::{new_session, observe, session_at, session_with_pending_tools, thinking_session};
+use support::session::{
+    new_session, observe, session_at, session_with_pending_tools, thinking_session,
+};
 
 /// `Idle` + `Cancel`：`Idle` 不是终态，跟 `Thinking`/`ToolsPending` 走同一条路径，
 /// 不特殊对待成 no-op。
@@ -68,7 +70,11 @@ fn cancel_from_tools_pending_discards_all_slots() {
     assert_eq!(s.status(), TurnStatus::Failed(Failure::Cancelled));
     assert!(s.tool_slots().is_empty(), "槽全弃");
     assert!(s.tools_converged(), "槽全弃之后没有东西要等了");
-    assert!(effects.iter().any(|e| matches!(e, Effect::CancelInFlight { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CancelInFlight { .. }))
+    );
 }
 
 /// 终态收到 `Cancel`：`ProtocolViolation`，状态（含 `epoch`）逐字段不变——没有东西
@@ -84,13 +90,22 @@ fn cancel_from_terminal_states_is_a_protocol_violation_and_does_not_bump_epoch()
 
         let effects = s.step(support::cancel_event());
 
-        assert_eq!(observe(&s), before, "{status:?}：终态收到 Cancel 不该改任何东西");
+        assert_eq!(
+            observe(&s),
+            before,
+            "{status:?}：终态收到 Cancel 不该改任何东西"
+        );
         assert!(
-            matches!(effects.as_slice(), [Effect::Emit(Notice::ProtocolViolation { .. })]),
+            matches!(
+                effects.as_slice(),
+                [Effect::Emit(Notice::ProtocolViolation { .. })]
+            ),
             "{status:?}"
         );
         assert!(
-            !effects.iter().any(|e| matches!(e, Effect::CancelInFlight { .. })),
+            !effects
+                .iter()
+                .any(|e| matches!(e, Effect::CancelInFlight { .. })),
             "{status:?}：终态不该发 CancelInFlight"
         );
     }

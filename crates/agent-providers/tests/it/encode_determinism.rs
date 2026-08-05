@@ -34,7 +34,11 @@ fn same_ingredients_encode_twice_byte_identical() {
     let messages = rich_messages();
     let tools = vec![
         support::tool_spec("srv:fs/read", "read a file", support::schema_order_a()),
-        support::tool_spec("srv:fs/write", "write a file", serde_json::json!({"type": "object"})),
+        support::tool_spec(
+            "srv:fs/write",
+            "write a file",
+            serde_json::json!({"type": "object"}),
+        ),
     ];
     let late_tools: Vec<agent_core::ToolSpec> = vec![];
     let config = support::session_config();
@@ -51,7 +55,10 @@ fn same_ingredients_encode_twice_byte_identical() {
 
     let a = provider.encode(&ing);
     let b = provider.encode(&ing);
-    assert_eq!(a.body, b.body, "同一份 Ingredients 两次 encode 必须逐字节相同");
+    assert_eq!(
+        a.body, b.body,
+        "同一份 Ingredients 两次 encode 必须逐字节相同"
+    );
 }
 
 #[test]
@@ -66,11 +73,19 @@ fn tool_schema_key_order_does_not_affect_encoded_bytes() {
     // 顺序相反。
     let tools_a = vec![
         support::tool_spec("srv:fs/read", "read a file", support::schema_order_a()),
-        support::tool_spec("srv:fs/list", "list a dir", serde_json::json!({"type": "object"})),
+        support::tool_spec(
+            "srv:fs/list",
+            "list a dir",
+            serde_json::json!({"type": "object"}),
+        ),
     ];
     let tools_b = vec![
         support::tool_spec("srv:fs/read", "read a file", support::schema_order_b()),
-        support::tool_spec("srv:fs/list", "list a dir", serde_json::json!({"type": "object"})),
+        support::tool_spec(
+            "srv:fs/list",
+            "list a dir",
+            serde_json::json!({"type": "object"}),
+        ),
     ];
 
     let ing_a = support::ingredients(

@@ -87,7 +87,13 @@ pub(crate) fn start(
         intent: RequestIntent::Free,
         prev_prefix: prev_prefix.as_ref(),
     };
-    let Encoded { body, prefix, drift, predicted_cache, adjustments } = ctx.provider.encode(&ing);
+    let Encoded {
+        body,
+        prefix,
+        drift,
+        predicted_cache,
+        adjustments,
+    } = ctx.provider.encode(&ing);
 
     // 兜底第 1 层：发前比对，花钱之前。M1 恒 `Reuse`——`agent_core::cache`
     // 模块文档：还没有任何一处会有意改前缀。
@@ -129,24 +135,57 @@ pub(crate) fn finish(
     stop: StopReason,
     usage: TokenUsage,
 ) -> Event {
-    let ProviderCall { agent, epoch, drift, predicted_cache, adjustments, prefix, .. } = call;
+    let ProviderCall {
+        agent,
+        epoch,
+        drift,
+        predicted_cache,
+        adjustments,
+        prefix,
+        ..
+    } = call;
     match result {
         Ok(StreamOutcome::Finished) => {
-            guard::report_success(ctx, &agent, &usage, drift, predicted_cache, adjustments.clone());
-            Event::ProviderDone { agent, epoch, blocks, stop, usage, prefix, adjustments }
+            guard::report_success(
+                ctx,
+                &agent,
+                &usage,
+                drift,
+                predicted_cache,
+                adjustments.clone(),
+            );
+            Event::ProviderDone {
+                agent,
+                epoch,
+                blocks,
+                stop,
+                usage,
+                prefix,
+                adjustments,
+            }
         }
         // 半截的文本/工具调用不喂回 loop——回填回下一轮请求就不诚实了
         // （跟旧版 `agent-cli::turn::run_turn` 的判断一致）。取消是用户意图，
         // 不带 epoch。
         Ok(StreamOutcome::Cancelled) => Event::Cancel { agent },
-        Ok(StreamOutcome::Broken(message)) => transport_trouble(ctx, agent, epoch, ErrorClass::Retryable, message),
+        Ok(StreamOutcome::Broken(message)) => {
+            transport_trouble(ctx, agent, epoch, ErrorClass::Retryable, message)
+        }
         Err(TransportError::Connect { message, .. }) => {
             transport_trouble(ctx, agent, epoch, ErrorClass::Retryable, message)
         }
         Err(TransportError::Http { status, body }) => {
             let class = ctx.provider.classify(status, &body);
-            ctx.emit(&agent, RunnerEvent::TransportTrouble(Arc::from(format!("HTTP {status}: {body}"))));
-            Event::ProviderFailed { agent, epoch, class, message: Arc::from(body) }
+            ctx.emit(
+                &agent,
+                RunnerEvent::TransportTrouble(Arc::from(format!("HTTP {status}: {body}"))),
+            );
+            Event::ProviderFailed {
+                agent,
+                epoch,
+                class,
+                message: Arc::from(body),
+            }
         }
     }
 }
@@ -170,6 +209,14 @@ fn transport_trouble(
     class: ErrorClass,
     message: String,
 ) -> Event {
-    ctx.emit(&agent, RunnerEvent::TransportTrouble(Arc::from(message.as_str())));
-    Event::ProviderFailed { agent, epoch, class, message: Arc::from(message) }
+    ctx.emit(
+        &agent,
+        RunnerEvent::TransportTrouble(Arc::from(message.as_str())),
+    );
+    Event::ProviderFailed {
+        agent,
+        epoch,
+        class,
+        message: Arc::from(message),
+    }
 }

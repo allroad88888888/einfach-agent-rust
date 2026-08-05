@@ -122,7 +122,9 @@ impl<K: Clone, V: Clone, M: Clone> SessionLog<K, V, M> {
     /// 必须是「已经换算过」的值，重放端从 `boundary = 0` 起步直接消费，不需要（也没有
     /// 能力）知道压实之前的真实 `boundary` 有多大。
     pub fn relative_cursor(&self) -> usize {
-        self.last_cursor.saturating_sub(self.boundary).min(self.held.len())
+        self.last_cursor
+            .saturating_sub(self.boundary)
+            .min(self.held.len())
     }
 
     /// 落一张快照：`held` 里现在这些全部被它代表了，标记为压实——`boundary` 前进
@@ -179,7 +181,9 @@ mod tests {
     }
 
     fn snap() -> Snapshot<String, V> {
-        Snapshot { values: vec![("a".to_string(), V(0))] }
+        Snapshot {
+            values: vec![("a".to_string(), V(0))],
+        }
     }
 
     type Log = SessionLog<String, V, u32>;

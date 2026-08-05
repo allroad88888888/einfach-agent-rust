@@ -16,7 +16,10 @@ use support::server::FakeServer;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_freshly_bound_server_listens_on_loopback_by_default() {
-    assert!(std::env::var("AGENT_BIND").is_err(), "这条测试假设环境里没设 AGENT_BIND，见本文件顶部注释");
+    assert!(
+        std::env::var("AGENT_BIND").is_err(),
+        "这条测试假设环境里没设 AGENT_BIND，见本文件顶部注释"
+    );
 
     let upstream = FakeServer::start(vec![]);
     // 走 `default_bind_addr`（红线 8 那条路径），不是测试帮手为了方便硬编码的
@@ -24,13 +27,20 @@ async fn a_freshly_bound_server_listens_on_loopback_by_default() {
     let addr = default_bind_addr(0).expect("默认路径不该失败");
     let server = support::http_server::start_at(addr, upstream.endpoint(), |c| c).await;
 
-    assert!(server.addr.ip().is_loopback(), "默认绑定地址该是 loopback，实际是 {}", server.addr.ip());
+    assert!(
+        server.addr.ip().is_loopback(),
+        "默认绑定地址该是 loopback，实际是 {}",
+        server.addr.ip()
+    );
     assert_ne!(server.addr.port(), 0, "起服务之后该有一个真实分配到的端口");
 }
 
 #[tokio::test]
 async fn default_bind_addr_helper_resolves_to_loopback_with_the_given_port() {
-    assert!(std::env::var("AGENT_BIND").is_err(), "这条测试假设环境里没设 AGENT_BIND");
+    assert!(
+        std::env::var("AGENT_BIND").is_err(),
+        "这条测试假设环境里没设 AGENT_BIND"
+    );
     let addr = default_bind_addr(0).expect("默认路径不该失败");
     assert!(addr.ip().is_loopback());
     assert_eq!(addr.port(), 0);

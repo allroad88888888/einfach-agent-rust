@@ -8,8 +8,8 @@
 
 use std::time::{Duration, Instant};
 
-use agent_mcp::{CLIENT_PROTOCOL_VERSION, McpClient, McpError, ProtocolError, TransportError};
 use agent_core::Reversibility;
+use agent_mcp::{CLIENT_PROTOCOL_VERSION, McpClient, McpError, ProtocolError, TransportError};
 
 fn connect(script: &str, handshake_timeout: Duration) -> Result<McpClient, McpError> {
     McpClient::connect(
@@ -48,7 +48,9 @@ printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}'
 printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"echo","description":"echoes","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}}]}}'
 "#;
     let mut client = connect(script, Duration::from_secs(5)).unwrap();
-    let (tools, warnings) = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap();
+    let (tools, warnings) = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap();
     assert_eq!(tools.len(), 1);
     assert_eq!(&*tools[0].0.name, "mcp:fakesrv/echo");
     assert_eq!(tools[0].1, Reversibility::Pure);
@@ -66,7 +68,9 @@ read l3
 printf '%s\n' '{"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"method not found"}}'
 "#;
     let mut client = connect(script, Duration::from_secs(5)).unwrap();
-    let err = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap_err();
+    let err = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap_err();
     match err {
         McpError::Rpc { code, message } => {
             assert_eq!(code, -32601);

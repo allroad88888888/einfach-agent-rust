@@ -25,17 +25,26 @@ pub(crate) fn outcome(session: &Session, child: &AgentId, status: &TurnStatus) -
     match status {
         TurnStatus::Done { truncated: false } => (final_text(session, child), false),
         TurnStatus::Done { truncated: true } => (
-            format!("[子 agent 撞到轮数上限，下面是它停下时的最后回复]\n{}", final_text(session, child)),
+            format!(
+                "[子 agent 撞到轮数上限，下面是它停下时的最后回复]\n{}",
+                final_text(session, child)
+            ),
             false,
         ),
-        TurnStatus::Failed(Failure::Cancelled) => ("子 agent 被取消，没有产出结果。".to_string(), true),
-        TurnStatus::Failed(Failure::Provider(class)) => {
-            (format!("子 agent 失败（provider {class:?}），没有产出结果。"), true)
+        TurnStatus::Failed(Failure::Cancelled) => {
+            ("子 agent 被取消，没有产出结果。".to_string(), true)
         }
+        TurnStatus::Failed(Failure::Provider(class)) => (
+            format!("子 agent 失败（provider {class:?}），没有产出结果。"),
+            true,
+        ),
         // 泵只在终态才收割，非终态在这里是不可达的——但 `TurnStatus` 是公开枚举，
         // 用 `unreachable!` 换一句诚实的兜底文本：一条奇怪的 tool_result 比一次
         // panic 好，父 agent 至少还能继续。
-        other => (format!("子 agent 停在非终态 {other:?}，没有产出结果。"), true),
+        other => (
+            format!("子 agent 停在非终态 {other:?}，没有产出结果。"),
+            true,
+        ),
     }
 }
 
@@ -46,7 +55,10 @@ pub(crate) fn outcome(session: &Session, child: &AgentId, status: &TurnStatus) -
 /// 要的是结论。一条消息里多个 `Text` 块按顺序换行拼接。
 fn final_text(session: &Session, child: &AgentId) -> String {
     let messages = session.messages_of(child);
-    let last = messages.iter().rev().find(|m| m.role == Role::Assistant && has_text(m));
+    let last = messages
+        .iter()
+        .rev()
+        .find(|m| m.role == Role::Assistant && has_text(m));
     match last {
         Some(message) => message
             .blocks
@@ -62,5 +74,8 @@ fn final_text(session: &Session, child: &AgentId) -> String {
 }
 
 fn has_text(message: &Message) -> bool {
-    message.blocks.iter().any(|b| matches!(b, ContentBlock::Text(_)))
+    message
+        .blocks
+        .iter()
+        .any(|b| matches!(b, ContentBlock::Text(_)))
 }

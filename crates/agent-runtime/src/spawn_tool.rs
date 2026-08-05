@@ -134,7 +134,11 @@ pub(crate) fn parse(input: &Value) -> Result<SpawnRequest, String> {
         Some(_) => return Err("spawn 失败：background 得是 true 或 false。".to_string()),
     };
 
-    Ok(SpawnRequest { task: Arc::from(task), tools, background })
+    Ok(SpawnRequest {
+        task: Arc::from(task),
+        tools,
+        background,
+    })
 }
 
 /// 模型点名的那几个工具 → 父手上那几个**规范全名**，或者一句拒绝。两件事一次做完：
@@ -164,7 +168,11 @@ pub(crate) fn check_subset(
     Err(format!(
         "spawn 失败：你要给子 agent 的这些工具你自己没有：{}。你现在有的是：{}。",
         missing.join("、"),
-        parent_has.iter().map(|n| &**n).collect::<Vec<_>>().join("、"),
+        parent_has
+            .iter()
+            .map(|n| &**n)
+            .collect::<Vec<_>>()
+            .join("、"),
     ))
 }
 
@@ -183,10 +191,16 @@ pub(crate) fn refusal_text(refused: &SpawnRefused) -> String {
         // 下面两条是宿主侧的 bug（父 agent 不在这棵树上 / 已经不活着），不是模型
         // 能收敛的东西——照样如实回给它，让这一轮有个结果而不是卡住。
         SpawnRefused::NotInSession { parent } => {
-            format!("spawn 失败：发起 spawn 的 agent（{}）不在这个会话的 agent 树上。", parent.as_str())
+            format!(
+                "spawn 失败：发起 spawn 的 agent（{}）不在这个会话的 agent 树上。",
+                parent.as_str()
+            )
         }
         SpawnRefused::ParentNotLive { parent } => {
-            format!("spawn 失败：发起 spawn 的 agent（{}）已经不在活名单上了。", parent.as_str())
+            format!(
+                "spawn 失败：发起 spawn 的 agent（{}）已经不在活名单上了。",
+                parent.as_str()
+            )
         }
     }
 }
@@ -211,7 +225,13 @@ pub(crate) fn intercept(
 ) -> Dispatched {
     // spawn 也是一次工具调用，该跟别的工具一样看得见「调了什么、参数是什么」。
     let request = ctx.tools.snapshot(SPAWN_TOOL, Arc::clone(input));
-    ctx.emit(parent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request });
+    ctx.emit(
+        parent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request,
+        },
+    );
 
     let parsed = match parse(input) {
         Ok(parsed) => parsed,
@@ -248,7 +268,10 @@ pub(crate) fn intercept(
     // 的正门进去：子 agent 刚建好时槽位全是默认值，`Status` 就是 `Idle`，于是
     // 转移表 `Idle + UserInput` 这一格原样接住它、发出它自己的 `CallProvider`。
     // 「子 agent 怎么开始干活」因此没有专门的代码路径。
-    Dispatched::Event(Event::UserInput { agent: child, text: parsed.task })
+    Dispatched::Event(Event::UserInput {
+        agent: child,
+        text: parsed.task,
+    })
 }
 
 /// 后台 spawn（052）：**槽当场收敛 + 记进 detached 名单**。
@@ -288,8 +311,16 @@ fn detach(
         },
     );
     Dispatched::Events(vec![
-        Event::ToolResult { agent: parent.clone(), epoch, call_id, content: Arc::from(content) },
-        Event::UserInput { agent: child, text: task },
+        Event::ToolResult {
+            agent: parent.clone(),
+            epoch,
+            call_id,
+            content: Arc::from(content),
+        },
+        Event::UserInput {
+            agent: child,
+            text: task,
+        },
     ])
 }
 

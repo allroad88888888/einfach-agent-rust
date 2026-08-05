@@ -16,8 +16,14 @@ impl Scratch {
     /// 唯一性靠进程 id + 单调计数器 + 纳秒时间戳。
     pub fn new(tag: &str) -> Self {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let dir = std::env::temp_dir().join(format!("agent-cli-indep-{tag}-{}-{n}-{nanos}", std::process::id()));
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "agent-cli-indep-{tag}-{}-{n}-{nanos}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&dir).expect("create scratch dir");
         Scratch { dir }
     }

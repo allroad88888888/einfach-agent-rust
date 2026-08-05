@@ -24,7 +24,7 @@ pub use agent_tree::render_agent_tree;
 pub use events::EventPrinter;
 pub use mcp::render_mcp_status;
 pub use receipts::{
-    cancelled_turn_erased, cancelled_turn_kept, model_switch_error, model_switched, recovery_failed,
-    redo_applied, redo_nothing, session_recovered, turn_outcome, undo_applied, undo_blocked,
-    undo_force_crossed, undo_nothing, unresolved_tool_call_notice,
+    cancelled_turn_erased, cancelled_turn_kept, model_switch_error, model_switched,
+    recovery_failed, redo_applied, redo_nothing, session_recovered, turn_outcome, undo_applied,
+    undo_blocked, undo_force_crossed, undo_nothing, unresolved_tool_call_notice,
 };

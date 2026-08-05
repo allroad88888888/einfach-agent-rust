@@ -38,7 +38,8 @@ fn snap(table: &ToolTable, tool: &str) -> agent_core::ToolCallRequest {
 /// 逐项相同——所有会话共有的那一段（连 MCP 之后）一个字节不动（红线 11）。
 #[test]
 fn injected_tools_are_appended_after_everything_the_sessions_share() {
-    let baseline = ToolTable::with_shell().with_mcp(vec![(spec("mcp:everything/echo"), Reversibility::Pure)]);
+    let baseline =
+        ToolTable::with_shell().with_mcp(vec![(spec("mcp:everything/echo"), Reversibility::Pure)]);
     let injected = ToolTable::with_shell()
         .with_mcp(vec![(spec("mcp:everything/echo"), Reversibility::Pure)])
         .with_host_tools(vec![
@@ -48,9 +49,16 @@ fn injected_tools_are_appended_after_everything_the_sessions_share() {
 
     let (base, all) = (names(&baseline), names(&injected));
     assert_eq!(all[..base.len()], base[..], "共有的那一段必须逐项相同");
-    assert_eq!(all[base.len()..], ["desk:clipboard/write", "web:crm/lookup"], "注入的排在表尾，且按名字排序");
+    assert_eq!(
+        all[base.len()..],
+        ["desk:clipboard/write", "web:crm/lookup"],
+        "注入的排在表尾，且按名字排序"
+    );
     assert!(injected.declares("web:crm/lookup"));
-    assert!(!baseline.declares("web:crm/lookup"), "没注入的表里不该有这个名字");
+    assert!(
+        !baseline.declares("web:crm/lookup"),
+        "没注入的表里不该有这个名字"
+    );
 }
 
 /// 红线 11 第二条（HOST-CAPABILITIES §六）：客户端给的数组顺序不可靠，**不许**变成
@@ -69,9 +77,15 @@ fn the_client_array_order_never_reaches_the_table() {
         host("desk:a/first", Reversibility::Reversible),
     ]);
     assert_eq!(names(&one), names(&other));
-    assert_eq!(names(&one)[2..], ["desk:a/first", "web:a/third", "web:b/second"]);
+    assert_eq!(
+        names(&one)[2..],
+        ["desk:a/first", "web:a/third", "web:b/second"]
+    );
     // 顺序一样还不够：同名那一项的可逆性也不能被顺序影响。
-    assert_eq!(snap(&one, "web:a/third").reversibility, snap(&other, "web:a/third").reversibility);
+    assert_eq!(
+        snap(&one, "web:a/third").reversibility,
+        snap(&other, "web:a/third").reversibility
+    );
 }
 
 /// 验收「声明了就用」：三个等级原样落地；`location` 恒走既有的 `location_of`
@@ -84,10 +98,19 @@ fn a_declared_reversibility_is_taken_as_is_and_location_comes_from_the_prefix() 
         host("desk:mail/send", Reversibility::Irreversible),
     ]);
 
-    assert_eq!(snap(&table, "web:crm/lookup").reversibility, Reversibility::Pure);
+    assert_eq!(
+        snap(&table, "web:crm/lookup").reversibility,
+        Reversibility::Pure
+    );
     assert_eq!(snap(&table, "web:crm/lookup").location, Location::Web);
-    assert_eq!(snap(&table, "web:crm/draft").reversibility, Reversibility::Reversible);
-    assert_eq!(snap(&table, "desk:mail/send").reversibility, Reversibility::Irreversible);
+    assert_eq!(
+        snap(&table, "web:crm/draft").reversibility,
+        Reversibility::Reversible
+    );
+    assert_eq!(
+        snap(&table, "desk:mail/send").reversibility,
+        Reversibility::Irreversible
+    );
     assert_eq!(snap(&table, "desk:mail/send").location, Location::Desktop);
 }
 
@@ -97,11 +120,19 @@ fn a_declared_reversibility_is_taken_as_is_and_location_comes_from_the_prefix() 
 /// `web:` 名字仍然走保守兜底，证明第一级不是「凡 web: 都算」。
 #[test]
 fn the_injection_map_wins_over_the_name_rules() {
-    let table = ToolTable::builtin().with_host_tools(vec![host("web:crm/lookup", Reversibility::Pure)]);
-    assert_eq!(snap(&table, "web:crm/lookup").reversibility, Reversibility::Pure);
+    let table =
+        ToolTable::builtin().with_host_tools(vec![host("web:crm/lookup", Reversibility::Pure)]);
+    assert_eq!(
+        snap(&table, "web:crm/lookup").reversibility,
+        Reversibility::Pure
+    );
 
     let not_injected = snap(&table, "web:crm/anything-else");
-    assert_eq!(not_injected.reversibility, Reversibility::Irreversible, "没注入的名字仍旧保守兜底");
+    assert_eq!(
+        not_injected.reversibility,
+        Reversibility::Irreversible,
+        "没注入的名字仍旧保守兜底"
+    );
     assert_eq!(not_injected.location, Location::Web);
 }
 
@@ -121,8 +152,14 @@ fn the_injection_map_wins_over_the_mcp_map() {
     let table = ToolTable::builtin()
         .with_mcp(vec![(spec("mcp:everything/echo"), Reversibility::Pure)])
         .with_host_tools(vec![host("web:crm/lookup", Reversibility::Irreversible)]);
-    assert_eq!(snap(&table, "mcp:everything/echo").reversibility, Reversibility::Pure);
-    assert_eq!(snap(&table, "web:crm/lookup").reversibility, Reversibility::Irreversible);
+    assert_eq!(
+        snap(&table, "mcp:everything/echo").reversibility,
+        Reversibility::Pure
+    );
+    assert_eq!(
+        snap(&table, "web:crm/lookup").reversibility,
+        Reversibility::Irreversible
+    );
 }
 
 // ── 075：push_spec 判重跨 with_mcp / with_host_tools 边界依然生效 ───────────
@@ -142,15 +179,26 @@ fn with_host_tools_loading_the_same_name_twice_keeps_the_first_reversibility() {
     };
     let result = std::panic::catch_unwind(build);
     if cfg!(debug_assertions) {
-        assert!(result.is_err(), "debug 构建下重复声明应该在 with_host_tools 内部 debug_assert 炸掉");
+        assert!(
+            result.is_err(),
+            "debug 构建下重复声明应该在 with_host_tools 内部 debug_assert 炸掉"
+        );
     } else {
         let table = result.expect("release 构建下 with_host_tools 不该 panic");
         assert_eq!(
-            table.specs().iter().filter(|s| &*s.name == "web:dup/tool").count(),
+            table
+                .specs()
+                .iter()
+                .filter(|s| &*s.name == "web:dup/tool")
+                .count(),
             1,
             "撞名的那条不该真的多进一条 spec"
         );
-        assert_eq!(snap(&table, "web:dup/tool").reversibility, Reversibility::Pure, "可逆性该是先来的那份，不是后来的 Irreversible");
+        assert_eq!(
+            snap(&table, "web:dup/tool").reversibility,
+            Reversibility::Pure,
+            "可逆性该是先来的那份，不是后来的 Irreversible"
+        );
     }
 }
 
@@ -175,14 +223,27 @@ fn a_name_that_collides_across_with_mcp_and_with_host_tools_keeps_the_first_one_
     let build = || {
         ToolTable::builtin()
             .with_mcp(vec![(spec("mcp:everything/echo"), Reversibility::Pure)])
-            .with_host_tools(vec![host("mcp:everything/echo", Reversibility::Irreversible)])
+            .with_host_tools(vec![host(
+                "mcp:everything/echo",
+                Reversibility::Irreversible,
+            )])
     };
     let result = std::panic::catch_unwind(build);
     if cfg!(debug_assertions) {
-        assert!(result.is_err(), "debug 构建下跨 with_* 边界撞名也该 debug_assert");
+        assert!(
+            result.is_err(),
+            "debug 构建下跨 with_* 边界撞名也该 debug_assert"
+        );
     } else {
         let table = result.expect("release 构建下不该 panic");
-        assert_eq!(table.specs().iter().filter(|s| &*s.name == "mcp:everything/echo").count(), 1);
+        assert_eq!(
+            table
+                .specs()
+                .iter()
+                .filter(|s| &*s.name == "mcp:everything/echo")
+                .count(),
+            1
+        );
         assert_eq!(
             snap(&table, "mcp:everything/echo").reversibility,
             Reversibility::Pure,
@@ -198,6 +259,12 @@ fn injecting_nothing_changes_nothing() {
     let untouched = ToolTable::with_shell();
     let empty = ToolTable::with_shell().with_host_tools(Vec::new());
     assert_eq!(names(&empty), names(&untouched));
-    assert_eq!(snap(&empty, "srv:fs/read").reversibility, snap(&untouched, "srv:fs/read").reversibility);
-    assert_eq!(snap(&empty, "srv:shell/exec").reversibility, Reversibility::Irreversible);
+    assert_eq!(
+        snap(&empty, "srv:fs/read").reversibility,
+        snap(&untouched, "srv:fs/read").reversibility
+    );
+    assert_eq!(
+        snap(&empty, "srv:shell/exec").reversibility,
+        Reversibility::Irreversible
+    );
 }

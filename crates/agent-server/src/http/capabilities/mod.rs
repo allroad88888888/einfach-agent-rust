@@ -195,17 +195,27 @@ mod tests {
             let caps = parse(json!({ "tools": [ { "name": "web:x/y", "reversibility": text } ] }));
             assert_eq!(caps.tools[0].reversibility, Some(expected));
         }
-        let pascal: Result<Capabilities, _> =
-            serde_json::from_value(json!({ "tools": [ { "name": "web:x/y", "reversibility": "Pure" } ] }));
+        let pascal: Result<Capabilities, _> = serde_json::from_value(
+            json!({ "tools": [ { "name": "web:x/y", "reversibility": "Pure" } ] }),
+        );
         assert!(pascal.is_err(), "PascalCase 不该被宿主面接受");
     }
 
     /// 宿主面拼法 → core 拼法的桥（062 装配时唯一的转换点）。
     #[test]
     fn reversibility_maps_onto_the_core_enum() {
-        assert_eq!(Reversibility::from(CapabilityReversibility::Pure), Reversibility::Pure);
-        assert_eq!(Reversibility::from(CapabilityReversibility::Reversible), Reversibility::Reversible);
-        assert_eq!(Reversibility::from(CapabilityReversibility::Irreversible), Reversibility::Irreversible);
+        assert_eq!(
+            Reversibility::from(CapabilityReversibility::Pure),
+            Reversibility::Pure
+        );
+        assert_eq!(
+            Reversibility::from(CapabilityReversibility::Reversible),
+            Reversibility::Reversible
+        );
+        assert_eq!(
+            Reversibility::from(CapabilityReversibility::Irreversible),
+            Reversibility::Irreversible
+        );
     }
 
     /// schema 原样收下（红线 11：`serde_json::Value` 的对象后端是 `BTreeMap`，
@@ -233,14 +243,19 @@ mod tests {
         assert_eq!(skill.description, "处理客户工单");
         assert_eq!(skill.body, "第一步……");
         assert_eq!(skill.tools[0].name, "web:crm/close");
-        assert_eq!(skill.tools[0].reversibility, Some(CapabilityReversibility::Irreversible));
+        assert_eq!(
+            skill.tools[0].reversibility,
+            Some(CapabilityReversibility::Irreversible)
+        );
     }
 
     /// 认不得的字段忽略、不报错——宿主比 server 先升级是常态（协议加字段时旧
     /// server 不该 400）。
     #[test]
     fn unknown_fields_are_ignored() {
-        let caps = parse(json!({ "tools": [ { "name": "web:x/y", "future_field": 1 } ], "future_field": true }));
+        let caps = parse(
+            json!({ "tools": [ { "name": "web:x/y", "future_field": 1 } ], "future_field": true }),
+        );
         assert_eq!(caps.tools.len(), 1);
     }
 }

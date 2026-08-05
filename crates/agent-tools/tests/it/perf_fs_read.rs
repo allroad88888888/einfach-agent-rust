@@ -61,8 +61,7 @@ fn paged_read_has_an_exact_line_and_prompt_byte_budget() {
     assert_eq!(full["revision"], page_result["revision"]);
     let full = full["content"].as_str().unwrap();
     assert!(full.len() > agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
-    let prompt_view =
-        agent_core::truncate_tool_output(full, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
+    let prompt_view = agent_core::truncate_tool_output(full, agent_core::DEFAULT_TOOL_OUTPUT_BYTES);
     assert!(prompt_view.len() < agent_core::DEFAULT_TOOL_OUTPUT_BYTES + 200);
     assert!(prompt_view.contains("输出被截断"));
 }

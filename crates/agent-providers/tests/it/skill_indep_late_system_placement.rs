@@ -40,11 +40,18 @@ use agent_providers::kimi::Kimi;
 use agent_providers::{Ingredients, Provider};
 
 fn sys(label: &str, text: &str) -> SystemChunk {
-    SystemChunk { label: Arc::from(label), text: Arc::from(text) }
+    SystemChunk {
+        label: Arc::from(label),
+        text: Arc::from(text),
+    }
 }
 
 fn msg(id: u64, text: &str) -> Message {
-    Message { id: MessageId(id), role: Role::User, blocks: vec![ContentBlock::Text(Arc::from(text))] }
+    Message {
+        id: MessageId(id),
+        role: Role::User,
+        blocks: vec![ContentBlock::Text(Arc::from(text))],
+    }
 }
 
 fn cfg(model: &str) -> SessionConfig {
@@ -77,7 +84,9 @@ fn build_ingredients<'a>(
 }
 
 fn system_role_message_count(body: &[u8]) -> usize {
-    String::from_utf8_lossy(body).matches("\"role\":\"system\"").count()
+    String::from_utf8_lossy(body)
+        .matches("\"role\":\"system\"")
+        .count()
 }
 
 fn contains(body: &[u8], needle: &str) -> bool {
@@ -100,8 +109,14 @@ fn assert_message_level(provider: &dyn Provider, model: &str) {
     let ing_v2 = build_ingredients(&base, &messages, &skill, &config, Some(&prefix_v1));
     let out_v2 = provider.encode(&ing_v2);
 
-    assert!(contains(&out_v2.body, "testskill"), "{model}: late_system 的内容必须真的进了 body");
-    assert!(contains(&out_v2.body, "称职的助手"), "{model}: 原有 system 内容不该被顶掉");
+    assert!(
+        contains(&out_v2.body, "testskill"),
+        "{model}: late_system 的内容必须真的进了 body"
+    );
+    assert!(
+        contains(&out_v2.body, "称职的助手"),
+        "{model}: 原有 system 内容不该被顶掉"
+    );
     assert_eq!(
         system_role_message_count(&out_v2.body),
         count_v1 + 1,
@@ -143,8 +158,14 @@ fn deepseek_places_late_system_by_extending_the_existing_system_segment_tail() {
     let ing_v2 = build_ingredients(&base, &messages, &skill, &config, Some(&prefix_v1));
     let out_v2 = DeepSeek.encode(&ing_v2);
 
-    assert!(contains(&out_v2.body, "testskill"), "late_system 内容必须真的进了 body");
-    assert!(contains(&out_v2.body, "称职的助手"), "原有 system 内容该保留(只是尾部追加,不是替换)");
+    assert!(
+        contains(&out_v2.body, "testskill"),
+        "late_system 内容必须真的进了 body"
+    );
+    assert!(
+        contains(&out_v2.body, "称职的助手"),
+        "原有 system 内容该保留(只是尾部追加,不是替换)"
+    );
     assert_eq!(
         system_role_message_count(&out_v2.body),
         count_v1,
@@ -186,6 +207,9 @@ fn each_provider_with_late_system_is_still_byte_deterministic() {
         let built = build_ingredients(&base, &messages, &skill, &config, None);
         let a = provider.encode(&built).body;
         let b = provider.encode(&built).body;
-        assert_eq!(a, b, "{model}: 带 late_system 的料两次 encode 必须逐字节相同");
+        assert_eq!(
+            a, b,
+            "{model}: 带 late_system 的料两次 encode 必须逐字节相同"
+        );
     }
 }

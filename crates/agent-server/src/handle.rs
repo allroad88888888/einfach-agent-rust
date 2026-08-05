@@ -151,7 +151,9 @@ impl SessionHandle {
     /// 有界事件环形缓冲供补发」是 031 的 `Last-Event-ID` 重连语义，不是这一层
     /// 要做的事（030 的注意事项：这里还没有网络面）。
     pub fn subscribe(&self) -> Subscription {
-        Subscription { inner: self.events.subscribe() }
+        Subscription {
+            inner: self.events.subscribe(),
+        }
     }
 }
 
@@ -176,9 +178,10 @@ impl Subscription {
     pub async fn recv(&mut self) -> Option<Frame> {
         match self.inner.recv().await {
             Ok(frame) => Some(frame),
-            Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                Some(Frame { agent: AgentId::root(), event: SessionEvent::Lagged { skipped } })
-            }
+            Err(broadcast::error::RecvError::Lagged(skipped)) => Some(Frame {
+                agent: AgentId::root(),
+                event: SessionEvent::Lagged { skipped },
+            }),
             Err(broadcast::error::RecvError::Closed) => None,
         }
     }
@@ -193,7 +196,15 @@ mod tests {
         let (events, _) = broadcast::channel(16);
         let tree = Arc::new(Mutex::new(AgentTree { nodes: Vec::new() }));
         let pending_tools = Arc::new(Mutex::new(Vec::new()));
-        (SessionHandle { canceller: CancelHandle::new(tx, Arc::new(AtomicBool::new(false))), events, tree, pending_tools }, rx)
+        (
+            SessionHandle {
+                canceller: CancelHandle::new(tx, Arc::new(AtomicBool::new(false))),
+                events,
+                tree,
+                pending_tools,
+            },
+            rx,
+        )
     }
 
     #[test]
@@ -201,7 +212,11 @@ mod tests {
         let (handle, rx) = handle();
         handle.send(Command::Cancel).unwrap();
         assert!(handle.canceller.is_cancelled(), "取消标志该立刻生效");
-        assert_eq!(rx.try_recv().unwrap(), Command::Cancel, "等待远端工具时 actor 需要被唤醒");
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            Command::Cancel,
+            "等待远端工具时 actor 需要被唤醒"
+        );
     }
 
     #[test]
@@ -230,12 +245,20 @@ mod tests {
     #[tokio::test]
     async fn lagged_receiver_gets_an_explicit_drop_event() {
         let (tx, _rx0) = broadcast::channel(2);
-        let mut sub = Subscription { inner: tx.subscribe() };
+        let mut sub = Subscription {
+            inner: tx.subscribe(),
+        };
         // 容量 2，连发 4 条 —— 订阅者肯定跟丢。
         for n in 0..4u64 {
-            let _ = tx.send(Frame { agent: AgentId::root(), event: SessionEvent::Lagged { skipped: n } });
+            let _ = tx.send(Frame {
+                agent: AgentId::root(),
+                event: SessionEvent::Lagged { skipped: n },
+            });
         }
         let first = sub.recv().await.unwrap();
-        assert!(matches!(first.event, SessionEvent::Lagged { .. }), "该先看到掉帧事件：{first:?}");
+        assert!(
+            matches!(first.event, SessionEvent::Lagged { .. }),
+            "该先看到掉帧事件：{first:?}"
+        );
     }
 }

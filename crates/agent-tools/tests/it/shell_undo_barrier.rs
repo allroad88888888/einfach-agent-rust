@@ -9,7 +9,7 @@
 //! 自己的任何实现——这也是为什么它只依赖 `agent-store`（本文件是唯一需要
 //! `agent-store` 这个 dev-dependency 的地方）。
 
-use agent_store::{record_set, AtomId, AtomValue, History, Store, UndoOutcome};
+use agent_store::{AtomId, AtomValue, History, Store, UndoOutcome, record_set};
 
 /// 屏障用的最小 meta：`same_turn` 在这个演示里恒真（三条记成一个 turn），
 /// 唯一有意义的字段是 `irreversible`——对应 `Reversibility::Irreversible`。

@@ -23,7 +23,10 @@ where
 
 #[test]
 fn effect_call_provider_roundtrip() {
-    roundtrip(&Effect::CallProvider { agent: support::agent(), epoch: Epoch::START });
+    roundtrip(&Effect::CallProvider {
+        agent: support::agent(),
+        epoch: Epoch::START,
+    });
 }
 
 #[test]
@@ -40,12 +43,16 @@ fn effect_execute_tool_roundtrip_is_pure_data() {
 
 #[test]
 fn effect_cancel_in_flight_roundtrip() {
-    roundtrip(&Effect::CancelInFlight { epoch: Epoch::START });
+    roundtrip(&Effect::CancelInFlight {
+        epoch: Epoch::START,
+    });
 }
 
 #[test]
 fn effect_emit_roundtrip() {
-    roundtrip(&Effect::Emit(Notice::TurnStatusChanged { status: TurnStatus::Thinking }));
+    roundtrip(&Effect::Emit(Notice::TurnStatusChanged {
+        status: TurnStatus::Thinking,
+    }));
 }
 
 // ---- Notice ----
@@ -78,7 +85,10 @@ fn notice_tool_output_truncated_roundtrip() {
 
 #[test]
 fn event_user_input_roundtrip() {
-    roundtrip(&Event::UserInput { agent: support::agent(), text: Arc::from("hello") });
+    roundtrip(&Event::UserInput {
+        agent: support::agent(),
+        text: Arc::from("hello"),
+    });
 }
 
 #[test]
@@ -88,7 +98,11 @@ fn event_provider_done_roundtrip() {
         epoch: Epoch::START,
         blocks: vec![ContentBlock::Text(Arc::from("done"))],
         stop: StopReason::EndTurn,
-        usage: TokenUsage { prompt: 10, completion: 5, cached: Some(0) },
+        usage: TokenUsage {
+            prompt: 10,
+            completion: 5,
+            cached: Some(0),
+        },
         prefix: support::prefix_image(),
         adjustments: vec![Adjustment::ThinkingDisabledForToolChoice],
     });
@@ -126,7 +140,11 @@ fn event_tool_failed_roundtrip() {
 
 #[test]
 fn event_timeout_roundtrip_both_call_id_forms() {
-    roundtrip(&Event::Timeout { agent: support::agent(), epoch: Epoch::START, call_id: None });
+    roundtrip(&Event::Timeout {
+        agent: support::agent(),
+        epoch: Epoch::START,
+        call_id: None,
+    });
     roundtrip(&Event::Timeout {
         agent: support::agent(),
         epoch: Epoch::START,
@@ -136,5 +154,7 @@ fn event_timeout_roundtrip_both_call_id_forms() {
 
 #[test]
 fn event_cancel_roundtrip() {
-    roundtrip(&Event::Cancel { agent: support::agent() });
+    roundtrip(&Event::Cancel {
+        agent: support::agent(),
+    });
 }

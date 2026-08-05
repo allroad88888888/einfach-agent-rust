@@ -45,13 +45,22 @@ fn routes() -> Vec<Route> {
     let remote_wire = wire_tool_name(REMOTE_TOOL);
     vec![
         // 子在拿到远端回传之后的第二跳（只有对照组会走到）。
-        Route { needle: "call_child_ask", delay: Duration::ZERO, status: 200, lines: sse_text("子答完了") },
+        Route {
+            needle: "call_child_ask",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("子答完了"),
+        },
         // 子的第一跳：吐一个远端工具调用 —— 它会**停在那儿**等宿主回传。
         Route {
             needle: "GHOSTTASK",
             delay: Duration::ZERO,
             status: 200,
-            lines: sse_tool_call("call_child_ask", &remote_wire, r#"{"question":"要我继续吗"}"#),
+            lines: sse_tool_call(
+                "call_child_ask",
+                &remote_wire,
+                r#"{"question":"要我继续吗"}"#,
+            ),
         },
         // root 的第一跳：一个后台 spawn + 一个远端工具调用（后者让 root 停在
         // `ToolsPending`，这一轮不落终态）。
@@ -60,15 +69,30 @@ fn routes() -> Vec<Route> {
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_bg", &spawn_wire, r#"{"task":"GHOSTTASK 后台干活","background":true}"#),
-                ("call_root_ask", &remote_wire, r#"{"question":"顺便问一句"}"#),
+                (
+                    "call_bg",
+                    &spawn_wire,
+                    r#"{"task":"GHOSTTASK 后台干活","background":true}"#,
+                ),
+                (
+                    "call_root_ask",
+                    &remote_wire,
+                    r#"{"question":"顺便问一句"}"#,
+                ),
             ]),
         },
     ]
 }
 
 /// 起一轮，停在「root 等远端回传、后台子也等远端回传」那个状态上。
-fn park(tag: &str) -> (Session, agent_runtime::RunnerCtx, std::rc::Rc<std::cell::RefCell<Vec<agent_runtime::AgentEvent>>>, RoutedServer) {
+fn park(
+    tag: &str,
+) -> (
+    Session,
+    agent_runtime::RunnerCtx,
+    std::rc::Rc<std::cell::RefCell<Vec<agent_runtime::AgentEvent>>>,
+    RoutedServer,
+) {
     let dir = temp_dir(tag);
     let server = RoutedServer::start(routes());
     let tools = agent_runtime::ToolTable::standard().with_spawn(agent_core::AgentLimits::default());
@@ -93,8 +117,14 @@ fn a_background_childs_late_result_is_dropped_by_the_epoch_gate() {
 
     // bump epoch：一次真的取消（undo 走的是同一个 bump，`undo.rs` 与 `commit.rs`）。
     let before = session.epoch();
-    let _ = session.step(Event::Cancel { agent: AgentId::root() });
-    assert_ne!(session.epoch(), before, "取消该推走世代，否则这条测试是空跑的");
+    let _ = session.step(Event::Cancel {
+        agent: AgentId::root(),
+    });
+    assert_ne!(
+        session.epoch(),
+        before,
+        "取消该推走世代，否则这条测试是空跑的"
+    );
     assert_eq!(session.status(), TurnStatus::Failed(Failure::Cancelled));
 
     // 幽灵结果回来了。
@@ -121,7 +151,10 @@ fn a_background_childs_late_result_is_dropped_by_the_epoch_gate() {
 
     // 而它没有被写进世界。**子还活着**（下面这条），所以挡住它的只可能是 epoch
     // 闸——活性闸在这条路上被排除了。
-    assert!(session.is_live(&child), "子该还活着：活性闸不该是这条测试的解释");
+    assert!(
+        session.is_live(&child),
+        "子该还活着：活性闸不该是这条测试的解释"
+    );
     assert!(
         !any_message_mentions(&session, &[AgentId::root(), child.clone()], "GHOSTANSWER"),
         "幽灵结果被写进了已经回滚掉的世界——回写前的 epoch 比对没挡住（红线 6）：{:#?}",

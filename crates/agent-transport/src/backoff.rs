@@ -17,7 +17,10 @@ pub struct Backoff {
 
 impl Default for Backoff {
     fn default() -> Self {
-        Backoff { base: Duration::from_millis(200), max_attempts: 3 }
+        Backoff {
+            base: Duration::from_millis(200),
+            max_attempts: 3,
+        }
     }
 }
 
@@ -27,7 +30,9 @@ impl Backoff {
     pub fn delay(&self, attempt: u32) -> Duration {
         let factor = 1u32 << attempt.saturating_sub(1).min(4);
         let exp = self.base.saturating_mul(factor);
-        exp + Duration::from_millis(jitter_ms(u64::try_from(exp.as_millis()).unwrap_or(u64::MAX) / 2))
+        exp + Duration::from_millis(jitter_ms(
+            u64::try_from(exp.as_millis()).unwrap_or(u64::MAX) / 2,
+        ))
     }
 }
 
@@ -38,8 +43,10 @@ fn jitter_ms(max: u64) -> u64 {
     if max == 0 {
         return 0;
     }
-    let nanos =
-        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
     u64::from(nanos) % (max + 1)
 }
 
@@ -64,20 +71,29 @@ mod tests {
 
     #[test]
     fn delay_grows_and_stays_bounded() {
-        let b = Backoff { base: Duration::from_millis(100), max_attempts: 5 };
+        let b = Backoff {
+            base: Duration::from_millis(100),
+            max_attempts: 5,
+        };
         // 下界：至少是没抖动时的指数值；上界：抖动最多加一半。
         for attempt in 1..=5 {
             let factor = 1u32 << (attempt - 1).min(4);
             let floor = b.base * factor;
             let d = b.delay(attempt);
             assert!(d >= floor, "attempt {attempt}: {d:?} < floor {floor:?}");
-            assert!(d <= floor + floor / 2 + Duration::from_millis(1), "attempt {attempt}: {d:?} 超出预期上界");
+            assert!(
+                d <= floor + floor / 2 + Duration::from_millis(1),
+                "attempt {attempt}: {d:?} 超出预期上界"
+            );
         }
     }
 
     #[test]
     fn delay_caps_growth_beyond_attempt_five() {
-        let b = Backoff { base: Duration::from_millis(10), max_attempts: 10 };
+        let b = Backoff {
+            base: Duration::from_millis(10),
+            max_attempts: 10,
+        };
         let d5 = b.delay(5);
         let d9 = b.delay(9);
         // 2^4 封顶后，attempt 5 和 attempt 9 的指数部分该相等（都乘 16）。
@@ -91,7 +107,11 @@ mod tests {
         let cancel = AtomicBool::new(true);
         let start = std::time::Instant::now();
         sleep_cancelable(Duration::from_secs(5), &cancel);
-        assert!(start.elapsed() < Duration::from_millis(200), "该立刻返回，实际 {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < Duration::from_millis(200),
+            "该立刻返回，实际 {:?}",
+            start.elapsed()
+        );
     }
 
     #[test]

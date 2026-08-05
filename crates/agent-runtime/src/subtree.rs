@@ -118,7 +118,13 @@ impl Subtree {
         epoch: Epoch,
         tool: &'static str,
     ) {
-        self.slots.push(ChildSlot { child, parent, call_id, epoch, tool });
+        self.slots.push(ChildSlot {
+            child,
+            parent,
+            call_id,
+            epoch,
+            tool,
+        });
     }
 
     /// 053：这个后台子还在 detached 名单上吗（= 还在跑、还没进 stash）。
@@ -157,7 +163,11 @@ impl Subtree {
     /// 记一笔后台子（052）：**没有 `call_id`**——父那个 spawn 槽在 `dispatch` 里
     /// 已经当场收敛了，这张表记的只是「这个子还在跑，而且没人在等它」。
     pub(crate) fn detach(&mut self, child: AgentId, parent: AgentId, epoch: Epoch) {
-        self.detached.push(Detached { child, parent, epoch });
+        self.detached.push(Detached {
+            child,
+            parent,
+            epoch,
+        });
     }
 
     /// 轮末清算用（`crate::orphan`）：detached 名单里**还活着、且没有 collect

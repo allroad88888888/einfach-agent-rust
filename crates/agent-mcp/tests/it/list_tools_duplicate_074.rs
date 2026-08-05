@@ -29,7 +29,10 @@ fn connect(script: &str) -> Result<McpClient, McpError> {
 /// 外层 `{"tools": [...]}`）。**必须是单行**——`read_line` 按 `\n` 切帧
 /// （newline-delimited JSON-RPC），`tools_json` 里混进换行会把一帧切成两半。
 fn server_script(tools_json: &str) -> String {
-    assert!(!tools_json.contains('\n'), "tools_json 必须是单行，否则破坏 newline-delimited 分帧");
+    assert!(
+        !tools_json.contains('\n'),
+        "tools_json 必须是单行，否则破坏 newline-delimited 分帧"
+    );
     format!(
         "read l1\n\
          printf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{{}}}}}}'\n\
@@ -47,12 +50,21 @@ fn server_script(tools_json: &str) -> String {
 fn duplicate_tool_name_keeps_first_spec_and_first_reversibility() {
     let tools_json = r#"{"name":"echo","description":"first","inputSchema":{"type":"object"},"annotations":{"readOnlyHint":true}},{"name":"echo","description":"second","inputSchema":{"type":"object"}}"#;
     let mut client = connect(&server_script(tools_json)).unwrap();
-    let (tools, warnings) = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap();
+    let (tools, warnings) = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap();
 
     assert_eq!(tools.len(), 1, "两条同名，只该留一条");
     assert_eq!(&*tools[0].0.name, "mcp:fakesrv/echo");
-    assert_eq!(&*tools[0].0.description, "first", "留下的该是第一条的 spec，不是第二条");
-    assert_eq!(tools[0].1, Reversibility::Pure, "可逆性该是第一条的那一档，不是后来居上");
+    assert_eq!(
+        &*tools[0].0.description, "first",
+        "留下的该是第一条的 spec，不是第二条"
+    );
+    assert_eq!(
+        tools[0].1,
+        Reversibility::Pure,
+        "可逆性该是第一条的那一档，不是后来居上"
+    );
 
     assert_eq!(warnings.len(), 1, "该有且只有一条告警");
     assert_eq!(warnings[0].server_id, "fakesrv", "告警必须点名 server id");
@@ -71,11 +83,17 @@ fn duplicate_tool_name_keeps_first_spec_and_first_reversibility() {
 fn same_name_three_times_drops_two_into_one_warning() {
     let tools_json = r#"{"name":"dup","description":"a","inputSchema":{"type":"object"}},{"name":"dup","description":"b","inputSchema":{"type":"object"}},{"name":"dup","description":"c","inputSchema":{"type":"object"}}"#;
     let mut client = connect(&server_script(tools_json)).unwrap();
-    let (tools, warnings) = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap();
+    let (tools, warnings) = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap();
 
     assert_eq!(tools.len(), 1);
     assert_eq!(&*tools[0].0.description, "a", "留下的该是最早那条");
-    assert_eq!(warnings.len(), 1, "同一个名字只应产出一条告警，不是每次撞名都开一条");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "同一个名字只应产出一条告警，不是每次撞名都开一条"
+    );
     assert_eq!(warnings[0].dropped, 2, "丢了两条(第二、第三条)");
 }
 
@@ -84,10 +102,15 @@ fn same_name_three_times_drops_two_into_one_warning() {
 fn distinct_names_all_kept_with_no_warnings() {
     let tools_json = r#"{"name":"a","inputSchema":{"type":"object"}},{"name":"b","inputSchema":{"type":"object"}},{"name":"c","inputSchema":{"type":"object"}}"#;
     let mut client = connect(&server_script(tools_json)).unwrap();
-    let (tools, warnings) = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap();
+    let (tools, warnings) = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap();
 
     let names: Vec<String> = tools.iter().map(|(s, _)| s.name.to_string()).collect();
-    assert_eq!(names, vec!["mcp:fakesrv/a", "mcp:fakesrv/b", "mcp:fakesrv/c"]);
+    assert_eq!(
+        names,
+        vec!["mcp:fakesrv/a", "mcp:fakesrv/b", "mcp:fakesrv/c"]
+    );
     assert!(warnings.is_empty(), "名字都不同，不该有告警");
 }
 
@@ -95,7 +118,9 @@ fn distinct_names_all_kept_with_no_warnings() {
 #[test]
 fn empty_tools_list_is_fine() {
     let mut client = connect(&server_script("")).unwrap();
-    let (tools, warnings) = client.list_tools("fakesrv", Duration::from_secs(5)).unwrap();
+    let (tools, warnings) = client
+        .list_tools("fakesrv", Duration::from_secs(5))
+        .unwrap();
     assert!(tools.is_empty());
     assert!(warnings.is_empty());
 }

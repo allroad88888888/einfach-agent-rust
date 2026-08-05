@@ -48,7 +48,9 @@ fn user_input_legal_only_from_idle() {
             assert_eq!(effects.len(), 2);
             assert!(matches!(
                 effects[0],
-                Effect::Emit(Notice::TurnStatusChanged { status: TurnStatus::Thinking })
+                Effect::Emit(Notice::TurnStatusChanged {
+                    status: TurnStatus::Thinking
+                })
             ));
             assert!(matches!(effects[1], Effect::CallProvider { .. }));
         } else {
@@ -120,12 +122,19 @@ fn provider_failed_legal_only_from_thinking() {
         let effects = s.step(support::provider_failed_event(s.epoch()));
 
         if matches!(status, TurnStatus::Thinking) {
-            assert_eq!(s.status(), TurnStatus::Thinking, "重试预算没耗尽，留在 Thinking");
+            assert_eq!(
+                s.status(),
+                TurnStatus::Thinking,
+                "重试预算没耗尽，留在 Thinking"
+            );
             assert_eq!(s.retries_used(), 1);
             assert_eq!(effects.len(), 2, "Retrying 通报 + 重发的 CallProvider");
             assert!(matches!(
                 effects[0],
-                Effect::Emit(Notice::Retrying { attempt: 1, max_retries: 2 })
+                Effect::Emit(Notice::Retrying {
+                    attempt: 1,
+                    max_retries: 2
+                })
             ));
             assert!(matches!(effects[1], Effect::CallProvider { .. }));
         } else {
@@ -145,7 +154,11 @@ fn timeout_provider_leg_legal_only_from_thinking() {
 
         if matches!(status, TurnStatus::Thinking) {
             assert_eq!(s.status(), TurnStatus::Thinking);
-            assert_eq!(s.retries_used(), 1, "provider 超时按 Retryable 走同一条重试路");
+            assert_eq!(
+                s.retries_used(),
+                1,
+                "provider 超时按 Retryable 走同一条重试路"
+            );
             assert_eq!(effects.len(), 2);
             assert!(matches!(effects[1], Effect::CallProvider { .. }));
         } else {
@@ -190,10 +203,15 @@ fn cancel_legal_from_non_terminal_states_violation_from_terminal() {
             assert_untouched(&before, observe(&s), &status);
             assert_violation(&effects, &status);
         } else {
-            assert_eq!(s.status(), TurnStatus::Failed(agent_core::Failure::Cancelled));
+            assert_eq!(
+                s.status(),
+                TurnStatus::Failed(agent_core::Failure::Cancelled)
+            );
             assert_eq!(s.epoch(), before.epoch.next(), "取消必须 bump epoch");
             assert!(
-                effects.iter().any(|e| matches!(e, Effect::CancelInFlight { .. })),
+                effects
+                    .iter()
+                    .any(|e| matches!(e, Effect::CancelInFlight { .. })),
                 "必须发 CancelInFlight"
             );
         }

@@ -66,7 +66,10 @@ impl Session {
         self.check_skill_agent(agent)?;
         let mut active = self.active_skill_names(agent);
         if active.iter().any(|s| **s == *skill.as_str()) {
-            return Err(SkillError::AlreadyActive { agent: agent.clone(), skill });
+            return Err(SkillError::AlreadyActive {
+                agent: agent.clone(),
+                skill,
+            });
         }
         active.push(Arc::clone(&skill.0));
         self.write_skills(agent, "activate_skill", active);
@@ -81,7 +84,10 @@ impl Session {
         self.check_skill_agent(agent)?;
         let mut active = self.active_skill_names(agent);
         if !active.iter().any(|s| **s == *skill.as_str()) {
-            return Err(SkillError::NotActive { agent: agent.clone(), skill });
+            return Err(SkillError::NotActive {
+                agent: agent.clone(),
+                skill,
+            });
         }
         active.retain(|s| **s != *skill.as_str());
         self.write_skills(agent, "deactivate_skill", active);
@@ -102,7 +108,10 @@ impl Session {
     /// 现取正文/工具，组这个 agent 这一轮的 `late_system` / `late_tools`。
     /// 空 = 没激活任何 skill。
     pub fn active_skills_of(&self, agent: &AgentId) -> Vec<SkillId> {
-        self.active_skill_names(agent).into_iter().map(SkillId).collect()
+        self.active_skill_names(agent)
+            .into_iter()
+            .map(SkillId)
+            .collect()
     }
 
     /// 激活集里的裸 id（`Arc<str>`）。公开读口 [`active_skills`](Session::active_skills)
@@ -125,10 +134,14 @@ impl Session {
     /// 激活/停用共用的前两道闸：在本会话、且活着。
     fn check_skill_agent(&self, agent: &AgentId) -> Result<(), SkillError> {
         if !self.in_session(agent) {
-            return Err(SkillError::NotInSession { agent: agent.clone() });
+            return Err(SkillError::NotInSession {
+                agent: agent.clone(),
+            });
         }
         if !self.is_live(agent) {
-            return Err(SkillError::NotLive { agent: agent.clone() });
+            return Err(SkillError::NotLive {
+                agent: agent.clone(),
+            });
         }
         Ok(())
     }

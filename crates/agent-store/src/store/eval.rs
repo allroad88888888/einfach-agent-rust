@@ -120,7 +120,12 @@ pub(super) fn read_atom<V: AtomValue>(inner: &Rc<RefCell<Inner<V>>>, root: AtomI
 /// edges keep their position in the dep's insertion-ordered back-set — the
 /// exact end state of vanilla's clearDependencies + re-add), store the value
 /// via `set_atom_state`, stamp settled, count the completed run.
-fn commit_read<V: AtomValue>(inner: &mut Inner<V>, id: AtomId, new_deps: Vec<(AtomId, u64)>, value: V) {
+fn commit_read<V: AtomValue>(
+    inner: &mut Inner<V>,
+    id: AtomId,
+    new_deps: Vec<(AtomId, u64)>,
+    value: V,
+) {
     let old_deps = inner.record_mut(id).deps.take().unwrap_or_default();
     // Set-backed diff keeps large fan-in commits linear (codex P1 review).
     let new_dep_set: std::collections::HashSet<AtomId> = new_deps.iter().map(|(d, _)| *d).collect();

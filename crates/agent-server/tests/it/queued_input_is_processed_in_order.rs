@@ -12,13 +12,22 @@ use support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn two_inputs_sent_back_to_back_both_run_and_in_submission_order() {
-    let server = FakeServer::start(vec![Script::Immediate(text_reply("first-reply")), Script::Immediate(text_reply("second-reply"))]);
+    let server = FakeServer::start(vec![
+        Script::Immediate(text_reply("first-reply")),
+        Script::Immediate(text_reply("second-reply")),
+    ]);
     let registry = agent_server::SessionRegistry::new();
-    let handle = registry.open(support::open_spec("queue-me", server.endpoint(), None)).unwrap();
+    let handle = registry
+        .open(support::open_spec("queue-me", server.endpoint(), None))
+        .unwrap();
 
     let mut sub = handle.subscribe();
-    handle.send(agent_server::Command::Input("first".to_string())).unwrap();
-    handle.send(agent_server::Command::Input("second".to_string())).unwrap(); // 不等第一条的结果
+    handle
+        .send(agent_server::Command::Input("first".to_string()))
+        .unwrap();
+    handle
+        .send(agent_server::Command::Input("second".to_string()))
+        .unwrap(); // 不等第一条的结果
 
     let first_turn = support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;
     let second_turn = support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;
@@ -30,6 +39,14 @@ async fn two_inputs_sent_back_to_back_both_run_and_in_submission_order() {
     // 第二条里有 "second"，不是反过来、也不是被合并成一条。
     let bodies = server.bodies();
     assert_eq!(bodies.len(), 2, "该有两次独立的 provider 调用，一轮一次");
-    assert!(bodies[0].contains("first"), "第一次请求体该含第一条输入：{}", bodies[0]);
-    assert!(bodies[1].contains("second"), "第二次请求体该含第二条输入：{}", bodies[1]);
+    assert!(
+        bodies[0].contains("first"),
+        "第一次请求体该含第一条输入：{}",
+        bodies[0]
+    );
+    assert!(
+        bodies[1].contains("second"),
+        "第二次请求体该含第二条输入：{}",
+        bodies[1]
+    );
 }

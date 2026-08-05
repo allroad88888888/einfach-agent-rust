@@ -6,7 +6,7 @@
 mod common;
 use common::*;
 
-use agent_store::{record_set, AtomId, History, Store, UndoOutcome};
+use agent_store::{AtomId, History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M {
@@ -26,7 +26,13 @@ fn is_barrier(meta: &M) -> bool {
     meta.barrier
 }
 
-fn write(store: &Store<TestValue>, history: &mut History<String, TestValue, M>, atom: AtomId, next: f64, meta: M) -> u64 {
+fn write(
+    store: &Store<TestValue>,
+    history: &mut History<String, TestValue, M>,
+    atom: AtomId,
+    next: f64,
+    meta: M,
+) -> u64 {
     let c = record_set(store, "p".to_string(), atom, num(next)).unwrap();
     history.append(meta, vec![c]).unwrap()
 }
@@ -42,7 +48,10 @@ fn undo_one_at_the_door_of_a_barrier_is_fully_blocked() {
 
     let before_cursor = history.cursor();
     match history.undo_one(is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert!(applied.is_empty(), "门口即屏障，applied 必须是空的");
             assert_eq!(bs, barrier_seq);
         }
@@ -53,7 +62,10 @@ fn undo_one_at_the_door_of_a_barrier_is_fully_blocked() {
 
     // 再撞一次，结果一样——屏障是永久的墙，不会因为多试一次就松动。
     match history.undo_one(is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert!(applied.is_empty());
             assert_eq!(bs, barrier_seq);
         }
@@ -76,7 +88,10 @@ fn undo_turn_mid_turn_barrier_stops_one_slot_past_it() {
     assert_eq!(history.cursor(), 4);
 
     let applied = match history.undo_turn(same_turn, is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert_eq!(bs, barrier_seq);
             applied
         }
@@ -89,12 +104,19 @@ fn undo_turn_mid_turn_barrier_stops_one_slot_past_it() {
             store.set(p, c.prev.clone());
         }
     }
-    assert_eq!(store.get(p).as_number(), Some(2.0), "停在屏障（e1）生效之后的状态");
+    assert_eq!(
+        store.get(p).as_number(),
+        Some(2.0),
+        "停在屏障（e1）生效之后的状态"
+    );
     assert_eq!(history.cursor(), 2, "游标停在屏障后一格：e0,e1 仍 applied");
 
     // 再 undo 一次：门口就是屏障本身，彻底不动，和 undo_one 的门口案例同构。
     match history.undo_turn(same_turn, is_barrier) {
-        UndoOutcome::Blocked { applied, barrier_seq: bs } => {
+        UndoOutcome::Blocked {
+            applied,
+            barrier_seq: bs,
+        } => {
             assert!(applied.is_empty());
             assert_eq!(bs, barrier_seq);
         }

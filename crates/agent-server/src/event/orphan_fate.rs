@@ -60,12 +60,22 @@ mod tests {
             OrphanFate::Despawned { descendants: 2 }
         );
         assert_eq!(
-            OrphanFate::from(RunnerOrphanFate::Kept { reason: "StillRead".to_string() }),
-            OrphanFate::Kept { reason: "StillRead".to_string() }
+            OrphanFate::from(RunnerOrphanFate::Kept {
+                reason: "StillRead".to_string()
+            }),
+            OrphanFate::Kept {
+                reason: "StillRead".to_string()
+            }
         );
         assert_eq!(
-            OrphanFate::from(RunnerOrphanFate::Discarded { bytes: 15, is_error: true }),
-            OrphanFate::Discarded { bytes: 15, is_error: true }
+            OrphanFate::from(RunnerOrphanFate::Discarded {
+                bytes: 15,
+                is_error: true
+            }),
+            OrphanFate::Discarded {
+                bytes: 15,
+                is_error: true
+            }
         );
     }
 
@@ -73,9 +83,15 @@ mod tests {
     /// 收窄靠的就是这个 `"type"` 键。
     #[test]
     fn orphan_fate_serializes_round_trip() {
-        let fate = OrphanFate::Discarded { bytes: 15, is_error: false };
+        let fate = OrphanFate::Discarded {
+            bytes: 15,
+            is_error: false,
+        };
         let s = serde_json::to_string(&fate).unwrap();
-        assert_eq!(s, r#"{"type":"discarded","data":{"bytes":15,"is_error":false}}"#);
+        assert_eq!(
+            s,
+            r#"{"type":"discarded","data":{"bytes":15,"is_error":false}}"#
+        );
         assert_eq!(serde_json::from_str::<OrphanFate>(&s).unwrap(), fate);
     }
 }

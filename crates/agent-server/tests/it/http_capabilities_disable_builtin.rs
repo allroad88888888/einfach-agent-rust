@@ -38,7 +38,11 @@ async fn a_disabled_builtin_is_invisible_here_and_untouched_next_door() {
     let upstream = FakeServer::start(vec![Script::Immediate(support::wire::text_reply("好的。"))]);
     let addr = start(&upstream).await;
 
-    create(addr, json!({ "id": "reduced", "capabilities": switch() }), 201);
+    create(
+        addr,
+        json!({ "id": "reduced", "capabilities": switch() }),
+        201,
+    );
     create(addr, json!({ "id": "plain" }), 201);
 
     let reduced = one_turn(&upstream, addr, "reduced").await;
@@ -46,17 +50,32 @@ async fn a_disabled_builtin_is_invisible_here_and_untouched_next_door() {
 
     assert_eq!(
         names(&reduced),
-        vec!["srv:fs/read", "srv:fs/list", "srv:agent/status", "srv:agent/collect"],
+        vec![
+            "srv:fs/read",
+            "srv:fs/list",
+            "srv:agent/status",
+            "srv:agent/collect"
+        ],
         "关掉的那两件不该在表里，没点名的一件不许少（顺序也不许变——红线 11）"
     );
     let bytes = tools_bytes(&reduced);
     for hint in ["交给一个新的子 agent", "sh -c"] {
-        assert!(!bytes.contains(hint), "关掉的工具描述还在进 prompt 的字节里（「{hint}」）——名字摘了描述留着，那笔钱照付");
+        assert!(
+            !bytes.contains(hint),
+            "关掉的工具描述还在进 prompt 的字节里（「{hint}」）——名字摘了描述留着，那笔钱照付"
+        );
     }
 
     assert_eq!(
         names(&plain),
-        vec!["srv:fs/read", "srv:fs/list", "srv:shell/exec", "srv:agent/spawn", "srv:agent/status", "srv:agent/collect"],
+        vec![
+            "srv:fs/read",
+            "srv:fs/list",
+            "srv:shell/exec",
+            "srv:agent/spawn",
+            "srv:agent/status",
+            "srv:agent/collect"
+        ],
         "隔壁那个不带开关的会话该是完整的一档——开关是 per-session 的，不粘在全局 template 上"
     );
 }
@@ -78,17 +97,36 @@ async fn an_unknown_name_is_rejected_by_name() {
     let addr = start(&upstream).await;
 
     for (label, caps, offender) in [
-        ("拼错", json!({ "disable_builtin": ["srv:agent/spawnn"] }), "srv:agent/spawnn"),
-        ("这个部署没装配", json!({ "disable_builtin": ["read_file"] }), "read_file"),
+        (
+            "拼错",
+            json!({ "disable_builtin": ["srv:agent/spawnn"] }),
+            "srv:agent/spawnn",
+        ),
+        (
+            "这个部署没装配",
+            json!({ "disable_builtin": ["read_file"] }),
+            "read_file",
+        ),
         (
             "宿主自己注入的（不在天花板里）",
             json!({ "tools": [ { "name": "web:crm/lookup" } ], "disable_builtin": ["web:crm/lookup"] }),
             "web:crm/lookup",
         ),
     ] {
-        let response = post(addr, json!({ "id": format!("bad-{}", offender.len()), "capabilities": caps }));
-        assert_eq!(response.status, 400, "{label}：该 400，实际 {} {}", response.status, response.body);
-        assert!(response.body.contains(offender), "{label}：报文必须点名是哪一个：{}", response.body);
+        let response = post(
+            addr,
+            json!({ "id": format!("bad-{}", offender.len()), "capabilities": caps }),
+        );
+        assert_eq!(
+            response.status, 400,
+            "{label}：该 400，实际 {} {}",
+            response.status, response.body
+        );
+        assert!(
+            response.body.contains(offender),
+            "{label}：报文必须点名是哪一个：{}",
+            response.body
+        );
         assert_eq!(
             support::extract_json_string_field(&response.body, "code"),
             "bad_request",
@@ -98,7 +136,11 @@ async fn an_unknown_name_is_rejected_by_name() {
 
     // 拒绝发生在 `open` **之前**：坏请求不该留下一个会话。
     let probe = http_client::request(addr, "GET", "/sessions/bad-15", None);
-    assert_eq!(probe.status, 404, "被拒的请求不该留下任何会话：{}", probe.body);
+    assert_eq!(
+        probe.status, 404,
+        "被拒的请求不该留下任何会话：{}",
+        probe.body
+    );
 }
 
 /// 关掉**全部**编排三件之后，`srv:agent/spawn` 连 `declares()` 都不为真——于是模型
@@ -113,7 +155,11 @@ async fn guessing_a_disabled_tool_name_falls_through_to_unknown_tool() {
         Script::Immediate(support::wire::text_reply("那我自己来。")),
     ]);
     let addr = start(&upstream).await;
-    create(addr, json!({ "id": "reduced", "capabilities": switch() }), 201);
+    create(
+        addr,
+        json!({ "id": "reduced", "capabilities": switch() }),
+        201,
+    );
 
     let before = upstream.request_count();
     input(addr, "reduced");
@@ -129,7 +175,12 @@ async fn guessing_a_disabled_tool_name_falls_through_to_unknown_tool() {
 }
 
 async fn start(upstream: &FakeServer) -> SocketAddr {
-    let server = support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), full_template(upstream.endpoint()), |c| c).await;
+    let server = support::http_server::start_at_with_template(
+        "127.0.0.1:0".parse().unwrap(),
+        full_template(upstream.endpoint()),
+        |c| c,
+    )
+    .await;
     server.addr
 }
 
@@ -137,7 +188,9 @@ async fn start(upstream: &FakeServer) -> SocketAddr {
 /// 关不出什么名堂）。
 fn full_template(endpoint: String) -> SessionTemplate {
     let mut template = support::http_server::session_template(endpoint);
-    template.tools = ToolTableSpec::Full { spawn_limits: AgentLimits::default() };
+    template.tools = ToolTableSpec::Full {
+        spawn_limits: AgentLimits::default(),
+    };
     template
 }
 
@@ -151,7 +204,12 @@ fn create(addr: SocketAddr, body: Value, want: u16) {
 }
 
 fn input(addr: SocketAddr, id: &str) {
-    let response = http_client::request(addr, "POST", &format!("/sessions/{id}/input"), Some(r#"{"text":"你好"}"#));
+    let response = http_client::request(
+        addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some(r#"{"text":"你好"}"#),
+    );
     assert_eq!(response.status, 202, "{}", response.body);
 }
 
@@ -167,7 +225,11 @@ async fn one_turn(upstream: &FakeServer, addr: SocketAddr, id: &str) -> Value {
 async fn wait_for(upstream: &FakeServer, want: usize) {
     let deadline = Instant::now() + Duration::from_secs(5);
     while upstream.request_count() < want {
-        assert!(Instant::now() < deadline, "等第 {want} 次 provider 调用超时，实际 {}", upstream.request_count());
+        assert!(
+            Instant::now() < deadline,
+            "等第 {want} 次 provider 调用超时，实际 {}",
+            upstream.request_count()
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
@@ -184,7 +246,12 @@ fn names(body: &Value) -> Vec<String> {
         .cloned()
         .unwrap_or_default()
         .iter()
-        .map(|t| agent_providers::wire_name::from_wire(t["function"]["name"].as_str().unwrap_or_default()).to_string())
+        .map(|t| {
+            agent_providers::wire_name::from_wire(
+                t["function"]["name"].as_str().unwrap_or_default(),
+            )
+            .to_string()
+        })
         .collect()
 }
 
@@ -196,7 +263,8 @@ fn tools_bytes(body: &Value) -> String {
 
 /// 一段 DeepSeek 形状的流式回复：模型调一个**已经被关掉**的 `srv:agent/spawn`。
 fn spawn_call() -> String {
-    let args = serde_json::to_string(&json!({ "task": "随便干点什么" }).to_string()).expect("json string");
+    let args =
+        serde_json::to_string(&json!({ "task": "随便干点什么" }).to_string()).expect("json string");
     format!(
         concat!(
             "data: {{\"choices\":[{{\"index\":0,\"delta\":{{\"role\":\"assistant\",\"content\":null,",

@@ -46,7 +46,10 @@ fn collect_trees(ctx: RunnerCtx) -> (RunnerCtx, Rc<RefCell<Vec<AgentTree>>>) {
 }
 
 fn is_running(activity: &AgentActivity) -> bool {
-    matches!(activity, AgentActivity::Thinking | AgentActivity::Working { .. })
+    matches!(
+        activity,
+        AgentActivity::Thinking | AgentActivity::Working { .. }
+    )
 }
 
 #[test]
@@ -57,7 +60,12 @@ fn two_background_children_are_on_the_tree_at_once_while_the_parent_thinks() {
 
     let server = RoutedServer::start(vec![
         // 越靠后发生的 call_id 越靠前判（root 每一跳都带着此前全部 call_id）。
-        Route { needle: "call_c2", delay: Duration::ZERO, status: 200, lines: sse_text("两个都领回来了") },
+        Route {
+            needle: "call_c2",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("两个都领回来了"),
+        },
         Route {
             needle: "call_c1",
             delay: Duration::ZERO,
@@ -70,20 +78,41 @@ fn two_background_children_are_on_the_tree_at_once_while_the_parent_thinks() {
             status: 200,
             lines: sse_tool_call("call_c1", &collect_wire, r#"{"id":"root/a1"}"#),
         },
-        Route { needle: "TASKBGA", delay: CHILD, status: 200, lines: sse_text("ANSWERBGA 子甲") },
-        Route { needle: "TASKBGB", delay: CHILD, status: 200, lines: sse_text("ANSWERBGB 子乙") },
+        Route {
+            needle: "TASKBGA",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("ANSWERBGA 子甲"),
+        },
+        Route {
+            needle: "TASKBGB",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("ANSWERBGB 子乙"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
             lines: sse_tool_calls(&[
-                ("call_bg_a", &spawn_wire, r#"{"task":"TASKBGA 后台干活甲","background":true}"#),
-                ("call_bg_b", &spawn_wire, r#"{"task":"TASKBGB 后台干活乙","background":true}"#),
+                (
+                    "call_bg_a",
+                    &spawn_wire,
+                    r#"{"task":"TASKBGA 后台干活甲","background":true}"#,
+                ),
+                (
+                    "call_bg_b",
+                    &spawn_wire,
+                    r#"{"task":"TASKBGB 后台干活乙","background":true}"#,
+                ),
             ]),
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (ctx, _events) = build_ctx(server.port, &dir, tools);
     let (mut ctx, trees) = collect_trees(ctx);
     let mut session = Session::new(AgentId::root());
@@ -112,18 +141,31 @@ fn two_background_children_are_on_the_tree_at_once_while_the_parent_thinks() {
     assert_eq!(both_running.nodes[2].depth, 1);
     assert_eq!(both_running.nodes[1].parent, Some(AgentId::root()));
     // 面板上区分得开谁是谁：两个同层子的 task 文本各是自己的那一句。
-    assert_eq!(both_running.nodes[1].task.as_deref(), Some("TASKBGA 后台干活甲"));
-    assert_eq!(both_running.nodes[2].task.as_deref(), Some("TASKBGB 后台干活乙"));
+    assert_eq!(
+        both_running.nodes[1].task.as_deref(),
+        Some("TASKBGA 后台干活甲")
+    );
+    assert_eq!(
+        both_running.nodes[2].task.as_deref(),
+        Some("TASKBGB 后台干活乙")
+    );
 
     // ② 被 collect 领走的子**留在树上并转 `Done`**（collect 只读结果，不拆人）。
     let last = trees.last().expect("至少一帧");
     assert_eq!(last.nodes.len(), 3, "领完的两个子该还在树上：{last:#?}");
     for node in &last.nodes {
-        assert!(matches!(node.activity, AgentActivity::Done { .. }), "{last:#?}");
+        assert!(
+            matches!(node.activity, AgentActivity::Done { .. }),
+            "{last:#?}"
+        );
     }
 
     // ③ 快照就是 `agent_tree()`（哑渲染的前提）——最后一帧跟此刻现读逐字节相同。
-    assert_eq!(*last, session.agent_tree(), "推出去的最后一帧该等于此刻现读的树");
+    assert_eq!(
+        *last,
+        session.agent_tree(),
+        "推出去的最后一帧该等于此刻现读的树"
+    );
 }
 
 #[test]
@@ -133,17 +175,34 @@ fn a_reaped_orphan_disappears_from_the_pushed_tree() {
 
     let server = RoutedServer::start(vec![
         // 父的第二跳：立刻答完收尾，压根不管那个后台子。
-        Route { needle: "call_bg", delay: Duration::ZERO, status: 200, lines: sse_text("我自己答完了") },
-        Route { needle: "ORPHANTASK", delay: CHILD, status: 200, lines: sse_text("LATEANSWER") },
+        Route {
+            needle: "call_bg",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("我自己答完了"),
+        },
+        Route {
+            needle: "ORPHANTASK",
+            delay: CHILD,
+            status: 200,
+            lines: sse_text("LATEANSWER"),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
             status: 200,
-            lines: sse_tool_call("call_bg", &spawn_wire, r#"{"task":"ORPHANTASK 后台慢活","background":true}"#),
+            lines: sse_tool_call(
+                "call_bg",
+                &spawn_wire,
+                r#"{"task":"ORPHANTASK 后台慢活","background":true}"#,
+            ),
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (ctx, _events) = build_ctx(server.port, &dir, tools);
     let (mut ctx, trees) = collect_trees(ctx);
     let mut session = Session::new(AgentId::root());
@@ -164,8 +223,19 @@ fn a_reaped_orphan_disappears_from_the_pushed_tree() {
     // `maybe_emit_tree` 就是这一帧（那条路不经过 `session.step`，A 段的变化检测
     // 看不见它）。少了它，面板会永远停在「有一个子 agent 在跑」的旧帧上。
     let last = trees.last().expect("至少一帧");
-    assert_eq!(last.nodes.len(), 1, "孤儿被拆掉后树上只该剩 root：{last:#?}");
+    assert_eq!(
+        last.nodes.len(),
+        1,
+        "孤儿被拆掉后树上只该剩 root：{last:#?}"
+    );
     assert_eq!(last.nodes[0].id, AgentId::root());
-    assert!(matches!(last.nodes[0].activity, AgentActivity::Done { .. }), "{last:#?}");
-    assert_eq!(*last, session.agent_tree(), "推出去的最后一帧该等于此刻现读的树");
+    assert!(
+        matches!(last.nodes[0].activity, AgentActivity::Done { .. }),
+        "{last:#?}"
+    );
+    assert_eq!(
+        *last,
+        session.agent_tree(),
+        "推出去的最后一帧该等于此刻现读的树"
+    );
 }

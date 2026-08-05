@@ -43,9 +43,9 @@ use std::thread::JoinHandle;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use agent_store::SessionStore;
 use agent_store::history::{Entry, Snapshot};
 use agent_store::persist::LoadOutcome;
-use agent_store::SessionStore;
 
 pub use error::SessionStoreError;
 
@@ -69,7 +69,10 @@ where
     /// 静默吞掉。这是刻意的：fire-and-forget 的端口不该在构造这一步就引入一个
     /// `Result`，那会诱使调用方去处理一个「万一失败怎么办」的分支——恰恰是这个
     /// 端口存在的意义要挡掉的那类分支。
-    pub fn new(path: impl Into<PathBuf>, on_error: impl Fn(SessionStoreError) + Send + Sync + 'static) -> Self {
+    pub fn new(
+        path: impl Into<PathBuf>,
+        on_error: impl Fn(SessionStoreError) + Send + Sync + 'static,
+    ) -> Self {
         let path = path.into();
         let on_error: Arc<dyn Fn(SessionStoreError) + Send + Sync> = Arc::new(on_error);
         let (tx, rx) = mpsc::channel();
@@ -78,7 +81,12 @@ where
             let on_error = on_error.clone();
             std::thread::spawn(move || io_thread::run(path, rx, on_error))
         };
-        Jsonl { path, tx: Mutex::new(Some(tx)), handle: Mutex::new(Some(handle)), on_error }
+        Jsonl {
+            path,
+            tx: Mutex::new(Some(tx)),
+            handle: Mutex::new(Some(handle)),
+            on_error,
+        }
     }
 
     /// 排干队列：调用返回时，此前所有写方法产生的写入都已经真正处理完（落盘或者

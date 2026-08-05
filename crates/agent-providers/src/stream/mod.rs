@@ -30,7 +30,11 @@ pub enum StreamEvent {
     TextDelta(Arc<str>),
     ThinkingDelta(Arc<str>),
     /// 一次工具调用的声明已完整（拿到 id 和 name）。参数可能还在流。
-    ToolCallStarted { index: u32, id: ToolCallId, name: Arc<str> },
+    ToolCallStarted {
+        index: u32,
+        id: ToolCallId,
+        name: Arc<str>,
+    },
     /// 收到 `finish_reason`。usage 可能还没来。
     Finished(StopReason),
     UsageReady(TokenUsage),
@@ -117,9 +121,11 @@ impl StreamAccumulator {
         let stop = self.stop.unwrap_or_else(stop::missing);
         // 没等到 usage：`cached: None` 才是诚实的——不是「没命中」，是「这轮
         // 没人报」，兜底第 2 层据此知道自己失明（见 core 的 `TokenUsage::cached`）。
-        let usage = self
-            .usage
-            .unwrap_or(TokenUsage { prompt: 0, completion: 0, cached: None });
+        let usage = self.usage.unwrap_or(TokenUsage {
+            prompt: 0,
+            completion: 0,
+            cached: None,
+        });
         (blocks, stop, usage)
     }
 
@@ -275,7 +281,14 @@ mod tests {
         assert_eq!(blocks, vec![ContentBlock::Text(Arc::from("ab"))]);
         // 流断在半截：stop 落 `Other`，usage 全 0 且 cached 是 None（没人报）。
         assert_eq!(stop, StopReason::Other(Arc::from("missing")));
-        assert_eq!(usage, TokenUsage { prompt: 0, completion: 0, cached: None });
+        assert_eq!(
+            usage,
+            TokenUsage {
+                prompt: 0,
+                completion: 0,
+                cached: None
+            }
+        );
     }
 
     /// `new` 的默认是 wire 名原样带出（装钩子那条路见 `deepseek` 的单测）。

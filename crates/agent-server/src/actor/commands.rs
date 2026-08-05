@@ -13,7 +13,9 @@
 use tokio::sync::broadcast::Sender as BroadcastSender;
 
 use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus};
-use agent_runtime::{RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool, run_turn};
+use agent_runtime::{
+    RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool, run_turn,
+};
 
 use crate::command::Granularity;
 use crate::event::{Frame, SessionEvent, UndoOutcome};
@@ -26,7 +28,10 @@ type Events = BroadcastSender<Frame>;
 /// 个具体 agent），一律标 [`AgentId::root`]（034：`crate::event::frame` 模块
 /// 文档同一条判据）。
 fn emit_root(events: &Events, event: SessionEvent) {
-    let _ = events.send(Frame { agent: AgentId::root(), event });
+    let _ = events.send(Frame {
+        agent: AgentId::root(),
+        event,
+    });
 }
 
 /// `Command::Input`：喂一句用户输入，跑一整轮。
@@ -36,7 +41,12 @@ fn emit_root(events: &Events, event: SessionEvent) {
 /// `run_turn` 之后不管落在哪个终态都无条件调用一次（非终态卡住的情况交给
 /// 调用方后续发 `Undo`/新的 `Input` 自行处理，跟 CLI 用户按 `/undo` 或者继续
 /// 输入是同一个逃生舱，见 `repl.rs` 模块文档）。
-pub(super) fn handle_input(session: &mut Session, ctx: &mut RunnerCtx, events: &Events, text: &str) {
+pub(super) fn handle_input(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    events: &Events,
+    text: &str,
+) {
     if session.status().is_terminal() {
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
@@ -58,7 +68,13 @@ pub(super) fn handle_input(session: &mut Session, ctx: &mut RunnerCtx, events: &
 /// 是防御性第二道闸：万一有调用方绕过 HTTP 层直接构造这个 `Command`（比如未来
 /// 的另一种传输、或者测试），也不会把这个字段吞成「什么都不做」，而是做一件
 /// 明确定义的事（忽略 force，退一条 entry）。
-pub(super) fn handle_undo(session: &mut Session, ctx: &mut RunnerCtx, events: &Events, granularity: Granularity, force: bool) {
+pub(super) fn handle_undo(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    events: &Events,
+    granularity: Granularity,
+    force: bool,
+) {
     ctx.discard_remote_tools();
     let report = match (granularity, force) {
         (Granularity::Turn, false) => session.undo_turn(),
@@ -69,7 +85,10 @@ pub(super) fn handle_undo(session: &mut Session, ctx: &mut RunnerCtx, events: &E
     // 034：`from_report` 现查 `session` 富化 `Blocked`（工具名/call_id），不再是
     // 裸的 `UndoReport` 字段翻译——`session` 此刻还没被这次 undo 之外的任何东西
     // 改动过，barrier entry 就在它的 history 里。
-    emit_root(events, SessionEvent::Undo(UndoOutcome::from_report(report, session)));
+    emit_root(
+        events,
+        SessionEvent::Undo(UndoOutcome::from_report(report, session)),
+    );
     // 048 补漏：undo 撤掉的子树也要让活树面板 / `GET .../agents` 看到——`handle_undo`
     // 不经 `run_turn` 的 pump，得在这里显式发一次树快照（真机验收逮到的漏投影：
     // core 层 `agent_tree()` 退了，SSE/GET 那一路没跟上）。
@@ -84,7 +103,10 @@ pub(super) fn handle_redo(session: &mut Session, ctx: &mut RunnerCtx, events: &E
     ctx.discard_remote_tools();
     let report = session.redo_turn();
     agent_runtime::persist::sync(ctx, session);
-    emit_root(events, SessionEvent::Redo(UndoOutcome::from_report(report, session)));
+    emit_root(
+        events,
+        SessionEvent::Redo(UndoOutcome::from_report(report, session)),
+    );
     // 048 补漏：redo 把子树接回来同样要让面板/GET 看到（见 handle_undo 同款注释）。
     ctx.emit_tree_snapshot(session);
 }
@@ -112,11 +134,18 @@ pub(super) fn handle_remote_tool_result(
     content: String,
     is_error: bool,
 ) {
-    let output = if is_error { RemoteToolOutput::Failure(content) } else { RemoteToolOutput::Success(content) };
+    let output = if is_error {
+        RemoteToolOutput::Failure(content)
+    } else {
+        RemoteToolOutput::Success(content)
+    };
     match resolve_remote_tool(session, ctx, agent, call_id, output) {
         Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
         Ok(_) => {}
-        Err(error) => emit_root(events, SessionEvent::TransportTrouble(std::sync::Arc::from(error.to_string()))),
+        Err(error) => emit_root(
+            events,
+            SessionEvent::TransportTrouble(std::sync::Arc::from(error.to_string())),
+        ),
     }
 }
 
@@ -127,8 +156,14 @@ pub(super) fn handle_remote_tool_result(
 /// `None`（这一刻其实没有槽过期）就什么都不做。跟 `handle_input` 同款收尾：轮次
 /// 万一落在 `Failed(Cancelled)`（比如超时恢复的那一圈里用户正好按了取消）照样走
 /// 自动擦除，不为超时新造一条策略。
-pub(super) fn handle_remote_tool_timeout(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
-    let Some(status) = agent_runtime::sweep_remote_tool_deadlines(session, ctx) else { return };
+pub(super) fn handle_remote_tool_timeout(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    events: &Events,
+) {
+    let Some(status) = agent_runtime::sweep_remote_tool_deadlines(session, ctx) else {
+        return;
+    };
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         erase_cancelled_turn(session, ctx, events);
     }
@@ -141,7 +176,10 @@ pub(super) fn handle_remote_tool_timeout(session: &mut Session, ctx: &mut Runner
 fn erase_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
     let report = session.undo_turn();
     agent_runtime::persist::sync(ctx, session);
-    emit_root(events, SessionEvent::Undo(UndoOutcome::from_report(report, session)));
+    emit_root(
+        events,
+        SessionEvent::Undo(UndoOutcome::from_report(report, session)),
+    );
     // 048 补漏：取消轮自动擦除也撤子树，同样发一次树快照（见 handle_undo 同款注释）。
     ctx.emit_tree_snapshot(session);
 }

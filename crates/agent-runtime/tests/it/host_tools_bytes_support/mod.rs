@@ -57,7 +57,11 @@ pub const DECLARED: &str = r#"[
 /// （`prefix::SegmentBytes { tools: canonical(&built.value), .. }`），所以每条断言都
 /// 对三家各跑一遍：只测一家的话，另外两家哪天改成另算一份都没人拦得住。
 pub fn providers() -> Vec<(&'static str, Box<dyn Provider>)> {
-    vec![("deepseek", Box::new(DeepSeek)), ("glm", Box::new(Glm)), ("kimi", Box::new(Kimi))]
+    vec![
+        ("deepseek", Box::new(DeepSeek)),
+        ("glm", Box::new(Glm)),
+        ("kimi", Box::new(Kimi)),
+    ]
 }
 
 fn config() -> &'static SessionConfig {
@@ -142,19 +146,33 @@ pub fn rotated(decl: &str, n: usize) -> String {
 /// `serde_json` 自己的流式反序列化读**一个**值，`byte_offset()` 就是它的右边界。
 pub fn wire_tools_bytes(enc: &Encoded) -> &[u8] {
     const KEY: &[u8] = b"\"tools\":";
-    let at = enc.body.windows(KEY.len()).position(|w| w == KEY).unwrap_or_else(|| {
-        panic!("请求体里没有 tools 段：{}", text(&enc.body));
-    });
+    let at = enc
+        .body
+        .windows(KEY.len())
+        .position(|w| w == KEY)
+        .unwrap_or_else(|| {
+            panic!("请求体里没有 tools 段：{}", text(&enc.body));
+        });
     let start = at + KEY.len();
     let mut stream = serde_json::Deserializer::from_slice(&enc.body[start..]).into_iter::<Value>();
-    let value = stream.next().expect("tools 后面该有一个值").expect("该是合法 JSON");
-    assert!(value.is_array(), "定位到的 tools 段不是数组，夹具里大概混进了 `\"tools\":` 字面串");
+    let value = stream
+        .next()
+        .expect("tools 后面该有一个值")
+        .expect("该是合法 JSON");
+    assert!(
+        value.is_array(),
+        "定位到的 tools 段不是数组，夹具里大概混进了 `\"tools\":` 字面串"
+    );
     &enc.body[start..start + stream.byte_offset()]
 }
 
 /// 前缀镜像里 Tools 那一段。
 pub fn tools_segment(prefix: &PrefixImage) -> &SegmentImage {
-    prefix.segments.iter().find(|s| s.segment == Segment::Tools).expect("镜像里该有 Tools 段")
+    prefix
+        .segments
+        .iter()
+        .find(|s| s.segment == Segment::Tools)
+        .expect("镜像里该有 Tools 段")
 }
 
 /// `agent-providers` 里 `wire::prefix::hash` 的**同款复制**（`DefaultHasher`，固定种子）。
@@ -192,7 +210,11 @@ pub fn items(tools_bytes: &[u8]) -> Vec<Vec<u8>> {
         rebuilt.extend_from_slice(item);
     }
     rebuilt.push(b']');
-    assert_eq!(text(&rebuilt), text(tools_bytes), "拆项再拼回去必须逐字节还原");
+    assert_eq!(
+        text(&rebuilt),
+        text(tools_bytes),
+        "拆项再拼回去必须逐字节还原"
+    );
     items
 }
 

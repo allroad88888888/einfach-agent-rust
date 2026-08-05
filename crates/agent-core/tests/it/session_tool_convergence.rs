@@ -28,13 +28,18 @@ fn all_tools_failing_still_converges_to_thinking_not_failed() {
     let effects = s.step(support::tool_failed_event(s.epoch(), "call_3", "boom 3"));
 
     assert_eq!(s.status(), TurnStatus::Thinking);
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
     let msg = s.messages().back().unwrap().clone();
     assert_eq!(msg.blocks.len(), 3);
-    assert!(msg.blocks.iter().all(|b| matches!(
-        b,
-        ContentBlock::ToolResult { is_error: true, .. }
-    )));
+    assert!(
+        msg.blocks
+            .iter()
+            .all(|b| matches!(b, ContentBlock::ToolResult { is_error: true, .. }))
+    );
 }
 
 /// 唯一一个工具调用失败的最小复现，同一断言。
@@ -44,7 +49,11 @@ fn a_single_tool_call_that_fails_alone_still_converges() {
     let effects = s.step(support::tool_failed_event(s.epoch(), "call_1", "boom"));
 
     assert_eq!(s.status(), TurnStatus::Thinking);
-    assert!(effects.iter().any(|e| matches!(e, Effect::CallProvider { .. })));
+    assert!(
+        effects
+            .iter()
+            .any(|e| matches!(e, Effect::CallProvider { .. }))
+    );
 }
 
 /// 边角 1：**槽还在、但已经是 `Finished`** 那条分支（其余槽仍 Pending，尚未收敛），
@@ -101,7 +110,10 @@ fn failed_tool_error_text_survives_verbatim_into_the_next_prompt_message() {
     let _ = s.step(support::tool_result_event(s.epoch(), "call_3", "ok 3"));
 
     let msg = s.messages().back().unwrap().clone();
-    let ContentBlock::ToolResult { content, is_error, .. } = &msg.blocks[1] else {
+    let ContentBlock::ToolResult {
+        content, is_error, ..
+    } = &msg.blocks[1]
+    else {
         panic!("第二个块应该是 call_2 的结果");
     };
     assert!(*is_error);

@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use agent_store::{capture, AtomFamily, AtomId, AtomValue, Snapshot, Store};
+use agent_store::{AtomFamily, AtomId, AtomValue, Snapshot, Store, capture};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Tv(i64);

@@ -53,7 +53,14 @@ pub struct McpStatus {
 
 impl McpBootstrap {
     fn empty(registry: Arc<McpRegistry>) -> Self {
-        Self { registry, tools: Vec::new(), status: McpStatus { servers: Vec::new(), tool_names: Vec::new() } }
+        Self {
+            registry,
+            tools: Vec::new(),
+            status: McpStatus {
+                servers: Vec::new(),
+                tool_names: Vec::new(),
+            },
+        }
     }
 
     /// 启动横幅里那一行摘要。没配 server → 「（无）」。
@@ -61,8 +68,18 @@ impl McpBootstrap {
         if self.status.servers.is_empty() {
             return "（无）".to_string();
         }
-        let connected = self.status.servers.iter().filter(|s| s.is_connected()).count();
-        format!("{}/{} server 连上，{} 个工具", connected, self.status.servers.len(), self.tools.len())
+        let connected = self
+            .status
+            .servers
+            .iter()
+            .filter(|s| s.is_connected())
+            .count();
+        format!(
+            "{}/{} server 连上，{} 个工具",
+            connected,
+            self.status.servers.len(),
+            self.tools.len()
+        )
     }
 }
 
@@ -93,7 +110,10 @@ pub fn bootstrap(path: &Path, explicit: bool, warn: &mut dyn FnMut(&str)) -> Mcp
     let registry = Arc::new(McpRegistry::new());
     if !path.exists() {
         if explicit {
-            warn(&format!("--mcp-config 指向的文件不存在：{}（按无 MCP 继续）", path.display()));
+            warn(&format!(
+                "--mcp-config 指向的文件不存在：{}（按无 MCP 继续）",
+                path.display()
+            ));
         }
         return McpBootstrap::empty(registry);
     }
@@ -123,12 +143,30 @@ fn load(
     // 撞名已在 `parse_config` 拦掉，id 唯一，排序是全序、逐字节确定，不受 `.mcp.json`
     // 里书写顺序影响——追加进工具表的稳定前缀因此不漂。
     config.servers.sort_by(|a, b| a.0.cmp(&b.0));
-    let outcome = load_servers(&config, &registry, Host::Server, timeouts, CLIENT_NAME, CLIENT_VERSION);
+    let outcome = load_servers(
+        &config,
+        &registry,
+        Host::Server,
+        timeouts,
+        CLIENT_NAME,
+        CLIENT_VERSION,
+    );
     for message in &outcome.warnings {
         warn(message);
     }
-    let tool_names = outcome.tools.iter().map(|(s, _)| Arc::clone(&s.name)).collect();
-    McpBootstrap { registry, tools: outcome.tools, status: McpStatus { servers: outcome.servers, tool_names } }
+    let tool_names = outcome
+        .tools
+        .iter()
+        .map(|(s, _)| Arc::clone(&s.name))
+        .collect();
+    McpBootstrap {
+        registry,
+        tools: outcome.tools,
+        status: McpStatus {
+            servers: outcome.servers,
+            tool_names,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -163,20 +201,25 @@ mod tests {
     #[test]
     fn missing_default_config_starts_clean_and_silent() {
         let mut warned: Vec<String> = Vec::new();
-        let boot =
-            bootstrap(Path::new("/no/such/dir/.mcp.json"), false, &mut |m| warned.push(m.to_string()));
+        let boot = bootstrap(Path::new("/no/such/dir/.mcp.json"), false, &mut |m| {
+            warned.push(m.to_string())
+        });
         assert!(boot.tools.is_empty(), "无配置 → 零 MCP 工具");
         assert!(boot.status.servers.is_empty());
         assert!(boot.status.tool_names.is_empty());
-        assert!(warned.is_empty(), "默认缺失不该警告（就是没接 MCP 的正常情况）");
+        assert!(
+            warned.is_empty(),
+            "默认缺失不该警告（就是没接 MCP 的正常情况）"
+        );
         assert_eq!(boot.summary(), "（无）");
     }
 
     #[test]
     fn explicit_missing_config_warns_but_still_starts_clean() {
         let mut warned: Vec<String> = Vec::new();
-        let boot =
-            bootstrap(Path::new("/no/such/dir/.mcp.json"), true, &mut |m| warned.push(m.to_string()));
+        let boot = bootstrap(Path::new("/no/such/dir/.mcp.json"), true, &mut |m| {
+            warned.push(m.to_string())
+        });
         assert!(boot.tools.is_empty());
         assert_eq!(warned.len(), 1, "显式指了不存在的文件要警告一次");
     }
@@ -195,17 +238,30 @@ mod tests {
         let boot = load(
             config,
             Arc::new(McpRegistry::new()),
-            LoadTimeouts { handshake: Duration::from_millis(500), call: Duration::from_millis(500) },
+            LoadTimeouts {
+                handshake: Duration::from_millis(500),
+                call: Duration::from_millis(500),
+            },
             &mut |_| {},
         );
         let ids: Vec<&str> = boot.status.servers.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, vec!["alpha", "zeta"], "server 之间按 id 排，不受书写顺序影响");
+        assert_eq!(
+            ids,
+            vec!["alpha", "zeta"],
+            "server 之间按 id 排，不受书写顺序影响"
+        );
         assert!(
-            boot.status.servers.iter().all(|s| matches!(s.availability, Availability::Unavailable { .. })),
+            boot.status
+                .servers
+                .iter()
+                .all(|s| matches!(s.availability, Availability::Unavailable { .. })),
             "命令不存在 → Unavailable",
         );
         assert!(boot.tools.is_empty(), "起不来的 server 不贡献工具");
-        assert!(!boot.registry.contains("zeta"), "半连的 client 不进 registry");
+        assert!(
+            !boot.registry.contains("zeta"),
+            "半连的 client 不进 registry"
+        );
     }
 
     /// 远端 server 形状只解析、不装载 → `Unsupported`，同样不崩、不贡献工具。
@@ -213,8 +269,16 @@ mod tests {
     fn remote_server_is_unsupported_not_fatal() {
         let config =
             parse_config(r#"{"mcpServers":{"r":{"type":"http","url":"https://x"}}}"#).unwrap();
-        let boot = load(config, Arc::new(McpRegistry::new()), LoadTimeouts::default(), &mut |_| {});
-        assert!(matches!(boot.status.servers[0].availability, Availability::Unsupported { .. }));
+        let boot = load(
+            config,
+            Arc::new(McpRegistry::new()),
+            LoadTimeouts::default(),
+            &mut |_| {},
+        );
+        assert!(matches!(
+            boot.status.servers[0].availability,
+            Availability::Unsupported { .. }
+        ));
         assert!(boot.tools.is_empty());
     }
 
@@ -252,9 +316,25 @@ mod tests {
             &mut |m| seen.push(m.to_string()),
         );
 
-        assert_eq!(seen.len(), 1, "loader 那条 074 告警必须逐条转出去，实收：{seen:?}");
-        assert!(seen[0].contains("dup"), "告警要带 server id，否则部署方不知道去改哪个配置：{}", seen[0]);
-        assert!(seen[0].contains("echo"), "告警要带重复的工具名：{}", seen[0]);
-        assert_eq!(boot.tools.len(), 1, "重复的那条整条不进工具表（074 的去重本体）");
+        assert_eq!(
+            seen.len(),
+            1,
+            "loader 那条 074 告警必须逐条转出去，实收：{seen:?}"
+        );
+        assert!(
+            seen[0].contains("dup"),
+            "告警要带 server id，否则部署方不知道去改哪个配置：{}",
+            seen[0]
+        );
+        assert!(
+            seen[0].contains("echo"),
+            "告警要带重复的工具名：{}",
+            seen[0]
+        );
+        assert_eq!(
+            boot.tools.len(),
+            1,
+            "重复的那条整条不进工具表（074 的去重本体）"
+        );
     }
 }

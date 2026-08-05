@@ -38,10 +38,21 @@ fn the_same_declaration_renders_the_very_same_bytes_twice() {
     for (family, provider) in providers() {
         let one = table_with(DECLARED);
         let other = table_with(DECLARED);
-        let (a, b) = (encode(&*provider, one.specs(), None), encode(&*provider, other.specs(), None));
+        let (a, b) = (
+            encode(&*provider, one.specs(), None),
+            encode(&*provider, other.specs(), None),
+        );
 
-        assert_eq!(tools_segment(&a.prefix), tools_segment(&b.prefix), "{family}：同一份声明两次渲染，前缀镜像的 Tools 段不一样");
-        assert_same_bytes(&format!("{family}：同一份声明两次渲染，wire 上的工具段"), wire_tools_bytes(&a), wire_tools_bytes(&b));
+        assert_eq!(
+            tools_segment(&a.prefix),
+            tools_segment(&b.prefix),
+            "{family}：同一份声明两次渲染，前缀镜像的 Tools 段不一样"
+        );
+        assert_same_bytes(
+            &format!("{family}：同一份声明两次渲染，wire 上的工具段"),
+            wire_tools_bytes(&a),
+            wire_tools_bytes(&b),
+        );
     }
 }
 
@@ -60,7 +71,10 @@ fn shuffling_the_declaration_array_never_moves_a_byte() {
             encode(&*provider, table.specs(), None)
         };
 
-        for (label, decl) in [("倒序", reversed(DECLARED)), ("轮转 5 位", rotated(DECLARED, 5))] {
+        for (label, decl) in [
+            ("倒序", reversed(DECLARED)),
+            ("轮转 5 位", rotated(DECLARED, 5)),
+        ] {
             let table = table_with(&decl);
             let again = encode(&*provider, table.specs(), Some(&first.prefix));
 
@@ -71,7 +85,11 @@ fn shuffling_the_declaration_array_never_moves_a_byte() {
                 Some(Segment::Tools),
                 "{family}/{label}：同一份声明换个数组顺序就被判成前缀漂了——功能一切正常，只是每一轮都全价（红线 11）"
             );
-            assert_eq!(tools_segment(&again.prefix), tools_segment(&first.prefix), "{family}/{label}：前缀镜像的 Tools 段跟着数组顺序变了");
+            assert_eq!(
+                tools_segment(&again.prefix),
+                tools_segment(&first.prefix),
+                "{family}/{label}：前缀镜像的 Tools 段跟着数组顺序变了"
+            );
             assert_same_bytes(
                 &format!("{family}/{label}：客户端给的数组顺序漏进了 prompt 字节"),
                 wire_tools_bytes(&first),
@@ -92,7 +110,11 @@ fn the_prefix_mirror_hashes_exactly_the_bytes_that_go_on_the_wire() {
         let wire = wire_tools_bytes(&encoded);
         let mirror = tools_segment(&encoded.prefix);
 
-        assert_eq!(mirror.bytes as usize, wire.len(), "{family}：镜像记的字节数跟 wire 上那一段对不上");
+        assert_eq!(
+            mirror.bytes as usize,
+            wire.len(),
+            "{family}：镜像记的字节数跟 wire 上那一段对不上"
+        );
         assert_eq!(
             mirror.hash,
             hash(wire),
@@ -129,14 +151,28 @@ fn the_key_order_inside_a_declared_schema_never_reaches_the_bytes() {
         let table = table_with(ORDER_B);
         let b = encode(&*provider, table.specs(), Some(&a.prefix));
 
-        let declared = items(wire_tools_bytes(&a)).pop().expect("注入的那一项在表尾");
-        assert_eq!(text(&declared), EXPECTED, "{family}：声明渲染出来的字节不是按 key 字典序排的");
-        assert_eq!(tools_segment(&b.prefix), tools_segment(&a.prefix), "{family}：schema 的 key 序变了前缀镜像");
+        let declared = items(wire_tools_bytes(&a))
+            .pop()
+            .expect("注入的那一项在表尾");
+        assert_eq!(
+            text(&declared),
+            EXPECTED,
+            "{family}：声明渲染出来的字节不是按 key 字典序排的"
+        );
+        assert_eq!(
+            tools_segment(&b.prefix),
+            tools_segment(&a.prefix),
+            "{family}：schema 的 key 序变了前缀镜像"
+        );
         assert_same_bytes(
             &format!("{family}：schema 的 key 序漏进了 prompt 字节"),
             wire_tools_bytes(&a),
             wire_tools_bytes(&b),
         );
-        assert_ne!(b.drift, Some(Segment::Tools), "{family}：同一份 schema 换个 key 序就被判前缀漂了（红线 11）");
+        assert_ne!(
+            b.drift,
+            Some(Segment::Tools),
+            "{family}：同一份 schema 换个 key 序就被判前缀漂了（红线 11）"
+        );
     }
 }

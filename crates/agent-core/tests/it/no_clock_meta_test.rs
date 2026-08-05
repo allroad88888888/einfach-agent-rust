@@ -19,7 +19,11 @@ fn the_transition_tables_and_the_derived_never_read_the_clock() {
 
 fn assert_no_clock_under(rel: &str) {
     let engine_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
-    assert!(engine_dir.is_dir(), "目录应该存在：{}", engine_dir.display());
+    assert!(
+        engine_dir.is_dir(),
+        "目录应该存在：{}",
+        engine_dir.display()
+    );
 
     // 用全限定路径而不是 `use std::process::Command`：这个 crate 的红线 7 检查
     // （scripts/check-invariants.sh）按 `crates/agent-core/*` 整包扫描 `use
@@ -28,7 +32,11 @@ fn assert_no_clock_under(rel: &str) {
     // 没有违反红线 7 的实际意图（「agent-core 库不做 IO」），只是不触发这条
     // 按文本匹配、没有对 tests/ 开洞的粗筛规则。
     let output = std::process::Command::new("grep")
-        .args(["-rn", "-E", "Instant::now|SystemTime::now|rand::|thread_rng"])
+        .args([
+            "-rn",
+            "-E",
+            "Instant::now|SystemTime::now|rand::|thread_rng",
+        ])
         .arg(&engine_dir)
         .output()
         .expect("grep 应该能正常执行");

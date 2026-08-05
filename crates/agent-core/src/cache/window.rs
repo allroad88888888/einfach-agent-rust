@@ -48,7 +48,10 @@ impl TurnHit {
     pub fn from_usage(usage: &TokenUsage) -> Self {
         match usage.cached {
             None => TurnHit::Blind,
-            Some(cached) => TurnHit::Observed { prompt: usage.prompt, cached },
+            Some(cached) => TurnHit::Observed {
+                prompt: usage.prompt,
+                cached,
+            },
         }
     }
 
@@ -61,9 +64,10 @@ impl TurnHit {
         match *self {
             TurnHit::Blind => None,
             TurnHit::Observed { prompt: 0, .. } => None,
-            TurnHit::Observed { prompt, cached } => {
-                Some(u32::try_from(u64::from(cached.min(prompt)) * 100 / u64::from(prompt)).unwrap_or(100))
-            }
+            TurnHit::Observed { prompt, cached } => Some(
+                u32::try_from(u64::from(cached.min(prompt)) * 100 / u64::from(prompt))
+                    .unwrap_or(100),
+            ),
         }
     }
 }
@@ -101,9 +105,17 @@ pub enum WindowVerdict {
     NoData { skipped: usize },
     /// 还没到告警条件。`hit_percent` 是窗口内按 token 加权的整体命中率，
     /// `low_streak` 是最近连续低命中的轮数（0 表示最近一轮是好的）。
-    Healthy { turns: usize, hit_percent: u32, low_streak: usize },
+    Healthy {
+        turns: usize,
+        hit_percent: u32,
+        low_streak: usize,
+    },
     /// 连续 `streak` 轮低命中，达到告警条件——慢性失效。
-    ChronicMiss { streak: usize, turns: usize, hit_percent: u32 },
+    ChronicMiss {
+        streak: usize,
+        turns: usize,
+        hit_percent: u32,
+    },
 }
 
 /// 第 3 层：从最近的轮次观测里判读慢性失效。
@@ -167,9 +179,17 @@ pub fn check_window(history: &[TurnHit], params: WindowParams) -> WindowVerdict 
         .count();
 
     if params.consecutive_alert > 0 && low_streak >= params.consecutive_alert {
-        WindowVerdict::ChronicMiss { streak: low_streak, turns, hit_percent }
+        WindowVerdict::ChronicMiss {
+            streak: low_streak,
+            turns,
+            hit_percent,
+        }
     } else {
-        WindowVerdict::Healthy { turns, hit_percent, low_streak }
+        WindowVerdict::Healthy {
+            turns,
+            hit_percent,
+            low_streak,
+        }
     }
 }
 
@@ -178,16 +198,31 @@ impl fmt::Display for WindowVerdict {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             WindowVerdict::NoData { skipped } => {
-                write!(f, "滚动窗口：窗口内没有可用观测（跳过 {skipped} 轮），本层不工作")
+                write!(
+                    f,
+                    "滚动窗口：窗口内没有可用观测（跳过 {skipped} 轮），本层不工作"
+                )
             }
-            WindowVerdict::Healthy { turns, hit_percent, low_streak: 0 } => {
+            WindowVerdict::Healthy {
+                turns,
+                hit_percent,
+                low_streak: 0,
+            } => {
                 write!(f, "滚动窗口：最近 {turns} 轮命中率 {hit_percent}%")
             }
-            WindowVerdict::Healthy { turns, hit_percent, low_streak } => write!(
+            WindowVerdict::Healthy {
+                turns,
+                hit_percent,
+                low_streak,
+            } => write!(
                 f,
                 "滚动窗口：最近 {turns} 轮命中率 {hit_percent}%（已连续 {low_streak} 轮低命中，还没到告警线）",
             ),
-            WindowVerdict::ChronicMiss { streak, turns, hit_percent } => write!(
+            WindowVerdict::ChronicMiss {
+                streak,
+                turns,
+                hit_percent,
+            } => write!(
                 f,
                 "滚动窗口告警：已连续 {streak} 轮低命中，最近 {turns} 轮整体命中率 {hit_percent}%——前缀基本没在复用",
             ),
@@ -203,25 +238,52 @@ mod tests {
     #[test]
     fn blind_turns_neither_count_nor_break_the_streak() {
         let history = vec![
-            TurnHit::Observed { prompt: 1000, cached: 0 },
+            TurnHit::Observed {
+                prompt: 1000,
+                cached: 0,
+            },
             TurnHit::Blind,
-            TurnHit::Observed { prompt: 1000, cached: 0 },
-            TurnHit::Observed { prompt: 1000, cached: 0 },
+            TurnHit::Observed {
+                prompt: 1000,
+                cached: 0,
+            },
+            TurnHit::Observed {
+                prompt: 1000,
+                cached: 0,
+            },
         ];
         assert!(matches!(
             check_window(&history, WindowParams::default()),
-            WindowVerdict::ChronicMiss { streak: 3, turns: 3, .. }
+            WindowVerdict::ChronicMiss {
+                streak: 3,
+                turns: 3,
+                ..
+            }
         ));
     }
 
     /// `Some(0)`（真的没命中）必须进窗口——它跟 `None` 走的是两条路。
     #[test]
     fn explicit_zero_enters_the_window() {
-        let usage = TokenUsage { prompt: 500, completion: 10, cached: Some(0) };
-        assert_eq!(TurnHit::from_usage(&usage), TurnHit::Observed { prompt: 500, cached: 0 });
+        let usage = TokenUsage {
+            prompt: 500,
+            completion: 10,
+            cached: Some(0),
+        };
+        assert_eq!(
+            TurnHit::from_usage(&usage),
+            TurnHit::Observed {
+                prompt: 500,
+                cached: 0
+            }
+        );
         assert_eq!(TurnHit::from_usage(&usage).hit_percent(), Some(0));
 
-        let blind = TokenUsage { prompt: 500, completion: 10, cached: None };
+        let blind = TokenUsage {
+            prompt: 500,
+            completion: 10,
+            cached: None,
+        };
         assert_eq!(TurnHit::from_usage(&blind), TurnHit::Blind);
         assert_eq!(TurnHit::from_usage(&blind).hit_percent(), None);
     }

@@ -40,7 +40,14 @@ mod tests {
         });
         let d = decode(&body);
         assert_eq!(d.stop, StopReason::ToolUse);
-        assert_eq!(d.usage, TokenUsage { prompt: 100, completion: 20, cached: Some(64) });
+        assert_eq!(
+            d.usage,
+            TokenUsage {
+                prompt: 100,
+                completion: 20,
+                cached: Some(64)
+            }
+        );
         assert_eq!(d.blocks.len(), 4, "思考 + 文本 + 两次调用：{:?}", d.blocks);
         assert!(matches!(d.blocks[0], ContentBlock::Thinking(_)));
         assert!(matches!(d.blocks[1], ContentBlock::Text(_)));

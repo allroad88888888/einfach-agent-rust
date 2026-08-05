@@ -24,33 +24,82 @@ fn undo_removes_the_previous_turn_and_the_next_request_excludes_it() {
     let session = scratch.path("s.jsonl");
 
     let mut cli = CliProcess::spawn(&providers, Some(&session));
-    assert!(cli.wait_for("输入一句话开始对话", T), "启动横幅超时：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("输入一句话开始对话", T),
+        "启动横幅超时：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("first message");
-    assert!(cli.wait_for("[本轮完成]", T), "第一轮没完成：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("[本轮完成]", T),
+        "第一轮没完成：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("second message");
-    assert!(cli.wait_for("turn two reply", T), "第二轮没收到回复：{}", cli.combined_output());
-    assert!(cli.wait_for("[本轮完成]", T), "第二轮没完成：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("turn two reply", T),
+        "第二轮没收到回复：{}",
+        cli.combined_output()
+    );
+    assert!(
+        cli.wait_for("[本轮完成]", T),
+        "第二轮没完成：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("/undo");
-    assert!(cli.wait_for("[已撤销]", T), "没看到撤销提示：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("[已撤销]", T),
+        "没看到撤销提示：{}",
+        cli.combined_output()
+    );
     let after_undo = cli.stdout_snapshot();
-    assert!(after_undo.contains("第 2 轮"), "撤销输出该说明退了第几轮：{after_undo}");
-    assert!(after_undo.contains('条'), "撤销输出该说明退了几条：{after_undo}");
+    assert!(
+        after_undo.contains("第 2 轮"),
+        "撤销输出该说明退了第几轮：{after_undo}"
+    );
+    assert!(
+        after_undo.contains('条'),
+        "撤销输出该说明退了几条：{after_undo}"
+    );
 
     cli.send_line("third message");
-    assert!(cli.wait_for("[本轮完成]", T), "第三轮没完成：{}", cli.combined_output());
+    assert!(
+        cli.wait_for("[本轮完成]", T),
+        "第三轮没完成：{}",
+        cli.combined_output()
+    );
 
     cli.send_line("/quit");
-    assert!(cli.wait_exit(T).is_some(), "该干净退出：{}", cli.combined_output());
+    assert!(
+        cli.wait_exit(T).is_some(),
+        "该干净退出：{}",
+        cli.combined_output()
+    );
 
     let bodies = server.bodies();
     assert_eq!(bodies.len(), 3, "应该恰好发生 3 次网络请求：{bodies:?}");
     let third = &bodies[2];
-    assert!(third.contains("first message"), "第 3 个请求体该保留第一轮：{third}");
-    assert!(third.contains("turn one reply"), "第 3 个请求体该保留第一轮的回复：{third}");
-    assert!(!third.contains("second message"), "第 3 个请求体不该含被撤销轮的用户输入：{third}");
-    assert!(!third.contains("turn two reply"), "第 3 个请求体不该含被撤销轮的助手回复：{third}");
-    assert!(third.contains("third message"), "第 3 个请求体该含新一轮的输入：{third}");
+    assert!(
+        third.contains("first message"),
+        "第 3 个请求体该保留第一轮：{third}"
+    );
+    assert!(
+        third.contains("turn one reply"),
+        "第 3 个请求体该保留第一轮的回复：{third}"
+    );
+    assert!(
+        !third.contains("second message"),
+        "第 3 个请求体不该含被撤销轮的用户输入：{third}"
+    );
+    assert!(
+        !third.contains("turn two reply"),
+        "第 3 个请求体不该含被撤销轮的助手回复：{third}"
+    );
+    assert!(
+        third.contains("third message"),
+        "第 3 个请求体该含新一轮的输入：{third}"
+    );
 }

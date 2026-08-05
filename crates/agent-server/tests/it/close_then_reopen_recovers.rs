@@ -20,18 +20,35 @@ async fn a_session_closed_and_reopened_recovers_its_history() {
     let store_path = support::temp_dir("close-reopen").join("session.jsonl");
 
     let registry = agent_server::SessionRegistry::new();
-    let handle = registry.open(support::open_spec("s", server.endpoint(), Some(store_path.clone()))).unwrap();
+    let handle = registry
+        .open(support::open_spec(
+            "s",
+            server.endpoint(),
+            Some(store_path.clone()),
+        ))
+        .unwrap();
 
     let mut sub = handle.subscribe();
-    handle.send(Command::Input("remember this".to_string())).unwrap();
+    handle
+        .send(Command::Input("remember this".to_string()))
+        .unwrap();
     support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;
 
-    registry.close(&agent_server::SessionId::from("s")).expect("优雅关闭该成功——actor 没崩过");
+    registry
+        .close(&agent_server::SessionId::from("s"))
+        .expect("优雅关闭该成功——actor 没崩过");
 
     // 重新 open：同一个落盘路径，全新的 registry 表项（原来那条已经被 close 摘掉）。
-    let handle2 = registry.open(support::open_spec("s", server.endpoint(), Some(store_path))).unwrap();
+    let handle2 = registry
+        .open(support::open_spec("s", server.endpoint(), Some(store_path)))
+        .unwrap();
     let mut sub2 = handle2.subscribe();
-    handle2.send(Command::Undo { granularity: Granularity::Turn, force: false }).unwrap();
+    handle2
+        .send(Command::Undo {
+            granularity: Granularity::Turn,
+            force: false,
+        })
+        .unwrap();
 
     let frame = tokio::time::timeout(Duration::from_secs(2), sub2.recv())
         .await

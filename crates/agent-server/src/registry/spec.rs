@@ -154,9 +154,10 @@ impl ToolTableSpec {
     pub(crate) fn spawn_limits(self) -> Option<AgentLimits> {
         match self {
             ToolTableSpec::Full { spawn_limits } => Some(spawn_limits),
-            ToolTableSpec::Builtin | ToolTableSpec::StandardLocal | ToolTableSpec::Standard | ToolTableSpec::WithShell => {
-                None
-            }
+            ToolTableSpec::Builtin
+            | ToolTableSpec::StandardLocal
+            | ToolTableSpec::Standard
+            | ToolTableSpec::WithShell => None,
         }
     }
 }
@@ -171,10 +172,19 @@ mod tests {
     /// 那个陷阱的看门狗——照 051 给 `with_status` 加的那条同款。
     #[test]
     fn the_full_table_declares_spawn_status_and_collect_together() {
-        let table = ToolTableSpec::Full { spawn_limits: AgentLimits::default() }.build();
+        let table = ToolTableSpec::Full {
+            spawn_limits: AgentLimits::default(),
+        }
+        .build();
         assert!(table.declares(agent_runtime::SPAWN_TOOL), "Full 该有 spawn");
-        assert!(table.declares(agent_runtime::STATUS_TOOL), "Full 该有 status");
-        assert!(table.declares(agent_runtime::COLLECT_TOOL), "Full 该有 collect");
+        assert!(
+            table.declares(agent_runtime::STATUS_TOOL),
+            "Full 该有 status"
+        );
+        assert!(
+            table.declares(agent_runtime::COLLECT_TOOL),
+            "Full 该有 collect"
+        );
     }
 
     /// 反面：别的档一个都不该有——`Full` 是唯一开子 agent 的那一档，
@@ -188,9 +198,11 @@ mod tests {
             ToolTableSpec::WithShell,
         ] {
             let table = spec.build();
-            for tool in
-                [agent_runtime::SPAWN_TOOL, agent_runtime::STATUS_TOOL, agent_runtime::COLLECT_TOOL]
-            {
+            for tool in [
+                agent_runtime::SPAWN_TOOL,
+                agent_runtime::STATUS_TOOL,
+                agent_runtime::COLLECT_TOOL,
+            ] {
                 assert!(!table.declares(tool), "{spec:?} 不该声明 {tool}");
             }
         }

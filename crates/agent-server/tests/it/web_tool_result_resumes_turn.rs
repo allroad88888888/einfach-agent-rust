@@ -33,15 +33,26 @@ async fn browser_action_result_is_matched_then_resumes_the_waiting_turn() {
     ]);
     let mut template = support::http_server::session_template(upstream.endpoint());
     template.tools = ToolTableSpec::Standard;
-    let server = support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, |config| config).await;
+    let server = support::http_server::start_at_with_template(
+        "127.0.0.1:0".parse().unwrap(),
+        template,
+        |config| config,
+    )
+    .await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     assert_eq!(create.status, 201, "{}", create.body);
     let id = support::extract_json_string_field(&create.body, "id");
-    let (status, _, mut sse) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status, _, mut sse) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
     assert_eq!(status, 200);
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"展示卡片\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"展示卡片\"}"),
+    );
     assert_eq!(input.status, 202, "{}", input.body);
 
     let (agent, call_id) = loop {
@@ -57,17 +68,27 @@ async fn browser_action_result_is_matched_then_resumes_the_waiting_turn() {
         "result": { "content": "{\"cardId\":\"card-1\"}" },
     })
     .to_string();
-    let result = http_client::request(server.addr, "POST", &format!("/sessions/{id}/tool_result"), Some(&body));
+    let result = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/tool_result"),
+        Some(&body),
+    );
     assert_eq!(result.status, 202, "{}", result.body);
 
     let mut saw_result = false;
     loop {
         let frame = next_frame(&mut sse);
         saw_result |= matches!(&frame.event, SessionEvent::ToolExecuted { tool, is_error: false, .. } if &**tool == "browser_action");
-        if matches!(&frame.event, SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status }) if status.is_terminal()) {
+        if matches!(&frame.event, SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status }) if status.is_terminal())
+        {
             break;
         }
     }
     assert!(saw_result, "必须先把 Web 回传记成工具结果再结束本轮");
-    assert_eq!(upstream.request_count(), 2, "远端结果应触发同一轮的第二次 provider 调用");
+    assert_eq!(
+        upstream.request_count(),
+        2,
+        "远端结果应触发同一轮的第二次 provider 调用"
+    );
 }

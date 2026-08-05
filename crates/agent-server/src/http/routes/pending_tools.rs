@@ -39,8 +39,15 @@ use crate::http::pending::{PendingTool, PendingToolsResponse};
 use crate::http::state::AppState;
 use crate::registry::SessionId;
 
-pub(in crate::http) async fn list(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<PendingToolsResponse>, ApiError> {
+pub(in crate::http) async fn list(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<PendingToolsResponse>, ApiError> {
     let handle = state.session_handle(&SessionId::from(id))?;
-    let pending = handle.pending_remote_tools().into_iter().map(PendingTool::from).collect();
+    let pending = handle
+        .pending_remote_tools()
+        .into_iter()
+        .map(PendingTool::from)
+        .collect();
     Ok(Json(PendingToolsResponse { pending }))
 }

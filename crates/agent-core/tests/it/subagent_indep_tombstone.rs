@@ -14,10 +14,14 @@ fn despawning_and_respawning_does_not_reuse_the_dead_agents_number() {
     let mut session = new_session();
     let root = session.agent().clone();
 
-    let first = session.spawn_child(&root, ChildConfig::default()).expect("spawn #1");
+    let first = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn #1");
     let _report = session.despawn_child(&first).expect("despawn #1");
 
-    let second = session.spawn_child(&root, ChildConfig::default()).expect("spawn #2");
+    let second = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn #2");
 
     assert_ne!(first, second, "墓碑还在，号不能被回收");
     assert_eq!(second, root.child(2), "第二个号该往上取，不是回落到 1");
@@ -27,19 +31,35 @@ fn despawning_and_respawning_does_not_reuse_the_dead_agents_number() {
 fn a_dead_agents_tombstone_key_exists_with_null_but_is_live_says_no() {
     let mut session = new_session();
     let root = session.agent().clone();
-    let child = session.spawn_child(&root, ChildConfig::default()).expect("spawn");
+    let child = session
+        .spawn_child(&root, ChildConfig::default())
+        .expect("spawn");
 
-    let before = session.primitives().iter().filter(|(k, _)| k.agent() == &child).count();
-    assert_eq!(before, 14, "每个 agent 一份 `Slot::ALL`（073 加了 HostTools → 12、064 加了 HostSkills → 13、076 加了 DisabledBuiltins → 14）");
+    let before = session
+        .primitives()
+        .iter()
+        .filter(|(k, _)| k.agent() == &child)
+        .count();
+    assert_eq!(
+        before, 14,
+        "每个 agent 一份 `Slot::ALL`（073 加了 HostTools → 12、064 加了 HostSkills → 13、076 加了 DisabledBuiltins → 14）"
+    );
 
     let report = session.despawn_child(&child).expect("despawn");
     assert_eq!(report.atoms_evicted, 13);
     assert!(!session.is_live(&child), "despawn 之后 is_live 该是假");
 
-    let remaining: Vec<_> = session.primitives().into_iter().filter(|(k, _)| k.agent() == &child).collect();
+    let remaining: Vec<_> = session
+        .primitives()
+        .into_iter()
+        .filter(|(k, _)| k.agent() == &child)
+        .collect();
 
     assert_eq!(remaining.len(), 1, "只该剩 ToolsAllowed 这一个墓碑");
-    assert_eq!(remaining[0].0, AtomKey::Agent(child.clone(), Slot::ToolsAllowed));
+    assert_eq!(
+        remaining[0].0,
+        AtomKey::Agent(child.clone(), Slot::ToolsAllowed)
+    );
     assert_eq!(remaining[0].1, AgentValue::Null);
 }
 
@@ -52,7 +72,9 @@ fn three_generations_under_the_same_parent_mint_three_distinct_numbers() {
 
     let mut ids = Vec::new();
     for _ in 0..3 {
-        let id = session.spawn_child(&root, ChildConfig::default()).expect("spawn");
+        let id = session
+            .spawn_child(&root, ChildConfig::default())
+            .expect("spawn");
         let _report = session.despawn_child(&id).expect("despawn");
         ids.push(id);
     }

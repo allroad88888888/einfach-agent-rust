@@ -38,7 +38,7 @@
 mod common;
 use common::*;
 
-use agent_store::{record_set, AtomId, Change, Entry, History, Store, UndoOutcome};
+use agent_store::{AtomId, Change, Entry, History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M {
@@ -47,7 +47,10 @@ struct M {
 }
 
 fn meta(turn: u32) -> M {
-    M { turn, barrier: false }
+    M {
+        turn,
+        barrier: false,
+    }
 }
 
 fn same_turn(a: &M, b: &M) -> bool {
@@ -78,7 +81,11 @@ fn apply_entries(
                 "p2" => p2,
                 other => panic!("unknown key: {other}"),
             };
-            let v = if for_undo { c.prev.clone() } else { c.next.clone() };
+            let v = if for_undo {
+                c.prev.clone()
+            } else {
+                c.next.clone()
+            };
             store.set(atom, v);
         }
     }
@@ -149,7 +156,11 @@ fn undo_turn_then_redo_turn_round_trips_primitives_and_derived() {
 
     assert_eq!(store.get(p1).as_number(), Some(100.0));
     assert_eq!(store.get(p2).as_number(), Some(200.0));
-    assert_eq!(store.get(d).as_number(), Some(300.0), "undo -> redo 精确复原");
+    assert_eq!(
+        store.get(d).as_number(),
+        Some(300.0),
+        "undo -> redo 精确复原"
+    );
     assert_eq!(history.cursor(), 4);
     assert!(!history.can_redo());
 }

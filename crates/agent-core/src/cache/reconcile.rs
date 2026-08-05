@@ -71,21 +71,29 @@ pub enum ReconcileVerdict {
     /// **好于预期**：实际命中比预测多。冷启动、换前缀、adapter 保守取整都会这样。
     ///
     /// 信息级，**不是告警**。省下来的钱被印成红字，人下次就不看这一层了。
-    BetterThanExpected { predicted: u32, actual: u32, surplus: u32 },
+    BetterThanExpected {
+        predicted: u32,
+        actual: u32,
+        surplus: u32,
+    },
     /// 差于预期且超过阈值：**告警**，带缺口的绝对数字。
     ///
     /// 意思是「我们对这家缓存语义的理解错了」，不是「模型出错了」——功能一切正常，
     /// 只有账单知道。
-    Shortfall { predicted: u32, actual: u32, gap: u32 },
+    Shortfall {
+        predicted: u32,
+        actual: u32,
+        gap: u32,
+    },
 }
 
 impl ReconcileVerdict {
     /// 缺口占预测的百分比（向下取整）。只有 [`ReconcileVerdict::Shortfall`] 有值。
     pub fn shortfall_percent(&self) -> Option<u32> {
         match self {
-            ReconcileVerdict::Shortfall { predicted, gap, .. } if *predicted > 0 => {
-                Some(u32::try_from(u64::from(*gap) * 100 / u64::from(*predicted)).unwrap_or(u32::MAX))
-            }
+            ReconcileVerdict::Shortfall { predicted, gap, .. } if *predicted > 0 => Some(
+                u32::try_from(u64::from(*gap) * 100 / u64::from(*predicted)).unwrap_or(u32::MAX),
+            ),
             _ => None,
         }
     }
@@ -136,7 +144,11 @@ pub fn reconcile(predicted: u32, cached: Option<u32>, params: ReconcileParams) -
         return if surplus <= params.tolerance_tokens {
             ReconcileVerdict::Match { predicted, actual }
         } else {
-            ReconcileVerdict::BetterThanExpected { predicted, actual, surplus }
+            ReconcileVerdict::BetterThanExpected {
+                predicted,
+                actual,
+                surplus,
+            }
         };
     }
 
@@ -145,7 +157,11 @@ pub fn reconcile(predicted: u32, cached: Option<u32>, params: ReconcileParams) -
     let over_ratio =
         u64::from(gap) * 100 > u64::from(params.shortfall_alert_percent) * u64::from(predicted);
     if gap > params.tolerance_tokens && over_ratio {
-        ReconcileVerdict::Shortfall { predicted, actual, gap }
+        ReconcileVerdict::Shortfall {
+            predicted,
+            actual,
+            gap,
+        }
     } else {
         ReconcileVerdict::Match { predicted, actual }
     }
@@ -161,19 +177,33 @@ impl fmt::Display for ReconcileVerdict {
                 "对账：这家没报 cached 字段，本轮第 2 层不工作（预测 {predicted}，不是 0 命中）",
             ),
             ReconcileVerdict::NoPrediction { actual } => {
-                write!(f, "对账：本轮无预测（冷启动或上轮镜像缺失），实际命中 {actual}，不判")
+                write!(
+                    f,
+                    "对账：本轮无预测（冷启动或上轮镜像缺失），实际命中 {actual}，不判"
+                )
             }
             ReconcileVerdict::Match { predicted, actual } if predicted == actual => {
                 write!(f, "对账：预测 {predicted} / 实际 {actual}，一致")
             }
             ReconcileVerdict::Match { predicted, actual } => {
-                write!(f, "对账：预测 {predicted} / 实际 {actual}，一致（差值未达告警阈值）")
+                write!(
+                    f,
+                    "对账：预测 {predicted} / 实际 {actual}，一致（差值未达告警阈值）"
+                )
             }
-            ReconcileVerdict::BetterThanExpected { predicted, actual, surplus } => write!(
+            ReconcileVerdict::BetterThanExpected {
+                predicted,
+                actual,
+                surplus,
+            } => write!(
                 f,
                 "对账：预测 {predicted} / 实际 {actual}，比预期多命中 {surplus}——好于预期，不是问题",
             ),
-            ReconcileVerdict::Shortfall { predicted, actual, gap } => {
+            ReconcileVerdict::Shortfall {
+                predicted,
+                actual,
+                gap,
+            } => {
                 let pct = self.shortfall_percent().unwrap_or(0);
                 write!(
                     f,
@@ -193,7 +223,10 @@ mod tests {
     fn thirty_percent_boundary_is_strict() {
         let p = ReconcileParams::default();
         // 缺口正好 30%：不告警。
-        assert!(matches!(reconcile(1000, Some(700), p), ReconcileVerdict::Match { .. }));
+        assert!(matches!(
+            reconcile(1000, Some(700), p),
+            ReconcileVerdict::Match { .. }
+        ));
         // 多缺一个 token：告警。
         assert!(matches!(
             reconcile(1000, Some(699), p),
@@ -204,11 +237,20 @@ mod tests {
     /// 容差同时是绝对下限：小预测上，光看比例会把几个 token 的零头放大成告警。
     #[test]
     fn tolerance_is_an_absolute_floor_for_alerts() {
-        let p = ReconcileParams { tolerance_tokens: 64, ..Default::default() };
+        let p = ReconcileParams {
+            tolerance_tokens: 64,
+            ..Default::default()
+        };
         // 缺口 50 token = 50%，超了比例但没超容差 → 不告警。
-        assert!(matches!(reconcile(100, Some(50), p), ReconcileVerdict::Match { .. }));
+        assert!(matches!(
+            reconcile(100, Some(50), p),
+            ReconcileVerdict::Match { .. }
+        ));
         // 容差同样吃掉正向零头：多 64 以内算一致，不刷「好于预期」。
-        assert!(matches!(reconcile(100, Some(164), p), ReconcileVerdict::Match { .. }));
+        assert!(matches!(
+            reconcile(100, Some(164), p),
+            ReconcileVerdict::Match { .. }
+        ));
         assert!(matches!(
             reconcile(100, Some(165), p),
             ReconcileVerdict::BetterThanExpected { surplus: 65, .. }

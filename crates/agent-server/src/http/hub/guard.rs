@@ -74,7 +74,12 @@ mod tests {
         let tree = Arc::new(Mutex::new(agent_core::AgentTree { nodes: Vec::new() }));
         let canceller = crate::handle::CancelHandle::new(tx, Arc::new(AtomicBool::new(false)));
         let pending_tools = Arc::new(Mutex::new(Vec::new()));
-        let handle = crate::SessionHandle { canceller, events, tree, pending_tools };
+        let handle = crate::SessionHandle {
+            canceller,
+            events,
+            tree,
+            pending_tools,
+        };
         let hubs = Arc::new(Mutex::new(HashMap::new()));
         SseHub::spawn(handle, 8, grace, SessionId::from("guard-test"), hubs)
     }
@@ -86,7 +91,10 @@ mod tests {
         drop(guard);
         assert!(!hub.canceller.is_cancelled(), "宽限期还没过，不该提前取消");
         tokio::time::sleep(Duration::from_millis(100)).await;
-        assert!(hub.canceller.is_cancelled(), "宽限期过了、始终没人回来，该取消了");
+        assert!(
+            hub.canceller.is_cancelled(),
+            "宽限期过了、始终没人回来，该取消了"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -108,7 +116,10 @@ mod tests {
         let second = SubscriberGuard::attach(Arc::clone(&hub));
         drop(first); // 还剩一个订阅者，不该起计时器
         tokio::time::sleep(Duration::from_millis(80)).await;
-        assert!(!hub.canceller.is_cancelled(), "断开的只是两个订阅者中的一个");
+        assert!(
+            !hub.canceller.is_cancelled(),
+            "断开的只是两个订阅者中的一个"
+        );
         drop(second);
     }
 }

@@ -104,7 +104,8 @@ pub struct RunnerCtx {
     /// **槽变化的那一刻**（`crate::ctx_remote_tools` 的四个变更点各通知一次），
     /// 不是宿主的命令边界——登记就在 `run_turn` 内部、下一行就广播
     /// `tool_executing` 了。设/不设与语义全在那个文件的模块文档里。
-    pub(crate) on_pending_remote_tools: Option<Box<dyn FnMut(Vec<crate::ctx_remote_tools::RemoteToolWaiting>)>>,
+    pub(crate) on_pending_remote_tools:
+        Option<Box<dyn FnMut(Vec<crate::ctx_remote_tools::RemoteToolWaiting>)>>,
 }
 
 impl RunnerCtx {
@@ -121,7 +122,8 @@ impl RunnerCtx {
         session_store: Box<SessionBackend>,
         mut on_event: Box<dyn FnMut(RunnerEvent)>,
     ) -> Self {
-        let on_event: Box<dyn FnMut(AgentEvent)> = Box::new(move |ev: AgentEvent| on_event(ev.event));
+        let on_event: Box<dyn FnMut(AgentEvent)> =
+            Box::new(move |ev: AgentEvent| on_event(ev.event));
         RunnerCtx {
             provider,
             client,
@@ -270,7 +272,13 @@ impl RunnerCtx {
     ///   `Session::prev_prefix()`，调用方必须自己清掉（`agent_cli::model_switch`
     ///   调 `Session::clear_prev_prefix()`；不清的话第 1 层会拿新家的请求去对
     ///   旧家的镜像，把正常的家族切换误判成前缀漂移）。
-    pub fn switch_provider(&mut self, provider: Arc<dyn Provider>, endpoint: String, api_key: String, model: Arc<str>) {
+    pub fn switch_provider(
+        &mut self,
+        provider: Arc<dyn Provider>,
+        endpoint: String,
+        api_key: String,
+        model: Arc<str>,
+    ) {
         self.provider = provider;
         self.endpoint = endpoint;
         self.api_key = api_key;
@@ -285,9 +293,11 @@ impl RunnerCtx {
     /// IO 线程自己那份 tag），存一个「当前 agent」字段反而会在并行的子 agent 之间
     /// 串味——那正是这个 issue 要解决的问题，不是解决它的手段。
     pub(crate) fn emit(&mut self, agent: &AgentId, event: RunnerEvent) {
-        (self.on_event)(AgentEvent { agent: agent.clone(), event });
+        (self.on_event)(AgentEvent {
+            agent: agent.clone(),
+            event,
+        });
     }
-
 }
 
 #[cfg(test)]

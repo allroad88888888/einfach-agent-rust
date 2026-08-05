@@ -68,7 +68,9 @@ impl AppState {
     /// session 还活着」的路由（input/undo/redo/cancel）共用这一次判断。
     pub(crate) fn session_handle(&self, id: &SessionId) -> Result<SessionHandle, ApiError> {
         match self.0.registry.get(id) {
-            None => Err(ApiError::not_found(format!("session \"{id}\" 不存在（从没 open 过，或者已经被 close 摘表）"))),
+            None => Err(ApiError::not_found(format!(
+                "session \"{id}\" 不存在（从没 open 过，或者已经被 close 摘表）"
+            ))),
             Some(SessionQuery::Dead { reason }) => Err(ApiError::gone(reason)),
             Some(SessionQuery::Alive(handle)) => Ok(handle),
         }
@@ -81,7 +83,9 @@ impl AppState {
     /// session。
     pub(crate) fn dispatch(&self, id: &SessionId, cmd: Command) -> Result<(), ApiError> {
         let handle = self.session_handle(id)?;
-        handle.send(cmd).map_err(|_| ApiError::gone("session 的 actor 线程在这条命令送达之前已经不在了".to_string()))
+        handle.send(cmd).map_err(|_| {
+            ApiError::gone("session 的 actor 线程在这条命令送达之前已经不在了".to_string())
+        })
     }
 
     /// 拿到这个 session 的 SSE hub，没有就现造一个（`hub_for` 是唯一入口——
@@ -97,7 +101,13 @@ impl AppState {
         if let Some(hub) = hubs.get(id) {
             return Ok(Arc::clone(hub));
         }
-        let hub = SseHub::spawn(handle, self.0.ring_capacity, self.0.cancel_grace, id.clone(), Arc::clone(&self.0.hubs));
+        let hub = SseHub::spawn(
+            handle,
+            self.0.ring_capacity,
+            self.0.cancel_grace,
+            id.clone(),
+            Arc::clone(&self.0.hubs),
+        );
         // ↑ `self.0.hubs` 本身已经在 `Arc<Inner>` 里了，这里又包一层 `Arc` 是
         // 故意的：`SseHub::spawn` 只想要「一份能长期持有、不依赖 `AppState`
         // 生死」的表引用（自清理任务活得可能比某一次请求的 `AppState` clone 长
@@ -131,7 +141,8 @@ mod tests {
             api_key: "fake-key".to_string(),
             model: Arc::from("deepseek-v4-pro"),
             tools: ToolTableSpec::Builtin,
-            tools_root: std::env::temp_dir().join(format!("agent-server-hub-reclaim-{}", std::process::id())),
+            tools_root: std::env::temp_dir()
+                .join(format!("agent-server-hub-reclaim-{}", std::process::id())),
             system: Vec::new(),
             client: Arc::new(Client::new()),
             history_cap: None,
@@ -163,17 +174,30 @@ mod tests {
         let mut ids = Vec::new();
         for _ in 0..3 {
             let id = state.generate_id();
-            let spec = state.template().open_spec(id.clone(), None, Vec::new(), Vec::new(), Vec::new()).expect("工具根目录该建得起来");
-            state.registry().open(spec).expect("开一个干净的新 session 不该失败");
+            let spec = state
+                .template()
+                .open_spec(id.clone(), None, Vec::new(), Vec::new(), Vec::new())
+                .expect("工具根目录该建得起来");
+            state
+                .registry()
+                .open(spec)
+                .expect("开一个干净的新 session 不该失败");
             // 跟 `POST /sessions` 同一条路：开完立刻现造 hub，然后把这次请求
             // 拿到的那份 `Arc` 丢掉（路由层也是 `let _ = state.hub_for(&id)`）。
             drop(state.hub_for(&id).expect("刚 open 成功，hub 该造得出来"));
             ids.push(id);
         }
-        assert_eq!(hub_ids(&state).len(), 3, "三个 session 各自该有一个 hub 挂在表上");
+        assert_eq!(
+            hub_ids(&state).len(),
+            3,
+            "三个 session 各自该有一个 hub 挂在表上"
+        );
 
         for id in &ids {
-            state.registry().close(id).expect("三个都是干净的活会话，优雅关闭不该报错");
+            state
+                .registry()
+                .close(id)
+                .expect("三个都是干净的活会话，优雅关闭不该报错");
         }
 
         // drain 任务的退出是异步的（它得先被调度到、发现广播端没了），给它一段
@@ -183,6 +207,10 @@ mod tests {
         while Instant::now() < deadline && !hub_ids(&state).is_empty() {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        assert_eq!(hub_ids(&state), Vec::<SessionId>::new(), "全部 close 之后 hub 表该精确归零（issue 059）");
+        assert_eq!(
+            hub_ids(&state),
+            Vec::<SessionId>::new(),
+            "全部 close 之后 hub 表该精确归零（issue 059）"
+        );
     }
 }

@@ -9,8 +9,8 @@ mod common;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{apply_prev, record_set, AtomFamily, AtomId, Entry, Store};
-use common::{num, TestValue as V};
+use agent_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
+use common::{TestValue as V, num};
 
 #[test]
 fn apply_prev_undoes_a_batch_double_write_to_the_same_atom_in_reverse() {
@@ -27,8 +27,14 @@ fn apply_prev_undoes_a_batch_double_write_to_the_same_atom_in_reverse() {
         changes.extend(record_set(s, "a".to_string(), a, num(3.0)));
     });
     assert_eq!(changes.len(), 2);
-    assert_eq!((changes[0].prev.clone(), changes[0].next.clone()), (num(1.0), num(2.0)));
-    assert_eq!((changes[1].prev.clone(), changes[1].next.clone()), (num(2.0), num(3.0)));
+    assert_eq!(
+        (changes[0].prev.clone(), changes[0].next.clone()),
+        (num(1.0), num(2.0))
+    );
+    assert_eq!(
+        (changes[1].prev.clone(), changes[1].next.clone()),
+        (num(2.0), num(3.0))
+    );
     assert_eq!(store.get(a), num(3.0));
 
     let entry: Entry<String, V, ()> = Entry {

@@ -8,10 +8,14 @@ mod support;
 
 use std::sync::Arc;
 
-use agent_core::{AgentId, AgentLimits, AgentValue, AtomKey, ChildConfig, Session, Slot, SpawnRefused};
+use agent_core::{
+    AgentId, AgentLimits, AgentValue, AtomKey, ChildConfig, Session, Slot, SpawnRefused,
+};
 
 fn cfg(tools: &[&str]) -> ChildConfig {
-    ChildConfig { tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect() }
+    ChildConfig {
+        tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect(),
+    }
 }
 
 fn root() -> AgentId {
@@ -28,10 +32,18 @@ fn a_spawn_lands_exactly_one_entry_carrying_the_childs_initial_slot() {
     assert_eq!(s.history_len(), before + 1, "spawn 恰好落一条 entry");
     let entry = s.last_entry().unwrap();
     assert_eq!(entry.meta.label, "spawn_child");
-    assert_eq!(entry.meta.turn_id, s.turn_id(), "子 agent 的 entry 继承 root 的 turn_id");
+    assert_eq!(
+        entry.meta.turn_id,
+        s.turn_id(),
+        "子 agent 的 entry 继承 root 的 turn_id"
+    );
 
     let key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
-    let change = entry.changes.iter().find(|c| c.key == key).expect("changes 里含子的初始槽位");
+    let change = entry
+        .changes
+        .iter()
+        .find(|c| c.key == key)
+        .expect("changes 里含子的初始槽位");
     assert_eq!(change.prev, AgentValue::Null, "spawn 之前它不在活名单上");
     assert!(matches!(change.next, AgentValue::Json(_)));
 }
@@ -47,7 +59,11 @@ fn the_child_shows_up_on_the_tree_with_a_full_slot_table() {
     assert_eq!(s.live_agents(), vec![root(), child.clone()]);
 
     // 与 root 同一条 `build_agent`：槽位一个不少（019 硬约束 1 的前提）。
-    let mine = s.primitives().into_iter().filter(|(k, _)| k.agent() == &child).count();
+    let mine = s
+        .primitives()
+        .into_iter()
+        .filter(|(k, _)| k.agent() == &child)
+        .count();
     assert_eq!(mine, Slot::ALL.len());
 }
 
@@ -104,9 +120,18 @@ fn despawning_frees_a_slot_but_not_the_seq() {
 #[test]
 fn limits_are_parameters_and_can_be_dialed() {
     let mut s = Session::new(root());
-    assert_eq!(s.agent_limits(), AgentLimits { max_depth: 3, max_children: 8 });
+    assert_eq!(
+        s.agent_limits(),
+        AgentLimits {
+            max_depth: 3,
+            max_children: 8
+        }
+    );
 
-    s.set_agent_limits(AgentLimits { max_depth: 1, max_children: 1 });
+    s.set_agent_limits(AgentLimits {
+        max_depth: 1,
+        max_children: 1,
+    });
     let a1 = s.spawn_child(&root(), cfg(&[])).unwrap();
     assert_eq!(
         s.spawn_child(&root(), cfg(&[])),

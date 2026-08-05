@@ -36,10 +36,16 @@ fn in_flight_mcp_result_is_dropped_by_the_epoch_gate_after_a_mid_flight_cancel()
     // 慢响应：server 收到 tools/call 后睡 1s 才回一条**成功**结果。
     let script = mcp::call_script("1", r#"{"content":[{"type":"text","text":"Echo: ghost"}]}"#);
     // 只挂 hop1——取消之后 run_turn 直接落终态，不会有 hop2。
-    let port = support::spawn_scripted_server(vec![mcp::hop_tool_use("mcp_3Aslow_2Fecho", "call_ghost")]);
+    let port =
+        support::spawn_scripted_server(vec![mcp::hop_tool_use("mcp_3Aslow_2Fecho", "call_ghost")]);
     // readOnly=true：可逆性与本测试无关（测的是 epoch，不是屏障），选它免得多一条屏障噪音。
-    let (mut ctx, events) =
-        mcp::build_ctx(port, &dir, "slow", vec![mcp::tool_entry("slow", "echo", true)], &script);
+    let (mut ctx, events) = mcp::build_ctx(
+        port,
+        &dir,
+        "slow",
+        vec![mcp::tool_entry("slow", "echo", true)],
+        &script,
+    );
 
     // 在飞期间（250ms）bump epoch：翻取消标志，泵会替 root 发 Cancel → epoch bump。
     let cancel = ctx.cancel_flag();

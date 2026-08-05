@@ -69,7 +69,12 @@ impl ToolTable {
     /// 从一组 specs 造一张表：空 skill registry、空 MCP 映射、空注入映射。四个内置
     /// 构造器共用它，免得每加一个字段就四处补一遍。
     fn from_specs(specs: Vec<ToolSpec>) -> Self {
-        ToolTable { specs, registry: SkillRegistry::empty(), mcp_reversibility: BTreeMap::new(), host_reversibility: BTreeMap::new() }
+        ToolTable {
+            specs,
+            registry: SkillRegistry::empty(),
+            mcp_reversibility: BTreeMap::new(),
+            host_reversibility: BTreeMap::new(),
+        }
     }
 
     /// 075：`with_*` 系列 `push` 进 `specs` 的唯一入口。**名字已经在表里 → 整条丢弃**
@@ -85,7 +90,11 @@ impl ToolTable {
     /// 只在 debug 构建炸，点得出撞的是哪个名字；release 静默丢弃。
     fn push_spec(&mut self, spec: ToolSpec) -> bool {
         if self.declares(&spec.name) {
-            debug_assert!(false, "ToolTable 已经有工具 `{}` 了，同名的后来这一条整条丢弃（specs 不 push，可逆性也不 insert）", spec.name);
+            debug_assert!(
+                false,
+                "ToolTable 已经有工具 `{}` 了，同名的后来这一条整条丢弃（specs 不 push，可逆性也不 insert）",
+                spec.name
+            );
             return false;
         }
         self.specs.push(spec);
@@ -222,7 +231,11 @@ impl ToolTable {
         // 对称，docs/MCP.md）。
         let reversibility = match self.host_reversibility.get(tool).copied() {
             Some(declared) => declared,
-            None if tool.starts_with("mcp:") => self.mcp_reversibility.get(tool).copied().unwrap_or(Reversibility::Irreversible),
+            None if tool.starts_with("mcp:") => self
+                .mcp_reversibility
+                .get(tool)
+                .copied()
+                .unwrap_or(Reversibility::Irreversible),
             None => reversibility_of(tool),
         };
         ToolCallRequest {

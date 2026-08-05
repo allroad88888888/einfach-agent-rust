@@ -17,7 +17,11 @@ pub struct ChunkedDecoder {
 
 impl ChunkedDecoder {
     pub fn new() -> Self {
-        ChunkedDecoder { raw: Vec::new(), decoded: Vec::new(), finished: false }
+        ChunkedDecoder {
+            raw: Vec::new(),
+            decoded: Vec::new(),
+            finished: false,
+        }
     }
 
     pub fn feed(&mut self, bytes: &[u8]) {
@@ -39,8 +43,12 @@ impl ChunkedDecoder {
             if self.finished {
                 return;
             }
-            let Some(line_end) = find_crlf(&self.raw) else { return };
-            let size_line = std::str::from_utf8(&self.raw[..line_end]).unwrap_or("").trim();
+            let Some(line_end) = find_crlf(&self.raw) else {
+                return;
+            };
+            let size_line = std::str::from_utf8(&self.raw[..line_end])
+                .unwrap_or("")
+                .trim();
             // chunk extension（`;` 之后）不出现在这个仓库的响应里，但按标准剥掉。
             let size_str = size_line.split(';').next().unwrap_or("0");
             let Ok(size) = usize::from_str_radix(size_str, 16) else {
@@ -62,7 +70,8 @@ impl ChunkedDecoder {
                 return;
             }
 
-            self.decoded.extend_from_slice(&self.raw[data_start..data_end]);
+            self.decoded
+                .extend_from_slice(&self.raw[data_start..data_end]);
             self.raw.drain(..needed_total);
         }
     }

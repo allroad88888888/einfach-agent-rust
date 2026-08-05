@@ -42,22 +42,38 @@ async fn a_recovered_session_keeps_its_switch_without_being_told_again() {
     let upstream = FakeServer::start(vec![Script::Immediate(support::wire::text_reply("好的。"))]);
     let sessions_dir = support::temp_dir("caps-disable-restart");
 
-    let (first_addr, first_sessions) = start(persistent_template(upstream.endpoint(), sessions_dir.clone())).await;
-    let created = create(first_addr, json!({ "id": CHAT_ID, "capabilities": switch() }));
+    let (first_addr, first_sessions) = start(persistent_template(
+        upstream.endpoint(),
+        sessions_dir.clone(),
+    ))
+    .await;
+    let created = create(
+        first_addr,
+        json!({ "id": CHAT_ID, "capabilities": switch() }),
+    );
     assert_eq!(created.status, 201, "{}", created.body);
     let before = one_turn(&upstream, first_addr).await;
     assert_eq!(
         names(&before),
-        vec!["srv:fs/read", "srv:fs/list", "srv:agent/status", "srv:agent/collect"],
+        vec![
+            "srv:fs/read",
+            "srv:fs/list",
+            "srv:agent/status",
+            "srv:agent/collect"
+        ],
         "夹具前提：第一次那一轮，关掉的两件确实不在"
     );
     assert!(first_sessions.close_all().iter().all(|(_, r)| r.is_ok()));
 
     // ── 第二次：**请求体里一个 `capabilities` 字都没有**。
-    let (second_addr, second_sessions) = start(persistent_template(upstream.endpoint(), sessions_dir)).await;
+    let (second_addr, second_sessions) =
+        start(persistent_template(upstream.endpoint(), sessions_dir)).await;
     let recovered = create(second_addr, json!({ "id": CHAT_ID }));
     assert_eq!(recovered.status, 200, "{}", recovered.body);
-    assert_eq!(support::extract_json_string_field(&recovered.body, "outcome"), "recovered");
+    assert_eq!(
+        support::extract_json_string_field(&recovered.body, "outcome"),
+        "recovered"
+    );
     let after = one_turn(&upstream, second_addr).await;
 
     assert!(
@@ -87,14 +103,25 @@ async fn a_session_with_history_refuses_a_new_switch() {
     let upstream = FakeServer::start(vec![Script::Immediate(support::wire::text_reply("好的。"))]);
     let sessions_dir = support::temp_dir("caps-disable-history");
 
-    let (addr, sessions) = start(persistent_template(upstream.endpoint(), sessions_dir.clone())).await;
-    assert_eq!(create(addr, json!({ "id": CHAT_ID, "capabilities": switch() })).status, 201);
+    let (addr, sessions) = start(persistent_template(
+        upstream.endpoint(),
+        sessions_dir.clone(),
+    ))
+    .await;
+    assert_eq!(
+        create(addr, json!({ "id": CHAT_ID, "capabilities": switch() })).status,
+        201
+    );
     one_turn(&upstream, addr).await;
     assert!(sessions.close_all().iter().all(|(_, r)| r.is_ok()));
 
-    let (second_addr, second_sessions) = start(persistent_template(upstream.endpoint(), sessions_dir)).await;
+    let (second_addr, second_sessions) =
+        start(persistent_template(upstream.endpoint(), sessions_dir)).await;
 
-    let refused = create(second_addr, json!({ "id": CHAT_ID, "capabilities": switch() }));
+    let refused = create(
+        second_addr,
+        json!({ "id": CHAT_ID, "capabilities": switch() }),
+    );
     assert_eq!(refused.status, 400, "{}", refused.body);
     assert_eq!(
         support::extract_json_string_field(&refused.body, "code"),
@@ -106,7 +133,10 @@ async fn a_session_with_history_refuses_a_new_switch() {
     // 正对照：不带 `capabilities` 的同一次重开是 200——拒的是「带了」，不是「有历史」。
     let ok = create(second_addr, json!({ "id": CHAT_ID }));
     assert_eq!(ok.status, 200, "{}", ok.body);
-    assert_eq!(support::extract_json_string_field(&ok.body, "outcome"), "recovered");
+    assert_eq!(
+        support::extract_json_string_field(&ok.body, "outcome"),
+        "recovered"
+    );
 
     assert!(second_sessions.close_all().iter().all(|(_, r)| r.is_ok()));
 }
@@ -114,7 +144,10 @@ async fn a_session_with_history_refuses_a_new_switch() {
 async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
     let server = AgentServer::new(ServerConfig::new(template));
     let sessions = server.sessions();
-    let bound = server.bind("127.0.0.1:0".parse().unwrap()).await.expect("bind 测试服务器");
+    let bound = server
+        .bind("127.0.0.1:0".parse().unwrap())
+        .await
+        .expect("bind 测试服务器");
     let addr = bound.local_addr();
     tokio::spawn(bound.serve());
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -124,7 +157,9 @@ async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
 /// 落盘 + 开满档（本 issue 要关的正是这一档里的东西）。
 fn persistent_template(endpoint: String, sessions_dir: PathBuf) -> SessionTemplate {
     let mut template = support::http_server::session_template(endpoint);
-    template.tools = ToolTableSpec::Full { spawn_limits: AgentLimits::default() };
+    template.tools = ToolTableSpec::Full {
+        spawn_limits: AgentLimits::default(),
+    };
     template.default_sessions_dir = Some(sessions_dir);
     template
 }
@@ -134,7 +169,12 @@ fn create(addr: SocketAddr, body: Value) -> support::http_client::HttpResponse {
 }
 
 fn input(addr: SocketAddr) {
-    let response = http_client::request(addr, "POST", &format!("/sessions/{CHAT_ID}/input"), Some(r#"{"text":"你好"}"#));
+    let response = http_client::request(
+        addr,
+        "POST",
+        &format!("/sessions/{CHAT_ID}/input"),
+        Some(r#"{"text":"你好"}"#),
+    );
     assert_eq!(response.status, 202, "{}", response.body);
 }
 
@@ -143,7 +183,11 @@ async fn one_turn(upstream: &FakeServer, addr: SocketAddr) -> Value {
     input(addr);
     let deadline = Instant::now() + Duration::from_secs(5);
     while upstream.request_count() < before + 1 {
-        assert!(Instant::now() < deadline, "等 provider 调用超时，实际 {}", upstream.request_count());
+        assert!(
+            Instant::now() < deadline,
+            "等 provider 调用超时，实际 {}",
+            upstream.request_count()
+        );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let body = upstream.bodies().swap_remove(before);
@@ -156,7 +200,12 @@ fn names(body: &Value) -> Vec<String> {
         .cloned()
         .unwrap_or_default()
         .iter()
-        .map(|t| agent_providers::wire_name::from_wire(t["function"]["name"].as_str().unwrap_or_default()).to_string())
+        .map(|t| {
+            agent_providers::wire_name::from_wire(
+                t["function"]["name"].as_str().unwrap_or_default(),
+            )
+            .to_string()
+        })
         .collect()
 }
 

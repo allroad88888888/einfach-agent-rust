@@ -30,7 +30,8 @@ impl fmt::Display for RemoteToolResultError {
         write!(
             formatter,
             "远端工具回传不匹配当前等待调用（agent={}, call_id={}）",
-            self.agent.as_str(), self.call_id.0
+            self.agent.as_str(),
+            self.call_id.0
         )
     }
 }
@@ -45,10 +46,12 @@ pub fn resolve_remote_tool(
     call_id: ToolCallId,
     output: RemoteToolOutput,
 ) -> Result<TurnStatus, RemoteToolResultError> {
-    let pending = ctx.take_remote_tool(&agent, &call_id).ok_or_else(|| RemoteToolResultError {
-        agent: agent.clone(),
-        call_id: call_id.clone(),
-    })?;
+    let pending = ctx
+        .take_remote_tool(&agent, &call_id)
+        .ok_or_else(|| RemoteToolResultError {
+            agent: agent.clone(),
+            call_id: call_id.clone(),
+        })?;
     let (event, output_len, is_error) = match output {
         RemoteToolOutput::Success(content) => (
             Event::ToolResult {
@@ -89,5 +92,11 @@ pub fn resolve_remote_tool(
 /// 回传的空闲会话也能立即结束；迟到结果会因等待槽已清空被安全拒绝。
 pub fn cancel_pending_remote_tools(session: &mut Session, ctx: &mut RunnerCtx) -> TurnStatus {
     ctx.discard_remote_tools();
-    runner::resume(session, ctx, Event::Cancel { agent: session.agent().clone() })
+    runner::resume(
+        session,
+        ctx,
+        Event::Cancel {
+            agent: session.agent().clone(),
+        },
+    )
 }

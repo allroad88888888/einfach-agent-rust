@@ -13,7 +13,9 @@ use std::time::Duration;
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name};
+use spawn_indep_support::{
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+};
 
 #[test]
 fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
@@ -21,9 +23,24 @@ fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_p", delay: Default::default(), status: 200, lines: sse_text("both children done, wrapping up") },
-        Route { needle: "GHOSTP", delay: Default::default(), status: 200, lines: sse_text("child P done") },
-        Route { needle: "GHOSTQ", delay: Default::default(), status: 200, lines: sse_text("child Q done") },
+        Route {
+            needle: "call_p",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("both children done, wrapping up"),
+        },
+        Route {
+            needle: "GHOSTP",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("child P done"),
+        },
+        Route {
+            needle: "GHOSTQ",
+            delay: Default::default(),
+            status: 200,
+            lines: sse_text("child Q done"),
+        },
         Route {
             needle: "kickoff6",
             delay: Default::default(),
@@ -39,11 +56,18 @@ fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff6 spawn two children then wrap up");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff6 spawn two children then wrap up",
+    );
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let events_at_return = events.borrow().len();
-    assert!(events_at_return > 0, "这条测试要求真的发生过事件，不然「没有新事件」就是空话");
+    assert!(
+        events_at_return > 0,
+        "这条测试要求真的发生过事件，不然「没有新事件」就是空话"
+    );
 
     std::thread::sleep(Duration::from_millis(500));
 
@@ -54,5 +78,9 @@ fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
     );
 
     // 服务器侧也该保持安静：没有任何被放弃的调用事后又发起新连接。
-    assert_eq!(server.calls().len(), 4, "该恰好四次调用：root 首跳 + 两个子 + root 第二跳，等待期间不该多出来");
+    assert_eq!(
+        server.calls().len(),
+        4,
+        "该恰好四次调用：root 首跳 + 两个子 + root 第二跳，等待期间不该多出来"
+    );
 }

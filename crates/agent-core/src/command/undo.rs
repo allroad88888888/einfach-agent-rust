@@ -129,8 +129,14 @@ impl Session {
                 };
                 (entries, report)
             }
-            UndoOutcome::Blocked { applied, barrier_seq } => {
-                let report = UndoReport::Blocked { entries: applied.len(), barrier_seq };
+            UndoOutcome::Blocked {
+                applied,
+                barrier_seq,
+            } => {
+                let report = UndoReport::Blocked {
+                    entries: applied.len(),
+                    barrier_seq,
+                };
                 (applied, report)
             }
         };

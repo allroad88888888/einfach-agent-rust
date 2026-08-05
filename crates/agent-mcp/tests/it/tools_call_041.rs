@@ -12,7 +12,10 @@ use serde_json::json;
 #[test]
 fn shape_is_bare_name_plus_arguments() {
     let params = tools_call_params("echo", json!({"message": "hi"}));
-    assert_eq!(params, json!({"name": "echo", "arguments": {"message": "hi"}}));
+    assert_eq!(
+        params,
+        json!({"name": "echo", "arguments": {"message": "hi"}})
+    );
 
     // name 必须是裸工具名，不带 mcp:<server>/ 前缀——那个前缀是本仓命名，
     // server 不认识；宿主在发之前剥掉。

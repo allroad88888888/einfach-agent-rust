@@ -36,7 +36,11 @@ fn kimi_config(temperature: Option<f32>) -> SessionConfig {
 fn must_use_named_tool_downgrades_with_adjustment() {
     let sys = [sys_chunk("base", "you are a helpful agent")];
     let messages = [user_text(1, "read the file")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let late_tools: [ToolSpec; 0] = [];
     let config = kimi_config(None);
 
@@ -68,7 +72,11 @@ fn must_use_named_tool_downgrades_with_adjustment() {
 fn must_use_tool_no_name_needs_no_adjustment() {
     let sys = [sys_chunk("base", "you are a helpful agent")];
     let messages = [user_text(1, "read something")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let late_tools: [ToolSpec; 0] = [];
     let config = kimi_config(None);
 
@@ -102,11 +110,23 @@ fn temperature_override_when_set() {
     let late_tools: [ToolSpec; 0] = [];
     let config = kimi_config(Some(0.7));
 
-    let ing = ingredients(&sys, &messages, &tools, &late_tools, &config, RequestIntent::Free, None);
+    let ing = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &config,
+        RequestIntent::Free,
+        None,
+    );
 
     let out = Kimi.encode(&ing);
     assert!(
-        out.adjustments.contains(&Adjustment::TemperatureOverridden { wanted: 0.7, used: 1.0 }),
+        out.adjustments
+            .contains(&Adjustment::TemperatureOverridden {
+                wanted: 0.7,
+                used: 1.0
+            }),
         "temperature=Some(0.7) 必须被钉死成 1 并记一笔：{:?}",
         out.adjustments
     );
@@ -120,11 +140,21 @@ fn no_temperature_override_when_unset() {
     let late_tools: [ToolSpec; 0] = [];
     let config = kimi_config(None);
 
-    let ing = ingredients(&sys, &messages, &tools, &late_tools, &config, RequestIntent::Free, None);
+    let ing = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late_tools,
+        &config,
+        RequestIntent::Free,
+        None,
+    );
 
     let out = Kimi.encode(&ing);
     assert!(
-        !out.adjustments.iter().any(|a| matches!(a, Adjustment::TemperatureOverridden { .. })),
+        !out.adjustments
+            .iter()
+            .any(|a| matches!(a, Adjustment::TemperatureOverridden { .. })),
         "config.temperature 是 None 时没有值可覆盖，不该报 TemperatureOverridden：{:?}",
         out.adjustments
     );
@@ -141,15 +171,33 @@ fn no_temperature_override_when_unset() {
 fn late_tools_go_in_free_via_message_level_channel() {
     let sys = [sys_chunk("base", "sys")];
     let messages = [user_text(1, "hi")];
-    let tools = [tool_spec("srv:fs/read", "read a file", serde_json::json!({"type": "object"}))];
-    let late = [tool_spec("srv:fs/write", "write a file", serde_json::json!({"type": "object"}))];
+    let tools = [tool_spec(
+        "srv:fs/read",
+        "read a file",
+        serde_json::json!({"type": "object"}),
+    )];
+    let late = [tool_spec(
+        "srv:fs/write",
+        "write a file",
+        serde_json::json!({"type": "object"}),
+    )];
     let config = kimi_config(None);
 
-    let ing = ingredients(&sys, &messages, &tools, &late, &config, RequestIntent::Free, None);
+    let ing = ingredients(
+        &sys,
+        &messages,
+        &tools,
+        &late,
+        &config,
+        RequestIntent::Free,
+        None,
+    );
 
     let out = Kimi.encode(&ing);
     assert!(
-        !out.adjustments.iter().any(|a| matches!(a, Adjustment::LateToolsForcedIntoPrefix { .. })),
+        !out.adjustments
+            .iter()
+            .any(|a| matches!(a, Adjustment::LateToolsForcedIntoPrefix { .. })),
         "Kimi 消息级 tools 零代价，不该报 LateToolsForcedIntoPrefix：{:?}",
         out.adjustments
     );
@@ -174,14 +222,19 @@ fn late_tools_go_in_free_via_message_level_channel() {
 #[test]
 fn stream_usage_without_cached_details_path_is_none() {
     let mut acc = Kimi.accumulator();
-    acc.push_line(r#"data: {"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}"#);
+    acc.push_line(
+        r#"data: {"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}"#,
+    );
     acc.push_line(
         r#"data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":42,"completion_tokens":3}}"#,
     );
     acc.push_line("data: [DONE]");
 
     let (_, _, usage) = acc.finish();
-    assert_eq!(usage.cached, None, "usage 里没有 prompt_tokens_details 时 cached 必须是 None");
+    assert_eq!(
+        usage.cached, None,
+        "usage 里没有 prompt_tokens_details 时 cached 必须是 None"
+    );
 }
 
 /// §三：Kimi 的 usage 在 finish 帧之后**另起一帧**，且那帧 `choices` 为空。
@@ -195,7 +248,9 @@ fn stream_usage_arrives_on_trailing_empty_choices_frame() {
         r#"data: {"choices":[],"usage":{"prompt_tokens":110,"completion_tokens":61,"prompt_tokens_details":{"cached_tokens":110}}}"#,
     );
     assert!(
-        events.iter().any(|e| matches!(e, StreamEvent::UsageReady(_))),
+        events
+            .iter()
+            .any(|e| matches!(e, StreamEvent::UsageReady(_))),
         "尾帧 choices 为空但带 usage，必须吐出 UsageReady：{events:?}"
     );
     acc.push_line("data: [DONE]");

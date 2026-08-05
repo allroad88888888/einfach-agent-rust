@@ -40,12 +40,26 @@ fn root_spawns_two() -> Route {
 /// 60ms 好让两边交替），第二段在写完第一段之后再等 120ms。两段拼起来就是
 /// `first_chunk`+`second_chunk`——这段文本被塞进 tool_result 送回 root，
 /// root 第二跳的路由靠它精确匹配。
-fn child_reply(needle: &'static str, first_chunk: &str, second_chunk: &str, first_delay: Duration) -> Route {
-    let first = format!(r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{first_chunk}"}},"finish_reason":null}}]}}"#);
+fn child_reply(
+    needle: &'static str,
+    first_chunk: &str,
+    second_chunk: &str,
+    first_delay: Duration,
+) -> Route {
+    let first = format!(
+        r#"data: {{"choices":[{{"index":0,"delta":{{"role":"assistant","content":"{first_chunk}"}},"finish_reason":null}}]}}"#
+    );
     let second = format!(
         r#"data: {{"choices":[{{"index":0,"delta":{{"content":"{second_chunk}"}},"finish_reason":"stop"}}],"usage":{{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}}}"#
     );
-    Route::paced(needle, vec![(first_delay, first.as_str()), (Duration::from_millis(120), second.as_str()), (Duration::ZERO, "data: [DONE]")])
+    Route::paced(
+        needle,
+        vec![
+            (first_delay, first.as_str()),
+            (Duration::from_millis(120), second.as_str()),
+            (Duration::ZERO, "data: [DONE]"),
+        ],
+    )
 }
 
 fn routes() -> Vec<Route> {
@@ -73,24 +87,38 @@ async fn spawning_two_children_over_http_interleaves_their_agent_tagged_frames()
     let upstream = RoutedServer::start(routes());
 
     let mut template = support::http_server::session_template(upstream.endpoint());
-    template.tools = ToolTableSpec::Full { spawn_limits: AgentLimits::default() };
-    let server = support::http_server::start_at_with_template("127.0.0.1:0".parse().unwrap(), template, |c| c).await;
+    template.tools = ToolTableSpec::Full {
+        spawn_limits: AgentLimits::default(),
+    };
+    let server = support::http_server::start_at_with_template(
+        "127.0.0.1:0".parse().unwrap(),
+        template,
+        |c| c,
+    )
+    .await;
 
     let create = http_client::request(server.addr, "POST", "/sessions", Some("{}"));
     assert_eq!(create.status, 201, "{}", create.body);
     let id = support::extract_json_string_field(&create.body, "id");
 
-    let (status, _, mut sse) = http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
+    let (status, _, mut sse) =
+        http_client::connect_sse(server.addr, &format!("/sessions/{id}/events"), None);
     assert_eq!(status, 200);
 
-    let input = http_client::request(server.addr, "POST", &format!("/sessions/{id}/input"), Some("{\"text\":\"分头去查甲和乙\"}"));
+    let input = http_client::request(
+        server.addr,
+        "POST",
+        &format!("/sessions/{id}/input"),
+        Some("{\"text\":\"分头去查甲和乙\"}"),
+    );
     assert_eq!(input.status, 202, "{}", input.body);
 
     // 收集到终态为止，逐帧解析成 `Frame`（034：agent 归属信封）。
     let mut frames: Vec<Frame> = Vec::new();
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while let Some(raw) = sse.next_event(Duration::from_secs(5)) {
-        let frame: Frame = serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
+        let frame: Frame =
+            serde_json::from_str(&raw.data).unwrap_or_else(|e| panic!("{e}: {}", raw.data));
         let terminal = matches!(
             &frame.event,
             SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status }) if status.is_terminal()
@@ -106,22 +134,36 @@ async fn spawning_two_children_over_http_interleaves_their_agent_tagged_frames()
     let a1_deltas: Vec<usize> = frames
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.agent.as_str() == "root/a1" && matches!(f.event, SessionEvent::TextDelta(_)))
+        .filter(|(_, f)| {
+            f.agent.as_str() == "root/a1" && matches!(f.event, SessionEvent::TextDelta(_))
+        })
         .map(|(i, _)| i)
         .collect();
     let a2_deltas: Vec<usize> = frames
         .iter()
         .enumerate()
-        .filter(|(_, f)| f.agent.as_str() == "root/a2" && matches!(f.event, SessionEvent::TextDelta(_)))
+        .filter(|(_, f)| {
+            f.agent.as_str() == "root/a2" && matches!(f.event, SessionEvent::TextDelta(_))
+        })
         .map(|(i, _)| i)
         .collect();
-    assert!(!a1_deltas.is_empty(), "该看到 root/a1 的 text_delta 帧：{frames:?}");
-    assert!(!a2_deltas.is_empty(), "该看到 root/a2 的 text_delta 帧：{frames:?}");
+    assert!(
+        !a1_deltas.is_empty(),
+        "该看到 root/a1 的 text_delta 帧：{frames:?}"
+    );
+    assert!(
+        !a2_deltas.is_empty(),
+        "该看到 root/a2 的 text_delta 帧：{frames:?}"
+    );
 
     // 交错：至少有一个 root/a2 帧夹在两个 root/a1 帧之间（或反过来）——不只是
     // 「两个都出现过」,而是两段落 wall-clock 上真的交替到达,帧序列本身也交替。
-    let interleaved = a1_deltas.windows(2).any(|w| a2_deltas.iter().any(|&i| w[0] < i && i < w[1]))
-        || a2_deltas.windows(2).any(|w| a1_deltas.iter().any(|&i| w[0] < i && i < w[1]));
+    let interleaved = a1_deltas
+        .windows(2)
+        .any(|w| a2_deltas.iter().any(|&i| w[0] < i && i < w[1]))
+        || a2_deltas
+            .windows(2)
+            .any(|w| a1_deltas.iter().any(|&i| w[0] < i && i < w[1]));
     assert!(
         interleaved,
         "两个子 agent 的 text_delta 帧该交错出现，实际 a1@{a1_deltas:?} a2@{a2_deltas:?}，全部帧：{frames:?}"
@@ -129,8 +171,15 @@ async fn spawning_two_children_over_http_interleaves_their_agent_tagged_frames()
 
     // 收尾正常：root 第二跳汇总之后落终态。
     let terminal = frames.iter().rev().find_map(|f| match &f.event {
-        SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status }) if status.is_terminal() => Some(status.clone()),
+        SessionEvent::Notice(agent_core::Notice::TurnStatusChanged { status })
+            if status.is_terminal() =>
+        {
+            Some(status.clone())
+        }
         _ => None,
     });
-    assert!(matches!(terminal, Some(agent_core::TurnStatus::Done { .. })), "该以正常结束收尾：{terminal:?}");
+    assert!(
+        matches!(terminal, Some(agent_core::TurnStatus::Done { .. })),
+        "该以正常结束收尾：{terminal:?}"
+    );
 }

@@ -21,7 +21,10 @@ fn overflowing_the_cap_reports_oldest_drop_events() {
             session.begin_turn();
         }
         let _ = session.step(user_input_event(&format!("round {i}")));
-        let _ = session.step(provider_done_end_turn(session.epoch(), &format!("answer {i}")));
+        let _ = session.step(provider_done_end_turn(
+            session.epoch(),
+            &format!("answer {i}"),
+        ));
     }
 
     assert!(session.history_len() <= 3, "日志长度不该超过设定的上限");
@@ -47,7 +50,10 @@ fn undoing_all_the_way_to_the_start_returns_nothing_without_panicking() {
             session.begin_turn();
         }
         let _ = session.step(user_input_event(&format!("round {i}")));
-        let _ = session.step(provider_done_end_turn(session.epoch(), &format!("answer {i}")));
+        let _ = session.step(provider_done_end_turn(
+            session.epoch(),
+            &format!("answer {i}"),
+        ));
     }
     let _ = session.take_drop_events();
 
@@ -76,10 +82,17 @@ fn setting_a_smaller_cap_after_the_fact_trims_immediately() {
             session.begin_turn();
         }
         let _ = session.step(user_input_event(&format!("round {i}")));
-        let _ = session.step(provider_done_end_turn(session.epoch(), &format!("answer {i}")));
+        let _ = session.step(provider_done_end_turn(
+            session.epoch(),
+            &format!("answer {i}"),
+        ));
     }
     assert!(session.history_len() > 2);
 
     session.set_history_cap(Some(2));
-    assert_eq!(session.history_len(), 2, "调小 cap 立即生效，不用等下一次 append");
+    assert_eq!(
+        session.history_len(),
+        2,
+        "调小 cap 立即生效，不用等下一次 append"
+    );
 }

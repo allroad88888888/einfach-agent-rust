@@ -41,25 +41,40 @@ fn nonexistent_server() -> ServerConfig {
 }
 
 fn timeouts() -> LoadTimeouts {
-    LoadTimeouts { handshake: Duration::from_secs(5), call: Duration::from_secs(5) }
+    LoadTimeouts {
+        handshake: Duration::from_secs(5),
+        call: Duration::from_secs(5),
+    }
 }
 
 /// 两个 server 各有同名工具 `x` → 两批都进表，`mcp:a/x` 与 `mcp:b/x` 不撞。
 #[test]
 fn two_servers_merge_with_disambiguated_prefixes() {
     let config = McpConfig {
-        servers: vec![("a".into(), fake_server("x")), ("b".into(), fake_server("x"))],
+        servers: vec![
+            ("a".into(), fake_server("x")),
+            ("b".into(), fake_server("x")),
+        ],
     };
     let registry = McpRegistry::new();
     let out = load_servers(&config, &registry, Host::Server, timeouts(), "t", "0");
 
     let names: Vec<String> = out.tools.iter().map(|(s, _)| s.name.to_string()).collect();
-    assert!(names.contains(&"mcp:a/x".to_string()), "缺 mcp:a/x，实际 {names:?}");
-    assert!(names.contains(&"mcp:b/x".to_string()), "缺 mcp:b/x，实际 {names:?}");
+    assert!(
+        names.contains(&"mcp:a/x".to_string()),
+        "缺 mcp:a/x，实际 {names:?}"
+    );
+    assert!(
+        names.contains(&"mcp:b/x".to_string()),
+        "缺 mcp:b/x，实际 {names:?}"
+    );
     assert_eq!(names.len(), 2, "两批工具都进表，不撞名");
 
     assert_eq!(out.connected_ids(), vec!["a", "b"]);
-    assert!(registry.contains("a") && registry.contains("b"), "活句柄进了 registry");
+    assert!(
+        registry.contains("a") && registry.contains("b"),
+        "活句柄进了 registry"
+    );
 }
 
 /// 一个 server 的命令指向不存在的可执行文件 → 它标 Unavailable（带原因），另一个正常
@@ -113,11 +128,21 @@ fn remote_entry_marked_unsupported_others_fine() {
     let registry = McpRegistry::new();
     let out = load_servers(&config, &registry, Host::Server, timeouts(), "t", "0");
 
-    let web = out.available_servers().iter().find(|s| s.id == "web").unwrap();
-    assert!(matches!(web.availability, Availability::Unsupported { .. }), "web 应暂不支持");
+    let web = out
+        .available_servers()
+        .iter()
+        .find(|s| s.id == "web")
+        .unwrap();
+    assert!(
+        matches!(web.availability, Availability::Unsupported { .. }),
+        "web 应暂不支持"
+    );
     assert!(!registry.contains("web"), "远端不进 registry");
 
-    assert!(out.connected_ids().contains(&"local"), "stdio server 照常连上");
+    assert!(
+        out.connected_ids().contains(&"local"),
+        "stdio server 照常连上"
+    );
     assert!(out.tools.iter().any(|(s, _)| &*s.name == "mcp:local/ping"));
     // local 的子进程活句柄在 registry 里，registry 在函数末尾 drop → kill+wait 收尸。
 }
@@ -126,8 +151,9 @@ fn remote_entry_marked_unsupported_others_fine() {
 /// CLI 是 server host 走不到这里，但门要能表达。
 #[test]
 fn stdio_on_browser_host_is_unavailable_without_spawning() {
-    let config =
-        McpConfig { servers: vec![("a".into(), fake_server("noop"))] };
+    let config = McpConfig {
+        servers: vec![("a".into(), fake_server("noop"))],
+    };
     let registry = McpRegistry::new();
     let out = load_servers(&config, &registry, Host::Browser, timeouts(), "t", "0");
 
@@ -137,5 +163,8 @@ fn stdio_on_browser_host_is_unavailable_without_spawning() {
         other => panic!("浏览器 host + stdio 应 Unavailable，实际 {other:?}"),
     }
     assert!(out.tools.is_empty());
-    assert!(!registry.contains("a"), "门不通过：不该 spawn、不该进 registry");
+    assert!(
+        !registry.contains("a"),
+        "门不通过：不该 spawn、不该进 registry"
+    );
 }

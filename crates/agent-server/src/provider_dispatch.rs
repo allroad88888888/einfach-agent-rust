@@ -48,6 +48,9 @@ mod tests {
         // `Debug`（trait object 不体面地要求所有实现者都能格式化自己），
         // `unwrap_err` 的 bound 挂在 `Ok` 类型上，`.err()` 不需要。
         let err = resolve_provider("bogus").err().unwrap();
-        assert!(err.contains("deepseek") && err.contains("kimi") && err.contains("glm"), "{err}");
+        assert!(
+            err.contains("deepseek") && err.contains("kimi") && err.contains("glm"),
+            "{err}"
+        );
     }
 }

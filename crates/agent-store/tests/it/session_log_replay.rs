@@ -16,12 +16,18 @@ fn entry(seq: u64) -> Entry<String, V, u32> {
     Entry {
         seq,
         meta: 1,
-        changes: vec![Change { key: "a".to_string(), prev: V(seq as i64), next: V(seq as i64 + 1) }],
+        changes: vec![Change {
+            key: "a".to_string(),
+            prev: V(seq as i64),
+            next: V(seq as i64 + 1),
+        }],
     }
 }
 
 fn snap() -> Snapshot<String, V> {
-    Snapshot { values: vec![("a".to_string(), V(0))] }
+    Snapshot {
+        values: vec![("a".to_string(), V(0))],
+    }
 }
 
 type Log = SessionLog<String, V, u32>;
@@ -43,7 +49,10 @@ fn three_entries_a_snapshot_then_two_more_only_the_tail_survives() {
 
     let loaded = log.to_loaded().unwrap();
     assert!(loaded.snapshot.is_some());
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![3, 4]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![3, 4]
+    );
     assert_eq!(loaded.cursor, 2); // 顶：两条都生效
     assert_eq!(loaded.next_seq, 5);
 }
@@ -63,7 +72,10 @@ fn cursor_mid_history_translates_relative_to_the_compacted_tail() {
     log.record_cursor(4);
 
     let loaded = log.to_loaded().unwrap();
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![3, 4, 5]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![3, 4, 5]
+    );
     assert_eq!(loaded.cursor, 1);
 }
 
@@ -79,7 +91,10 @@ fn a_second_snapshot_only_captures_what_was_appended_since_the_first() {
     log.record_cursor(4);
 
     let loaded = log.to_loaded().unwrap();
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![3]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![3]
+    );
     assert_eq!(loaded.cursor, 1);
     assert_eq!(loaded.next_seq, 4);
 }
@@ -105,7 +120,10 @@ fn drop_oldest_after_a_snapshot_only_removes_what_is_still_held() {
     log.record_cursor(1); // History::cursor() 本身也被 enforce_cap 减到了 1
 
     let loaded = log.to_loaded().unwrap();
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![4]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![4]
+    );
     assert_eq!(loaded.cursor, 1);
     assert_eq!(loaded.next_seq, 5);
 }
@@ -120,7 +138,10 @@ fn drop_oldest_before_any_snapshot_behaves_like_a_plain_front_trim() {
     log.record_cursor(3); // 剩 3 条全生效
 
     let loaded = log.to_loaded().unwrap();
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![2, 3, 4]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![2, 3, 4]
+    );
     assert_eq!(loaded.cursor, 3);
 }
 
@@ -136,7 +157,10 @@ fn drop_after_only_trims_the_tail_and_leaves_the_front_offset_untouched() {
     log.record_cursor(2);
 
     let loaded = log.to_loaded().unwrap();
-    assert_eq!(loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![0, 9]);
+    assert_eq!(
+        loaded.entries.iter().map(|e| e.seq).collect::<Vec<_>>(),
+        vec![0, 9]
+    );
     assert_eq!(loaded.cursor, 2);
 }
 

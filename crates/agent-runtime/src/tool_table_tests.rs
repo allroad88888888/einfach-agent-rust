@@ -3,11 +3,11 @@
 
 // 076 把名字规则挪进 `tool_table_names.rs` 之后，下面四样不再顺着 `tool_table.rs`
 // 的 `use` 白拿进来——测试自己点名，比在实现文件里留几个它用不上的导入干净。
-use agent_core::Location;
+use super::*;
 use crate::collect_tool::COLLECT_TOOL;
 use crate::spawn_tool::SPAWN_TOOL;
 use crate::status_tool::STATUS_TOOL;
-use super::*;
+use agent_core::Location;
 
 #[test]
 fn builtin_specs_are_exposed_in_order() {
@@ -86,7 +86,9 @@ fn a_table_without_spawn_does_not_declare_it() {
 /// 无屏障）——它**不是**保守默认那条分支的产物，所以这里两件事都得断言。
 #[test]
 fn with_status_appends_the_status_tool_and_it_is_pure() {
-    let table = ToolTable::with_shell().with_spawn(AgentLimits::default()).with_status();
+    let table = ToolTable::with_shell()
+        .with_spawn(AgentLimits::default())
+        .with_status();
     let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
     assert_eq!(
         names,
@@ -108,7 +110,11 @@ fn with_status_appends_the_status_tool_and_it_is_pure() {
 /// 这个名字跟别的不存在的工具走同一条路（`dispatch` 只在 `declares` 为真时截获）。
 #[test]
 fn a_table_without_status_does_not_declare_it() {
-    assert!(!ToolTable::builtin().with_spawn(AgentLimits::default()).declares(STATUS_TOOL));
+    assert!(
+        !ToolTable::builtin()
+            .with_spawn(AgentLimits::default())
+            .declares(STATUS_TOOL)
+    );
     assert!(ToolTable::builtin().with_status().declares(STATUS_TOOL));
 }
 
@@ -116,8 +122,10 @@ fn a_table_without_status_does_not_declare_it() {
 /// collect 是 `Pure`——它只读一份已经产生的结果，屏障位在子自己那条 entry 上。
 #[test]
 fn with_collect_appends_the_collect_tool_and_it_is_pure() {
-    let table =
-        ToolTable::with_shell().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let table = ToolTable::with_shell()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
     assert_eq!(
         names,
@@ -140,7 +148,10 @@ fn with_collect_appends_the_collect_tool_and_it_is_pure() {
 #[test]
 fn a_table_without_collect_does_not_declare_it() {
     assert!(
-        !ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().declares(COLLECT_TOOL)
+        !ToolTable::builtin()
+            .with_spawn(AgentLimits::default())
+            .with_status()
+            .declares(COLLECT_TOOL)
     );
     assert!(ToolTable::builtin().with_collect().declares(COLLECT_TOOL));
 }
@@ -172,7 +183,9 @@ fn mcp_tool(name: &str, read_only: Option<bool>) -> McpTool {
         name: name.to_string(),
         description: Some(format!("{name} desc")),
         input_schema: json!({"type": "object"}),
-        annotations: read_only.map(|r| Annotations { read_only_hint: Some(r) }),
+        annotations: read_only.map(|r| Annotations {
+            read_only_hint: Some(r),
+        }),
     }
 }
 
@@ -214,7 +227,12 @@ fn with_mcp_appends_specs_at_end_and_declares_them() {
     let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
     assert_eq!(
         names,
-        vec!["srv:fs/read", "srv:fs/list", "mcp:everything/echo", "mcp:everything/sendEmail"]
+        vec![
+            "srv:fs/read",
+            "srv:fs/list",
+            "mcp:everything/echo",
+            "mcp:everything/sendEmail"
+        ]
     );
     assert!(table.declares("mcp:everything/echo"));
     assert!(!table.declares("mcp:everything/x"));
@@ -225,7 +243,11 @@ fn with_mcp_appends_specs_at_end_and_declares_them() {
 // （spec 不 push，配套的可逆性映射也不 insert），debug_assert 点名，release 静默丢弃。
 
 fn raw_spec(name: &str) -> ToolSpec {
-    ToolSpec { name: Arc::from(name), description: Arc::from(format!("{name} 的说明书")), schema: Arc::new(json!({ "type": "object" })) }
+    ToolSpec {
+        name: Arc::from(name),
+        description: Arc::from(format!("{name} 的说明书")),
+        schema: Arc::new(json!({ "type": "object" })),
+    }
 }
 
 /// `push_spec` 本身：撞名不该真的 push 进 `specs`——不管 debug 还是 release。
@@ -247,9 +269,15 @@ fn push_spec_leaves_specs_untouched_when_the_name_already_exists() {
             .cloned()
             .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
             .unwrap_or_default();
-        assert!(msg.contains("srv:fs/read"), "debug_assert 的 panic 消息要点得出撞的是哪个名字，实际：{msg}");
+        assert!(
+            msg.contains("srv:fs/read"),
+            "debug_assert 的 panic 消息要点得出撞的是哪个名字，实际：{msg}"
+        );
     } else {
-        assert!(!result.unwrap(), "release 构建下已经在表里的名字，push_spec 该返回 false");
+        assert!(
+            !result.unwrap(),
+            "release 构建下已经在表里的名字，push_spec 该返回 false"
+        );
     }
     assert_eq!(table.specs().len(), before, "撞名的那条不该真的进 specs");
 }
@@ -271,16 +299,25 @@ fn with_mcp_loading_the_same_name_twice_keeps_the_first_reversibility() {
     };
     let result = std::panic::catch_unwind(build);
     if cfg!(debug_assertions) {
-        assert!(result.is_err(), "debug 构建下重复装载应该在 with_mcp 内部 debug_assert 炸掉");
+        assert!(
+            result.is_err(),
+            "debug 构建下重复装载应该在 with_mcp 内部 debug_assert 炸掉"
+        );
     } else {
         let table = result.expect("release 构建下 with_mcp 不该 panic");
         assert_eq!(
-            table.specs().iter().filter(|s| &*s.name == "mcp:dup/tool").count(),
+            table
+                .specs()
+                .iter()
+                .filter(|s| &*s.name == "mcp:dup/tool")
+                .count(),
             1,
             "撞名的那条不该真的多进一条 spec"
         );
         assert_eq!(
-            table.snapshot("mcp:dup/tool", Arc::new(Value::Null)).reversibility,
+            table
+                .snapshot("mcp:dup/tool", Arc::new(Value::Null))
+                .reversibility,
             Reversibility::Pure,
             "可逆性该是先来的那份（Pure），不是后来的 Irreversible"
         );

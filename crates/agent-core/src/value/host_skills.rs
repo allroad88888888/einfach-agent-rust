@@ -91,7 +91,10 @@ pub(crate) fn from_value(value: &AgentValue) -> Vec<HostSkill> {
     let Some(array) = value.as_json().and_then(|j| j.as_array()) else {
         return Vec::new();
     };
-    array.iter().filter_map(|item| serde_json::from_value::<HostSkill>(item.clone()).ok()).collect()
+    array
+        .iter()
+        .filter_map(|item| serde_json::from_value::<HostSkill>(item.clone()).ok())
+        .collect()
 }
 
 #[cfg(test)]
@@ -108,7 +111,9 @@ mod tests {
             tools: vec![ToolSpec {
                 name: Arc::from(tool),
                 description: Arc::from("说明"),
-                schema: Arc::new(json!({ "type": "object", "properties": { "id": { "type": "string" } } })),
+                schema: Arc::new(
+                    json!({ "type": "object", "properties": { "id": { "type": "string" } } }),
+                ),
             }],
         }
     }
@@ -116,14 +121,20 @@ mod tests {
     /// 往返：落值再读回来，四个字段一个不少、一个不错。
     #[test]
     fn round_trips_through_the_value() {
-        let read = from_value(&to_value(vec![skill("zeta-flow", "web:z/one"), skill("alpha-flow", "web:a/one")]));
+        let read = from_value(&to_value(vec![
+            skill("zeta-flow", "web:z/one"),
+            skill("alpha-flow", "web:a/one"),
+        ]));
 
         assert_eq!(read.len(), 2);
         assert_eq!(read[0].id.as_str(), "alpha-flow", "写入时按 id 排过序");
         assert_eq!(read[1].id.as_str(), "zeta-flow");
         assert_eq!(&*read[0].body, "正文若干");
         assert_eq!(&*read[0].tools[0].name, "web:a/one");
-        assert_eq!(read[0].tools[0].schema["properties"]["id"]["type"], json!("string"));
+        assert_eq!(
+            read[0].tools[0].schema["properties"]["id"]["type"],
+            json!("string")
+        );
     }
 
     /// 红线 11：客户端给的数组顺序、以及 `schema` 里键的插入顺序，都进不了落盘
@@ -151,15 +162,25 @@ mod tests {
             vec![make("b-flow", "web:b/x"), make("a-flow", "web:a/y")]
         };
         let bytes = |v: &AgentValue| {
-            let AgentValue::Json(json) = v else { panic!("落 Json") };
+            let AgentValue::Json(json) = v else {
+                panic!("落 Json")
+            };
             serde_json::to_string(&**json).unwrap()
         };
 
         let a = to_value(with(&forward));
         let mut reversed = with(&backward);
         reversed.reverse();
-        assert_eq!(bytes(&a), bytes(&to_value(reversed)), "声明的落盘字节不许跟着输入顺序漂（红线 11）");
-        assert_eq!(bytes(&a), bytes(&to_value(with(&forward))), "同一份声明两次序列化也必须逐字节相同");
+        assert_eq!(
+            bytes(&a),
+            bytes(&to_value(reversed)),
+            "声明的落盘字节不许跟着输入顺序漂（红线 11）"
+        );
+        assert_eq!(
+            bytes(&a),
+            bytes(&to_value(with(&forward))),
+            "同一份声明两次序列化也必须逐字节相同"
+        );
     }
 
     /// 空声明落成空数组（默认值就是它）——「没声明」和「声明了零个」在状态上就是
@@ -186,6 +207,9 @@ mod tests {
         let read = from_value(&half_bad);
         assert_eq!(read.len(), 1, "只有形状完整的那一项活下来：{read:?}");
         assert_eq!(read[0].id.as_str(), "ok-flow");
-        assert!(read[0].tools.is_empty(), "缺 tools 是合法的（不带工具的 skill）");
+        assert!(
+            read[0].tools.is_empty(),
+            "缺 tools 是合法的（不带工具的 skill）"
+        );
     }
 }

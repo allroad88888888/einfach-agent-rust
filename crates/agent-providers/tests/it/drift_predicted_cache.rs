@@ -52,8 +52,14 @@ fn cold_start_without_prev_prefix_has_no_drift_and_zero_predicted_cache() {
     );
 
     let encoded = provider.encode(&ing);
-    assert_eq!(encoded.drift, None, "冷启动没有 prev_prefix，drift 必须是 None");
-    assert_eq!(encoded.predicted_cache, 0, "冷启动没有可预测的命中，必须是 0");
+    assert_eq!(
+        encoded.drift, None,
+        "冷启动没有 prev_prefix，drift 必须是 None"
+    );
+    assert_eq!(
+        encoded.predicted_cache, 0,
+        "冷启动没有可预测的命中，必须是 0"
+    );
 }
 
 /// 严格延长（只在消息末尾追加）：`prompt_tokens` 整除 128 的情形。
@@ -97,7 +103,10 @@ fn strict_extension_predicted_cache_rounds_down_to_block_size_exact_multiple() {
     );
     let second = provider.encode(&ing_2);
 
-    assert_eq!(second.drift, None, "只在末尾追加消息，没有任何一段漂，drift 必须是 None");
+    assert_eq!(
+        second.drift, None,
+        "只在末尾追加消息，没有任何一段漂，drift 必须是 None"
+    );
     assert_eq!(
         second.predicted_cache, 2432,
         "2432 整除 128，向下取整后还是 2432"
@@ -188,7 +197,11 @@ fn changing_tool_table_drifts_tools_segment_and_zeroes_predicted_cache() {
     );
     let second = provider.encode(&ing_2);
 
-    assert_eq!(second.drift, Some(Segment::Tools), "改了工具表，漂的必须是 Tools 段");
+    assert_eq!(
+        second.drift,
+        Some(Segment::Tools),
+        "改了工具表，漂的必须是 Tools 段"
+    );
     assert_eq!(second.predicted_cache, 0, "前缀已经归零，没有可预测的命中");
 }
 

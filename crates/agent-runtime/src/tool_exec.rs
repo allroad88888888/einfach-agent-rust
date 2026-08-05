@@ -20,27 +20,49 @@ pub(crate) fn execute(
     request: ToolCallRequest,
     epoch: Epoch,
 ) -> Event {
-    ctx.emit(&agent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request: request.clone() });
+    ctx.emit(
+        &agent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request: request.clone(),
+        },
+    );
 
     match ctx.fs.execute(&request.tool, &request.input) {
         Ok(content) => {
-            ctx.emit(&agent, RunnerEvent::ToolExecuted {
-                call_id: call_id.clone(),
-                tool: request.tool.clone(),
-                output_len: content.len(),
-                is_error: false,
-            });
-            Event::ToolResult { agent, epoch, call_id, content: Arc::from(content) }
+            ctx.emit(
+                &agent,
+                RunnerEvent::ToolExecuted {
+                    call_id: call_id.clone(),
+                    tool: request.tool.clone(),
+                    output_len: content.len(),
+                    is_error: false,
+                },
+            );
+            Event::ToolResult {
+                agent,
+                epoch,
+                call_id,
+                content: Arc::from(content),
+            }
         }
         Err(err) => {
             let message = format!("[{}] {}", err.code, err.message);
-            ctx.emit(&agent, RunnerEvent::ToolExecuted {
-                call_id: call_id.clone(),
-                tool: request.tool.clone(),
-                output_len: message.len(),
-                is_error: true,
-            });
-            Event::ToolFailed { agent, epoch, call_id, error: Arc::from(message) }
+            ctx.emit(
+                &agent,
+                RunnerEvent::ToolExecuted {
+                    call_id: call_id.clone(),
+                    tool: request.tool.clone(),
+                    output_len: message.len(),
+                    is_error: true,
+                },
+            );
+            Event::ToolFailed {
+                agent,
+                epoch,
+                call_id,
+                error: Arc::from(message),
+            }
         }
     }
 }

@@ -49,7 +49,11 @@ impl ProviderConfig {
         {
             return Some(v);
         }
-        if self.api_key.is_empty() { None } else { Some(self.api_key.clone()) }
+        if self.api_key.is_empty() {
+            None
+        } else {
+            Some(self.api_key.clone())
+        }
     }
 
     /// 给人看的 key 长度——**不是 key 本身**。日志/CLI 只许打印这个。
@@ -82,9 +86,17 @@ impl fmt::Debug for ProviderConfig {
 #[derive(Debug)]
 pub enum ConfigError {
     /// 三个候选路径都没有文件。
-    NotFound { tried: Vec<PathBuf> },
-    Io { path: PathBuf, message: String },
-    Parse { path: PathBuf, message: String },
+    NotFound {
+        tried: Vec<PathBuf>,
+    },
+    Io {
+        path: PathBuf,
+        message: String,
+    },
+    Parse {
+        path: PathBuf,
+        message: String,
+    },
     /// `[default] provider` 指了一个 `[providers.*]` 里没有的名字。
     UnknownDefault(String),
 }
@@ -106,7 +118,10 @@ impl fmt::Display for ConfigError {
                 write!(f, "{} 解析失败: {message}", path.display())
             }
             ConfigError::UnknownDefault(name) => {
-                write!(f, "[default] provider = \"{name}\"，但 [providers.{name}] 不存在")
+                write!(
+                    f,
+                    "[default] provider = \"{name}\"，但 [providers.{name}] 不存在"
+                )
             }
         }
     }
@@ -129,9 +144,13 @@ pub fn default_provider(root: &RootConfig) -> Result<&ProviderConfig, ConfigErro
 
 fn candidates() -> Vec<PathBuf> {
     [
-        std::env::var("AGENT_PROVIDERS_CONFIG").ok().map(PathBuf::from),
+        std::env::var("AGENT_PROVIDERS_CONFIG")
+            .ok()
+            .map(PathBuf::from),
         Some(PathBuf::from("providers.toml")),
-        std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config/agent/providers.toml")),
+        std::env::var("HOME")
+            .ok()
+            .map(|h| PathBuf::from(h).join(".config/agent/providers.toml")),
     ]
     .into_iter()
     .flatten()
@@ -144,14 +163,20 @@ fn load_from(candidates: &[PathBuf]) -> Result<RootConfig, ConfigError> {
             return parse_file(path);
         }
     }
-    Err(ConfigError::NotFound { tried: candidates.to_vec() })
+    Err(ConfigError::NotFound {
+        tried: candidates.to_vec(),
+    })
 }
 
 fn parse_file(path: &Path) -> Result<RootConfig, ConfigError> {
-    let text = std::fs::read_to_string(path)
-        .map_err(|e| ConfigError::Io { path: path.to_path_buf(), message: e.to_string() })?;
-    toml::from_str(&text)
-        .map_err(|e| ConfigError::Parse { path: path.to_path_buf(), message: e.to_string() })
+    let text = std::fs::read_to_string(path).map_err(|e| ConfigError::Io {
+        path: path.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    toml::from_str(&text).map_err(|e| ConfigError::Parse {
+        path: path.to_path_buf(),
+        message: e.to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -171,8 +196,10 @@ mod tests {
     fn write_temp(contents: &str) -> (TempFile, PathBuf) {
         static COUNTER: AtomicU32 = AtomicU32::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir()
-            .join(format!("agent-transport-test-{}-{n}.toml", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "agent-transport-test-{}-{n}.toml",
+            std::process::id()
+        ));
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(contents.as_bytes()).unwrap();
         (TempFile(path.clone()), path)
@@ -207,7 +234,10 @@ provider = "deepseek"
         let ds = &root.providers["deepseek"];
         let dump = format!("{ds:?}");
         assert!(!dump.contains(FAKE_KEY), "Debug 输出泄漏了 key: {dump}");
-        assert!(dump.contains(&FAKE_KEY.len().to_string()), "该报长度: {dump}");
+        assert!(
+            dump.contains(&FAKE_KEY.len().to_string()),
+            "该报长度: {dump}"
+        );
         // RootConfig 整体的 Debug（走派生）也一样干净——因为它内部用的还是
         // ProviderConfig 手写的 Debug。
         let root_dump = format!("{root:?}");
@@ -217,7 +247,10 @@ provider = "deepseek"
     #[test]
     fn resolve_key_prefers_env_over_inline() {
         let root: RootConfig = toml::from_str(&sample_toml()).unwrap();
-        assert_eq!(root.providers["deepseek"].resolve_key().as_deref(), Some(FAKE_KEY));
+        assert_eq!(
+            root.providers["deepseek"].resolve_key().as_deref(),
+            Some(FAKE_KEY)
+        );
 
         // api_key_env 指向的变量没设时，回落到「未配置」，不会误读别的变量。
         let kimi = &root.providers["kimi"];

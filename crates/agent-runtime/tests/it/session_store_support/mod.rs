@@ -17,7 +17,10 @@ use agent_runtime::SessionStoreError;
 pub fn temp_path(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("agent-runtime-it-session-store-{name}-{}-{n}.jsonl", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "agent-runtime-it-session-store-{name}-{}-{n}.jsonl",
+        std::process::id()
+    ))
 }
 
 pub type Errors = Arc<Mutex<Vec<SessionStoreError>>>;
@@ -26,7 +29,9 @@ pub type Errors = Arc<Mutex<Vec<SessionStoreError>>>;
 pub fn collecting_on_error() -> (Errors, impl Fn(SessionStoreError) + Send + Sync + 'static) {
     let errors: Errors = Arc::new(Mutex::new(Vec::new()));
     let sink = errors.clone();
-    (errors, move |e: SessionStoreError| sink.lock().unwrap().push(e))
+    (errors, move |e: SessionStoreError| {
+        sink.lock().unwrap().push(e)
+    })
 }
 
 /// 最小值类型：`i64` 包一层新类型——`AtomValue` 是外部 trait，`tests/` 下每个文件都是

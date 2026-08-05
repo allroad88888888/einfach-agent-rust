@@ -34,19 +34,27 @@ use agent_core::{
     AgentActivity, AgentId, AgentNode, AgentTree, ChildConfig, Event, Session, TurnStatus,
     UndoReport,
 };
-use support::{provider_done_end_turn, provider_done_end_turn_for, provider_done_tool_use_for, user_input_event, user_input_for};
+use support::{
+    provider_done_end_turn, provider_done_end_turn_for, provider_done_tool_use_for,
+    user_input_event, user_input_for,
+};
 
 fn root() -> AgentId {
     AgentId::root()
 }
 
 fn cfg() -> ChildConfig {
-    ChildConfig { tools_allowed: vec![Arc::from("srv:fs/read")] }
+    ChildConfig {
+        tools_allowed: vec![Arc::from("srv:fs/read")],
+    }
 }
 
 fn find<'a>(tree: &'a AgentTree, id: &AgentId) -> &'a AgentNode {
     tree.nodes.iter().find(|n| &n.id == id).unwrap_or_else(|| {
-        panic!("agent_tree() 里没有 {id:?}，节点里的 id 有：{:?}", tree.nodes.iter().map(|n| &n.id).collect::<Vec<_>>())
+        panic!(
+            "agent_tree() 里没有 {id:?}，节点里的 id 有：{:?}",
+            tree.nodes.iter().map(|n| &n.id).collect::<Vec<_>>()
+        )
     })
 }
 
@@ -56,10 +64,18 @@ fn find<'a>(tree: &'a AgentTree, id: &AgentId) -> &'a AgentNode {
 fn assert_activity_matches_status(activity: &AgentActivity, status: &TurnStatus) {
     match status {
         TurnStatus::Idle => {
-            assert_eq!(activity, &AgentActivity::Idle, "Idle 应映射成 AgentActivity::Idle");
+            assert_eq!(
+                activity,
+                &AgentActivity::Idle,
+                "Idle 应映射成 AgentActivity::Idle"
+            );
         }
         TurnStatus::Thinking => {
-            assert_eq!(activity, &AgentActivity::Thinking, "Thinking 应映射成 AgentActivity::Thinking");
+            assert_eq!(
+                activity,
+                &AgentActivity::Thinking,
+                "Thinking 应映射成 AgentActivity::Thinking"
+            );
         }
         TurnStatus::ToolsPending => {
             assert!(
@@ -70,7 +86,9 @@ fn assert_activity_matches_status(activity: &AgentActivity, status: &TurnStatus)
         TurnStatus::Done { truncated } => {
             assert_eq!(
                 activity,
-                &AgentActivity::Done { truncated: *truncated },
+                &AgentActivity::Done {
+                    truncated: *truncated
+                },
                 "Done{{truncated}} 应原样带过来"
             );
         }
@@ -130,7 +148,10 @@ fn spawning_two_children_yields_three_nodes_in_stable_order() {
     let second = s.agent_tree();
     let ids_first: Vec<AgentId> = first.nodes.iter().map(|n| n.id.clone()).collect();
     let ids_second: Vec<AgentId> = second.nodes.iter().map(|n| n.id.clone()).collect();
-    assert_eq!(ids_first, ids_second, "两次调用 agent_tree() 的节点顺序必须逐个相同");
+    assert_eq!(
+        ids_first, ids_second,
+        "两次调用 agent_tree() 的节点顺序必须逐个相同"
+    );
 
     // 具体顺序：root 在前、字典序（跟 `Session::live_agents()` 的裁决同一句话）。
     assert_eq!(ids_first, vec![root(), a1, a2]);
@@ -144,7 +165,11 @@ fn spawning_two_children_yields_three_nodes_in_stable_order() {
 fn root_activity_is_thinking_right_after_the_first_message() {
     let mut s = Session::new(root());
     let _ = s.step(user_input_event("帮我读一下 a.txt"));
-    assert_eq!(s.status(), TurnStatus::Thinking, "fixture 前提：驱动到了 Thinking");
+    assert_eq!(
+        s.status(),
+        TurnStatus::Thinking,
+        "fixture 前提：驱动到了 Thinking"
+    );
 
     let tree = s.agent_tree();
     let node = find(&tree, &root());
@@ -174,8 +199,16 @@ fn a_child_running_a_tool_shows_up_as_working() {
     let child = s.spawn_child(&root(), cfg()).unwrap();
 
     let _ = s.step(user_input_for(&child, "子任务：读文件"));
-    let _ = s.step(provider_done_tool_use_for(&child, s.epoch(), &[("call_1", "srv:fs/read")]));
-    assert_eq!(s.status_of(&child), TurnStatus::ToolsPending, "fixture 前提");
+    let _ = s.step(provider_done_tool_use_for(
+        &child,
+        s.epoch(),
+        &[("call_1", "srv:fs/read")],
+    ));
+    assert_eq!(
+        s.status_of(&child),
+        TurnStatus::ToolsPending,
+        "fixture 前提"
+    );
 
     let tree = s.agent_tree();
     let node = find(&tree, &child);
@@ -209,7 +242,11 @@ fn a_child_that_finishes_its_turn_shows_up_as_done() {
 
     let _ = s.step(user_input_for(&child, "子任务"));
     let _ = s.step(provider_done_end_turn_for(&child, s.epoch(), "干完了"));
-    assert_eq!(s.status_of(&child), TurnStatus::Done { truncated: false }, "fixture 前提");
+    assert_eq!(
+        s.status_of(&child),
+        TurnStatus::Done { truncated: false },
+        "fixture 前提"
+    );
 
     let tree = s.agent_tree();
     let node = find(&tree, &child);
@@ -224,8 +261,13 @@ fn a_cancelled_child_shows_up_as_failed() {
 
     // 016 验收原文「取消在任意状态下都生效」——从 Idle 直接 Cancel 就够造出 Failed，
     // 不需要先把它推进 Thinking/ToolsPending。
-    let _ = s.step(Event::Cancel { agent: child.clone() });
-    assert!(matches!(s.status_of(&child), TurnStatus::Failed(_)), "fixture 前提");
+    let _ = s.step(Event::Cancel {
+        agent: child.clone(),
+    });
+    assert!(
+        matches!(s.status_of(&child), TurnStatus::Failed(_)),
+        "fixture 前提"
+    );
 
     let tree = s.agent_tree();
     let node = find(&tree, &child);
@@ -250,7 +292,10 @@ fn undo_of_the_spawn_turn_drops_the_child_from_the_tree() {
 
     let before = s.agent_tree();
     assert_eq!(before.nodes.len(), 2, "root + 子");
-    assert!(before.nodes.iter().any(|n| n.id == child), "撤销之前子在树上");
+    assert!(
+        before.nodes.iter().any(|n| n.id == child),
+        "撤销之前子在树上"
+    );
 
     // 三条 entry（user_input / spawn_child / user_input）全在同一个 root turn 里
     // （028 的决策 5：子 agent 继承 turn_id），所以一次 `undo_turn` 该把三条一起退。
@@ -263,7 +308,11 @@ fn undo_of_the_spawn_turn_drops_the_child_from_the_tree() {
     assert!(!s.is_live(&child), "spawn 被撤了，子不再活着");
 
     let after = s.agent_tree();
-    assert_eq!(after.nodes.len(), 1, "被撤的子 agent 不再出现在 agent_tree() 里");
+    assert_eq!(
+        after.nodes.len(),
+        1,
+        "被撤的子 agent 不再出现在 agent_tree() 里"
+    );
     assert_eq!(after.nodes[0].id, root());
     assert!(
         after.nodes.iter().all(|n| n.id != child),
@@ -303,10 +352,17 @@ fn root_task_is_the_first_message_and_survives_a_second_turn() {
     let mut s = Session::new(root());
     let _ = s.step(user_input_event("第一句"));
     let _ = s.step(provider_done_end_turn(s.epoch(), "答完了"));
-    assert_eq!(s.status(), TurnStatus::Done { truncated: false }, "fixture 前提：先走完一轮");
+    assert_eq!(
+        s.status(),
+        TurnStatus::Done { truncated: false },
+        "fixture 前提：先走完一轮"
+    );
 
     let first_turn_tree = s.agent_tree();
-    assert_eq!(find(&first_turn_tree, &root()).task, Some("第一句".to_string()));
+    assert_eq!(
+        find(&first_turn_tree, &root()).task,
+        Some("第一句".to_string())
+    );
 
     // 开第二轮、说第二句——task 仍然是第一句，不随后续消息改变。
     s.begin_turn();
@@ -328,7 +384,10 @@ fn child_task_is_its_own_spawn_message_not_roots() {
     let _ = s.step(user_input_for(&child, "子任务：分析日志"));
 
     let tree = s.agent_tree();
-    assert_eq!(find(&tree, &root()).task, Some("root 自己的第一句".to_string()));
+    assert_eq!(
+        find(&tree, &root()).task,
+        Some("root 自己的第一句".to_string())
+    );
     assert_eq!(
         find(&tree, &child).task,
         Some("子任务：分析日志".to_string()),

@@ -32,7 +32,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
-use agent_server::{AgentServer, BootstrapOptions, ServerConfig, ToolTableSpec, bootstrap, default_bind_addr};
+use agent_server::{
+    AgentServer, BootstrapOptions, ServerConfig, ToolTableSpec, bootstrap, default_bind_addr,
+};
 use agent_transport::Client;
 
 #[tokio::main]
@@ -40,13 +42,20 @@ async fn main() {
     // 内置工具的路径监狱根——每个 session 实际锁在 `tools_root/<session-id>/`
     // 之内（`SessionTemplate::open_spec` 现造），跟 agent-cli 一样锁在启动时
     // 的当前工作目录，只是多一层子目录避免不同 session 互相踩脚。
-    let tools_root = std::env::current_dir().unwrap_or_else(|e| fail(&format!("拿不到当前工作目录: {e}"))).join(".agent-server-tools");
+    let tools_root = std::env::current_dir()
+        .unwrap_or_else(|e| fail(&format!("拿不到当前工作目录: {e}")))
+        .join(".agent-server-tools");
 
     let assembled = bootstrap(BootstrapOptions {
         tools_root,
         default_sessions_dir: None,
-        tools: ToolTableSpec::Full { spawn_limits: AgentLimits::default() },
-        system: vec![SystemChunk { label: Arc::from("base"), text: Arc::from("你是一个简洁、诚实的助手。") }],
+        tools: ToolTableSpec::Full {
+            spawn_limits: AgentLimits::default(),
+        },
+        system: vec![SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("你是一个简洁、诚实的助手。"),
+        }],
         client: Arc::new(Client::new()),
         history_cap: None,
         snapshot_every: None,
@@ -54,7 +63,10 @@ async fn main() {
     })
     .unwrap_or_else(|e| fail(&format!("{e}")));
 
-    let port: u16 = std::env::var("AGENT_SERVER_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let port: u16 = std::env::var("AGENT_SERVER_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
     let addr = default_bind_addr(port).unwrap_or_else(|e| fail(&format!("{e}")));
 
     let provider_name = assembled.provider_name.clone();
@@ -78,7 +90,9 @@ async fn main() {
         "agent-server 监听 http://{}（provider={provider_name} model={model} tools=builtin+shell+spawn，开满档）",
         bound.local_addr(),
     );
-    eprintln!("Ctrl-C 退出。把上面这个地址喂给 packages/web 的 AGENT_SERVER 环境变量（见包内 README）。");
+    eprintln!(
+        "Ctrl-C 退出。把上面这个地址喂给 packages/web 的 AGENT_SERVER 环境变量（见包内 README）。"
+    );
 
     if let Err(e) = bound.serve().await {
         fail(&format!("serve 失败: {e}"));

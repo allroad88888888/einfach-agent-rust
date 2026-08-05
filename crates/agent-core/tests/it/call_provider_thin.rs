@@ -11,7 +11,10 @@ use agent_core::{Effect, Epoch};
 
 #[test]
 fn call_provider_json_keys_are_exactly_agent_and_epoch() {
-    let effect = Effect::CallProvider { agent: support::agent(), epoch: Epoch::START };
+    let effect = Effect::CallProvider {
+        agent: support::agent(),
+        epoch: Epoch::START,
+    };
     let json = serde_json::to_value(&effect).expect("序列化不应失败");
 
     // Effect 是外部打标签（externally tagged）的枚举：顶层只有一个 key

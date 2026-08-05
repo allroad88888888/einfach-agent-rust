@@ -64,15 +64,27 @@ pub enum RunnerEvent {
     /// 即将真的执行一个工具。`request` 是宿主按 002 合并记录的裁决现造的
     /// 「发起时快照」——`tool`/`input` 是模型给的，`location`/`reversibility`
     /// 由 [`crate::tool_table::ToolTable::snapshot`] 按名字查表补全。
-    ToolExecuting { call_id: ToolCallId, request: ToolCallRequest },
+    ToolExecuting {
+        call_id: ToolCallId,
+        request: ToolCallRequest,
+    },
     /// 工具执行完了。`output_len` 是原始（未截断）字节数——截断发生在 core
     /// 边界（决策 19），这里报的是 executor 真正吐出来的长度。
-    ToolExecuted { call_id: ToolCallId, tool: Arc<str>, output_len: usize, is_error: bool },
+    ToolExecuted {
+        call_id: ToolCallId,
+        tool: Arc<str>,
+        output_len: usize,
+        is_error: bool,
+    },
 
     /// 一轮 `CallProvider` 成功收尾：三层判读 + usage + adjustments 一起给宿主。
     /// **每次成功的 provider 调用都发一次**，不是整个 `TurnState` 只发一次——
     /// 重试之后的那次成功调用一样要看得见它自己的 usage 和判读。
-    TurnGuard { usage: TokenUsage, report: GuardReport, adjustments: Vec<Adjustment> },
+    TurnGuard {
+        usage: TokenUsage,
+        report: GuardReport,
+        adjustments: Vec<Adjustment>,
+    },
 
     /// loop 自己发的通报，原样透传——见本文件顶部的判据。
     Notice(Notice),

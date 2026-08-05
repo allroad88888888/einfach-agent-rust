@@ -4,7 +4,7 @@
 //! WindowVerdict}`）验证：十轮全命中不告警、连续三轮 0 命中告警、失明轮不进
 //! 窗口也不打断连续性、cached>prompt 的畸形输入不 panic。
 
-use agent_core::cache::{check_window, TurnHit, WindowParams, WindowVerdict};
+use agent_core::cache::{TurnHit, WindowParams, WindowVerdict, check_window};
 
 #[test]
 fn ten_full_hits_do_not_alert() {
@@ -20,7 +20,7 @@ fn ten_full_hits_do_not_alert() {
         WindowVerdict::Healthy {
             turns,
             hit_percent,
-            low_streak
+            low_streak,
         } => {
             assert_eq!(turns, 10);
             assert_eq!(hit_percent, 100);
@@ -59,16 +59,16 @@ fn blind_turn_does_not_break_the_streak() {
     let history = vec![
         TurnHit::Observed {
             prompt: 1000,
-            cached: 0
+            cached: 0,
         },
         TurnHit::Observed {
             prompt: 1000,
-            cached: 0
+            cached: 0,
         },
         TurnHit::Blind,
         TurnHit::Observed {
             prompt: 1000,
-            cached: 0
+            cached: 0,
         },
     ];
     let verdict = check_window(&history, WindowParams::default());
@@ -91,18 +91,18 @@ fn blind_turns_do_not_occupy_window_slots() {
     let params = WindowParams {
         window: 2,
         low_hit_percent: 50,
-        consecutive_alert: 3
+        consecutive_alert: 3,
     };
     let history = vec![
         TurnHit::Blind,
         TurnHit::Observed {
             prompt: 1000,
-            cached: 1000
+            cached: 1000,
         },
         TurnHit::Blind,
         TurnHit::Observed {
             prompt: 1000,
-            cached: 900
+            cached: 900,
         },
         TurnHit::Blind,
     ];
@@ -129,7 +129,7 @@ fn all_blind_history_is_no_data_not_zero_hit_rate() {
 fn malformed_cached_greater_than_prompt_does_not_panic() {
     let malformed = TurnHit::Observed {
         prompt: 10,
-        cached: 20
+        cached: 20,
     };
     assert_eq!(malformed.hit_percent(), Some(100));
 

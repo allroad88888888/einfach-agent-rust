@@ -19,8 +19,16 @@ pub fn open_backend(
     on_error: impl Fn(SessionStoreError) + Send + Sync + 'static,
 ) -> Box<SessionBackend> {
     match path {
-        Some(p) => Box::new(Jsonl::<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>::new(p, on_error)),
-        None => Box::new(Memory::<agent_core::AtomKey, agent_core::AgentValue, PersistedMeta>::new()),
+        Some(p) => Box::new(Jsonl::<
+            agent_core::AtomKey,
+            agent_core::AgentValue,
+            PersistedMeta,
+        >::new(p, on_error)),
+        None => Box::new(Memory::<
+            agent_core::AtomKey,
+            agent_core::AgentValue,
+            PersistedMeta,
+        >::new()),
     }
 }
 
@@ -36,13 +44,24 @@ mod tests {
 
     #[test]
     fn a_path_opens_a_jsonl_backend_writable_and_loadable() {
-        let path = std::env::temp_dir().join(format!("agent-runtime-open-backend-{}.jsonl", std::process::id()));
+        let path = std::env::temp_dir().join(format!(
+            "agent-runtime-open-backend-{}.jsonl",
+            std::process::id()
+        ));
         let store = open_backend(Some(path.clone()), |_| {});
         let entry = agent_store::Entry {
             seq: 0,
-            meta: PersistedMeta { turn_id: 1, epoch: 0, label: "user_input".to_string(), barrier: false },
+            meta: PersistedMeta {
+                turn_id: 1,
+                epoch: 0,
+                label: "user_input".to_string(),
+                barrier: false,
+            },
             changes: vec![agent_store::Change {
-                key: agent_core::AtomKey::Agent(agent_core::AgentId::root(), agent_core::Slot::TurnsUsed),
+                key: agent_core::AtomKey::Agent(
+                    agent_core::AgentId::root(),
+                    agent_core::Slot::TurnsUsed,
+                ),
                 prev: agent_core::AgentValue::U64(0),
                 next: agent_core::AgentValue::U64(1),
             }],

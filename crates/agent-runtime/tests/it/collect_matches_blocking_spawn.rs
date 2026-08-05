@@ -52,7 +52,12 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
     // **越具体的 needle 越靠前**：root 每一跳的请求体都含着此前全部 call_id
     // （tool_call_id 回填），只有按「最新那个」先判才认得出是第几跳。
     let server = RoutedServer::start(vec![
-        Route { needle: "call_collect_a", delay: Duration::ZERO, status: 200, lines: sse_text("收工：A 说三行") },
+        Route {
+            needle: "call_collect_a",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("收工：A 说三行"),
+        },
         Route {
             needle: "call_status",
             delay: Duration::ZERO,
@@ -65,7 +70,12 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
             status: 200,
             lines: sse_tool_call("call_status", &status_wire, "{}"),
         },
-        Route { needle: "TASKCOLLECT", delay: Duration::ZERO, status: 200, lines: sse_text(ANSWER) },
+        Route {
+            needle: "TASKCOLLECT",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text(ANSWER),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
@@ -74,7 +84,10 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
@@ -82,8 +95,15 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());
-    assert_eq!(results.len(), 3, "spawn + status + collect 各一条：{results:#?}");
-    assert!(results[0].1.contains("root/a1"), "第一条该是后台 spawn 回的 agent_id：{results:#?}");
+    assert_eq!(
+        results.len(),
+        3,
+        "spawn + status + collect 各一条：{results:#?}"
+    );
+    assert!(
+        results[0].1.contains("root/a1"),
+        "第一条该是后台 spawn 回的 agent_id：{results:#?}"
+    );
     assert!(
         results[1].1.contains("root/a1") && results[1].1.contains("Done"),
         "collect 之前 status 该已经看到 A 干完了（这条测的是「立刻」的前提）：{results:#?}"
@@ -101,8 +121,18 @@ fn blocking_run(tag: &str) -> String {
     let spawn_wire = wire_tool_name(agent_runtime::SPAWN_TOOL);
 
     let server = RoutedServer::start(vec![
-        Route { needle: "call_fg_a", delay: Duration::ZERO, status: 200, lines: sse_text("收工：A 说三行") },
-        Route { needle: "TASKCOLLECT", delay: Duration::ZERO, status: 200, lines: sse_text(ANSWER) },
+        Route {
+            needle: "call_fg_a",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text("收工：A 说三行"),
+        },
+        Route {
+            needle: "TASKCOLLECT",
+            delay: Duration::ZERO,
+            status: 200,
+            lines: sse_text(ANSWER),
+        },
         Route {
             needle: "kickoff",
             delay: Duration::ZERO,
@@ -111,7 +141,10 @@ fn blocking_run(tag: &str) -> String {
         },
     ]);
 
-    let tools = ToolTable::builtin().with_spawn(AgentLimits::default()).with_status().with_collect();
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_status()
+        .with_collect();
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
@@ -119,7 +152,11 @@ fn blocking_run(tag: &str) -> String {
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());
-    assert_eq!(results.len(), 1, "阻塞 spawn 只有一条 tool_result：{results:#?}");
+    assert_eq!(
+        results.len(),
+        1,
+        "阻塞 spawn 只有一条 tool_result：{results:#?}"
+    );
     assert!(!results[0].2);
     results[0].1.clone()
 }
@@ -134,8 +171,15 @@ fn collect_hands_over_a_finished_background_childs_answer_at_once() {
 
     // 「立刻」的操作证据：子只被调用过一次（collect 没有把它再驱动一轮），而且
     // 它答完的时刻**早于** root 发出 status 那一跳——collect 无从等起。
-    let child_calls = server.calls().into_iter().filter(|c| c.needle == "TASKCOLLECT").count();
-    assert_eq!(child_calls, 1, "子该只跑一次；collect 是领结果，不是再跑一遍");
+    let child_calls = server
+        .calls()
+        .into_iter()
+        .filter(|c| c.needle == "TASKCOLLECT")
+        .count();
+    assert_eq!(
+        child_calls, 1,
+        "子该只跑一次；collect 是领结果，不是再跑一遍"
+    );
     let child = server.call("TASKCOLLECT").expect("子该被调用");
     let status_hop = server.call("call_status").expect("status 那一跳该发出去");
     assert!(
@@ -159,5 +203,8 @@ fn and_it_is_byte_for_byte_what_blocking_spawn_would_have_returned() {
     let (background, _events, _server) = background_run("collect-vs-blocking-bg");
     let blocking = blocking_run("collect-vs-blocking-fg");
 
-    assert_eq!(background, blocking, "spawn(bg)+collect 和阻塞 spawn 该回同一份正文");
+    assert_eq!(
+        background, blocking,
+        "spawn(bg)+collect 和阻塞 spawn 该回同一份正文"
+    );
 }

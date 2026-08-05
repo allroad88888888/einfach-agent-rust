@@ -68,10 +68,15 @@ fn host_tools_value() -> AgentValue {
 fn a_snapshot_with_host_tools_restores_every_field_of_every_declaration() {
     let snapshot = vec![(AtomKey::Agent(root(), Slot::HostTools), host_tools_value())];
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| unknown.push(k.clone()))
-        .expect("合法快照该能恢复");
+    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+        unknown.push(k.clone())
+    })
+    .expect("合法快照该能恢复");
 
-    assert!(unknown.is_empty(), "HostTools 是这一版认识的槽位，不该报进 on_unknown_key");
+    assert!(
+        unknown.is_empty(),
+        "HostTools 是这一版认识的槽位，不该报进 on_unknown_key"
+    );
     let restored = session.host_tools();
     assert_eq!(restored.len(), 2);
 
@@ -101,15 +106,30 @@ fn the_declaration_survives_a_serde_roundtrip_byte_for_byte() {
     let primitives = session.primitives();
 
     let text = serde_json::to_string(&primitives).expect("红线 3：primitive 的值必须全部可序列化");
-    let back: Vec<(AtomKey, AgentValue)> = serde_json::from_str(&text).expect("自己写出来的快照必须读得回来");
-    assert_eq!(serde_json::to_string(&back).unwrap(), text, "快照两次序列化必须逐字节相同");
+    let back: Vec<(AtomKey, AgentValue)> =
+        serde_json::from_str(&text).expect("自己写出来的快照必须读得回来");
+    assert_eq!(
+        serde_json::to_string(&back).unwrap(),
+        text,
+        "快照两次序列化必须逐字节相同"
+    );
 
     // 顺带钉住「声明真的在快照里」——上面那句对一份空快照也成立。
     let key = AtomKey::Agent(root(), Slot::HostTools);
-    let value = back.into_iter().find(|(k, _)| *k == key).map(|(_, v)| v).expect("快照里该有 HostTools");
-    assert_eq!(value, host_tools_value(), "往返回来的值必须跟写进去的那份相等");
+    let value = back
+        .into_iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, v)| v)
+        .expect("快照里该有 HostTools");
+    assert_eq!(
+        value,
+        host_tools_value(),
+        "往返回来的值必须跟写进去的那份相等"
+    );
     assert!(
-        serde_json::to_string(&value).unwrap().contains("按客户 ID 查 CRM 档案"),
+        serde_json::to_string(&value)
+            .unwrap()
+            .contains("按客户 ID 查 CRM 档案"),
         "描述得真的在落盘字节里，不是靠某个运行时 registry 现取：{value:?}"
     );
 }
@@ -121,7 +141,10 @@ fn the_declaration_survives_a_serde_roundtrip_byte_for_byte() {
 fn an_old_session_without_the_key_falls_back_to_no_injection() {
     let session = Session::restore(root(), None, Vec::new(), 0, 0, 100, &mut |_| {})
         .expect("全新会话，没有任何快照/日志，该能正常建出来");
-    assert!(session.host_tools().is_empty(), "默认值必须是「没有任何注入」");
+    assert!(
+        session.host_tools().is_empty(),
+        "默认值必须是「没有任何注入」"
+    );
 }
 
 /// 全链路往返：真实写一次声明 → 取整段日志 → 喂进一个全新 `Session::restore` →
@@ -137,8 +160,16 @@ fn restoring_a_real_sessions_log_reproduces_its_declaration() {
     assert_eq!(entries[0].meta.label, "declare_host_tools");
 
     let cursor = original.cursor();
-    let restored = Session::restore(root(), None, entries.clone(), cursor, entries.len() as u64, 100, &mut |_| {})
-        .expect("原会话产出的日志必须能被自己重放");
+    let restored = Session::restore(
+        root(),
+        None,
+        entries.clone(),
+        cursor,
+        entries.len() as u64,
+        100,
+        &mut |_| {},
+    )
+    .expect("原会话产出的日志必须能被自己重放");
 
     let (before, after) = (original.host_tools(), restored.host_tools());
     assert_eq!(after.len(), before.len());
@@ -157,8 +188,16 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
     original.declare_host_tools(declaration());
     let entries: Vec<_> = original.history().entries().cloned().collect();
 
-    let restored = Session::restore(root(), None, entries.clone(), 0, entries.len() as u64, 100, &mut |_| {})
-        .expect("游标为 0 的日志是合法的（全部可 redo）");
+    let restored = Session::restore(
+        root(),
+        None,
+        entries.clone(),
+        0,
+        entries.len() as u64,
+        100,
+        &mut |_| {},
+    )
+    .expect("游标为 0 的日志是合法的（全部可 redo）");
     assert!(
         restored.host_tools().is_empty(),
         "游标在声明之前 = 那一步还没发生，恢复出来的会话不该认得那些工具"
@@ -166,8 +205,15 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
 
     // 正对照：同一份日志、游标在声明之后，工具就该在——只断言上面那一句的话，
     // 一个「从来不恢复任何声明」的实现同样会绿。
-    let with_cursor_at_the_end =
-        Session::restore(root(), None, entries.clone(), entries.len(), entries.len() as u64, 100, &mut |_| {})
-            .expect("游标在末尾是最普通的那种恢复");
+    let with_cursor_at_the_end = Session::restore(
+        root(),
+        None,
+        entries.clone(),
+        entries.len(),
+        entries.len() as u64,
+        100,
+        &mut |_| {},
+    )
+    .expect("游标在末尾是最普通的那种恢复");
     assert_eq!(with_cursor_at_the_end.host_tools().len(), 2);
 }

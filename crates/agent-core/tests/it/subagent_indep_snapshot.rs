@@ -8,7 +8,7 @@
 
 mod support;
 
-use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, Session, DEFAULT_HISTORY_CAP};
+use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DEFAULT_HISTORY_CAP, Session};
 use support::session::new_session;
 use support::user_input_for;
 
@@ -17,21 +17,36 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     let mut session = new_session();
     let root = session.agent().clone();
     let a1 = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("a1");
     let a2 = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:web/fetch".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:web/fetch".into()],
+            },
+        )
         .expect("a2");
     session.step(user_input_for(&a1, "a1 说话"));
     session.step(user_input_for(&a2, "a2 说话"));
 
     let snap = session.primitives();
-    let agents_present: std::collections::BTreeSet<&AgentId> = snap.iter().map(|(k, _)| k.agent()).collect();
+    let agents_present: std::collections::BTreeSet<&AgentId> =
+        snap.iter().map(|(k, _)| k.agent()).collect();
 
     assert!(agents_present.contains(&root));
     assert!(agents_present.contains(&a1));
     assert!(agents_present.contains(&a2));
-    assert_eq!(snap.len(), 42, "root + a1 + a2，每个 agent 十四个槽位（073 加了 HostTools、064 加了 HostSkills、076 加了 DisabledBuiltins）");
+    assert_eq!(
+        snap.len(),
+        42,
+        "root + a1 + a2，每个 agent 十四个槽位（073 加了 HostTools、064 加了 HostSkills、076 加了 DisabledBuiltins）"
+    );
 }
 
 #[test]
@@ -39,7 +54,12 @@ fn primitives_survive_a_serde_round_trip_unchanged() {
     let mut session = new_session();
     let root = session.agent().clone();
     let a1 = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("a1");
     session.step(user_input_for(&a1, "hello"));
 
@@ -58,10 +78,20 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
     let mut session = new_session();
     let root = session.agent().clone();
     let a1 = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:fs/read".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:fs/read".into()],
+            },
+        )
         .expect("a1");
     let a2 = session
-        .spawn_child(&root, ChildConfig { tools_allowed: vec!["srv:web/fetch".into()] })
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: vec!["srv:web/fetch".into()],
+            },
+        )
         .expect("a2");
     session.step(user_input_for(&a1, "a1 说话"));
     session.step(user_input_for(&a2, "a2 说话"));
@@ -82,8 +112,19 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
     )
     .expect("恢复不该拒绝一份自己刚生成的落盘件");
 
-    assert!(unknown_keys.is_empty(), "本版本生成的日志不该出现『不认识的键』");
-    assert_eq!(restored.live_agents(), session.live_agents(), "恢复后活着的 agent 集合要完整");
+    assert!(
+        unknown_keys.is_empty(),
+        "本版本生成的日志不该出现『不认识的键』"
+    );
+    assert_eq!(
+        restored.live_agents(),
+        session.live_agents(),
+        "恢复后活着的 agent 集合要完整"
+    );
     assert_eq!(restored.children_of(&root), session.children_of(&root));
-    assert_eq!(restored.primitives(), session.primitives(), "恢复后每个 agent 的每个槽位值都要完整回来");
+    assert_eq!(
+        restored.primitives(),
+        session.primitives(),
+        "恢复后每个 agent 的每个槽位值都要完整回来"
+    );
 }

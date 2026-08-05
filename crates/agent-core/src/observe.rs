@@ -77,7 +77,11 @@ impl Session {
     /// `live_agents` 靠 `ToolsAllowed` 的活性判定，那本身就是被 undo 回滚的槽，
     /// 树跟着退，零专门代码。
     pub fn agent_tree(&self) -> AgentTree {
-        let nodes = self.live_agents().into_iter().map(|id| self.agent_node(id)).collect();
+        let nodes = self
+            .live_agents()
+            .into_iter()
+            .map(|id| self.agent_node(id))
+            .collect();
         AgentTree { nodes }
     }
 
@@ -89,7 +93,13 @@ impl Session {
         let depth = id.depth() as u32;
         let task = first_user_text(&self.messages_of(&id));
         let activity = self.activity_of(&id);
-        AgentNode { id, parent, depth, task, activity }
+        AgentNode {
+            id,
+            parent,
+            depth,
+            task,
+            activity,
+        }
     }
 
     /// [`TurnStatus`] → [`AgentActivity`] 的呈现投影（本文件顶部文档的判据）。
@@ -100,9 +110,13 @@ impl Session {
         match self.status_of(agent) {
             TurnStatus::Idle => AgentActivity::Idle,
             TurnStatus::Thinking => AgentActivity::Thinking,
-            TurnStatus::ToolsPending => AgentActivity::Working { tools: self.pending_tool_names(agent) },
+            TurnStatus::ToolsPending => AgentActivity::Working {
+                tools: self.pending_tool_names(agent),
+            },
             TurnStatus::Done { truncated } => AgentActivity::Done { truncated },
-            TurnStatus::Failed(failure) => AgentActivity::Failed { reason: describe_failure(&failure) },
+            TurnStatus::Failed(failure) => AgentActivity::Failed {
+                reason: describe_failure(&failure),
+            },
         }
     }
 
@@ -158,7 +172,10 @@ mod tests {
     use super::*;
 
     fn user_input(session: &mut Session, agent: &AgentId, text: &str) {
-        let _ = session.step(Event::UserInput { agent: agent.clone(), text: Arc::from(text) });
+        let _ = session.step(Event::UserInput {
+            agent: agent.clone(),
+            text: Arc::from(text),
+        });
     }
 
     /// 单 agent 会话：1 个节点，`parent = None`，`depth = 0`，`task` = 首轮输入，
@@ -236,8 +253,15 @@ mod tests {
                 input: Arc::new(serde_json::json!({"cmd": "echo hi"})),
             }],
             stop: StopReason::ToolUse,
-            usage: TokenUsage { prompt: 10, completion: 5, cached: None },
-            prefix: PrefixImage { segments: Vec::new(), prompt_tokens: None },
+            usage: TokenUsage {
+                prompt: 10,
+                completion: 5,
+                cached: None,
+            },
+            prefix: PrefixImage {
+                segments: Vec::new(),
+                prompt_tokens: None,
+            },
             adjustments: Vec::new(),
         });
 
@@ -245,7 +269,9 @@ mod tests {
         assert_eq!(tree.nodes.len(), 1);
         assert_eq!(
             tree.nodes[0].activity,
-            AgentActivity::Working { tools: vec!["srv:shell/exec".to_string()] }
+            AgentActivity::Working {
+                tools: vec!["srv:shell/exec".to_string()]
+            }
         );
     }
 
@@ -286,6 +312,9 @@ mod tests {
     #[test]
     fn failure_reason_is_a_readable_string() {
         assert_eq!(describe_failure(&Failure::Cancelled), "cancelled");
-        assert_eq!(describe_failure(&Failure::Provider(ErrorClass::Auth)), "provider error: Auth");
+        assert_eq!(
+            describe_failure(&Failure::Provider(ErrorClass::Auth)),
+            "provider error: Auth"
+        );
     }
 }

@@ -37,7 +37,9 @@ pub fn render_mcp_status(status: &McpStatus) -> String {
 /// 三态可用性 → （状态词, 可选细节）。connected 带工具数，其余带原因。
 fn describe(availability: &Availability) -> (&'static str, Option<String>) {
     match availability {
-        Availability::Connected { tool_count } => ("connected", Some(format!("{tool_count} 个工具"))),
+        Availability::Connected { tool_count } => {
+            ("connected", Some(format!("{tool_count} 个工具")))
+        }
         Availability::Unavailable { reason } => ("unavailable", Some(reason.clone())),
         Availability::Unsupported { reason } => ("unsupported", Some(reason.clone())),
     }
@@ -53,7 +55,10 @@ mod tests {
 
     #[test]
     fn empty_status_tells_how_to_configure() {
-        let out = render_mcp_status(&McpStatus { servers: vec![], tool_names: vec![] });
+        let out = render_mcp_status(&McpStatus {
+            servers: vec![],
+            tool_names: vec![],
+        });
         assert!(out.contains("没有配置"), "实际: {out}");
     }
 
@@ -65,7 +70,10 @@ mod tests {
                 ServerStatus::unavailable("broken", "连接失败: 子进程起不来"),
                 ServerStatus::unsupported("remote", "远端传输 http 在 M6 未实现"),
             ],
-            tool_names: vec![Arc::from("mcp:everything/echo"), Arc::from("mcp:everything/add")],
+            tool_names: vec![
+                Arc::from("mcp:everything/echo"),
+                Arc::from("mcp:everything/add"),
+            ],
         };
         let out = render_mcp_status(&status);
         assert!(out.contains("everything  connected"), "实际: {out}");
@@ -82,7 +90,10 @@ mod tests {
     #[test]
     fn tools_are_grouped_under_their_own_server() {
         let status = McpStatus {
-            servers: vec![ServerStatus::connected("a", 1), ServerStatus::connected("b", 1)],
+            servers: vec![
+                ServerStatus::connected("a", 1),
+                ServerStatus::connected("b", 1),
+            ],
             tool_names: vec![Arc::from("mcp:a/x"), Arc::from("mcp:b/y")],
         };
         let out = render_mcp_status(&status);

@@ -84,9 +84,17 @@ pub(crate) fn run_effect(
         Effect::CallProvider { agent, epoch } => {
             Dispatched::Call(provider_call::start(session, ctx, tx.clone(), agent, epoch))
         }
-        Effect::ExecuteTool { agent, call_id, tool, input, epoch } => {
+        Effect::ExecuteTool {
+            agent,
+            call_id,
+            tool,
+            input,
+            epoch,
+        } => {
             if &*tool == SPAWN_TOOL && ctx.tools.declares(SPAWN_TOOL) {
-                return spawn_tool::intercept(session, ctx, subtree, &agent, call_id, &input, epoch);
+                return spawn_tool::intercept(
+                    session, ctx, subtree, &agent, call_id, &input, epoch,
+                );
             }
             // collect 同款截获（053）：它读的是**泵的记账**（`Subtree` 的 detached
             // 名单与 stash），executor 连这张表的存在都不知道。两条出路：子已经跑完
@@ -94,7 +102,9 @@ pub(crate) fn run_effect(
             // 的 `call_id` 上、返回 `Nothing`，父那个槽保持 `Pending` 等收割回写
             // ——**跟前台 spawn 逐字同一条路**，只是绑定的时机由模型自己选。
             if &*tool == COLLECT_TOOL && ctx.tools.declares(COLLECT_TOOL) {
-                return collect_tool::intercept(session, ctx, subtree, &agent, call_id, &input, epoch);
+                return collect_tool::intercept(
+                    session, ctx, subtree, &agent, call_id, &input, epoch,
+                );
             }
             // status 同款截获（051）：它要读的是**整棵会话的 agent 树**
             // （`Session::agent_tree`），executor 够不着 `Session`。跟上面两条不同
@@ -108,7 +118,8 @@ pub(crate) fn run_effect(
             // skill 激活/停用同款截获（039）：它们改会话状态（写 `SkillsActive`），
             // executor 够不着 `Session`。宿主没声明（没开 skill）就不截获，模型凭空
             // 猜出来的这个名字跟别的不存在的工具走同一条路（`unknown_tool`）。
-            if (&*tool == SKILL_ACTIVATE || &*tool == SKILL_DEACTIVATE) && ctx.tools.declares(&tool) {
+            if (&*tool == SKILL_ACTIVATE || &*tool == SKILL_DEACTIVATE) && ctx.tools.declares(&tool)
+            {
                 return skill::intercept(session, ctx, &agent, call_id, &tool, &input, epoch);
             }
             // 027：发起时快照在这里造一次，`Irreversible` 的立刻登记——记录点
@@ -174,7 +185,13 @@ fn start_mcp(
     request: ToolCallRequest,
     epoch: Epoch,
 ) -> Dispatched {
-    ctx.emit(&agent, RunnerEvent::ToolExecuting { call_id: call_id.clone(), request: request.clone() });
+    ctx.emit(
+        &agent,
+        RunnerEvent::ToolExecuting {
+            call_id: call_id.clone(),
+            request: request.clone(),
+        },
+    );
     let call = mcp_call::start(
         tx.clone(),
         Arc::clone(&ctx.mcp),
@@ -187,4 +204,3 @@ fn start_mcp(
     );
     Dispatched::McpCall(call)
 }
-

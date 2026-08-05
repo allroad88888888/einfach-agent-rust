@@ -86,7 +86,14 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
-    resume(session, ctx, Event::UserInput { agent: root, text: Arc::from(user_input) })
+    resume(
+        session,
+        ctx,
+        Event::UserInput {
+            agent: root,
+            text: Arc::from(user_input),
+        },
+    )
 }
 
 /// 从一项已发生的事件继续驱动会话。
@@ -94,7 +101,6 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
 /// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
 /// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
 pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event) -> TurnStatus {
-
     // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
     // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
     // 断开——在飞与否由下面这张表回答，不是由 channel 的连接状态回答。
@@ -236,7 +242,9 @@ fn speak_for_root_on_cancel(
     *seen = true;
     let root_in_flight = calls.iter().any(|call| &call.agent == root);
     if !root_in_flight && !session.status().is_terminal() {
-        pending.push_back(Event::Cancel { agent: root.clone() });
+        pending.push_back(Event::Cancel {
+            agent: root.clone(),
+        });
     }
 }
 
@@ -256,9 +264,17 @@ fn receive(
                 ctx.emit(&delta.agent, delta.event);
             }
         }
-        Ok(IoMsg::Done { agent, result, blocks, stop, usage }) => {
+        Ok(IoMsg::Done {
+            agent,
+            result,
+            blocks,
+            stop,
+            usage,
+        }) => {
             if let Some(call) = take_call(calls, &agent) {
-                pending.push_back(provider_call::finish(ctx, call, result, blocks, stop, usage));
+                pending.push_back(provider_call::finish(
+                    ctx, call, result, blocks, stop, usage,
+                ));
             }
         }
         Ok(IoMsg::Gone { agent }) => {
@@ -270,7 +286,12 @@ fn receive(
         // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
         // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
         // 返回 `None` 同款。
-        Ok(IoMsg::McpDone { agent, call_id, content, is_error }) => {
+        Ok(IoMsg::McpDone {
+            agent,
+            call_id,
+            content,
+            is_error,
+        }) => {
             if let Some(call) = mcp_call::take(mcp_calls, &agent, &call_id) {
                 pending.push_back(mcp_call::finish(ctx, call, content, is_error));
             }

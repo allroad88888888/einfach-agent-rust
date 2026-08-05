@@ -30,7 +30,9 @@ impl CliProcess {
         if let Some(session) = session_path {
             cmd.arg("--session").arg(session);
         }
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         let mut child = cmd.spawn().expect("spawn agent-cli binary");
         let stdin = child.stdin.take().expect("cli stdin");
@@ -42,7 +44,12 @@ impl CliProcess {
         spawn_byte_reader(stdout_pipe, Arc::clone(&stdout));
         spawn_byte_reader(stderr_pipe, Arc::clone(&stderr));
 
-        CliProcess { child, stdin, stdout, stderr }
+        CliProcess {
+            child,
+            stdin,
+            stdout,
+            stderr,
+        }
     }
 
     /// 写一行到子进程 stdin（自动补 `\n`），立刻 flush。
@@ -58,7 +65,11 @@ impl CliProcess {
     /// 对子进程发信号（`sig` 形如 `"-INT"`、`"-9"`），走系统 `kill` 命令而不是
     /// 引入 libc 依赖——效果跟真实 Ctrl-C / `kill -9` 完全一样。
     pub fn send_signal(&self, sig: &str) {
-        Command::new("kill").arg(sig).arg(self.pid().to_string()).status().expect("send signal to cli process");
+        Command::new("kill")
+            .arg(sig)
+            .arg(self.pid().to_string())
+            .status()
+            .expect("send signal to cli process");
     }
 
     pub fn stdout_snapshot(&self) -> String {

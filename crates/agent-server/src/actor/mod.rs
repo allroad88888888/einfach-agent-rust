@@ -131,7 +131,12 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
 
     match ready_rx.recv() {
         Ok(Ok(cancel)) => {
-            let handle = SessionHandle { canceller: CancelHandle::new(cmd_tx, cancel), events: events_tx, tree, pending_tools };
+            let handle = SessionHandle {
+                canceller: CancelHandle::new(cmd_tx, cancel),
+                events: events_tx,
+                tree,
+                pending_tools,
+            };
             Ok(SpawnedActor { handle, join, died })
         }
         Ok(Err(reason)) => {
@@ -140,7 +145,9 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
         }
         Err(_) => {
             let _ = join.join();
-            Err(OpenError("actor 线程异常退出，未能确认启动状态".to_string()))
+            Err(OpenError(
+                "actor 线程异常退出，未能确认启动状态".to_string(),
+            ))
         }
     }
 }

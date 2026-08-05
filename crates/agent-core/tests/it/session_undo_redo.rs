@@ -38,7 +38,10 @@ fn undoing_a_whole_turn_restores_every_primitive_and_recomputes_every_derived() 
 
     assert_eq!(
         report,
-        UndoReport::Applied { entries: 3, turn_id: 2 },
+        UndoReport::Applied {
+            entries: 3,
+            turn_id: 2
+        },
         "begin_turn + user_input + provider_done 三条都属于 turn 2"
     );
     assert_eq!(s.primitives(), after_turn_one, "所有 primitive 逐值回退");
@@ -68,7 +71,13 @@ fn redo_turn_is_the_exact_inverse_of_undo_turn() {
     assert!(matches!(s.undo_turn(), UndoReport::Applied { .. }));
     let report = s.redo_turn();
 
-    assert_eq!(report, UndoReport::Applied { entries: 3, turn_id: 2 });
+    assert_eq!(
+        report,
+        UndoReport::Applied {
+            entries: 3,
+            turn_id: 2
+        }
+    );
     assert_eq!(s.primitives(), before_undo, "redo 之后逐值回到原样");
     assert_eq!(s.cursor(), cursor_before);
     assert!(!s.tools_converged(), "derived 也跟着回来了");
@@ -95,7 +104,11 @@ fn consecutive_undos_walk_turn_by_turn_and_then_report_nothing() {
         }
     }
     assert_eq!(s.primitives(), fresh, "退到底就是开局那份状态");
-    assert_eq!(s.undo_turn(), UndoReport::Nothing, "到头了要明确报，不 panic");
+    assert_eq!(
+        s.undo_turn(),
+        UndoReport::Nothing,
+        "到头了要明确报，不 panic"
+    );
 }
 
 /// 020 的屏障接上真日志：宿主标记过 `Irreversible` 的那次调用，它的结果落地那一条
@@ -118,7 +131,10 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
 
     assert_eq!(
         report,
-        UndoReport::Blocked { entries: 1, barrier_seq },
+        UndoReport::Blocked {
+            entries: 1,
+            barrier_seq
+        },
         "屏障之上的那一条已经退了，屏障本身停在门口"
     );
     assert_eq!(s.cursor(), cursor_before - 1);
@@ -129,7 +145,13 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
     );
 
     // 幂等：再问一次还是同样的答案，History 不记「已经问过了」。
-    assert_eq!(s.undo_turn(), UndoReport::Blocked { entries: 0, barrier_seq });
+    assert_eq!(
+        s.undo_turn(),
+        UndoReport::Blocked {
+            entries: 0,
+            barrier_seq
+        }
+    );
     assert_eq!(s.cursor(), cursor_before - 1, "游标一动不动");
 }
 
@@ -137,7 +159,8 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
 /// 不可逆操作。
 #[test]
 fn undo_turn_force_crosses_exactly_one_barrier() {
-    let mut s = session_with_pending_tools(&[("call_1", "srv:shell/exec"), ("call_2", "srv:shell/exec")]);
+    let mut s =
+        session_with_pending_tools(&[("call_1", "srv:shell/exec"), ("call_2", "srv:shell/exec")]);
     s.mark_irreversible(ToolCallId::new("call_1"));
     s.mark_irreversible(ToolCallId::new("call_2"));
 
@@ -150,19 +173,28 @@ fn undo_turn_force_crosses_exactly_one_barrier() {
     // 普通 undo：撞上最近那条屏障，一条都退不动。
     assert_eq!(
         s.undo_turn(),
-        UndoReport::Blocked { entries: 0, barrier_seq: second_barrier }
+        UndoReport::Blocked {
+            entries: 0,
+            barrier_seq: second_barrier
+        }
     );
 
     // 强制：越过第二条，接着走到第一条又停下。
     assert_eq!(
         s.undo_turn_force(),
-        UndoReport::Blocked { entries: 1, barrier_seq: first_barrier },
+        UndoReport::Blocked {
+            entries: 1,
+            barrier_seq: first_barrier
+        },
         "一次确认只放行一条"
     );
 
     // 再强制一次：越过第一条，这一轮剩下的条目一路退完。
     let report = s.undo_turn_force();
-    assert!(matches!(report, UndoReport::Applied { turn_id: 1, .. }), "{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { turn_id: 1, .. }),
+        "{report:?}"
+    );
     assert_eq!(s.status(), TurnStatus::Idle);
 }
 

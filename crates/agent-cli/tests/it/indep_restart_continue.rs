@@ -27,14 +27,30 @@ fn restarting_the_same_session_path_continues_the_conversation_and_undo_still_wo
         ]);
         let providers = scratch.write_providers_toml(&server.base_url());
         let mut cli = CliProcess::spawn(&providers, Some(&session));
-        assert!(cli.wait_for("输入一句话开始对话", T), "会话 A 启动横幅超时：{}", cli.combined_output());
+        assert!(
+            cli.wait_for("输入一句话开始对话", T),
+            "会话 A 启动横幅超时：{}",
+            cli.combined_output()
+        );
 
         cli.send_line("alpha message");
-        assert!(cli.wait_for("[本轮完成]", T), "会话 A 第一轮没完成：{}", cli.combined_output());
+        assert!(
+            cli.wait_for("[本轮完成]", T),
+            "会话 A 第一轮没完成：{}",
+            cli.combined_output()
+        );
         cli.send_line("beta message");
-        assert!(cli.wait_for("[本轮完成]", T), "会话 A 第二轮没完成：{}", cli.combined_output());
+        assert!(
+            cli.wait_for("[本轮完成]", T),
+            "会话 A 第二轮没完成：{}",
+            cli.combined_output()
+        );
         cli.send_line("/quit");
-        assert!(cli.wait_exit(T).is_some(), "会话 A 该干净退出：{}", cli.combined_output());
+        assert!(
+            cli.wait_exit(T).is_some(),
+            "会话 A 该干净退出：{}",
+            cli.combined_output()
+        );
         assert_eq!(server.bodies().len(), 2, "会话 A 该恰好发生两次网络请求");
     }
 
@@ -43,25 +59,56 @@ fn restarting_the_same_session_path_continues_the_conversation_and_undo_still_wo
     let server_b = FakeServer::start(vec![Script::Immediate(sse::text_reply("gamma reply"))]);
     let providers_b = scratch.write_providers_toml(&server_b.base_url());
     let mut cli_b = CliProcess::spawn(&providers_b, Some(&session));
-    assert!(cli_b.wait_for("[会话已恢复]", T), "该看到恢复横幅：{}", cli_b.combined_output());
+    assert!(
+        cli_b.wait_for("[会话已恢复]", T),
+        "该看到恢复横幅：{}",
+        cli_b.combined_output()
+    );
 
     cli_b.send_line("gamma message");
-    assert!(cli_b.wait_for("[本轮完成]", T), "会话 B 新一轮没完成：{}", cli_b.combined_output());
+    assert!(
+        cli_b.wait_for("[本轮完成]", T),
+        "会话 B 新一轮没完成：{}",
+        cli_b.combined_output()
+    );
 
     let bodies_b = server_b.bodies();
     assert_eq!(bodies_b.len(), 1, "会话 B 该恰好发生一次网络请求");
     let req3 = &bodies_b[0];
-    assert!(req3.contains("alpha message"), "该带上会话 A 第一轮的输入：{req3}");
-    assert!(req3.contains("turn one reply"), "该带上会话 A 第一轮的回复：{req3}");
-    assert!(req3.contains("beta message"), "该带上会话 A 第二轮的输入：{req3}");
-    assert!(req3.contains("turn two reply"), "该带上会话 A 第二轮的回复：{req3}");
+    assert!(
+        req3.contains("alpha message"),
+        "该带上会话 A 第一轮的输入：{req3}"
+    );
+    assert!(
+        req3.contains("turn one reply"),
+        "该带上会话 A 第一轮的回复：{req3}"
+    );
+    assert!(
+        req3.contains("beta message"),
+        "该带上会话 A 第二轮的输入：{req3}"
+    );
+    assert!(
+        req3.contains("turn two reply"),
+        "该带上会话 A 第二轮的回复：{req3}"
+    );
     assert!(req3.contains("gamma message"), "该带上新一轮的输入：{req3}");
 
     // /undo 在 B 里仍工作——undo 栈是从盘上重建的。
     cli_b.send_line("/undo");
-    assert!(cli_b.wait_for("[已撤销]", T), "undo 栈该从磁盘恢复：{}", cli_b.combined_output());
-    assert!(cli_b.stdout_snapshot().contains("第 3 轮"), "该退掉刚才在 B 里新开的第 3 轮");
+    assert!(
+        cli_b.wait_for("[已撤销]", T),
+        "undo 栈该从磁盘恢复：{}",
+        cli_b.combined_output()
+    );
+    assert!(
+        cli_b.stdout_snapshot().contains("第 3 轮"),
+        "该退掉刚才在 B 里新开的第 3 轮"
+    );
 
     cli_b.send_line("/quit");
-    assert!(cli_b.wait_exit(T).is_some(), "会话 B 该干净退出：{}", cli_b.combined_output());
+    assert!(
+        cli_b.wait_exit(T).is_some(),
+        "会话 B 该干净退出：{}",
+        cli_b.combined_output()
+    );
 }

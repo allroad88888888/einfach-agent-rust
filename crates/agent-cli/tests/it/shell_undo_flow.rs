@@ -37,7 +37,10 @@ fn undo_then_undo_force_through_the_real_cli_functions() {
     let dir = support::temp_dir("shell-undo-flow");
     let marker = dir.join("ran.marker");
 
-    let port = support::spawn_scripted_server(vec![hop1_shell_call(marker.to_str().unwrap()), hop2_end_turn()]);
+    let port = support::spawn_scripted_server(vec![
+        hop1_shell_call(marker.to_str().unwrap()),
+        hop2_end_turn(),
+    ]);
     let mut ctx = support::build_ctx_with_shell(port, &dir);
     let mut session = Session::new(AgentId::root());
 
@@ -50,9 +53,16 @@ fn undo_then_undo_force_through_the_real_cli_functions() {
     // 的那条 entry）和它之前的全部留着——`UndoReport::Blocked` 的文档原话：
     // 「entries 是已经回滚掉的条数（比屏障新的那些）」。
     let messages_before = session.messages().len();
-    assert_eq!(messages_before, 4, "用户提问 + 助手 ToolUse + 助手 ToolResult + 助手收尾文本");
+    assert_eq!(
+        messages_before, 4,
+        "用户提问 + 助手 ToolUse + 助手 ToolResult + 助手收尾文本"
+    );
     undo::undo(&mut session, &mut ctx);
-    assert_eq!(session.messages().len(), 3, "只退掉屏障之后那一条（hop2 的收尾回复）");
+    assert_eq!(
+        session.messages().len(),
+        3,
+        "只退掉屏障之后那一条（hop2 的收尾回复）"
+    );
 
     // `agent_cli::undo::undo_force`：`/undo!`，真的越过。
     undo::undo_force(&mut session, &mut ctx);

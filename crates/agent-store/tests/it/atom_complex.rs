@@ -17,10 +17,17 @@ fn complex_dependency_network() {
     let b = store.create_atom(num(2.0));
     let c = store.create_atom(num(3.0));
 
-    let ab_sum = store.create_derived_ctx(move |args| num(args.get(a).as_number().unwrap() + args.get(b).as_number().unwrap()));
-    let bc_product = store.create_derived_ctx(move |args| num(args.get(b).as_number().unwrap() * args.get(c).as_number().unwrap()));
+    let ab_sum = store.create_derived_ctx(move |args| {
+        num(args.get(a).as_number().unwrap() + args.get(b).as_number().unwrap())
+    });
+    let bc_product = store.create_derived_ctx(move |args| {
+        num(args.get(b).as_number().unwrap() * args.get(c).as_number().unwrap())
+    });
     let complex = store.create_derived_ctx(move |args| {
-        num(args.get(ab_sum).as_number().unwrap() * args.get(bc_product).as_number().unwrap() - args.get(a).as_number().unwrap())
+        num(
+            args.get(ab_sum).as_number().unwrap() * args.get(bc_product).as_number().unwrap()
+                - args.get(a).as_number().unwrap(),
+        )
     });
 
     assert_eq!(store.get(ab_sum).as_number(), Some(3.0));
@@ -111,18 +118,27 @@ fn multi_layer_writable_writes() {
     );
 
     assert_eq!(store.get(full).as_text(), Some("Zhang-San".to_string()));
-    assert_eq!(store.get(greeting).as_text(), Some("Hello, Zhang-San!".to_string()));
+    assert_eq!(
+        store.get(greeting).as_text(),
+        Some("Hello, Zhang-San!".to_string())
+    );
 
     store.set(full, txt("Li-Si"));
     assert_eq!(store.get(first).as_text(), Some("Li".to_string()));
     assert_eq!(store.get(last).as_text(), Some("Si".to_string()));
-    assert_eq!(store.get(greeting).as_text(), Some("Hello, Li-Si!".to_string()));
+    assert_eq!(
+        store.get(greeting).as_text(),
+        Some("Hello, Li-Si!".to_string())
+    );
 
     store.set(greeting, txt("Hello, Wang-Wu!"));
     assert_eq!(store.get(first).as_text(), Some("Wang".to_string()));
     assert_eq!(store.get(last).as_text(), Some("Wu".to_string()));
     assert_eq!(store.get(full).as_text(), Some("Wang-Wu".to_string()));
-    assert_eq!(store.get(greeting).as_text(), Some("Hello, Wang-Wu!".to_string()));
+    assert_eq!(
+        store.get(greeting).as_text(),
+        Some("Hello, Wang-Wu!".to_string())
+    );
 }
 
 /// atom.complex.test.ts «带有副作用的写入操作» — write fn reads via
@@ -191,8 +207,11 @@ fn selective_notification_on_indirect_deps() {
     let a = store.create_atom(num(1.0));
     let b = store.create_atom(num(2.0));
 
-    let derived_a = store.create_derived_ctx(move |args| num(args.get(a).as_number().unwrap() * 2.0));
-    let derived_ab = store.create_derived_ctx(move |args| num(args.get(a).as_number().unwrap() + args.get(b).as_number().unwrap()));
+    let derived_a =
+        store.create_derived_ctx(move |args| num(args.get(a).as_number().unwrap() * 2.0));
+    let derived_ab = store.create_derived_ctx(move |args| {
+        num(args.get(a).as_number().unwrap() + args.get(b).as_number().unwrap())
+    });
 
     let calls_a = Rc::new(Cell::new(0u32));
     let calls_ab = Rc::new(Cell::new(0u32));
