@@ -47,6 +47,13 @@ pub fn resolve_remote_tool(
     call_id: ToolCallId,
     output: RemoteToolOutput,
 ) -> Result<TurnStatus, RemoteToolResultError> {
+    if ctx.pending_remote_tools.pending.iter().any(|pending| {
+        pending.agent == agent
+            && pending.call_id == call_id
+            && crate::transient_source_policy::is_transient_source(&pending.request.tool)
+    }) {
+        return Err(RemoteToolResultError { agent, call_id });
+    }
     let pending = ctx
         .take_remote_tool(&agent, &call_id)
         .ok_or_else(|| RemoteToolResultError {

@@ -88,9 +88,12 @@ pub(crate) fn reap(session: &mut Session, ctx: &mut RunnerCtx, subtree: &mut Sub
             // `agents` 一定含它自己（`live_subtree_leaf_first` 的形状），减掉它
             // 就是后代数。`saturating_sub` 是防御性的：一条告警不值得为一个将来
             // 可能变的实现细节留一条 panic 路径。
-            Ok(report) => OrphanFate::Despawned {
-                descendants: report.agents.len().saturating_sub(1),
-            },
+            Ok(report) => {
+                ctx.discard_remote_tools_for_agents(&report.agents);
+                OrphanFate::Despawned {
+                    descendants: report.agents.len().saturating_sub(1),
+                }
+            }
             // 拆不掉（子树之外还有读者，`DespawnRefused::StillRead`）：状态一个
             // 字节没改，这个子会以活着的状态跨过这一轮。照样喊一声——静默的话
             // 下一轮会冒出一个来历不明的活 agent。

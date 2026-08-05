@@ -5,9 +5,8 @@
 //! 是块不是角色——**把它编码成第三个 role 是本文件的活**（docs/ADAPTER.md）。
 //!
 //! 两处刻意的取舍，都写在这里而不是散在各家 `encode` 里：
-//! - **`Thinking` 块不回传**。三家的 `reasoning_content` 都是「只出」的观测
-//!   （DeepSeek 实测放回请求上下文会被拒；Kimi/GLM 没有反例但也没有证据证明
-//!   安全），保守起见统一不把历史里的思考块塞回 wire。
+//! - 默认不回传 `Thinking`。DeepSeek 的 thinking tool-call continuation 是唯一
+//!   例外，由 adapter 显式选择 [`history_with_tool_reasoning`]；Kimi/GLM 仍走默认。
 //! - **`ToolResult.is_error` 不进 wire**。OpenAI 系的 tool 消息没有这个字段，
 //!   而往 content 里塞前缀等于改语义（adapter 明确不做的事）——错误信息本来
 //!   就在 content 里。
@@ -59,10 +58,20 @@ pub struct EncodedHistory {
 
 /// 历史消息 → wire 消息数组（不含 system），按调用方给出的图片能力编码。
 pub fn history_with_image_support(messages: &[Message], supports_images: bool) -> EncodedHistory {
+    history(messages, supports_images, false)
+}
+
+/// DeepSeek thinking-mode tool continuation: replay reasoning only on the assistant
+/// message that owns tool calls. Other messages and providers keep the default omission.
+pub fn history_with_tool_reasoning(messages: &[Message], supports_images: bool) -> EncodedHistory {
+    history(messages, supports_images, true)
+}
+
+fn history(messages: &[Message], supports_images: bool, tool_reasoning: bool) -> EncodedHistory {
     let mut out = Vec::with_capacity(messages.len());
     let mut dropped_images = 0;
     for msg in messages {
-        dropped_images += push_message(msg, supports_images, &mut out);
+        dropped_images += push_message(msg, supports_images, tool_reasoning, &mut out);
     }
     EncodedHistory {
         messages: out,
@@ -70,8 +79,15 @@ pub fn history_with_image_support(messages: &[Message], supports_images: bool) -
     }
 }
 
-fn push_message(msg: &Message, supports_images: bool, out: &mut Vec<Value>) -> usize {
+fn push_message(
+    msg: &Message,
+    supports_images: bool,
+    tool_reasoning: bool,
+    out: &mut Vec<Value>,
+) -> usize {
     let mut text = String::new();
+    let mut reasoning = String::new();
+    let mut saw_reasoning = false;
     let mut content = Vec::new();
     let mut tool_calls = Vec::new();
     let mut results = Vec::new();
@@ -89,8 +105,10 @@ fn push_message(msg: &Message, supports_images: bool, out: &mut Vec<Value>) -> u
                     content.push(json!({"type": "text", "text": &**t}));
                 }
             }
-            // 思考不回传，见模块注释。
-            ContentBlock::Thinking(_) => {}
+            ContentBlock::Thinking(value) => {
+                saw_reasoning = true;
+                reasoning.push_str(value);
+            }
             ContentBlock::Image { reference, .. } if supports_images => content.push(json!({
                 "type": "image_url",
                 "image_url": {"url": &**reference},
@@ -135,6 +153,9 @@ fn push_message(msg: &Message, supports_images: bool, out: &mut Vec<Value>) -> u
         );
         if !tool_calls.is_empty() {
             m.insert("tool_calls".into(), Value::Array(tool_calls));
+            if tool_reasoning && saw_reasoning && msg.role == Role::Assistant {
+                m.insert("reasoning_content".into(), json!(reasoning));
+            }
         }
         out.push(Value::Object(m));
     }
@@ -235,6 +256,34 @@ mod tests {
             history[2],
             json!({"role": "tool", "tool_call_id": "call_1", "content": "晴"})
         );
+    }
+
+    #[test]
+    fn tool_reasoning_is_opt_in_and_kept_per_message() {
+        let source = |id: &str, reasoning: &str| {
+            msg(
+                Role::Assistant,
+                vec![
+                    ContentBlock::Thinking(Arc::from(reasoning)),
+                    ContentBlock::ToolUse {
+                        id: ToolCallId::new(id),
+                        name: Arc::from("web:source/read"),
+                        input: Arc::new(json!({})),
+                    },
+                ],
+            )
+        };
+        let messages = [
+            source("call_1", "pull bytes"),
+            source("call_2", "read bytes"),
+        ];
+        let encoded = history_with_tool_reasoning(&messages, false).messages;
+        assert_eq!(encoded[0]["reasoning_content"], json!("pull bytes"));
+        assert_eq!(encoded[1]["reasoning_content"], json!("read bytes"));
+
+        let default = history_with_image_support(&messages, false).messages;
+        assert!(default[0].get("reasoning_content").is_none());
+        assert!(default[1].get("reasoning_content").is_none());
     }
 
     /// 空消息不产出空壳——发出去只会让对方 400。

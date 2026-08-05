@@ -77,6 +77,12 @@ impl ToolTable {
         }
     }
 
+    /// 不向模型声明任何工具的隔离档。公开改写等不可信输出路径必须从空表开始，
+    /// 不能先装部署期工具再靠名称黑名单回减。
+    pub fn empty() -> Self {
+        Self::from_specs(Vec::new())
+    }
+
     /// 075：`with_*` 系列 `push` 进 `specs` 的唯一入口。**名字已经在表里 → 整条丢弃**
     /// （不 `push`），返回 `false` 交给调用方——`with_mcp`/`with_host_tools` 靠这个
     /// 返回值判断要不要顺带 `insert` 对应的可逆性映射，不然会造出「表里没有对应 spec

@@ -50,6 +50,7 @@ mod http_undo_redo_cancel_endpoints;
 mod image_upload_upstream;
 mod nonvisual_image_input;
 mod queued_input_is_processed_in_order;
+mod recovered_pending_tools_fail_closed;
 mod registry_ids_lists_open_sessions;
 mod same_session_two_subscribers_see_the_same_sequence;
 mod spawn_over_http_interleaves_child_agent_frames;

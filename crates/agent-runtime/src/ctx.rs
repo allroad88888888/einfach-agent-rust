@@ -79,6 +79,9 @@ pub struct RunnerCtx {
     pub(crate) remote_tool_timeout: Duration,
     pub(crate) guard_history: Vec<TurnHit>,
     pub(crate) pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools,
+    /// Reserved source inputs/results live only here.  This vault is process-local and has no
+    /// serialization surface; durable core state contains policy placeholders only.
+    pub(crate) transient_sources: crate::transient_source_vault::TransientSourceVault,
     /// 011 的端口，027 上岗：`persist::sync` 每条命令之后转发进它，
     /// `persist::recover` 启动时从它读回。
     pub(crate) session_store: Box<SessionBackend>,
@@ -145,6 +148,7 @@ impl RunnerCtx {
             remote_tool_timeout: DEFAULT_REMOTE_TOOL_TIMEOUT,
             guard_history: Vec::new(),
             pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools::default(),
+            transient_sources: crate::transient_source_vault::TransientSourceVault::default(),
             session_store,
             persisted_seq: None,
             snapshot_every: DEFAULT_SNAPSHOT_EVERY,

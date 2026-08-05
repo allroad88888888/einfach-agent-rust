@@ -36,22 +36,22 @@ pub(in crate::http) async fn claim(
             disposition: ToolClaimDisposition::Claimed,
             agent: body.agent,
             tool_call_id: body.tool_call_id,
-            request: grant.request,
+            request: Some(grant.request),
             revision: grant.revision,
         })),
         RemoteToolClaimDecision::AlreadyClaimedByYou(grant) => Ok(Json(ToolClaimResponse {
             disposition: ToolClaimDisposition::AlreadyClaimedByYou,
             agent: body.agent,
             tool_call_id: body.tool_call_id,
-            request: grant.request,
+            request: Some(grant.request),
             revision: grant.revision,
         })),
-        RemoteToolClaimDecision::ClaimedByOther(grant) => Ok(Json(ToolClaimResponse {
+        RemoteToolClaimDecision::ClaimedByOther { revision } => Ok(Json(ToolClaimResponse {
             disposition: ToolClaimDisposition::Ignored,
             agent: body.agent,
             tool_call_id: body.tool_call_id,
-            request: grant.request,
-            revision: grant.revision,
+            request: None,
+            revision,
         })),
         RemoteToolClaimDecision::Terminal(receipt) => Err(terminal_error(&receipt)),
         RemoteToolClaimDecision::StatusNotRetained => Err(ApiError::remote_tool(

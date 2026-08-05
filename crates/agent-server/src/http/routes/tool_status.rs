@@ -111,7 +111,9 @@ fn active_status(
         retention_floor_revision: None,
         agent: active.agent.clone(),
         tool_call_id: active.call_id.clone(),
-        request: Some(active.request.clone()),
+        // `request` 是 raw tool input；状态投影只用于 Java 对账，不能成为第二条
+        // 读取源码参数的通道。raw request 仅在 pending/claim 的私有协议体中出现。
+        request: None,
         created_at_unix_ms: unix_ms(active.registered_at),
         updated_at_unix_ms: unix_ms(active.updated_at),
         deadline_at_unix_ms: Some(unix_ms(active.deadline_at)),

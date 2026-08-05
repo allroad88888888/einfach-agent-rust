@@ -15,7 +15,7 @@ const SUBMISSION_ID: &str = "submission-a";
 
 fn browser_action_reply() -> String {
     [
-        r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_browser_1","type":"function","function":{"name":"browser_action","arguments":"{\"action\":\"render_card\"}"}}]},"finish_reason":null}]}"#,
+        r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_browser_1","type":"function","function":{"name":"browser_action","arguments":"{\"action\":\"render_card\",\"token\":\"status-raw-request-canary\"}"}}]},"finish_reason":null}]}"#,
         r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"tool_calls"}]}"#,
         "data: [DONE]",
         "",
@@ -111,6 +111,11 @@ async fn v2_claim_submit_replay_conflict_and_status_are_actor_confirmed() {
     assert_eq!(active["state"], "claimed");
     assert_eq!(active["claimed_by_me"], true);
     assert_eq!(active["revision"], first_claim["revision"]);
+    assert!(active["request"].is_null());
+    assert!(
+        !active.to_string().contains("status-raw-request-canary"),
+        "status projection must not expose raw tool input"
+    );
 
     let result = json!({
         "agent": agent,

@@ -144,6 +144,8 @@ fn main() {
         Ok(None) => Session::new(AgentId::root()),
         Err(e) => fail(&format!("{e}")),
     };
+    let recovered_source_needs_fail_close =
+        agent_runtime::recovered_transient_source_needs_fail_close(&session);
 
     let mut printer = print::EventPrinter::new();
     let mut ctx = RunnerCtx::new(
@@ -203,6 +205,9 @@ fn main() {
     // `agent_runtime::persist::seed_after_recover` 文档「真 bug」一节）。对全新
     // 会话是无害的空操作，不需要在这里分支判断「是不是恢复出来的」。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
+    if recovered_source_needs_fail_close {
+        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+    }
 
     let cancel = ctx.cancel_flag();
     if let Err(e) = ctrlc::set_handler(move || {

@@ -140,6 +140,8 @@ impl RunnerCtx {
                 continue;
             }
             let pending = self.pending_remote_tools.pending.remove(index);
+            self.transient_sources
+                .purge_call(&pending.agent, &pending.call_id);
             let status = if pending.claim_id.is_some() {
                 RemoteToolTerminalStatus::OutcomeUnknown
             } else {
@@ -185,12 +187,42 @@ impl RunnerCtx {
 
     /// 取消、撤回或会话终止后切断未完成远端调用，防止迟到回传写入新 epoch。
     pub fn discard_remote_tools(&mut self) {
+        self.transient_sources.purge_all();
         // 072 第三个必接的变更点。空表时直接返回：`/undo` `/redo` `/cancel` 每次都
         // 会调它一次，绝大多数会话根本没有远端等待，不该为此每条命令都扰动一次投影。
         if self.pending_remote_tools.pending.is_empty() {
             return;
         }
         let discarded = std::mem::take(&mut self.pending_remote_tools.pending);
+        for pending in discarded {
+            self.record_remote_tool_terminal(
+                &pending,
+                RemoteToolTerminalStatus::Cancelled,
+                crate::remote_tool_protocol::RemoteToolTerminalOrigin::Session,
+                None,
+                None,
+            );
+        }
+        self.publish_pending_remote_tools();
+    }
+
+    /// Drop pending calls owned by agents removed during orphan reaping.
+    pub(crate) fn discard_remote_tools_for_agents(&mut self, agents: &[AgentId]) {
+        let mut discarded = Vec::new();
+        let mut index = 0;
+        while index < self.pending_remote_tools.pending.len() {
+            if agents.contains(&self.pending_remote_tools.pending[index].agent) {
+                discarded.push(self.pending_remote_tools.pending.remove(index));
+            } else {
+                index += 1;
+            }
+        }
+        for agent in agents {
+            self.transient_sources.purge_agent(agent);
+        }
+        if discarded.is_empty() {
+            return;
+        }
         for pending in discarded {
             self.record_remote_tool_terminal(
                 &pending,

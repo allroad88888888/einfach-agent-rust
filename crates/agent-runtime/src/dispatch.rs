@@ -82,7 +82,10 @@ pub(crate) fn run_effect(
 ) -> Dispatched {
     match effect {
         Effect::CallProvider { agent, epoch } => {
-            Dispatched::Call(provider_call::start(session, ctx, tx.clone(), agent, epoch))
+            match provider_call::start(session, ctx, tx.clone(), agent, epoch) {
+                Ok(call) => Dispatched::Call(call),
+                Err(event) => Dispatched::Event(event),
+            }
         }
         Effect::ExecuteTool {
             agent,
@@ -164,8 +167,24 @@ pub(crate) fn run_effect(
             // 未知工具路（`ctx.fs.execute` 的 `unknown_tool`），模型看到 `is_error`
             // 自纠——跟同样被编造出来的 `srv:` 名字待遇一致（决策 20 的兜底）。
             if request.location.is_remote() && remotely_declared {
-                ctx.register_remote_tool(agent.clone(), call_id.clone(), epoch, request.clone());
-                ctx.emit(&agent, RunnerEvent::ToolExecuting { call_id, request });
+                let public_request = if crate::transient_source_policy::is_transient_source(&tool) {
+                    crate::transient_source_policy::sanitize_request(&request)
+                } else {
+                    request
+                };
+                ctx.register_remote_tool(
+                    agent.clone(),
+                    call_id.clone(),
+                    epoch,
+                    public_request.clone(),
+                );
+                ctx.emit(
+                    &agent,
+                    RunnerEvent::ToolExecuting {
+                        call_id,
+                        request: public_request,
+                    },
+                );
                 return Dispatched::Nothing;
             }
             Dispatched::Event(tool_exec::execute(ctx, agent, call_id, request, epoch))
@@ -173,6 +192,7 @@ pub(crate) fn run_effect(
         Effect::CancelInFlight { epoch: _ } => {
             ctx.cancel.store(true, Ordering::Relaxed);
             ctx.discard_remote_tools();
+            ctx.transient_sources.purge_all();
             Dispatched::CancelAll
         }
         // `Notice` 没有 agent 字段，也不该有（029 §事件归属：别为多 agent 输出去改

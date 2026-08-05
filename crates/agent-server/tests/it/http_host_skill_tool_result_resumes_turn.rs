@@ -12,7 +12,7 @@ use crate::support::server::{FakeServer, Script};
 
 const CHAT_ID: &str = "host-skill-dispatch";
 const SKILL: &str = "source-diagnostics";
-const SOURCE_TOOL: &str = "web:source/read";
+const SOURCE_TOOL: &str = "web:diagnostic/read";
 const ACTIVATE: &str = "srv:skill/activate";
 const DEACTIVATE: &str = "srv:skill/deactivate";
 
@@ -93,7 +93,7 @@ async fn active_host_skill_tool_uses_pending_result_flow_and_deactivation_revoke
     let upstream = FakeServer::start(vec![
         Script::Immediate(tool_reply(
             "call_before",
-            "web_3Asource_2Fread",
+            "web_3Adiagnostic_2Fread",
             json!({ "path": "before.rs" }),
         )),
         Script::Immediate(support::wire::text_reply("激活前调用已拒绝。")),
@@ -104,7 +104,7 @@ async fn active_host_skill_tool_uses_pending_result_flow_and_deactivation_revoke
         )),
         Script::Immediate(tool_reply(
             "call_source",
-            "web_3Asource_2Fread",
+            "web_3Adiagnostic_2Fread",
             json!({ "path": "src/lib.rs" }),
         )),
         Script::Immediate(support::wire::text_reply("源码读取结果已收到。")),
@@ -115,7 +115,7 @@ async fn active_host_skill_tool_uses_pending_result_flow_and_deactivation_revoke
         )),
         Script::Immediate(tool_reply(
             "call_after",
-            "web_3Asource_2Fread",
+            "web_3Adiagnostic_2Fread",
             json!({ "path": "after.rs" }),
         )),
         Script::Immediate(support::wire::text_reply("停用后调用已拒绝。")),

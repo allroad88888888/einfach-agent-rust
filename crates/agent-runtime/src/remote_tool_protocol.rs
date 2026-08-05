@@ -78,7 +78,7 @@ pub struct RemoteToolClaimRequest {
 pub enum RemoteToolClaimDecision {
     Claimed(RemoteToolClaimGrant),
     AlreadyClaimedByYou(RemoteToolClaimGrant),
-    ClaimedByOther(RemoteToolClaimGrant),
+    ClaimedByOther { revision: u64 },
     Terminal(RemoteToolReceipt),
     StatusNotRetained,
     UnknownToolCall,

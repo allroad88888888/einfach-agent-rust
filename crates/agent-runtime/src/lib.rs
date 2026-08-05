@@ -91,6 +91,16 @@ mod subtree;
 mod tool_exec;
 mod tool_name;
 mod tool_table;
+mod transient_source_completion;
+#[cfg(test)]
+mod transient_source_completion_tests;
+mod transient_source_ingress;
+mod transient_source_policy;
+mod transient_source_prompt;
+mod transient_source_recovery;
+#[cfg(test)]
+mod transient_source_tests;
+mod transient_source_vault;
 
 pub mod ctx;
 pub mod event;
@@ -127,3 +137,4 @@ pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry}
 pub use spawn_tool::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::ToolTable;
+pub use transient_source_recovery::recovered_transient_source_needs_fail_close;

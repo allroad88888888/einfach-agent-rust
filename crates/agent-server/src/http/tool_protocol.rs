@@ -29,7 +29,9 @@ pub(crate) struct ToolClaimResponse {
     pub(crate) disposition: ToolClaimDisposition,
     pub(crate) agent: AgentId,
     pub(crate) tool_call_id: ToolCallId,
-    pub(crate) request: ToolCallRequest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub(crate) request: Option<ToolCallRequest>,
     pub(crate) revision: u64,
 }
 

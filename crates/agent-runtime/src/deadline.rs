@@ -50,11 +50,21 @@ pub(crate) fn sweep(
             continue;
         }
         let call = calls.remove(i);
-        pending.push_back(Event::Timeout {
-            agent: call.agent,
-            epoch: call.epoch,
-            call_id: None,
-        });
+        if call.one_shot {
+            ctx.transient_sources
+                .purge_agent_epoch(&call.agent, call.epoch);
+            pending.push_back(
+                crate::transient_source_completion::provider_completion_failed(
+                    ctx, call.agent, call.epoch,
+                ),
+            );
+        } else {
+            pending.push_back(Event::Timeout {
+                agent: call.agent,
+                epoch: call.epoch,
+                call_id: None,
+            });
+        }
     }
     pending.extend(expired(ctx, now));
 }
@@ -95,7 +105,12 @@ fn expired(ctx: &mut RunnerCtx, now: Instant) -> Vec<Event> {
     ctx.take_expired_remote_tools(now)
         .into_iter()
         .map(|pending| {
-            let error = if pending.claim_id.is_some() {
+            let transient = crate::transient_source_policy::is_transient_source(
+                &pending.request.tool,
+            );
+            let error = if transient {
+                crate::transient_source_policy::SAFE_ERROR.to_owned()
+            } else if pending.claim_id.is_some() {
                 format!(
                     "[remote_tool_outcome_unknown] 远端工具结果超时：宿主已领取 {}，但在 {}s 内没有回传结果",
                     pending.request.tool,

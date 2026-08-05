@@ -223,6 +223,16 @@ pub(super) fn run(
     // 见 `capabilities::record`。
     capabilities::record(&mut ctx, &mut session, &spec, restored);
 
+    // JSONL 能恢复出 core 的 `ToolsPending`，但宿主的 claim/receipt/evidence 都只在
+    // 旧进程内存里；绝不能凭那份旧槽重放工具，也不能让新 actor 因 ctx 没有等待表而
+    // 裸 recv 永久挂住。恢复时直接把整轮取消成终态，清空共享等待投影并发出终态事件。
+    if restored
+        && (agent_runtime::has_unresolved_tool_calls(&session)
+            || agent_runtime::recovered_transient_source_needs_fail_close(&session))
+    {
+        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+    }
+
     let cancel = ctx.cancel_flag();
     if ready_tx.send(Ok(cancel)).is_err() {
         // opener 那边已经不要这个握手结果了（比如它自己被取消/超时放弃了）——

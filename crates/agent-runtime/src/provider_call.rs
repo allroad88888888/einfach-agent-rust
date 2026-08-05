@@ -54,6 +54,11 @@ pub(crate) struct ProviderCall {
     predicted_cache: u32,
     adjustments: Vec<Adjustment>,
     prefix: PrefixImage,
+    /// This request consumed transient source material and must never be retried.
+    pub(crate) one_shot: bool,
+    /// Calls that consumed a transient source overlay suppress live deltas. Their complete
+    /// terminal text is emitted once by `transient_source_completion` after the stream closes.
+    hold_deltas: bool,
 }
 
 /// 起飞：取料 → `encode` → 发前第 1 层 → 起 IO 线程。**不等结果。**
@@ -63,12 +68,25 @@ pub(crate) fn start(
     tx: SyncSender<IoMsg>,
     agent: AgentId,
     epoch: Epoch,
-) -> ProviderCall {
+) -> Result<ProviderCall, Event> {
     // 宿主从状态取料（012，027 换成 `Session` 的读口，029 换成 per-agent 的那
     // 一版）：`imbl::Vector` 不是连续切片，Ingredients 要的是 `&[Message]`，
     // 这里物化一份——克隆的是 `Message`（里面全是 `Arc`），代价是指针拷贝乘
     // 消息数，不是深拷内容（红线 5）。
-    let messages: Vec<agent_core::Message> = session.messages_of(&agent).iter().cloned().collect();
+    let durable_messages: Vec<agent_core::Message> =
+        session.messages_of(&agent).iter().cloned().collect();
+    let prepared = match crate::transient_source_prompt::prepare(
+        &durable_messages,
+        &mut ctx.transient_sources,
+        &agent,
+        epoch,
+    ) {
+        Ok(prepared) => prepared,
+        Err(()) => {
+            ctx.transient_sources.purge_agent_epoch(&agent, epoch);
+            return Err(crate::transient_source_completion::failure(agent, epoch));
+        }
+    };
     let prev_prefix = session.prev_prefix_of(&agent);
     let system = subagent::system_for(session, ctx, &agent);
     let tools = subagent::tools_for(session, ctx, &agent);
@@ -79,7 +97,7 @@ pub(crate) fn start(
     let (late_system, late_tools) = ctx.tools.skill_injection(&active);
     let ing = Ingredients {
         system: &system,
-        messages: &messages,
+        messages: &prepared.messages,
         tools: &tools,
         late_tools: &late_tools,
         late_system: &late_system,
@@ -89,11 +107,30 @@ pub(crate) fn start(
     };
     let Encoded {
         body,
-        prefix,
-        drift,
-        predicted_cache,
-        adjustments,
+        mut prefix,
+        mut drift,
+        mut predicted_cache,
+        mut adjustments,
     } = ctx.provider.encode(&ing);
+    if prepared.one_shot {
+        // Prefix mirrors, drift reports and cache predictions are durable/public metadata.
+        // Re-encode the placeholder history locally so none of them fingerprints the raw
+        // one-shot overlay; only the first body's bytes are sent to the provider.
+        let safe = ctx.provider.encode(&Ingredients {
+            system: &system,
+            messages: &durable_messages,
+            tools: &tools,
+            late_tools: &late_tools,
+            late_system: &late_system,
+            config: &ctx.session_config,
+            intent: RequestIntent::Free,
+            prev_prefix: prev_prefix.as_ref(),
+        });
+        prefix = safe.prefix;
+        drift = safe.drift;
+        predicted_cache = safe.predicted_cache;
+        adjustments = safe.adjustments;
+    }
 
     // 兜底第 1 层：发前比对，花钱之前。M1 恒 `Reuse`——`agent_core::cache`
     // 模块文档：还没有任何一处会有意改前缀。
@@ -115,7 +152,7 @@ pub(crate) fn start(
         ctx.cancel_flag(),
     );
 
-    ProviderCall {
+    Ok(ProviderCall {
         agent,
         epoch,
         deadline: Instant::now() + ctx.provider_timeout,
@@ -123,7 +160,15 @@ pub(crate) fn start(
         predicted_cache,
         adjustments,
         prefix,
-    }
+        one_shot: prepared.one_shot,
+        hold_deltas: prepared.one_shot,
+    })
+}
+
+/// Suppress live deltas only for a call that actually consumed a transient source overlay.
+/// Ordinary source-capable calls keep the established real-time streaming behavior.
+pub(crate) fn gate_delta(call: &mut ProviderCall, event: RunnerEvent) -> Option<RunnerEvent> {
+    if call.hold_deltas { None } else { Some(event) }
 }
 
 /// 落地：把 IO 线程的终态翻译成一个 loop 事件；成功路径顺带装配 `GuardReport`。
@@ -142,8 +187,25 @@ pub(crate) fn finish(
         predicted_cache,
         adjustments,
         prefix,
+        one_shot,
         ..
     } = call;
+    if one_shot {
+        return crate::transient_source_completion::finish(
+            ctx,
+            crate::transient_source_completion::Metadata {
+                agent,
+                epoch,
+                drift,
+                predicted_cache,
+                adjustments,
+                prefix,
+            },
+            result,
+            blocks,
+            stop,
+        );
+    }
     match result {
         Ok(StreamOutcome::Finished) => {
             guard::report_success(
@@ -193,10 +255,17 @@ pub(crate) fn finish(
 /// IO 线程 panic 了（`IoMsg::Gone`）——没留下任何终态消息。按可重试的传输故障
 /// 处理：`agent-transport::read_loop` 对读线程异常退出是同一个判断（它那边归
 /// `StreamOutcome::Broken`）。
-pub(crate) fn thread_gone(agent: AgentId, epoch: Epoch) -> Event {
+pub(crate) fn thread_gone(ctx: &mut RunnerCtx, call: ProviderCall) -> Event {
+    if call.one_shot {
+        ctx.transient_sources
+            .purge_agent_epoch(&call.agent, call.epoch);
+        return crate::transient_source_completion::provider_completion_failed(
+            ctx, call.agent, call.epoch,
+        );
+    }
     Event::ProviderFailed {
-        agent,
-        epoch,
+        agent: call.agent,
+        epoch: call.epoch,
         class: ErrorClass::Retryable,
         message: Arc::from("IO 线程异常退出（未留下终态消息）"),
     }

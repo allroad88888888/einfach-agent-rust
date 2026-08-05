@@ -56,7 +56,7 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
             est_cost_multiple: LATE_SYSTEM_COST_MULTIPLE,
         });
     }
-    let encoded_history = messages::history_with_image_support(ing.messages, SUPPORTS_IMAGES);
+    let encoded_history = messages::history_with_tool_reasoning(ing.messages, SUPPORTS_IMAGES);
     if encoded_history.dropped_images > 0 {
         adjustments.push(Adjustment::ImagesDropped {
             count: u32::try_from(encoded_history.dropped_images).unwrap_or(u32::MAX),

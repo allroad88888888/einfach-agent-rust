@@ -154,6 +154,7 @@ pub(crate) fn resume_after_first_commit(
         // A. 排空待办。FIFO：一批 effect 产出的事件排在当前这批后面，
         //    顺序与 012 的「一代一代喂」完全一致。
         while let Some(event) = pending.pop_front() {
+            let event = crate::transient_source_ingress::prepare(session, ctx, event);
             let source = event.agent().clone();
             let effects = session.step(event);
             persist::sync(ctx, session);
@@ -196,6 +197,7 @@ pub(crate) fn resume_after_first_commit(
         if calls.is_empty() && mcp_calls.is_empty() {
             let status = session.status();
             if status.is_terminal() {
+                ctx.transient_sources.purge_all();
                 persist::maybe_snapshot(ctx, session);
             }
             return status;
@@ -289,8 +291,11 @@ fn receive(
             // 已经被放弃的调用（超时划掉）接着发来的增量：丢。跟 `Session::step`
             // 对过期 epoch 的处理同一条判据——过期回执是正常现象，不是错误，
             // 每条喊一声只会刷屏。
-            if calls.iter().any(|call| call.agent == delta.agent) {
-                ctx.emit(&delta.agent, delta.event);
+            if let Some(call) = calls.iter_mut().find(|call| call.agent == delta.agent) {
+                let agent = call.agent.clone();
+                if let Some(event) = provider_call::gate_delta(call, delta.event) {
+                    ctx.emit(&agent, event);
+                }
             }
         }
         Ok(IoMsg::Done {
@@ -308,7 +313,7 @@ fn receive(
         }
         Ok(IoMsg::Gone { agent }) => {
             if let Some(call) = take_call(calls, &agent) {
-                pending.push_back(provider_call::thread_gone(call.agent, call.epoch));
+                pending.push_back(provider_call::thread_gone(ctx, call));
             }
         }
         // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
