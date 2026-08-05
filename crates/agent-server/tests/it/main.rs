@@ -37,6 +37,7 @@ mod http_post_input_streams_deltas_then_terminal;
 mod http_reconnect_past_buffer_gets_a_gap_frame;
 mod http_reconnect_with_last_event_id_replays_missed_frames;
 mod http_remote_tool_v2_protocol;
+mod http_remote_tool_claim_race_092;
 mod http_session_status_lifecycle;
 mod http_session_template;
 mod http_sessions_handle_closes_all_open_sessions;
