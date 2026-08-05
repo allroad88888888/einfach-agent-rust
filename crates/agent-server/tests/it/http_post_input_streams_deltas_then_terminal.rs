@@ -3,16 +3,15 @@
 //! `GET /sessions/:id` 这条创建-查询链路（issue 031「做什么」小节点名的两个
 //! 会话生命周期端点）。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::{Notice, TurnStatus};
 use agent_server::{Frame, SessionEvent};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn posting_input_then_reading_sse_yields_deltas_then_a_terminal_frame() {

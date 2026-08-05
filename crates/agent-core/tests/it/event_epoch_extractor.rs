@@ -3,8 +3,7 @@
 //! 返回 `Some`，`UserInput`/`Cancel` 返回 `None`。这是 `step` 入口的闸门
 //! 唯一依赖的判定：闸装在一处，不是转移表里每格各判一次。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{Epoch, ErrorClass, Event, StopReason, TokenUsage};
@@ -69,7 +68,8 @@ fn user_input_and_cancel_return_none() {
     assert_eq!(
         Event::UserInput {
             agent: agent.clone(),
-            text: Arc::from("hi")
+            text: Arc::from("hi"),
+            images: Vec::new(),
         }
         .epoch(),
         None,

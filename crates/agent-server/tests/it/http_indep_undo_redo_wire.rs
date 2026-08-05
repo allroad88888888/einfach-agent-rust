@@ -2,13 +2,11 @@
 //! undo(turn) → SSE 出 undo outcome 帧 → 下一轮 input 的上游请求体不含被退
 //! 内容（假上游存请求体断言——027 的证法搬到 HTTP 层）」）。
 
-mod http_indep_support;
-
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::SseClient;
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::SseClient;
 
 fn drain_until_terminal(sse: &mut SseClient) {
     loop {

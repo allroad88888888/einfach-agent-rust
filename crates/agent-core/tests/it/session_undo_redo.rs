@@ -4,11 +4,10 @@
 //!
 //! M1 没有对应文件——这是 026 长出来的能力本身。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentValue, AtomKey, Slot, ToolCallId, TurnStatus, UndoReport};
 
-use support::session::{new_session, session_with_pending_tools};
+use crate::support::session::{new_session, session_with_pending_tools};
 
 /// 跑完一整轮并 `begin_turn`，返回「第一轮刚结束时」的完整快照。
 fn one_finished_turn() -> (agent_core::Session, Vec<(AtomKey, AgentValue)>) {

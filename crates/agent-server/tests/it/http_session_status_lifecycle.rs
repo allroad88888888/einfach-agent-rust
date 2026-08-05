@@ -3,16 +3,15 @@
 //! 200(alive)/404/200(dead——状态本身不是错误,`GET` 就是用来问这个的);命令类
 //! 端点在死会话上报 410,在不存在的 id 上报 404。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::ErrorClass;
 use agent_providers::{Decoded, Encoded, Ingredients, Provider, StreamAccumulator};
 use serde_json::Value;
 
-use support::http_client;
-use support::server::FakeServer;
+use crate::support::http_client;
+use crate::support::server::FakeServer;
 
 /// 跟 `actor_panic_is_reported_dead.rs` 同一招：`encode` 一被调用就 panic，
 /// 不需要真的连网络就能可靠地把 actor 线程打死。

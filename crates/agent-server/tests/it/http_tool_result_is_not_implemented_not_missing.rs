@@ -2,10 +2,9 @@
 //! 202，未知 session 如同其它命令端点一样返回 404。调用槽位的精确校验由 actor
 //! 异步完成，路由不在 HTTP 线程伪造同步成功。
 
-mod support;
-
-use support::http_client;
-use support::server::FakeServer;
+use crate::support;
+use crate::support::http_client;
+use crate::support::server::FakeServer;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn tool_result_endpoint_queues_a_web_result_for_an_existing_session() {
@@ -23,6 +22,15 @@ async fn tool_result_endpoint_queues_a_web_result_for_an_existing_session() {
         Some(body),
     );
     assert_eq!(real_session.status, 202, "{}", real_session.body);
+    assert_eq!(
+        real_session.header("deprecation"),
+        Some("true"),
+        "v1 回传必须明确通知迁移到认领协议"
+    );
+    assert_eq!(
+        real_session.header("x-remote-tool-protocol-deprecated"),
+        Some("v1")
+    );
 
     let unknown_session = http_client::request(
         server.addr,

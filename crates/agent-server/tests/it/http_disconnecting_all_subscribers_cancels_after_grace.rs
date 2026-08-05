@@ -9,15 +9,14 @@
 //! 之前吃过一次这个亏（紧绷的固定 sleep 在独立跑时稳定通过、全量并发跑时偶发
 //! 超时失败）。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::{Failure, Notice, TurnStatus};
 use agent_server::{Frame, ServerConfig, SessionEvent};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 /// provider 永远不自然超时（一分钟，测试不会真的等到这里）——这样「看到
 /// `Cancelled`」只可能来自宽限计时器，不可能是巧合撞上 provider 超时。

@@ -3,8 +3,7 @@
 //! 从原来的 next_seq 继续，不重用被丢弃条目占用过的 seq。
 //! 钉死接口（重建版本）见 `undo_redo_roundtrip.rs` 顶部注释。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{History, Store, UndoOutcome, record_set};
 

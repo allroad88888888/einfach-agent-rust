@@ -5,11 +5,9 @@
 //! executor 本身不截断（lib.rs 文档：截断在 core 边界做），所以这里先验证
 //! executor 返回的是完整原文，再验证过 core 截断函数之后的结果。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn fs_read_output_is_bounded_after_core_truncation() {

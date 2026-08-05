@@ -1,10 +1,8 @@
 //! 可撤回工作区工具的确定性资源预算测试。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const MAX_TEXT_BYTES: usize = 1_048_576;
 

@@ -6,11 +6,10 @@
 //! 真 `kill -9` 的端到端由主会话用 CLI 子进程真跑；这里钉的是
 //! `agent-runtime` 这一层的恢复管道本身是对的。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, Session, TurnStatus, UndoReport};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn plain_turn(text: &'static str) -> ScriptedResponse {
     ScriptedResponse::Sse(vec![

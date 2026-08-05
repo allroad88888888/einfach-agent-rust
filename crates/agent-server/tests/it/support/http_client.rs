@@ -9,26 +9,25 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
-/// 一次简单请求-响应（POST 那几个端点用）：状态码 + headers + 完整 body。
-pub struct HttpResponse {
-    pub status: u16,
-    pub headers: Vec<(String, String)>,
-    pub body: String,
-}
-
-impl HttpResponse {
-    pub fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(name))
-            .map(|(_, v)| v.as_str())
-    }
-}
+use super::http_chunked::{ChunkDecoder, find};
+pub use super::http_response::HttpResponse;
 
 /// 发一个小请求（body 可选），同步读完整个响应。不是流式的——`POST` 那几个
 /// 端点的响应体很小，不值得为它们复用 SSE 那套增量读取。
 pub fn request(addr: SocketAddr, method: &str, path: &str, body: Option<&str>) -> HttpResponse {
-    let mut reader = connect_and_send(addr, method, path, &[], body);
+    request_with_headers(addr, method, path, &[], body)
+}
+
+/// 发一个带额外请求头的小请求。状态查询用它携带认领凭据；凭据不能退回 query，
+/// 否则反向代理的访问日志可能保留它。
+pub fn request_with_headers(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<&str>,
+) -> HttpResponse {
+    let mut reader = connect_and_send(addr, method, path, headers, body);
     let (status, headers) = read_head(&mut reader);
     let body = read_full_body(&mut reader, &headers);
     HttpResponse {
@@ -294,44 +293,6 @@ impl SseReader {
                 return Some(SseEvent { id, data });
             }
             // 纯心跳块，没有 data——继续找下一条。
-        }
-    }
-}
-
-fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|w| w == needle)
-}
-
-#[derive(Default)]
-struct ChunkDecoder {
-    raw: Vec<u8>,
-    decoded: Vec<u8>,
-    done: bool,
-}
-
-impl ChunkDecoder {
-    fn feed(&mut self, bytes: &[u8]) {
-        self.raw.extend_from_slice(bytes);
-        loop {
-            let Some(line_end) = find(&self.raw, b"\r\n") else {
-                return;
-            };
-            let size_str = String::from_utf8_lossy(&self.raw[..line_end]);
-            let Ok(size) = usize::from_str_radix(size_str.trim(), 16) else {
-                self.done = true;
-                return;
-            };
-            let needed = line_end + 2 + size + 2;
-            if self.raw.len() < needed {
-                return;
-            }
-            if size == 0 {
-                self.done = true;
-                return;
-            }
-            self.decoded
-                .extend_from_slice(&self.raw[line_end + 2..line_end + 2 + size]);
-            self.raw.drain(..needed);
         }
     }
 }

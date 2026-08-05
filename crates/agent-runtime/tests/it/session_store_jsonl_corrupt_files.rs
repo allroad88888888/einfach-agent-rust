@@ -10,15 +10,13 @@
 //!   `LoadOutcome::Refused`（**不是** `Absent`：这个身份下明明写过东西，只是这一份
 //!   数据现在读不出来）——不静默丢中段、不加载半份状态。
 
-mod session_store_support;
-
 use std::io::Write;
 
-use agent_store::SessionStore;
 use agent_store::history::{Change, Entry};
+use agent_store::SessionStore;
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::{Jsonl, SessionStoreError};
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 type Backend = Jsonl<String, Val, u32>;
 

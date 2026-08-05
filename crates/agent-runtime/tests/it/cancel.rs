@@ -3,15 +3,14 @@
 //! `Failed(Cancelled)` 终态，且不是靠我们自己的超时机制凑巧撞上（超时预算
 //! 特意设得远大于这条测试的时间尺度）。
 
-mod support;
-
+use crate::support;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, Failure, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 #[test]
 fn ctrl_c_during_call_provider_cancels_the_turn() {

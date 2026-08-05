@@ -4,8 +4,7 @@
 //! 断言逐条对应 M1 那份；`messages_before` 从 0 变成 1（fixture 是驱动出来的，
 //! 用户那条消息已经在历史里），比较的仍然是**增量**。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{
@@ -13,7 +12,7 @@ use agent_core::{
     TurnStatus,
 };
 
-use support::session::thinking_session;
+use crate::support::session::thinking_session;
 
 /// `EndTurn` → `Done { truncated: false }`；回复进历史；`prev_prefix.prompt_tokens`
 /// 用这次的 `usage.prompt` 回填（纯赋值，不是判断）。

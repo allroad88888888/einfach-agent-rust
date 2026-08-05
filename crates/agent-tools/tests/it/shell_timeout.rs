@@ -2,13 +2,11 @@
 //! `timeout_secs` 到点后必须在自己设的时限附近返回 `Err`，`code == "timeout"`，
 //! **不能**傻等到子进程自己跑完（这里子进程是 `sleep 60`）。
 
-mod support;
-
 use std::time::Instant;
 
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn sleep_beyond_timeout_secs_is_err_timeout_within_a_few_seconds() {

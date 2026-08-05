@@ -5,11 +5,10 @@
 //! 唯一的形状变化：M1 直接给 `st.max_retries` 赋值，这里走
 //! `Session::set_max_retries`（红线 2：预算也是 primitive，改它同样要留下 `Entry`）。
 
-mod support;
-
+use crate::support;
 use agent_core::{Effect, ErrorClass, Failure, Notice, TurnStatus};
 
-use support::session::{new_session, thinking_session};
+use crate::support::session::{new_session, thinking_session};
 
 /// `BadRequest`/`Auth`/`Exhausted`/`Unknown` 四个非 `Retryable` 类：立刻
 /// `Failed(Provider(class))`，重试预算完全不消耗——「重试的判断」压根没有走到

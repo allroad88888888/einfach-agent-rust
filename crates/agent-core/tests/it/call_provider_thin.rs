@@ -3,8 +3,7 @@
 //! 内层字段 key 集合恰为 `{agent, epoch}`——出现 `payload`/`body`/`request`
 //! 任何一个都算失败，因为那意味着 core 又想自己组装请求了。
 
-mod support;
-
+use crate::support;
 use std::collections::BTreeSet;
 
 use agent_core::{Effect, Epoch};

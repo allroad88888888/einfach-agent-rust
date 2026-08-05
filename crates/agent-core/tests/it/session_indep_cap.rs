@@ -3,13 +3,11 @@
 //! 返回 `Nothing`，不 panic（cap 裁掉的是已生效区，不会把游标带到一个不存在的
 //! 位置上）。
 
-mod support;
-
 use agent_store::DropEvent;
 
 use agent_core::UndoReport;
-use support::session::new_session;
-use support::{provider_done_end_turn, user_input_event};
+use crate::support::session::new_session;
+use crate::support::{provider_done_end_turn, user_input_event};
 
 #[test]
 fn overflowing_the_cap_reports_oldest_drop_events() {

@@ -5,8 +5,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::Store;
 

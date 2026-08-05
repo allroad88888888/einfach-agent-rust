@@ -12,15 +12,13 @@
 //! 最后 root 照样答完这一轮：四条 tool_result 里三条 `is_error`，`run_turn` 返回
 //! `Done`。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name, Route, RoutedServer,
 };
 
 /// 让 A 有时间答完：第一次 collect 因此走 stash 那条路，第二次才是货真价实的

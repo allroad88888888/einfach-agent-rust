@@ -9,11 +9,10 @@
 //!    `assert_eq!(observe(&s), before)`：所有 primitive 逐值 + epoch + turn_id
 //!    + **日志没多出一条 entry**。最后一项是 M1 没有的那一半。
 
-mod support;
-
+use crate::support;
 use agent_core::{Effect, Notice, ToolCallId, TurnStatus};
 
-use support::session::{Observed, all_statuses, observe, session_at};
+use crate::support::session::{Observed, all_statuses, observe, session_at};
 
 fn assert_violation(effects: &[Effect], expected_status: &TurnStatus) {
     assert_eq!(

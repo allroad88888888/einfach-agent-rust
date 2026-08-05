@@ -2,12 +2,11 @@
 //! 发命令之前订阅（`broadcast` 没有历史重放，见 `SessionHandle::subscribe`
 //! 文档），之后各自收到的事件序列必须逐条相等。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn two_subscribers_of_the_same_session_get_identical_event_sequences() {
@@ -21,7 +20,10 @@ async fn two_subscribers_of_the_same_session_get_identical_event_sequences() {
     let mut sub2 = handle.subscribe();
 
     handle
-        .send(agent_server::Command::Input("hi".to_string()))
+        .send(agent_server::Command::Input {
+            text: "hi".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
 
     let events1 = support::collect_until_terminal(&mut sub1, Duration::from_secs(5)).await;

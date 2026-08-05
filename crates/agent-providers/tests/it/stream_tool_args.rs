@@ -10,8 +10,7 @@
 //! `get_weather`、`{"city": "北京"}`），只是把已知的完整 JSON 切成三段模拟
 //! 流式到达。
 
-mod support;
-
+use crate::support;
 use agent_providers::{Provider, StreamEvent};
 use serde_json::json;
 

@@ -11,8 +11,7 @@
 //!    不是「有这个工具」，是「一个字节都没变」，前缀缓存才接得上）；
 //! 3. 恢复时又带声明 → **直接拒绝**，且错误码能跟「名字写错了」分开。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -23,9 +22,9 @@ use agent_server::{
 };
 use serde_json::{Value, json};
 
-use support::http_client::{self, SseReader};
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client::{self, SseReader};
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 const CHAT_ID: &str = "caps-restart-chat";
 

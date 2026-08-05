@@ -1,14 +1,13 @@
 //! Web 工具的闭环：SSE 派发 `browser_action`，宿主通过 `/tool_result` 回传，
 //! 同一轮才继续第二次 provider 调用。此测试也证明 HTTP 不能直接伪造 epoch。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_server::{Frame, SessionEvent, ToolTableSpec};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 fn browser_action_reply() -> String {
     [

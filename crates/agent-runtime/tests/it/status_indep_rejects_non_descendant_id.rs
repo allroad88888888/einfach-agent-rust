@@ -9,15 +9,13 @@
 //! 两条都该是「回一句话给模型」而不是「掀桌」：被拒的那个 agent 照常收尾、父照常
 //! 拿到结果、整轮照常落 `Done`（003 的哲学，跟 spawn 的提权拒绝一套规矩）。
 
-mod status_indep_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use status_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name,
+use crate::status_indep_support::{
+    build_ctx, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

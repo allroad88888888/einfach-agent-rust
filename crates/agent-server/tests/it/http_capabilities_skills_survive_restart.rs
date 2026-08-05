@@ -11,8 +11,7 @@
 //! 历史里明明写着它读过那段正文）。而且 073 之后有历史的会话再带 `capabilities`
 //! 一律 400，**不存下来就是永久没了**，连「重连时重报一遍」这条退路都不存在。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -20,8 +19,8 @@ use std::time::{Duration, Instant};
 use agent_server::{AgentServer, ServerConfig, SessionTemplate, SessionsHandle};
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 const CHAT_ID: &str = "caps-skill-restart";
 const CRM_BODY: &str = "CRMFLOW_BODY_MARKER_ZX91";

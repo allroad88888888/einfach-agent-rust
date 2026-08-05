@@ -16,16 +16,14 @@
 //! `root/a1` 都发完下一跳了还没回来，并用服务器记的时间窗把这件事断言死。否则
 //! 「兄弟没出现」和「兄弟还没被建出来」在结果上长得一模一样，红线 10 破了也是绿的。
 
-mod status_indep_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use status_indep_support::{
-    Route, RoutedServer, build_ctx, listed_ids, sse_text, sse_tool_calls, temp_dir, tool_result,
-    wire_tool_name,
+use crate::status_indep_support::{
+    build_ctx, listed_ids, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name, Route,
+    RoutedServer,
 };
 
 /// 兄弟那一路的延迟。只要明显长过「root/a1 建孙子 + 读树 + 发下一跳」那一小段

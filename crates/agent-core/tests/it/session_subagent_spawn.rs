@@ -4,8 +4,6 @@
 //! - 「spawn 记账：spawn 后 history 多一条 entry，changes 含子的初始槽位」
 //! - 「深度 4 / 子数 9 被拒：`is_error` 语义的错误返回，不 panic」
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{

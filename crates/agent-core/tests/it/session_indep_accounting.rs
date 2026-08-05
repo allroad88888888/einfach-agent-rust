@@ -7,16 +7,14 @@
 //! `AtomKey` 压根没有对应 derived 的变体（那是 `DerivedKey`，另一张表），新增
 //! `AtomKey`/`Slot` 变体不改这个 match 就编译不过。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::command::meta::{AgentChange, AgentEntry};
 use agent_core::{
     AtomKey, ContentBlock, Role, Slot, SlotState, ToolCallId, ToolCallSlot, TurnStatus,
 };
-use support::session::new_session;
-use support::{
+use crate::support::session::new_session;
+use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
 };
 

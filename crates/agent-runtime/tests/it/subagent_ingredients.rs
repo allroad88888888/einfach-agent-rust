@@ -5,12 +5,11 @@
 //! 断言全部对着**假服务器收到的请求体**做——料对不对的唯一判据是模型看到了什么，
 //! 不是我们内部某个 `Vec` 长什么样（跟 027 用请求体证明 `/undo` 是同一种证明）。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 

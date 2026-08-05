@@ -7,9 +7,7 @@
 //! shell 命令全程只被真正执行了一次（undo/redo/undo! 都是纯粹的原子回滚/
 //! 重放，不会重新跑一次工具）。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::time::Duration;
 
 const T: Duration = Duration::from_secs(10);

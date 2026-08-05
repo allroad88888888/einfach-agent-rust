@@ -11,16 +11,14 @@
 //! 领取顺序是 **B（最快）→ C（中）→ A（最慢）**，跟 spawn 顺序 A,B,C 反着来。
 //! 这正是本里程碑要买的那件事：先收先完成的，别按发出去的顺序死等第一个。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, orphan_warnings, sse_text, sse_tool_call, sse_tool_calls,
-    temp_dir, tool_results, wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, orphan_warnings, sse_text, sse_tool_call, sse_tool_calls, temp_dir, tool_results,
+    wire_tool_name, Route, RoutedServer,
 };
 
 const SLOW: Duration = Duration::from_millis(400);

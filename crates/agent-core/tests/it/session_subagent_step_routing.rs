@@ -3,12 +3,11 @@
 //! 验收对应：「各 agent 的 turn 状态独立（status/槽位/预算 per-agent），epoch 仍是
 //! 会话级」「`turn_id` 由 root 铸造，子 agent 的 entry 继承」。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{AgentId, ChildConfig, Effect, Session, Slot, TurnStatus};
-use support::{provider_done_tool_use_for, tool_result_for, user_input_event, user_input_for};
+use crate::support::{provider_done_tool_use_for, tool_result_for, user_input_event, user_input_for};
 
 fn cfg() -> ChildConfig {
     ChildConfig {

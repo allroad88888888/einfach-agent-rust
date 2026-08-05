@@ -13,19 +13,17 @@
 //! 这样「取消之后还有没有新连接」量的是接入计数，不受挂住连接本身要多久
 //! 才算「服务完」影响。
 
-mod spawn_indep_support;
-
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, AgentLimits, Failure, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{build_ctx, sse_tool_calls, temp_dir, wire_tool_name};
+use crate::spawn_indep_support::{build_ctx, sse_tool_calls, temp_dir, wire_tool_name};
 
 fn drain(stream: &mut TcpStream) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());

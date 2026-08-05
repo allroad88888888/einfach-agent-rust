@@ -5,11 +5,9 @@
 //! `../` 逃逸用不存在的目标：越界检查必须先于存在性检查生效，否则会把
 //! outside_root 误判成 not_found，等于把「root 外是否存在该文件」泄露给调用方。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn assert_outside_root(exec: &ToolExecutor, tool: &str, input: serde_json::Value) {
     let err = exec

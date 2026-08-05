@@ -2,14 +2,13 @@
 //! 发任何数据），`RunnerCtx::provider_timeout` 设成毫秒级，到点该走 016 的
 //! 重试路（`Notice::Retrying`），重试预算耗尽后落 `Failed(Provider(Retryable))`。
 
-mod support;
-
+use crate::support;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ErrorClass, Failure, Notice, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, run_turn};
+use agent_runtime::{run_turn, RunnerEvent};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 #[test]
 fn provider_call_timeout_retries_then_fails() {
@@ -57,9 +56,7 @@ fn provider_call_timeout_retries_then_fails() {
     );
 
     // 超时路径不产出 GuardReport——那一轮压根没收到响应，没有 usage 可对账。
-    assert!(
-        !events
-            .iter()
-            .any(|e| matches!(e, RunnerEvent::TurnGuard { .. }))
-    );
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, RunnerEvent::TurnGuard { .. })));
 }

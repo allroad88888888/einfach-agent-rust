@@ -35,8 +35,7 @@
 //! 已经是倒序，条目内 `changes` 还要再倒序应用 prev；redo 方向 entries 正序，
 //! 条目内 changes 也正序应用 next。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{AtomId, Change, Entry, History, Store, UndoOutcome, record_set};
 

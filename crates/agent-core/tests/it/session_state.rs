@@ -5,11 +5,10 @@
 //! 是一个平结构，「完整状态」只能靠人对着字段清单点名；这里它是
 //! `Session::primitives()` 的返回值，点名的是构图函数。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentValue, AtomKey, Slot, TurnStatus};
 
-use support::session::new_session;
+use crate::support::session::new_session;
 
 /// 开局：`Idle`、空历史、空槽、[`Epoch::START`]、无前缀镜像、下一个消息号是 1、
 /// 轮数与重试计数清零、上限取默认值——逐条对应 M1 的

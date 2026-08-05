@@ -13,8 +13,7 @@
 //! `ctrlc::set_handler` 翻的就是这同一个标志，见该文件顶部注释），不是真的
 //! 发一个 SIGINT。
 
-mod support;
-
+use crate::support;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
@@ -22,7 +21,7 @@ use agent_cli::undo;
 use agent_core::{AgentId, Failure, Role, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 /// 第二跳：普通的一句话回答，跟 `agent-runtime/tests/happy_two_hop.rs` 的
 /// `hop2_end_turn` 同一种形状（无工具调用的纯文本收尾），不是这条测试自己

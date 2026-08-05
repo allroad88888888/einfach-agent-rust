@@ -1,11 +1,9 @@
 //! `srv:fs/rg_search` 的固定规模资源预算：最大用户行/结果参数不能放大为超过
 //! 工具响应上限的无效 JSON，输出顺序也不得依赖文件系统返回顺序。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const FILE_COUNT: usize = 512;
 const MAX_LINE_CHARS: usize = 4_096;

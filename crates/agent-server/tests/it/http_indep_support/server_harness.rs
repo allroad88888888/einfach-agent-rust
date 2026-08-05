@@ -48,6 +48,7 @@ fn template(endpoint: String, tools_root: std::path::PathBuf) -> SessionTemplate
     );
     SessionTemplate {
         provider: Arc::new(DeepSeek),
+        upload_base_url: endpoint.clone(),
         endpoint,
         api_key: "fake-key".to_string(),
         model: Arc::from("deepseek-v4-pro"),

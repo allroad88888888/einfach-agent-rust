@@ -26,15 +26,13 @@
 //! `session_subagent_step_routing.rs` 是同一套打法，那几个文件也是本文件驱动
 //! spawn/undo/多 agent 状态时对照的样板。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{
     AgentActivity, AgentId, AgentNode, AgentTree, ChildConfig, Event, Session, TurnStatus,
     UndoReport,
 };
-use support::{
+use crate::support::{
     provider_done_end_turn, provider_done_end_turn_for, provider_done_tool_use_for,
     user_input_event, user_input_for,
 };

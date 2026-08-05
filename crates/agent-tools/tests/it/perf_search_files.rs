@@ -1,11 +1,9 @@
 //! `srv:fs/search_files` 的固定规模资源预算：大量长路径的结果必须在工具侧保留
 //! 完整 JSON，并受结果数和响应字节数双重限制；不使用 wall-clock 断言。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const FILE_COUNT: usize = 4_096;
 const MAX_RESPONSE_BYTES: usize = 24 * 1024;

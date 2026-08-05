@@ -78,6 +78,7 @@ pub fn user_input_for(agent: &AgentId, text: &str) -> Event {
     Event::UserInput {
         agent: agent.clone(),
         text: Arc::from(text),
+        images: Vec::new(),
     }
 }
 

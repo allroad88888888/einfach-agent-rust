@@ -7,13 +7,11 @@
 //! is_error` 这个结构化字段做权威判定，wire 文本只做「确实带进去了」的佐证）、
 //! 成功那个内容完整不受影响。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

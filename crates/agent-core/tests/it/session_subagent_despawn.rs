@@ -4,12 +4,11 @@
 //! 的内脏才测得出，住在 `src/command/despawn.rs` 的单元测试里。这里测的是三条
 //! 约束里能从外面看见的部分，加上几种拒绝路径。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DespawnRefused, Session, Slot};
-use support::user_input_for;
+use crate::support::user_input_for;
 
 fn cfg() -> ChildConfig {
     ChildConfig {

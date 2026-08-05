@@ -5,12 +5,11 @@
 //! 也接对了」：`undo::undo` 内部会 `persist::sync`，`undo::undo_force` 会额外
 //! 打一行「越过了什么」。
 
-mod support;
-
+use crate::support;
 use agent_cli::undo;
 use agent_core::{AgentId, Session, TurnStatus, UndoReport};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn hop1_shell_call(marker: &str) -> ScriptedResponse {
     let arguments = format!(r#"{{\"cmd\": \"echo hi > {marker}\"}}"#);

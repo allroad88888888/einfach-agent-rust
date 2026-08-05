@@ -6,13 +6,12 @@
 //! agent」不需要另存一份名单。少了这一步，多 agent 会话重启后子树整个消失，
 //! 而快照里那些键会被当成「这一版 schema 不认识的键」报上来。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{AgentEntry, AgentId, AtomKey, ChildConfig, Session, Slot, TurnStatus};
-use support::user_input_event;
-use support::user_input_for;
+use crate::support::user_input_event;
+use crate::support::user_input_for;
 
 fn cfg() -> ChildConfig {
     ChildConfig {

@@ -2,8 +2,7 @@
 //! 倒序应用，prev 链才能咬合、回到 batch 之前的值——顺序反了会错误停在中间值上。
 //! 钉死接口（重建版本）见 `undo_redo_roundtrip.rs` 顶部注释。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{Change, History, Store, UndoOutcome, record_set};
 

@@ -1,11 +1,9 @@
 //! `srv:fs/read` 正常路径（issue 013 验收 1）：全读 / 带 offset / 带
 //! offset+limit，覆盖中文内容与多行文件。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn reads_whole_file() {

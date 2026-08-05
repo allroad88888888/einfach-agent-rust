@@ -4,10 +4,8 @@
 //! `docs/issues/041-mcp-protocol.md` §验收「name 全是 mcp:everything/<t> 形状」
 //! 一条。只测规格，不看实现体。
 
-mod common;
-
 use agent_mcp::{parse_tools_list, translate};
-use common::{everything_tools_list_frame, recorded_result};
+use crate::common::{everything_tools_list_frame, recorded_result};
 
 #[test]
 fn all_translated_names_have_mcp_server_tool_shape() {

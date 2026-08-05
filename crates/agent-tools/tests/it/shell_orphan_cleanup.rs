@@ -5,14 +5,12 @@
 //! 用一个不太可能与别的用例/系统进程撞车的 sleep 秒数；测试收尾无论断言是否
 //! 通过都尝试 `pkill` 兜底，避免脏环境。
 
-mod support;
-
 use std::process::Command;
 use std::time::{Duration, Instant};
 
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 // 独特秒数：91。不撞其余用例用到的 sleep 1/60，也不太可能撞其他系统进程。
 const MARK: &str = "sleep 91";

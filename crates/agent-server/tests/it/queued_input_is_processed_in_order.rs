@@ -3,12 +3,11 @@
 //! actor 是单线程循环，第二条物理上不可能提前于第一条被处理；这个测试证明
 //! 的是「两条都真的各自跑完了一整轮，而不是后一条把前一条挤丢/合并」。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn two_inputs_sent_back_to_back_both_run_and_in_submission_order() {
@@ -23,10 +22,16 @@ async fn two_inputs_sent_back_to_back_both_run_and_in_submission_order() {
 
     let mut sub = handle.subscribe();
     handle
-        .send(agent_server::Command::Input("first".to_string()))
+        .send(agent_server::Command::Input {
+            text: "first".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
     handle
-        .send(agent_server::Command::Input("second".to_string()))
+        .send(agent_server::Command::Input {
+            text: "second".to_string(),
+            images: Vec::new(),
+        })
         .unwrap(); // 不等第一条的结果
 
     let first_turn = support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;

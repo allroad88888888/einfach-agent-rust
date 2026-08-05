@@ -7,10 +7,8 @@
 //! `Session::set_agent_limits` 的文档注释（不追溯的理由）。不读
 //! `src/command/spawn.rs` 源码。
 
-mod support;
-
 use agent_core::{AgentLimits, ChildConfig, SpawnRefused};
-use support::session::new_session;
+use crate::support::session::new_session;
 
 #[test]
 fn depth_four_is_refused_without_panicking() {

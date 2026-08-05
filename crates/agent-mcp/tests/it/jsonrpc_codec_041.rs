@@ -6,12 +6,10 @@
 //! `docs/issues/041-mcp-protocol.md` §验收。只测规格，不看实现体（写这份测试
 //! 时函数体全是 `todo!()`）。
 
-mod common;
-
 use agent_mcp::{
     RpcResponse, encode_notification, encode_request, parse_response, tools_call_params,
 };
-use common::recorded_result;
+use crate::common::recorded_result;
 use serde_json::{Value, json};
 
 #[test]

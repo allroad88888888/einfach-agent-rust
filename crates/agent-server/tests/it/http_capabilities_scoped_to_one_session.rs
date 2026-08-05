@@ -15,15 +15,14 @@
 //! （HOST-CAPABILITIES.md §二）。红线 11 的两条也在这里：基线那一段一个字节不动
 //! （§六 第 1 条）、客户端数组顺序进不了 prompt（§六 第 2 条；063 把后者钉到会红）。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 /// 两个工具，**故意不按字典序给**（`web:` 在前、`desk:` 在后）：表里必须是反过来的。
 fn declaration() -> Value {

@@ -11,8 +11,8 @@
 pub mod base;
 
 pub use base::{
-    Route, RoutedServer, SPAWN_WIRE, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
-    wire_tool_name,
+    build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir, wire_tool_name, Route,
+    RoutedServer, SPAWN_WIRE,
 };
 
 use agent_core::{AgentId, ContentBlock, Session};
@@ -50,6 +50,7 @@ pub fn any_message_mentions(session: &Session, agents: &[AgentId], needle: &str)
                 ContentBlock::Thinking(t) => t.contains(needle),
                 ContentBlock::ToolResult { content, .. } => content.contains(needle),
                 ContentBlock::ToolUse { input, .. } => input.to_string().contains(needle),
+                ContentBlock::Image { .. } => false,
             })
         })
     })

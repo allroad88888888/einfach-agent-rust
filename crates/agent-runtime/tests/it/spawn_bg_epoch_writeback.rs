@@ -25,16 +25,14 @@
 //! 下面第二条用例是**孪生对照**：同一份脚本、同一次回传，只是不 bump epoch，
 //! 结果就该老老实实落进子的历史。一个进一个不进，闸的存在才是被测出来的。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, Event, Failure, Session, ToolCallId, TurnStatus};
-use agent_runtime::{RemoteToolOutput, RunnerEvent, resolve_remote_tool, run_turn};
+use agent_runtime::{resolve_remote_tool, run_turn, RemoteToolOutput, RunnerEvent};
 
-use spawn_bg_support::{
-    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_call, sse_tool_calls,
-    temp_dir, wire_tool_name,
+use crate::spawn_bg_support::{
+    any_message_mentions, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
+    wire_tool_name, Route, RoutedServer,
 };
 
 /// Web 宿主执行的交互工具之一（`ToolTable::standard` 注册，`Location::Web`）。

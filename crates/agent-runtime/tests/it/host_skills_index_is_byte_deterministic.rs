@@ -32,7 +32,7 @@ use agent_providers::glm::Glm;
 use agent_providers::kimi::Kimi;
 use agent_providers::{Encoded, Ingredients, Provider};
 use agent_runtime::SkillRegistry;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 /// 12 个 skill，**故意不按字典序给**。
 ///
@@ -65,6 +65,7 @@ fn skills(order: &[usize]) -> Vec<HostSkill> {
                 // 这件事也被字节断言看住（正文漏进 System 段的话字节当场变）。
                 body: Arc::from(format!("{id} 的正文，激活之后才该出现。")),
                 tools: Vec::new(),
+                tool_reversibility: Default::default(),
             }
         })
         .collect()

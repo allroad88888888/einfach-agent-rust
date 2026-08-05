@@ -21,8 +21,7 @@
 //! 得上真正会跑的那件事（069 §拍板：**这正是本仓最怕的那类静默错值，只不过发生在
 //! prompt 里而不是 store 里**）。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,12 +29,12 @@ use agent_core::{
     AgentId, HostSkill, Reversibility, Session, SessionConfig, SkillId, ToolSpec, TurnStatus,
 };
 use agent_providers::deepseek::DeepSeek;
-use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable, run_turn};
+use agent_runtime::{run_turn, RunnerCtx, SkillRegistry, ToolTable};
 use agent_tools::ToolExecutor;
 use agent_transport::{Backoff, Client};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 
@@ -69,7 +68,46 @@ fn declared_skill() -> HostSkill {
             spec(CLASH, SKILL_DESC),
             spec(ONLY_FROM_SKILL, "只有 skill 带的"),
         ],
+        tool_reversibility: [(Arc::from(CLASH), Reversibility::Pure)]
+            .into_iter()
+            .collect(),
     }
+}
+
+#[test]
+fn dispatch_uses_the_table_declaration_when_an_active_skill_has_the_same_name() {
+    let fs_root = support::temp_dir("skill-clash-dispatch-fs");
+    let server = RoutedServer::start(vec![Route::sse(
+        "",
+        vec![
+            r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_clash","type":"function","function":{"name":"web_3Acrm_2Fclose","arguments":"{\"ticket\":\"T-7\"}"}}]}}]}"#.to_string(),
+            r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"tool_calls"}]}"#.to_string(),
+            "data: [DONE]".to_string(),
+        ],
+    )]);
+    let mut ctx = build_ctx(server.port, &fs_root);
+    let root = AgentId::root();
+    let mut session = Session::new(root.clone());
+    session
+        .activate_skill(&root, SkillId::new("crm-flow"))
+        .unwrap();
+
+    assert_eq!(
+        run_turn(&mut session, &mut ctx, "关闭 T-7"),
+        TurnStatus::ToolsPending
+    );
+
+    let pending = ctx.pending_remote_tools();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].agent, root);
+    assert_eq!(&*pending[0].call_id.0, "call_clash");
+    assert_eq!(&*pending[0].request.tool, CLASH);
+    assert_eq!(*pending[0].request.input, json!({ "ticket": "T-7" }));
+    assert_eq!(
+        pending[0].request.reversibility,
+        Reversibility::Irreversible,
+        "ToolTable 的同名声明必须赢；skill 那份故意标成 Pure，用不同值钉住 dispatch 优先级"
+    );
 }
 
 /// 装配形状照 `agent-server` 的 `actor::capabilities::assemble`：

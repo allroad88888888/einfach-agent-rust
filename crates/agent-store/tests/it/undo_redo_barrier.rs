@@ -3,8 +3,7 @@
 //! `M.barrier == true`）挡住 undo 越过它，但从不挡 redo。
 //! 钉死接口（重建版本）见 `undo_redo_roundtrip.rs` 顶部注释。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{AtomId, History, Store, UndoOutcome, record_set};
 

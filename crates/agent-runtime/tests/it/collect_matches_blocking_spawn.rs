@@ -9,16 +9,14 @@
 //! 夹具复用 052 的 `spawn_bg_support`（它自己又复用 029 的并发假服务器）：collect
 //! 是后台那半边的另一头，同一种服务器形状，没有一处需要为它另起一份。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{AgentEvent, ToolTable, run_turn};
+use agent_runtime::{run_turn, AgentEvent, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about,
-    wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about, wire_tool_name,
+    Route, RoutedServer,
 };
 
 /// 两条路跑的是**同一个任务**、拿的是**同一份回答**——只有这样，最后那句

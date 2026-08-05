@@ -8,11 +8,10 @@
 //! 一个 `AgentServer` 时，默认路径确实用的是 loopback」这条集成层面的事实，
 //! 前提是这个进程的环境本来就没设 `AGENT_BIND`（本仓 CI/沙箱环境的既有假设）。
 
-mod support;
-
+use crate::support;
 use agent_server::default_bind_addr;
 
-use support::server::FakeServer;
+use crate::support::server::FakeServer;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_freshly_bound_server_listens_on_loopback_by_default() {

@@ -5,14 +5,13 @@
 //! `Undo`——如果历史是空的（没恢复上），结果只能是 `Nothing`；能看到
 //! `Applied` 就证明上一个 actor 写的 entry 真的被读回来、重建进了新 `Session`。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_server::{Command, Granularity, SessionEvent, UndoOutcome};
 
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_session_closed_and_reopened_recovers_its_history() {
@@ -30,7 +29,10 @@ async fn a_session_closed_and_reopened_recovers_its_history() {
 
     let mut sub = handle.subscribe();
     handle
-        .send(Command::Input("remember this".to_string()))
+        .send(Command::Input {
+            text: "remember this".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
     support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;
 

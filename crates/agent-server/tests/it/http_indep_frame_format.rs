@@ -6,13 +6,11 @@
 //! 契约，只是要先从信封里把它取出来。自己拼的 HTTP 客户端见
 //! `http_indep_support/`，不碰实现方的 `http/` 源码或 `tests/http_*.rs`。
 
-mod http_indep_support;
-
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::SseClient;
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::SseClient;
 
 /// 两个必发 header（`Cache-Control: no-cache`、`X-Accel-Buffering: no`）要出现
 /// 在每一次 `GET /events` 的响应头里，值逐字节匹配 issue 原文——header 名字大小写

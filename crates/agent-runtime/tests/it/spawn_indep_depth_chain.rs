@@ -11,13 +11,11 @@
 //! tool_result 是 `is_error`；`turn_id` 全树一致（用跟覆盖点 1 同一个
 //! `undo_turn` 单次吞光作证据——029 没有暴露原始日志迭代口）。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

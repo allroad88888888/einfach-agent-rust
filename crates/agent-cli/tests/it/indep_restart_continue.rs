@@ -7,9 +7,7 @@
 //! `--session <path>` 起会话 B → 能接着问（第 3 轮请求体含前两轮上下文）→
 //! `/undo` 在 B 里仍工作（undo 栈是从盘上重建的，不是内存里带过来的）。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::time::Duration;
 
 const T: Duration = Duration::from_secs(10);

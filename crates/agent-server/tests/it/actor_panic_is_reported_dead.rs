@@ -7,8 +7,7 @@
 //! ——如果 `catch_unwind` 没接住，这个测试进程会直接被这个 panic 干掉，
 //! 连断言都不会跑到。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -68,7 +67,10 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
 
     let mut sub = handle.subscribe();
     handle
-        .send(Command::Input("trigger the panic".to_string()))
+        .send(Command::Input {
+            text: "trigger the panic".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
 
     let died_reason = loop {

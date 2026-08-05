@@ -6,11 +6,10 @@
 //! 后门——这里用 `undo_turn`（另一个 bump 世代的动作，红线 6）把世代推起来，顺带
 //! 证明了两条 bump 路径产出的是同一个东西。
 
-mod support;
-
+use crate::support;
 use agent_core::{Effect, Epoch, Failure, Notice, TurnStatus};
 
-use support::session::{
+use crate::support::session::{
     new_session, observe, session_at, session_with_pending_tools, thinking_session,
 };
 

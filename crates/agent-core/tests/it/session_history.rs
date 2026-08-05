@@ -4,11 +4,10 @@
 //! M1 没有对应文件——它压根没有日志。这一份和 `session_undo_redo.rs` 是 026 新增
 //! 的那两块：一个证明「写下来了」，一个证明「退得回去」。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentValue, AtomKey, Slot, TurnStatus};
 
-use support::session::new_session;
+use crate::support::session::new_session;
 
 /// 一轮完整对话：user → provider(ToolUse) → tool result → provider(EndTurn)。
 /// 四个事件、四次真的改了状态的转移 → **恰好四条 entry**，label 一一对上。

@@ -11,15 +11,13 @@
 //!   最强证据：如果子 agent 的 entry 带着不同的 turn_id，`undo_turn` 不会
 //!   一次性吞掉整棵树）。
 
-mod spawn_indep_support;
-
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 const SLOW: Duration = Duration::from_millis(350);

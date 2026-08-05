@@ -7,12 +7,11 @@
 //! MCP 映射（`readOnlyHint`）而不是名字。所以这条测试和 `shell_exec_undo_barrier`
 //! 是同一套断言，换了工具来源。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use support::mcp;
+use crate::support::mcp;
 
 /// 跑一轮：模型调一个 MCP 工具（server 立即回结果）→ hop2 EndTurn → `Done`。
 fn run_one_mcp_turn(dir: &std::path::Path, tool: &str, read_only: bool) -> Session {

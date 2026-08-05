@@ -10,16 +10,14 @@
 //! 顺带守住那条边界：两段正文里都**没有**子 agent 的回答文本（那是 collect 的事，
 //! 053）——虽然第二跳时那些文本就躺在同一条历史的隔壁块里。
 
-mod status_indep_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use status_indep_support::{
-    Route, RoutedServer, build_ctx, listed_activities, listed_ids, sse_text, sse_tool_call,
-    sse_tool_calls, temp_dir, tool_result, wire_tool_name,
+use crate::status_indep_support::{
+    build_ctx, listed_activities, listed_ids, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
+    tool_result, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

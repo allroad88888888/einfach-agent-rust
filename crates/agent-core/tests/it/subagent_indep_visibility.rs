@@ -5,10 +5,8 @@
 //! §2 与「注意」段、cargo doc 的 `graph::visibility` / `command::cross_read`
 //! 模块文档。不读 `src/graph/visibility.rs` 与 `src/command/cross_read.rs` 源码。
 
-mod support;
-
 use agent_core::{AgentId, ChildConfig, ReadDenied, Session, Slot, Visibility};
-use support::session::new_session;
+use crate::support::session::new_session;
 
 /// root -> child -> grandchild 三层，够覆盖「隔代」和「兄弟」两类关系。
 fn spawn_two_level(session: &mut Session) -> (AgentId, AgentId) {

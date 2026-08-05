@@ -23,6 +23,8 @@ mod mcp_execution;
 mod mcp_undo_barrier;
 mod remote_tool_deadline_epoch_writeback;
 mod remote_tool_deadline_fails_the_call;
+mod remote_tool_protocol_092;
+mod remote_tool_receipt_retention_092;
 mod remote_undeclared_tool_is_not_a_hang;
 mod session_store_backend_choice;
 mod session_store_jsonl_cap_crosses_snapshot;

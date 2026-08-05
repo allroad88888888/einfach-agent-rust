@@ -38,18 +38,17 @@
 //! ——这是第二大风险点,猜错的表现是「工具调用返回 is_error,后续断言全部落空」,
 //! 会在独立测试报告里单独点出来。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{AgentId, Session, SessionConfig, SkillId, TurnStatus, UndoReport};
 use agent_providers::deepseek::DeepSeek;
-use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable, run_turn};
+use agent_runtime::{run_turn, RunnerCtx, SkillRegistry, ToolTable};
 use agent_tools::ToolExecutor;
 use agent_transport::{Backoff, Client};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 

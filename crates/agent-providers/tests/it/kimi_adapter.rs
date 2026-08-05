@@ -5,15 +5,13 @@
 //! `docs/ADAPTER.md` 的接缝定义，以及 `agent-providers` / `agent-core` 的公开签名。
 //! **不看** `crates/agent-providers/src/kimi/` 的实现体。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{Adjustment, ErrorClass, RequestIntent, SessionConfig, ToolSpec};
 use agent_providers::kimi::Kimi;
 use agent_providers::{Provider, StreamEvent};
 
-use support::{ingredients, sys_chunk, tool_spec, user_text};
+use crate::support::{ingredients, sys_chunk, tool_spec, user_text};
 
 fn kimi_config(temperature: Option<f32>) -> SessionConfig {
     SessionConfig {

@@ -4,13 +4,11 @@
 //! 正序回滚会停在中间值（第二笔的 prev），那是一个看起来"动了"、实际没回滚到底
 //! 的 bug；本测试直接断言最终值，把这个反例挡在门口。
 
-mod common;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 #[test]
 fn apply_prev_undoes_a_batch_double_write_to_the_same_atom_in_reverse() {

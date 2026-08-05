@@ -27,14 +27,12 @@
 //! （所以线上走不到这一格）——但红线 6 管的是**回写前的那道闸**，不是上游有没有
 //! 顺手清干净：换一个宿主、换一条 undo 入口，这道闸就是最后一层。
 
-mod support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, ContentBlock, Notice, Session, TurnStatus, UndoReport};
-use agent_runtime::{RunnerEvent, ToolTable, run_turn, sweep_remote_tool_deadlines};
+use agent_runtime::{run_turn, sweep_remote_tool_deadlines, RunnerEvent, ToolTable};
 
-use support::{build_ctx_with, spawn_scripted_server, sse_tool_call, temp_dir};
+use crate::support::{build_ctx_with, spawn_scripted_server, sse_tool_call, temp_dir};
 
 const BUDGET: Duration = Duration::from_millis(60);
 

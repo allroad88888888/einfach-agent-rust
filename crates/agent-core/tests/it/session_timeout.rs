@@ -1,13 +1,12 @@
 //! 026 等价重写自 `timeout_transitions.rs`：`Event::Timeout` 的内部子分支（016）
 //! ——provider 超时复用错误分流的重试路径，工具超时复用工具收敛的部分失败路径。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{ContentBlock, Effect, ErrorClass, Failure, Notice, ToolCallId, TurnStatus};
 
-use support::session::{observe, session_with_pending_tools, thinking_session};
+use crate::support::session::{observe, session_with_pending_tools, thinking_session};
 
 /// provider 超时（`call_id: None`）跟 `ProviderFailed(Retryable)` 是同一条重试判断
 /// 路径——预算耗尽之后同样落 `Failed(Provider(Retryable))`，不是单独一套「超时专属」

@@ -1,10 +1,8 @@
 //! 命令发现的固定资源边界：manifest 数、摘录字节与响应字节均由工具侧硬限制。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const MANIFEST_COUNT: usize = 16;
 const MANIFEST_BYTES: usize = 5_000;

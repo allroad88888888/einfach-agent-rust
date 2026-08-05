@@ -5,9 +5,7 @@
 //! 用户输入和助手回复（服务器把收到的 body 存下来断言，这就是“下一轮
 //! prompt 不含被退内容”的黑盒证法）。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::time::Duration;
 
 const T: Duration = Duration::from_secs(10);

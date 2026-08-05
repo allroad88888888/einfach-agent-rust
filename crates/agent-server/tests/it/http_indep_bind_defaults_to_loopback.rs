@@ -3,14 +3,12 @@
 //! （`resolve_bind_ip`/`default_bind_ip`/`default_bind_addr`）+ 真起一个服务器
 //! 验证监听地址的网络行为——不读 `src/bind.rs` 源码。
 
-mod http_indep_support;
-
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
 use agent_server::{default_bind_ip, resolve_bind_ip};
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start_on};
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start_on};
 
 /// `resolve_bind_ip` 是纯函数：不传 `AGENT_BIND` 的等价物（`None`）该解析成
 /// loopback；显式给 `"0.0.0.0"` 才准出全零地址；非法输入是硬失败，不悄悄退回

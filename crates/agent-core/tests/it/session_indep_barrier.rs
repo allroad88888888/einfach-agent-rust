@@ -5,11 +5,9 @@
 //! `undo_turn_force` 恰放行一条屏障——同一轮里还有第二条屏障时，force 一次只
 //! 越过遇到的第一条，仍然会在第二条前面再次 `Blocked`（026 实做记录判断 7）。
 
-mod support;
-
 use agent_core::{ToolCallId, UndoReport};
-use support::session::thinking_session;
-use support::{provider_done_tool_use, tool_result_event};
+use crate::support::session::thinking_session;
+use crate::support::{provider_done_tool_use, tool_result_event};
 
 #[test]
 fn a_barrier_entry_blocks_undo_turn_at_the_right_seq() {

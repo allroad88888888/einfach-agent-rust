@@ -2,13 +2,11 @@
 //! 被取消（假上游挂住不回，断言取消而非等到超时）」+ 实做记录「刷新页面不该
 //! 杀轮次」的宽限期）。反例：宽限期内重连，轮继续跑不被杀。
 
-mod http_indep_support;
-
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::SseClient;
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::SseClient;
 
 fn is_cancelled_terminal(data: &str) -> bool {
     data.contains("TurnStatusChanged") && data.contains("Cancelled")

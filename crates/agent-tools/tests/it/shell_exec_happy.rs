@@ -4,11 +4,9 @@
 //! 钉死规格：`sh -c`，cwd = root；stdout 无 stderr、退出码 0 时原样返回，不追加
 //! 任何标记。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn echo_hi_returns_stdout_verbatim() {

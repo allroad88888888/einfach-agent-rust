@@ -8,8 +8,7 @@
 //! `agent_providers::deepseek::DeepSeek` 经 `Provider` trait 调用，符合 issue 025
 //! 「用 DeepSeek 验证接缝」的要求；不读 `src/deepseek/` 下任何文件。
 
-mod support;
-
+use crate::support;
 use agent_core::StopReason;
 use agent_providers::{Provider, StreamEvent};
 

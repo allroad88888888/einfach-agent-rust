@@ -26,13 +26,11 @@
 //! 测试改为验证约束 2 的正向面：一棵没有外部读者的真实子树，despawn 该顺利
 //! 通过而不会被状态驱动的逐出闸误伤（下面 `despawn_evicts_leaf_first_...`）。
 
-mod support;
-
 use agent_core::{
     AgentEntry, AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use support::session::new_session;
-use support::{provider_done_tool_use_for, tool_result_for, user_input_for};
+use crate::support::session::new_session;
+use crate::support::{provider_done_tool_use_for, tool_result_for, user_input_for};
 
 fn child_key_count(session: &Session, agent: &AgentId) -> usize {
     session

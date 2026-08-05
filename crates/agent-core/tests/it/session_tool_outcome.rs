@@ -5,8 +5,7 @@
 //! 003 收尾补测那四条边界（全败仍继续、重复不覆盖、错误文本进 prompt、收敛是扫不是
 //! 计数）在 `session_tool_convergence.rs`。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{
@@ -14,7 +13,7 @@ use agent_core::{
     TurnStatus,
 };
 
-use support::session::{new_session, observe, session_with_pending_tools};
+use crate::support::session::{new_session, observe, session_with_pending_tools};
 
 /// 两个槽：先落一个——没收敛，效果是空的（不是隐式忽略，是「等其余槽」）；再落最后
 /// 一个——**这时候**才收敛：状态回 `Thinking`，两个结果按槽序（模型请求顺序）拼成

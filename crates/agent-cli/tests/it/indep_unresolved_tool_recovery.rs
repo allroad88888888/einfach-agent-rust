@@ -8,9 +8,7 @@
 //! `has_unresolved_tool_calls` 分支：提示“可能已经执行过”，**不自动重发**
 //! ——既不重新执行本地工具，也不把这个未完成的工具调用回执发回 provider。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::time::Duration;
 
 const T: Duration = Duration::from_secs(15);

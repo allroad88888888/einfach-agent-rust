@@ -5,13 +5,11 @@
 //! （`ToolTable::declares`）该判定它跟别的不存在的工具一样，走
 //! `unknown_tool` 语义的路，**不长树**：`live_agents()` 只有 root。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

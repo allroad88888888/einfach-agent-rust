@@ -6,13 +6,11 @@
 //! （因为两轮分属不同 turn），落地到 apply_prev + get-or-create 闭包后，
 //! 3 个 primitive 的值必须全部回到第一轮末——包括被重建的那两个。
 
-mod common;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Entry, History, Store, UndoOutcome, apply_prev, record_set};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 #[derive(Debug, Clone, PartialEq)]
 struct Meta {

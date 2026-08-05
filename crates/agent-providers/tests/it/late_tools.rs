@@ -3,8 +3,7 @@
 //! 代价 120x——所以 `encode` 必须报 `Adjustment::LateToolsForcedIntoPrefix`，
 //! 且这些工具必须真的出现在 `body` 里（不是「报了调整但其实没塞进去」）。
 
-mod support;
-
+use crate::support;
 use agent_core::{Adjustment, RequestIntent};
 use agent_providers::Provider;
 

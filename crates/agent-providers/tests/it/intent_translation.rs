@@ -7,8 +7,7 @@
 //! 自动关思考，并记一笔 `Adjustment::ThinkingDisabledForToolChoice`——静默改变
 //! 模型行为是本层头号大忌。
 
-mod support;
-
+use crate::support;
 use agent_core::{Adjustment, RequestIntent};
 use agent_providers::Provider;
 

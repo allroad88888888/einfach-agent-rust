@@ -2,11 +2,9 @@
 //! 所有 primitive 逐值回退到第一轮结束时的快照，`tools_converged()` 等读口一致；
 //! `redo_turn` 反演回第二轮结束时的状态。
 
-mod support;
-
 use agent_core::UndoReport;
-use support::session::new_session;
-use support::{
+use crate::support::session::new_session;
+use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
 };
 

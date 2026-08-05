@@ -1,11 +1,9 @@
 //! 026 独立测试：`begin_turn`——turn_id 递增、状态回 Idle、工具槽清空、消息历史
 //! 保留（以及文档点名的另外两件事：本轮预算清零、上限延续）。
 
-mod support;
-
 use agent_core::TurnStatus;
-use support::session::new_session;
-use support::{
+use crate::support::session::new_session;
+use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
 };
 

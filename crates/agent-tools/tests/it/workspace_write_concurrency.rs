@@ -1,11 +1,9 @@
 //! 两个并发调用者写同一文件时的公开接口验收。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
 use std::sync::{Arc, Barrier};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn inspect_revision(executor: &ToolExecutor) -> String {
     let output = executor

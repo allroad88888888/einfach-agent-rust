@@ -6,15 +6,13 @@
 //! 再收到任何新的 `AgentEvent`：既没有被放弃的 IO 线程尾巴直接绕过泵调用
 //! 回调，也没有任何延迟触发的收尾通报。
 
-mod spawn_indep_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

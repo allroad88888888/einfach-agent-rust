@@ -1,11 +1,9 @@
 //! `srv:fs/list` 正常路径（issue 013 验收 1）：按名字典序排序、目录带尾 `/`、
 //! `path` 省略时默认列 root（`"."`）。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn lists_entries_sorted_with_dir_trailing_slash() {

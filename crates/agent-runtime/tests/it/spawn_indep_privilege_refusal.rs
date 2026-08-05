@@ -11,13 +11,11 @@
 //! 那样测不出「拿宿主完整表当放行依据」这类 bug——必须测到「授予者自己的
 //! 子集」这一层。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]
@@ -126,9 +124,7 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
             _ => None,
         })
         .collect();
-    assert!(
-        root_text
-            .iter()
-            .any(|t| t.contains("received child1's report"))
-    );
+    assert!(root_text
+        .iter()
+        .any(|t| t.contains("received child1's report")));
 }

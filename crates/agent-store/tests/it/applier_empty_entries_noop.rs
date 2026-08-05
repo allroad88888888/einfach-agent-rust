@@ -6,13 +6,11 @@
 //! "空 changes 不落条目"——但 applier 的契约只看 `&[Entry<..>]` 这个形状本身，
 //! 防御性地把这个边界也钉住）。
 
-mod common;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Entry, Store, apply_next, apply_prev};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 fn counting_resolve(
     family: Rc<RefCell<AtomFamily<String>>>,

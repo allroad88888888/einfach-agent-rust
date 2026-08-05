@@ -7,8 +7,7 @@
 //!
 //! 验收 5（batch 语义示范）、验收 6（空 changes append）。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{Change, History};
 

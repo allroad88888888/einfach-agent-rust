@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{Reversibility, ToolSpec};
-use agent_mcp::{Annotations, McpClient, McpRegistry, McpTool, translate};
+use agent_mcp::{translate, Annotations, McpClient, McpRegistry, McpTool};
 use agent_runtime::{AgentEvent, RunnerCtx, ToolTable};
 use serde_json::json;
 

@@ -19,16 +19,15 @@
 //! 内容（闸把它挡在了世界之外）。**把闸拆掉，这条会立刻红**：幽灵 `ToolResult` 会被写
 //! 进已经回滚掉的世界。
 
-mod support;
-
+use crate::support;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ContentBlock, Failure, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, run_turn};
+use agent_runtime::{run_turn, RunnerEvent};
 
-use support::mcp;
+use crate::support::mcp;
 
 #[test]
 fn in_flight_mcp_result_is_dropped_by_the_epoch_gate_after_a_mid_flight_cancel() {

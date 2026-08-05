@@ -6,13 +6,11 @@
 //! 手工 `encode` 一次）发出去的请求体里，不含第一轮任何痕迹——子的 task
 //! 文本、子的回答、root 的汇总文本，一个字都不该在。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

@@ -12,16 +12,14 @@
 //!
 //! 外加一条：轮末留了可见告警（模型 spawn 了后台子却没收尾就走了），不静默。
 
-mod spawn_bg_support;
-
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
-use spawn_bg_support::{
-    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_call, streamed_text,
-    temp_dir, warned_about, wire_tool_name,
+use crate::spawn_bg_support::{
+    any_message_mentions, build_ctx, sse_text, sse_tool_call, streamed_text, temp_dir,
+    warned_about, wire_tool_name, Route, RoutedServer,
 };
 
 /// 子答得比父慢得多——父收尾时它还在飞。

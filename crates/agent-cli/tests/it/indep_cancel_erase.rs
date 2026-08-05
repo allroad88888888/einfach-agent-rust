@@ -6,9 +6,7 @@
 //! 测试用系统 `kill -INT <pid>` 直接给子进程发真信号，效果跟终端里按
 //! Ctrl-C 完全一样。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::time::Duration;
 
 const T: Duration = Duration::from_secs(10);

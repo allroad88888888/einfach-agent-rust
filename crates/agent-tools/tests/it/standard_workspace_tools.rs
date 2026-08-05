@@ -1,10 +1,8 @@
 //! 标准名称的工作区工具必须走同一套 revision/journal 实现，不能只在 schema 层存在。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn call(executor: &ToolExecutor, tool: &str, input: Value) -> Value {
     let output = executor.execute(tool, &input).unwrap();

@@ -1,14 +1,12 @@
 //! Pull polling reads the same retained event stream as browser SSE.
 
-mod http_indep_support;
-
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::raw_http::request;
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::{SseClient, SseFrame};
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::raw_http::request;
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::{SseClient, SseFrame};
 
 fn poll(addr: SocketAddr, id: &str, last: Option<u64>, wait: Option<u64>) -> serde_json::Value {
     let path = format!("/sessions/{id}/events/poll");

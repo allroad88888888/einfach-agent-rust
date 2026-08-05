@@ -6,13 +6,11 @@
 //! ——gap 帧标 root（`crate::event::frame` 模块文档：重连补发是连接级事实，
 //! 不属于任何具体 agent）。
 
-mod http_indep_support;
-
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::{SseClient, SseFrame};
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::{SseClient, SseFrame};
 
 fn drain_until_terminal(sse: &mut SseClient) -> Vec<SseFrame> {
     let mut frames = Vec::new();

@@ -5,15 +5,13 @@
 //! 这一次结果是**领**回来的而不是等回来的。两条路共用 `crate::child_outcome`
 //! 那一份翻译，所以这里也顺带钉住「后台那条路没有偷偷换一套措辞」。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name, Route, RoutedServer,
 };
 
 /// 让子先撞完 402 再让 root 醒来去领。

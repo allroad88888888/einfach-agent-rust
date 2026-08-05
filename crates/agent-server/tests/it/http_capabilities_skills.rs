@@ -9,8 +9,7 @@
 //! **全都不接 `.with_skills(..)`**，经 HTTP 起的会话里 `srv:skill/activate` 根本不在
 //! 表里——M5 做的整套 skill 机制在 server 形态下等于不存在。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -18,8 +17,8 @@ use agent_core::Notice;
 use agent_server::{Frame, SessionEvent};
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 const CRM_BODY: &str = "CRMFLOW_BODY_MARKER_ZX91";
 const MAIL_BODY: &str = "MAILFLOW_BODY_MARKER_ZX91";

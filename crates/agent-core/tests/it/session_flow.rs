@@ -7,11 +7,10 @@
 //! 跟着一起迁更合适（那时才知道 runner 要什么形状）。这里手工喂事件——本来 mock 就
 //! 站在事件层，脚手架省下的只是循环，不是语义。
 
-mod support;
-
+use crate::support;
 use agent_core::{ContentBlock, Effect, Notice, ToolCallId, TurnStatus};
 
-use support::session::new_session;
+use crate::support::session::new_session;
 
 /// 005 的核心验收：`UserInput` → `CallProvider` →（回 2 个 `ToolUse`）→
 /// `ExecuteTool`×2 → 回填 → 再 `CallProvider` →（回 `EndTurn`）→ `Done`。

@@ -24,15 +24,13 @@
 //! 「按关闭列表逐个 `remove`/重建」之类顺序敏感的写法，这里立刻红。它是那个性质的
 //! 看门狗，不是 `sort()` 的看门狗——两个落点各钉各的，不重复。
 
-mod host_tools_bytes_support;
-
 use std::sync::Arc;
 
-use agent_core::{AgentLimits, Segment};
-use agent_runtime::ToolTable;
-use host_tools_bytes_support::{
+use crate::host_tools_bytes_support::{
     assert_same_bytes, encode, hash, providers, text, tools_segment, wire_tools_bytes,
 };
+use agent_core::{AgentLimits, Segment};
+use agent_runtime::ToolTable;
 
 /// 一个装满的部署档：内置只读 + shell + 编排三件。
 fn deployed() -> ToolTable {

@@ -26,8 +26,6 @@
 //! 字段名/引号形状是稳定的),数 `"role":"system"` 出现几次就能分辨"新增一条
 //! 消息"和"改了已有那条的内容"这两种 placement,不需要知道 JSON 树的精确形状。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{

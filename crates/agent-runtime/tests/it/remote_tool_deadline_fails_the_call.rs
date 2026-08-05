@@ -12,17 +12,15 @@
 //!
 //! 超时压到 80ms（`with_remote_tool_timeout`）——真实默认是 10 分钟，测试不真等。
 
-mod support;
-
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ContentBlock, Session, ToolCallId, TurnStatus};
 use agent_runtime::{
-    RemoteToolOutput, RunnerEvent, ToolTable, resolve_remote_tool, run_turn,
-    sweep_remote_tool_deadlines,
+    resolve_remote_tool, run_turn, sweep_remote_tool_deadlines, RemoteToolOutput, RunnerEvent,
+    ToolTable,
 };
 
-use support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
+use crate::support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
 
 const BUDGET: Duration = Duration::from_millis(80);
 

@@ -5,8 +5,7 @@
 //! 断言的落点是**假上游收到的请求体**：料对不对的唯一判据是模型看到了什么，不是
 //! 内部某个 `Vec` 长什么样（跟 062/064 的作用域测试同一种证明手法）。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -14,8 +13,8 @@ use agent_core::AgentLimits;
 use agent_server::{SessionTemplate, ToolTableSpec};
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 /// 关掉表尾那两件（编排的一半 + 那件最该关的 shell）。
 fn switch() -> Value {

@@ -18,11 +18,10 @@
 //! 提到有单元测试钉住，但那不是独测 agent 能验的东西（那是实现方代码的白盒
 //! 覆盖）。如实记在这里，不假装覆盖到了。
 
-mod http_indep_support;
-
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::raw_http::{post_json, request};
-use http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support;
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::raw_http::{post_json, request};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
 
 async fn server() -> http_indep_support::server_harness::TestServer {
     let upstream = FakeUpstream::start(vec![Script::Text("hi".to_string())]);

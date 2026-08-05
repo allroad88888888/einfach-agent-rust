@@ -4,13 +4,11 @@
 //! 比「只读目录」更环境无关（部分沙箱/CI 以 root 跑测试时，权限位不生效，
 //! 目录不存在这条路走到哪都一样失败）。
 
-mod session_store_support;
-
-use agent_store::SessionStore;
 use agent_store::history::{Change, Entry};
+use agent_store::SessionStore;
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::Jsonl;
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 type Backend = Jsonl<String, Val, u32>;
 

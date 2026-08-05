@@ -26,9 +26,8 @@
 //! （`UnknownLabel`，语法合法但标签不认识）现在是同一种硬失败形状——两条本来
 //! 就该走同一个出口，"出口统一"是这次修复的一部分。
 
-mod indep_support;
-
-use indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
+use crate::indep_support;
+use crate::indep_support::{CliProcess, FakeServer, Scratch, Script, sse};
 use std::path::PathBuf;
 use std::time::Duration;
 

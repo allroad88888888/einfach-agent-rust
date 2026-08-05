@@ -21,13 +21,11 @@
 //! 结论，是需要被看住的性质**——哪天有人为了给镜像加个什么处理而另起一次
 //! `tools::build`，上面那条 tie 就是唯一会红的地方。
 
-mod host_tools_bytes_support;
-
-use agent_core::Segment;
-use host_tools_bytes_support::{
-    DECLARED, assert_same_bytes, encode, hash, items, providers, reversed, rotated, table_with,
-    text, tools_segment, wire_tools_bytes,
+use crate::host_tools_bytes_support::{
+    assert_same_bytes, encode, hash, items, providers, reversed, rotated, table_with, text,
+    tools_segment, wire_tools_bytes, DECLARED,
 };
+use agent_core::Segment;
 
 /// 第 1 条：同一份声明**装两次表、渲染两次**，字节完全相同。
 ///

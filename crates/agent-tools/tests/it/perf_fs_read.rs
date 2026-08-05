@@ -2,11 +2,9 @@
 //! 并发写入的 revision；进入 prompt 前经 core 截断后仍受字节上限约束。这里刻意不量 wall-clock；当前 executor
 //! 没有公开的 IO 计数器，测试只钉住可从 API 观察到的资源边界。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const LINE_COUNT: usize = 4_096;
 const PAGE_OFFSET: usize = 2_049;

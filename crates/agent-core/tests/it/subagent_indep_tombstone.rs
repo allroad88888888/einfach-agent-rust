@@ -4,10 +4,8 @@
 //! 「深度 4 / 子数 9 被拒」邻近的号复用段落、cargo doc 的 `command::spawn` /
 //! `command::despawn` 模块文档。不读 `src/command/{spawn,despawn}.rs` 源码。
 
-mod support;
-
 use agent_core::{AgentValue, AtomKey, ChildConfig, Slot};
-use support::session::new_session;
+use crate::support::session::new_session;
 
 #[test]
 fn despawning_and_respawning_does_not_reuse_the_dead_agents_number() {

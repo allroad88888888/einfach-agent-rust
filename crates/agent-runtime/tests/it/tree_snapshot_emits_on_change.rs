@@ -8,8 +8,7 @@
 //!    挂起 + 重试」脚本：重试那一步（`Event::Timeout` 且预算没耗尽）状态原地
 //!    留在 `Thinking`，`agent_tree()` 跟上一次逐字节相同，change 检测必须挡住它。
 
-mod support;
-
+use crate::support;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
@@ -17,9 +16,9 @@ use std::time::Duration;
 use agent_core::{
     AgentActivity, AgentId, AgentLimits, AgentTree, ErrorClass, Failure, Session, TurnStatus,
 };
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 

@@ -5,11 +5,9 @@
 //! `undo_turn` 把整个新轮的 primitive 全部退回上一轮结束时的样子，`turn_id()`
 //! 仍然报告新轮的号码，因为它是日志的分组依据，不是被日志记录的状态。
 
-mod support;
-
 use agent_core::UndoReport;
-use support::session::new_session;
-use support::{provider_done_end_turn, user_input_event};
+use crate::support::session::new_session;
+use crate::support::{provider_done_end_turn, user_input_event};
 
 #[test]
 fn epoch_only_moves_forward_across_undo_and_redo() {

@@ -4,13 +4,12 @@
 //! M1 用 `TurnState::bump_epoch()` 手动推世代；`Session` 没有那条后门——推世代的
 //! 只有两个真实动作：**取消**和 **undo**。两条都在这里走一遍。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{Effect, Epoch, ErrorClass, Event, Session, StopReason, TokenUsage, TurnStatus};
 
-use support::session::{new_session, observe, session_with_pending_tools};
+use crate::support::session::{new_session, observe, session_with_pending_tools};
 
 /// 每种带 epoch 的事件变体各构造一份；`label` 用于失败信息。
 fn epoch_bearing_event(label: &str, epoch: Epoch) -> Event {

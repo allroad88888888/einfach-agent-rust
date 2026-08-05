@@ -10,8 +10,7 @@
 //! 开关丢了会**多几个工具**——什么症状都没有，直到模型真的去调了那件本该被藏起来的
 //! 东西。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -20,8 +19,8 @@ use agent_core::AgentLimits;
 use agent_server::{AgentServer, ServerConfig, SessionTemplate, SessionsHandle, ToolTableSpec};
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 const CHAT_ID: &str = "caps-disable-restart";
 

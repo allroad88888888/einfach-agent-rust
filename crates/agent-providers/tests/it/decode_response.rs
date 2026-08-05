@@ -9,8 +9,7 @@
 //! （加 `finish_reason` 和顶层 `usage`，usage 数值取自同一文件 deepseek 的
 //! `stream.tail`）。
 
-mod support;
-
+use crate::support;
 use agent_core::{ContentBlock, StopReason};
 use agent_providers::Provider;
 use serde_json::json;

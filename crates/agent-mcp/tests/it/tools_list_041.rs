@@ -5,10 +5,8 @@
 //! `parse_tools_list` 文档注释）、`docs/issues/041-mcp-protocol.md` §验收
 //! 「录制的 tools/list 响应」一条。只测规格，不看实现体。
 
-mod common;
-
 use agent_mcp::{ProtocolError, parse_tools_list};
-use common::{everything_tools_list_frame, recorded_result};
+use crate::common::{everything_tools_list_frame, recorded_result};
 
 #[test]
 fn returns_all_tools_in_original_order() {

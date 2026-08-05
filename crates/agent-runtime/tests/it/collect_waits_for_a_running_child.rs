@@ -13,16 +13,14 @@
 //! 中间 root **一次请求都没多发**（总共三跳），所以「父被挡住了」不是靠猜的：
 //! 它要是没被挡，t0 到 t1 之间必然会有第三跳。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about,
-    wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about, wire_tool_name,
+    Route, RoutedServer,
 };
 
 /// B 慢：足够长，让「root 第三跳在它之后」不是一次毫秒级的巧合。

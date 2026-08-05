@@ -2,11 +2,9 @@
 //! serde 往返（红线 3：primitive atom 的值必须全部可序列化，用一轮真实对话
 //! 攒出来的完整快照做整份 to_string/from_str 相等断言）。
 
-mod support;
-
 use agent_core::{AgentValue, AtomKey};
-use support::session::new_session;
-use support::{
+use crate::support::session::new_session;
+use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
 };
 

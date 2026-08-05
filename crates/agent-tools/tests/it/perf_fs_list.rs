@@ -1,11 +1,9 @@
 //! `srv:fs/list` 的确定性输出预算：一个大而固定的目录必须完整、按名字稳定排序；
 //! 交给 core 的 prompt 视图必须受统一截断上限约束。不使用 wall-clock 断言。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 const PAIRS: usize = 1_024;
 

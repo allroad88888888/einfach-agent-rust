@@ -3,8 +3,7 @@
 //! `close()`」，这条测试钉住 registry 这一层的语义，`SessionsHandle` 自己的
 //! 测试只需要证明它薄薄转发了这两个调用）。
 
-mod support;
-
+use crate::support;
 #[test]
 fn ids_reflects_opens_and_closes() {
     let registry = agent_server::SessionRegistry::new();

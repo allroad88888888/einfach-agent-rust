@@ -11,11 +11,9 @@
 //! 规格来源：`docs/issues/041-mcp-protocol.md` §验收「可逆性翻译穷举」一条、
 //! `docs/MCP.md` §「可逆性不能再从名字推」。只测规格，不看实现体。
 
-mod common;
-
 use agent_core::Reversibility;
 use agent_mcp::{Annotations, parse_tools_list, translate};
-use common::{recorded_result, tool_with_annotations};
+use crate::common::{recorded_result, tool_with_annotations};
 
 #[test]
 fn read_only_true_is_pure() {

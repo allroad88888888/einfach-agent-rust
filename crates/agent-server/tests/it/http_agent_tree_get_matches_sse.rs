@@ -7,15 +7,14 @@
 //! wall-clock 窗口可以立刻发一次 `GET /sessions/:id/agents`——两条路问的是
 //! 同一个瞬间，不是「先后凑巧读到同一个终态」。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::{AgentActivity, AgentId, AgentLimits, AgentTree};
 use agent_server::{Frame, SessionEvent, ToolTableSpec};
 
-use support::http_client;
-use support::routed::{Route, RoutedServer};
+use crate::support::http_client;
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 

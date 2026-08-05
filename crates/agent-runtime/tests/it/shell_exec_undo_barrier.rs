@@ -9,8 +9,7 @@
 //! 这条测试不经 `support::build_ctx`（那个 helper 固定用 `ToolTable::builtin()`，
 //! 没有 shell），手工装一份 `RunnerCtx` 换成 `ToolTable::with_shell()`。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{AgentId, Session, SessionConfig, TurnStatus, UndoReport};
@@ -19,7 +18,7 @@ use agent_runtime::{RunnerCtx, ToolTable};
 use agent_tools::ToolExecutor;
 use agent_transport::Client;
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn hop1_shell_call(marker: &str) -> ScriptedResponse {
     // `srv:shell/exec` 的 wire 转义：`:` → `_3A`，`/` → `_2F`

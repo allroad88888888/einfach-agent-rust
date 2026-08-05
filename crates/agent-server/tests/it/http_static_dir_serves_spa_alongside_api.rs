@@ -5,11 +5,10 @@
 //! `/sessions...` 的 API 端点不被静态兜底吞掉——命中不了任何真实文件也照样是
 //! `session_not_found`，不是 index.html 的 200。
 
-mod support;
-
+use crate::support;
 use std::io::Write;
 
-use support::http_client;
+use crate::support::http_client;
 
 const INDEX_MARKER: &str = "STATIC-DIR-TEST-INDEX";
 const APP_JS: &str = "console.log('static-dir-test');";

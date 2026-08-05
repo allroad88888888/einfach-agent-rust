@@ -14,13 +14,12 @@
 //! `cargo test -p agent-server` 全绿；`reconnect_with_explicit_last_event_id_zero_sees_full_history`
 //! 钉住「机制本身没坏」这一半，帮助后续排障定位到具体缺的是哪一条路径。
 
-mod http_indep_support;
-
+use crate::http_indep_support;
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::SseClient;
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::SseClient;
 
 async fn two_rounds_before_any_sse_connect() -> (
     http_indep_support::server_harness::TestServer,

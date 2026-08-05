@@ -7,13 +7,11 @@
 //! resolve 出来的新 primitive id 上重新建一个。这正是 apply_prev 的验收第三条
 //! ("重建走的是与正常创建同一条路径，不是一个特判分支")在 derived 这一侧的样子。
 
-mod common;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 #[test]
 fn recreated_primitive_feeds_a_freshly_built_derived_the_old_one_does_not_survive() {

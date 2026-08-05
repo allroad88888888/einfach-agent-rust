@@ -7,8 +7,7 @@
 //!    料单序列化后也必须逐字节相同——证明 adapter 没有引入任何顺序敏感的
 //!    序列化路径（比如中途转成 HashMap 再迭代）。
 
-mod support;
-
+use crate::support;
 use agent_core::RequestIntent;
 use agent_providers::Provider;
 

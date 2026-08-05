@@ -2,11 +2,9 @@
 //! 越界（钉死范围 `1..=300`）都必须是 `bad_input`，不能真的去 spawn 一个空/异常
 //! 的进程再失败——错误必须在 schema 校验这一层就截住。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn missing_cmd_is_bad_input() {

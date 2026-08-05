@@ -42,14 +42,13 @@
 //! 红**——本文件是先红后绿的回归测试，交付时附带过两次分别关掉其中一处修法时的
 //! 失败输出。
 
-mod support;
-
+use crate::support;
 use std::path::Path;
 
 use agent_core::{AgentId, Session, TurnStatus};
 use agent_runtime::RunnerCtx;
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn plain_turn(text: &'static str) -> ScriptedResponse {
     ScriptedResponse::Sse(vec![

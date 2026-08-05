@@ -2,8 +2,7 @@
 //! undo_turn，每次都要停在正确的 turn 边界上——逐次断言 cursor 与 store 值。
 //! 钉死接口（重建版本）见 `undo_redo_roundtrip.rs` 顶部注释。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{AtomId, History, Store, UndoOutcome, record_set};
 

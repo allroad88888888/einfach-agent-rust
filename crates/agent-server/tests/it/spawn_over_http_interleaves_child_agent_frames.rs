@@ -11,15 +11,14 @@
 //! 后者，这个文件证的是前者——033 上报的缺口就是「SSE 帧不带归属，看不出两个
 //! 子 agent 谁是谁」）。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::AgentLimits;
 use agent_server::{Frame, SessionEvent, ToolTableSpec};
 
-use support::http_client;
-use support::routed::{Route, RoutedServer};
+use crate::support::http_client;
+use crate::support::routed::{Route, RoutedServer};
 
 /// root 首跳：一次声明两个 `srv:agent/spawn`。wire 上的函数名是转义过的
 /// （`srv:agent/spawn` → `srv_3Aagent_2Fspawn`，`agent-providers/src/wire/

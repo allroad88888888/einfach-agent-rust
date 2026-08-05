@@ -6,11 +6,9 @@
 //! `Session::primitives`/`Session::restore` 文档。`Session::restore` 是公开
 //! API，所以直接测它，不必退到 `to_parts`/`from_parts` 那一层。
 
-mod support;
-
 use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DEFAULT_HISTORY_CAP, Session};
-use support::session::new_session;
-use support::user_input_for;
+use crate::support::session::new_session;
+use crate::support::user_input_for;
 
 #[test]
 fn primitives_of_a_two_child_session_cover_the_whole_tree() {

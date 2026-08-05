@@ -1,16 +1,15 @@
 //! 验收清单第五条：undo/redo/cancel 端点各自生效（复用 030 的命令语义）。三个
 //! 端点结构上高度相似（都是 fire-and-forget POST，结果走 SSE），放一个文件里。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::{Failure, Notice, TurnStatus};
 use agent_server::{Frame, SessionEvent, UndoOutcome};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 async fn create_session_with_sse(addr: std::net::SocketAddr) -> (String, http_client::SseReader) {
     let create = http_client::request(addr, "POST", "/sessions", Some("{}"));

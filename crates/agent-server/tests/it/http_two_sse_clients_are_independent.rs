@@ -1,14 +1,13 @@
 //! 验收清单第二条：两个 SSE 客户端同帧序；断一个不影响另一个。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_server::{Frame, SessionEvent};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 /// 034：SSE 帧 data 是 `Frame` 信封，不再是裸的 `SessionEvent`——返回整个信封
 /// （不只 `event`）：「两个订阅者该看到完全相同的事件序列」这条断言这样也顺带

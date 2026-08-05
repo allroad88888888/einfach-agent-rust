@@ -8,14 +8,13 @@
 //! 3. 消息树完整：root 四条、每个子 agent 两条，子的结论逐字进了父的 tool_result；
 //! 4. `turn_id` 全树一致（决策 5：子 agent 的 entry 继承 root 那一轮的号）。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Role, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, ToolTable, run_turn};
+use agent_runtime::{run_turn, RunnerEvent, ToolTable};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 /// root 首跳：两个 spawn，wire 上的函数名是转义过的（`srv:agent/spawn` →
 /// `srv_3Aagent_2Fspawn`，规则见 `agent-providers/src/wire/names.rs`）。

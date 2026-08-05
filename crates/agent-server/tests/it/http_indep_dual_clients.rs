@@ -1,13 +1,11 @@
 //! 031 独立测试 agent：双客户端（issue 031 验收「两条 SSE 连接同帧序；断一条
 //! 另一条不受影响、会话不被宽限杀（引用计数 >0）」）。
 
-mod http_indep_support;
-
 use std::time::Duration;
 
-use http_indep_support::fake_upstream::{FakeUpstream, Script};
-use http_indep_support::server_harness::{HarnessConfig, start};
-use http_indep_support::sse_client::{SseClient, SseFrame};
+use crate::http_indep_support::fake_upstream::{FakeUpstream, Script};
+use crate::http_indep_support::server_harness::{HarnessConfig, start};
+use crate::http_indep_support::sse_client::{SseClient, SseFrame};
 
 fn collect_until_terminal(sse: &mut SseClient) -> Vec<SseFrame> {
     let mut frames = Vec::new();

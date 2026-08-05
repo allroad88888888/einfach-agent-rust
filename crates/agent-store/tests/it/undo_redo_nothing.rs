@@ -1,8 +1,7 @@
 //! 验收 6（017）：`Nothing` 的三种触发——空日志、顶端 redo、底端 undo。
 //! 钉死接口（重建版本）见 `undo_redo_roundtrip.rs` 顶部注释。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{History, Store, UndoOutcome, record_set};
 

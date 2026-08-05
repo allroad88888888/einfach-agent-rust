@@ -30,6 +30,7 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 | [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) | 子 agent 状态**给模型看** | M8 |
 | [docs/INTEGRATION.md](docs/INTEGRATION.md) | 给**企业宿主**看：chatid 身份 / 拉取式传输 / 进程生命周期 | M9 |
 | [docs/HOST-CAPABILITIES.md](docs/HOST-CAPABILITIES.md) | 宿主声明自己的 tool / skill / MCP | M10 |
+| [docs/IMAGES.md](docs/IMAGES.md) | 图片附件：怎么进 prompt、吃不下的家怎么降级 | M11 |
 
 新会话先读 `ROADMAP.md`（知道在哪）、`docs/issues/`（知道下一步做什么）、
 `INVARIANTS.md`（知道什么不能碰）。
@@ -93,6 +94,10 @@ fork 时移除的 Excel 血统：`ArrayData`（rows×cols 矩形块）、`Lambda
 pnpm workspace 在 `packages/`（`protocol` + `web`）+ `apps/`（`desktop`，M3 建）。
 另有两个**独立 workspace**，不进主依赖图：`probes/api` 与 `apps/desktop/src-tauri`。
 TS 侧的协议类型由 Rust 用 **ts-rs** 生成，**不手写**——见 ARCHITECTURE.md §「协议类型」。
+
+**集成测试一律写进各 crate 的 `tests/it/`**（新建文件 + 在 `tests/it/main.rs` 加一行
+`mod`），**不要在 `tests/` 顶层建 `.rs`**——顶层每个文件都是独立链接的二进制，267 个
+测试文件曾两天把 target 堆到 58GB/88 万文件，2026-08-05 已合并为每 crate 一个 harness。
 
 ## 自动检查
 

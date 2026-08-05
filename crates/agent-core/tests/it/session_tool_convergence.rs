@@ -6,13 +6,12 @@
 //! （收敛时机、截断、协议违规），这份测「003 的三条验收各自的反例锚点」
 //! （全败仍继续、重复不覆盖、错误文本进 prompt、收敛是扫不是计数）。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{ContentBlock, Effect, Notice, SlotState, ToolCallId, TurnStatus};
 
-use support::session::{new_session, observe, session_with_pending_tools};
+use crate::support::session::{new_session, observe, session_with_pending_tools};
 
 /// 003 验收 2：**全部**失败仍然继续（让模型看到全貌再决定），不是直接 `Failed`。
 #[test]

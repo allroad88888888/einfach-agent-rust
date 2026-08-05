@@ -6,14 +6,13 @@
 //! 顺带钉住 027 的自动擦除策略在 actor 里一样生效：取消落地成
 //! `Failed(Cancelled)` 之后，紧跟着一条 `SessionEvent::Undo(Applied)`。
 
-mod support;
-
+use crate::support;
 use std::time::{Duration, Instant};
 
 use agent_core::{Failure, TurnStatus};
 use agent_server::{Command, SessionEvent, UndoOutcome};
 
-use support::server::{FakeServer, Script};
+use crate::support::server::{FakeServer, Script};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_of_ms() {
@@ -25,7 +24,10 @@ async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_
 
     let mut sub = handle.subscribe();
     handle
-        .send(Command::Input("say something slow".to_string()))
+        .send(Command::Input {
+            text: "say something slow".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
 
     let cancel_handle = handle.clone();

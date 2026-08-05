@@ -7,15 +7,14 @@
 //! 已经有一条 `barrier: true` 的 entry（shell 调用的结果），`session.undo_turn()`
 //! 走到它就停，`after_cancelled_turn` 因此走 `Blocked` 分支。
 
-mod support;
-
+use crate::support;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use agent_cli::undo;
 use agent_core::{AgentId, Failure, Session, TurnStatus};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn hop1_shell_call(marker: &str) -> ScriptedResponse {
     let arguments = format!(r#"{{\"cmd\": \"echo hi > {marker}\"}}"#);

@@ -18,18 +18,16 @@
 //! 被 collect 领走的子**留在树上并转 `Done`**（collect 不拆人）也在第一条里一并
 //! 断言：最后一帧三个节点全 `Done`。
 
-mod spawn_bg_support;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use agent_core::{AgentActivity, AgentId, AgentLimits, AgentTree, Session, TurnStatus};
-use agent_runtime::{RunnerCtx, ToolTable, run_turn};
+use agent_runtime::{run_turn, RunnerCtx, ToolTable};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
-    wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir, wire_tool_name, Route,
+    RoutedServer,
 };
 
 /// 两个后台子都跑这么久——比 root 的后续几跳（零延迟）慢得多，于是「root 已经

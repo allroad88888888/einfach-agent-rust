@@ -1,8 +1,7 @@
 //! 055：业务 chatid 作为会话身份时，重复请求要接上活会话，关闭后的同一
 //! chatid 要从默认 jsonl 恢复；不可信 id 则在任何文件系统副作用之前拒绝。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -12,9 +11,9 @@ use agent_server::{
     AgentServer, Frame, ServerConfig, SessionEvent, SessionTemplate, SessionsHandle,
 };
 
-use support::http_client::{self, SseReader};
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client::{self, SseReader};
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 const CHAT_ID: &str = "customer_42-chat";
 

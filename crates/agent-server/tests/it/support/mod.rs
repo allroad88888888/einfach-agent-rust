@@ -1,7 +1,9 @@
 //! 集成测试共用的假 SSE 服务器 + `OpenSpec` 装配 + 「收事件收到终态」的小工具。
 #![allow(dead_code)]
 
+mod http_chunked;
 pub mod http_client;
+mod http_response;
 pub mod http_server;
 pub mod routed;
 pub mod server;

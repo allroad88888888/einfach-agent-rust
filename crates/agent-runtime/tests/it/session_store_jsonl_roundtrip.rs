@@ -3,16 +3,14 @@
 //! `session_store_memory_full_chain.rs` 是同一段调用方代码（`command` 帮助函数逐字
 //! 相同），只换了后端——这正是 011 要求的「Memory 与 Jsonl 都过同一套端口行为测试」。
 
-mod session_store_support;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::history::{History, apply_next, capture, record_set, restore};
+use agent_store::history::{apply_next, capture, record_set, restore, History};
 use agent_store::{AtomFamily, AtomId, SessionStore, Snapshot, Store};
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::Jsonl;
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 type Log = History<String, Val, u32>;
 type Backend = Jsonl<String, Val, u32>;

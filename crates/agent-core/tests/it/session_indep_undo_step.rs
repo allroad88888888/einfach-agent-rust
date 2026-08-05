@@ -3,11 +3,9 @@
 //! 任何 `step()` 调用），这是 003 验收 3「收敛判断不是计数器、是扫描」在
 //! `Session` 一侧唯一够得着的复现方式——原子图版本没有直接给字段赋值的后门。
 
-mod support;
-
 use agent_core::UndoReport;
-use support::session::{new_session, session_with_pending_tools};
-use support::{provider_done_end_turn, tool_result_event, user_input_event};
+use crate::support::session::{new_session, session_with_pending_tools};
+use crate::support::{provider_done_end_turn, tool_result_event, user_input_event};
 
 #[test]
 fn undo_step_flips_convergence_back_immediately_without_a_step_call() {

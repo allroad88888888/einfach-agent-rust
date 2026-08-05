@@ -4,10 +4,8 @@
 //! `parse_initialize_result` 文档注释）、`docs/issues/041-mcp-protocol.md`
 //! §验收「录制的 initialize 响应」一条。只测规格，不看实现体。
 
-mod common;
-
 use agent_mcp::{ProtocolError, parse_initialize_result};
-use common::recorded_result;
+use crate::common::recorded_result;
 use serde_json::json;
 
 #[test]

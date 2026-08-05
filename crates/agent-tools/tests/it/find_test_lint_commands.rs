@@ -1,10 +1,8 @@
 //! `srv:workspace/find_test_lint_commands` 的发现边界：只读 manifest，返回 argv 候选。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn discover(root: &TestRoot) -> Value {
     let output = ToolExecutor::new(root.path())

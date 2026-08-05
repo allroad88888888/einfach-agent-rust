@@ -5,11 +5,10 @@
 //! 而是「经真实 HTTP 创建的会话，句柄能拿到、`close_all` 之后它们真的从
 //! registry 摘掉了（`GET /sessions/:id` 由 200 alive 变成 404 not-found）」。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
-use support::http_server::session_template;
+use crate::support::http_server::session_template;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn close_all_closes_every_session_created_over_http() {

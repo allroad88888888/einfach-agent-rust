@@ -5,12 +5,11 @@
 //! 前缀回退正确——`prev_prefix` 也是 primitive，undo 会把它带回上一轮末尾
 //! 那份镜像）。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, RequestIntent, Session, SessionConfig, TurnStatus, UndoReport};
-use agent_providers::{Ingredients, Provider, deepseek::DeepSeek};
+use agent_providers::{deepseek::DeepSeek, Ingredients, Provider};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 fn hop1_tool_use() -> ScriptedResponse {
     ScriptedResponse::Sse(vec![

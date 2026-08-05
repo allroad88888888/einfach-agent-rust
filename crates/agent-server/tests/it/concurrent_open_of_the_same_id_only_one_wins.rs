@@ -10,8 +10,7 @@
 //! 发起 N 次 `open`，有且只有一次成功，其余全部拿到明确的「已经在开/开着」
 //! 错误，而不是静默覆盖导致的线程泄漏。
 
-mod support;
-
+use crate::support;
 use std::sync::{Arc, Barrier};
 use std::thread;
 

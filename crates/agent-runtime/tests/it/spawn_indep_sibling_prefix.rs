@@ -11,13 +11,11 @@
 //! 断言不依赖对 encode() 输出结构的额外假设，只依赖「前缀不含 task」这一
 //! 条被测的性质本身。
 
-mod spawn_indep_support;
-
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_indep_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
+use crate::spawn_indep_support::{
+    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 #[test]

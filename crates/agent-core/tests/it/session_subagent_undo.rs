@@ -12,15 +12,14 @@
 //! 理由与代价写在 `command/tree.rs` 与 `command/despawn.rs` 的模块文档里，
 //! 这个文件是它的可执行形式：`redo_turn` 之后子树必须**完整**回来。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{
     AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use support::user_input_event;
-use support::user_input_for;
+use crate::support::user_input_event;
+use crate::support::user_input_for;
 
 fn subtree_of(s: &Session, agent: &AgentId) -> Vec<(AtomKey, AgentValue)> {
     s.primitives()

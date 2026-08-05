@@ -6,13 +6,11 @@
 //! `docs/STATE-MODEL.md` 与 017 `UndoOutcome` 文档说的"undo 按 seq 倒序、
 //! redo 按正序"在 applier 这一层的样子。函数本身不重排 entries，顺序是调用方的责任。
 
-mod common;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Change, Entry, Store, apply_next, apply_prev};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 #[test]
 fn apply_next_replayed_in_redo_order_restores_the_pre_undo_state() {

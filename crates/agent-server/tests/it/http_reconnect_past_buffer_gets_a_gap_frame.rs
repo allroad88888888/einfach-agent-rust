@@ -2,16 +2,15 @@
 //! `gap` 事件，不是假装什么都没发生。`support::http_server::start` 把环形缓冲
 //! 容量调到 5 帧，好在测试里真的把它挤爆而不用发几百条消息。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::AgentId;
 use agent_server::{Frame, SessionEvent};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_last_event_id_older_than_the_ring_buffer_yields_an_explicit_gap_frame() {

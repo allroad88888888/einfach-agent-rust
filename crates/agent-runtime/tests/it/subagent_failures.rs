@@ -4,15 +4,14 @@
 //! 不该把父那一轮拖垮，父收到一条 `is_error` 的 tool_result 照常接着干——
 //! 模型比我们更知道这个失败要不要紧。
 
-mod support;
-
+use crate::support;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Failure, Session, TurnStatus};
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use support::routed::{Route, RoutedServer};
+use crate::support::routed::{Route, RoutedServer};
 
 const USAGE_STOP: &str = r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":50,"completion_tokens":10,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":50}}"#;
 

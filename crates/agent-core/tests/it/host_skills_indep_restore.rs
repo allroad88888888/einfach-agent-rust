@@ -10,9 +10,12 @@
 //! `crm-flow` 激活着、展开注入却什么都取不到（`injection` 对查不到的 id 静默跳过），
 //! 而模型的历史里明明写着它读过那段正文。这份测试的最后一条就钉这个。
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use agent_core::{AgentId, AgentValue, AtomKey, HostSkill, Session, SkillId, Slot, ToolSpec};
+use agent_core::{
+    AgentId, AgentValue, AtomKey, HostSkill, Reversibility, Session, SkillId, Slot, ToolSpec,
+};
 
 fn root() -> AgentId {
     AgentId::root()
@@ -26,6 +29,7 @@ fn declaration() -> Vec<HostSkill> {
             description: Arc::from("发信的标准流程"),
             body: Arc::from("先草拟再发送。"),
             tools: Vec::new(),
+            tool_reversibility: BTreeMap::new(),
         },
         HostSkill {
             id: SkillId::new("crm-flow"),
@@ -40,6 +44,7 @@ fn declaration() -> Vec<HostSkill> {
                     "required": ["ticket"]
                 })),
             }],
+            tool_reversibility: BTreeMap::from([(Arc::from("web:crm/close"), Reversibility::Pure)]),
         },
     ]
 }
@@ -70,7 +75,7 @@ fn restore_with(snapshot: Vec<(AtomKey, AgentValue)>) -> Session {
     session
 }
 
-/// 直接注入快照：四个字段一个不差（含自带工具的 schema 那段自由 JSON）。
+/// 直接注入快照：五个字段一个不差（含工具 schema 与旁挂执行元数据）。
 #[test]
 fn a_snapshot_with_host_skills_restores_every_field_of_every_declaration() {
     let session = restore_with(vec![(
@@ -98,9 +103,37 @@ fn a_snapshot_with_host_skills_restores_every_field_of_every_declaration() {
         restored[0].tools[0].schema["properties"]["ticket"]["type"],
         serde_json::json!("string")
     );
+    assert_eq!(
+        restored[0].tool_reversibility["web:crm/close"],
+        Reversibility::Pure
+    );
     assert!(
         restored[1].tools.is_empty(),
         "不带工具的 skill 恢复出来也不该凭空长出工具"
+    );
+}
+
+/// 064 写出的旧快照没有执行元数据字段；升级后仍须读回声明，而不是整项跳过。
+#[test]
+fn a_legacy_snapshot_without_tool_reversibility_still_restores() {
+    let legacy = AgentValue::Json(Arc::new(serde_json::json!([{
+        "id": "crm-flow",
+        "description": "处理客户工单",
+        "body": "先查档案。",
+        "tools": [{
+            "name": "web:crm/lookup",
+            "description": "查 CRM",
+            "schema": { "type": "object" }
+        }]
+    }])));
+
+    let session = restore_with(vec![(AtomKey::Agent(root(), Slot::HostSkills), legacy)]);
+    let restored = session.host_skills();
+    assert_eq!(restored.len(), 1, "旧形状不能因为缺新字段而被整项跳过");
+    assert_eq!(&*restored[0].tools[0].name, "web:crm/lookup");
+    assert!(
+        restored[0].tool_reversibility.is_empty(),
+        "缺字段用空映射表示；执行侧按名字缺省为 irreversible"
     );
 }
 

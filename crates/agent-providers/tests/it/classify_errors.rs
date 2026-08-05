@@ -11,8 +11,7 @@
 //! **402 必须单列成 `Exhausted`**——PROVIDERS.md 原话：混进限流会安静地退避到
 //! 天荒地老。
 
-mod support;
-
+use crate::support;
 use agent_core::ErrorClass;
 use agent_providers::Provider;
 

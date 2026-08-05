@@ -2,11 +2,9 @@
 //! 类型不对 → `bad_input`；不存在的文件 → `not_found`；offset 超总行数 →
 //! `Ok("")`（非错误）。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn unknown_tool_name_is_rejected() {

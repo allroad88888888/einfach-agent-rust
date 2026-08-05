@@ -5,8 +5,7 @@
 //!
 //! 验收 2。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{History, Store, record_set};
 

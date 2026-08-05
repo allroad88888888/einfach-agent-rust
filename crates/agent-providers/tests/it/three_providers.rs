@@ -7,8 +7,6 @@
 //!
 //! 红线 12 的元测试已经在 `invariants_meta.rs` 里，本文件不重复写。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{RequestIntent, SessionConfig, ToolSpec};
@@ -17,7 +15,7 @@ use agent_providers::deepseek::DeepSeek;
 use agent_providers::glm::Glm;
 use agent_providers::kimi::Kimi;
 
-use support::{
+use crate::support::{
     assistant_text, ingredients, schema_order_a, schema_order_b, sys_chunk, tool_spec, user_text,
 };
 

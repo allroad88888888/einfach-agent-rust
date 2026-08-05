@@ -8,12 +8,10 @@
 //! `read_ancestor` / `read_descendant` 两个跨 agent 读口，也没有 `store()`
 //! 访问器。这里能测的是第二道保险：把兄弟当参数喂进这两个口，它们显式拒绝。
 
-mod support;
-
 use std::sync::Arc;
 
 use agent_core::{AgentId, AgentValue, ChildConfig, ReadDenied, Session, Slot, Visibility};
-use support::{user_input_event, user_input_for};
+use crate::support::{user_input_event, user_input_for};
 
 fn tree() -> (Session, AgentId, AgentId, AgentId) {
     let mut s = Session::new(AgentId::root());

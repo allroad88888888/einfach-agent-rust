@@ -18,14 +18,13 @@
 //! 空 ring，压根碰不到这条 bug（issue §现象 的 ⚠️ 块）。判据是「会话身份被复用 +
 //! 客户端没有游标」。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_server::{Frame, SessionEvent, ToolTableSpec};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 const CHAT_ID: &str = "chat-072";
 

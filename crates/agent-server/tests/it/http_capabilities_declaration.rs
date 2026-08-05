@@ -2,15 +2,14 @@
 //! 一律 400 **且会话根本没被建出来**（不只断状态码：既问 registry 的 `ids()`，
 //! 也顺手 `GET /sessions/:id` 看它是不是 404）。
 
-mod support;
-
+use crate::support;
 use std::net::SocketAddr;
 
 use agent_server::{AgentServer, ServerConfig, SessionTemplate, SessionsHandle};
 use serde_json::{Value, json};
 
-use support::http_client;
-use support::server::FakeServer;
+use crate::support::http_client;
+use crate::support::server::FakeServer;
 
 const CHAT_ID: &str = "capabilities-chat";
 

@@ -11,8 +11,7 @@
 //!   （前缀归零，PROVIDERS.md「顶层 tools 在 prompt 最前面」）。
 //! - 改中段历史（不是追加）：`drift == Some(Segment::History)`。
 
-mod support;
-
+use crate::support;
 use agent_core::{RequestIntent, Segment};
 use agent_providers::Provider;
 

@@ -1,16 +1,15 @@
 //! 验收清单第三条前半：重连带 `Last-Event-ID` → 精确补发缺的帧，帧内容逐字节
 //! 同首播。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_core::Notice;
 use agent_server::{Frame, SessionEvent};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 /// 反序列化成真的 `Frame`（而不是子串匹配）才知道是不是终态——嵌套的
 /// `agent_core::Notice` 用的是它自己的 serde 默认命名（`TurnStatusChanged`，

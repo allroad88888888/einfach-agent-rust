@@ -7,13 +7,11 @@
 //! 做完整版本；agent-store 自己的 `session_store_memory_full_chain.rs` 只测了
 //! `Memory` 单独那一半。
 
-mod session_store_support;
-
 use agent_store::history::{Change, Entry};
 use agent_store::{Memory, SessionStore, Snapshot};
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::Jsonl;
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 fn entry(seq: u64, value: i64) -> Entry<String, Val, u32> {
     Entry {

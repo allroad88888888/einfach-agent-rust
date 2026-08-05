@@ -11,15 +11,13 @@
 //! 对照组是这条测试的全部强度所在：没有它，「第二跳没发出去」这句话对一个压根
 //! 发不出第二跳的脚本也成立。
 
-mod spawn_bg_support;
-
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, run_turn};
+use agent_runtime::{run_turn, RunnerEvent};
 
-use spawn_bg_support::{
-    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
+use crate::spawn_bg_support::{
+    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
 };
 
 /// 子第一跳的延迟：留足时间让 root 先收尾。

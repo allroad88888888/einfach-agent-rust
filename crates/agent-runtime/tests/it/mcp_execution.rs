@@ -7,12 +7,11 @@
 //! `unknown_tool` 错误，绝造不出 `"Echo: hi"` 这段内容——所以一条 `is_error: false`
 //! 且内容等于假 server 回值的 `ToolResult`，就是走了第四路的铁证。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, run_turn};
+use agent_runtime::{run_turn, RunnerEvent};
 
-use support::mcp;
+use crate::support::mcp;
 
 fn tool_result_block(session: &Session) -> (String, bool) {
     for message in session.messages() {

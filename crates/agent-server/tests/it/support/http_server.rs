@@ -70,7 +70,7 @@ pub async fn start_at_with_template(
 /// 跟 `support::open_spec` 同一套参数选择（DeepSeek、短连接超时/取消轮询节奏），
 /// 只是形状是 `SessionTemplate`（少 `id`/`store_path`，031 的 `POST /sessions`
 /// 只认 `session_path`，`id` 由服务端生成）。`pub`——`start_at_with_template`
-/// 的调用方常常只想改一个字段（比如 provider），不想把其余七个字段重抄一遍。
+/// 的调用方常常只想改一个字段（比如 provider），不想把其余八个字段重抄一遍。
 pub fn session_template(endpoint: String) -> SessionTemplate {
     let client = Client::with_config(
         Duration::from_secs(5),
@@ -82,6 +82,7 @@ pub fn session_template(endpoint: String) -> SessionTemplate {
     );
     SessionTemplate {
         provider: std::sync::Arc::new(DeepSeek),
+        upload_base_url: endpoint.clone(),
         endpoint,
         api_key: "fake-key".to_string(),
         model: std::sync::Arc::from("deepseek-v4-pro"),

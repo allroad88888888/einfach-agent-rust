@@ -9,16 +9,14 @@
 //! 用的那份，`boundary` 从 0 起步）重放出来的游标会和真实的活体状态对不上，
 //! 而且不 panic、不报错——正是这类静默错值最难查的地方，得有一个测试专门盯着它。
 
-mod session_store_support;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::history::{History, apply_next, capture, record_set, restore};
+use agent_store::history::{apply_next, capture, record_set, restore, History};
 use agent_store::{AtomFamily, AtomId, SessionStore, Snapshot, Store};
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::Jsonl;
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 type Log = History<String, Val, u32>;
 type Backend = Jsonl<String, Val, u32>;
@@ -125,8 +123,8 @@ fn cap_eviction_crossing_a_snapshot_boundary_survives_a_restart() {
 
         command(&world, &mut log, &backend, 2, &[("a", Val(2))]); // seq 1，未溢出
         command(&world, &mut log, &backend, 3, &[("b", Val(3))]); // seq 2 → 溢出，驱逐 seq0
-        // seq0 早被快照吃过了：这次驱逐对 held 应该是空转（跟 Memory 那边的推导一样，
-        // 只是这里额外经过一次「写文件 → 从文件重放」）。
+                                                                  // seq0 早被快照吃过了：这次驱逐对 held 应该是空转（跟 Memory 那边的推导一样，
+                                                                  // 只是这里额外经过一次「写文件 → 从文件重放」）。
         command(&world, &mut log, &backend, 4, &[("a", Val(4))]); // seq 3 → 再溢出，真删 seq1
 
         assert!(errors.lock().unwrap().is_empty());

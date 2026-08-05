@@ -6,18 +6,16 @@
 //! （触发 `Drop` 里的排干），构造第二个全新实例指向同一个路径——第二个实例
 //! 没有任何活体镜像，`load()` 只能靠文件内容重建，这正是这个测试要证的事。
 
-mod session_store_support;
-
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use agent_store::history::{
-    History, UndoOutcome, apply_next, apply_prev, capture, record_set, restore,
+    apply_next, apply_prev, capture, record_set, restore, History, UndoOutcome,
 };
 use agent_store::{AtomFamily, AtomId, SessionStore, Snapshot, Store};
 
+use crate::session_store_support::{collecting_on_error, temp_path, Val};
 use agent_runtime::Jsonl;
-use session_store_support::{Val, collecting_on_error, temp_path};
 
 type Log = History<String, Val, u32>;
 type Backend = Jsonl<String, Val, u32>;

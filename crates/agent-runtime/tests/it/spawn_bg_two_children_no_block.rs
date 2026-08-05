@@ -16,16 +16,14 @@
 //! 而「不回写父」这条要数着断言：父的 tool_result **恰好两条**（不是四条），
 //! 且子的回答正文一个字都没进父的历史。
 
-mod spawn_bg_support;
-
 use std::time::Duration;
 
 use agent_core::{AgentId, Session, TurnStatus};
 use agent_runtime::run_turn;
 
-use spawn_bg_support::{
-    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_calls, temp_dir,
-    tool_results, warned_about, wire_tool_name,
+use crate::spawn_bg_support::{
+    any_message_mentions, build_ctx, sse_text, sse_tool_calls, temp_dir, tool_results,
+    warned_about, wire_tool_name, Route, RoutedServer,
 };
 
 const CHILD: Duration = Duration::from_millis(250);

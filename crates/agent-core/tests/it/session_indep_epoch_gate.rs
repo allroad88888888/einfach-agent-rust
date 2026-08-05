@@ -1,11 +1,9 @@
 //! 026 独立测试：红线 6 端到端——undo（或 Cancel 后 undo）之后旧 epoch 的
 //! `ToolResult` 喂 `step` 必须被闸挡掉：返回空 effects，`primitives()` 逐值不变。
 
-mod support;
-
 use agent_core::UndoReport;
-use support::session::session_with_pending_tools;
-use support::{cancel_event, tool_result_event};
+use crate::support::session::session_with_pending_tools;
+use crate::support::{cancel_event, tool_result_event};
 
 #[test]
 fn a_tool_result_from_before_an_undo_is_dropped() {

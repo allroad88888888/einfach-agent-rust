@@ -10,11 +10,9 @@
 //! STATE-MODEL 说的「`agent` 仅用于 UI 时间线显示，不参与 undo 判定」在这份
 //! 落地代码里的具体形状。
 
-mod support;
-
 use agent_core::{AgentId, ChildConfig, Session};
-use support::session::new_session;
-use support::{provider_done_end_turn_for, user_input_for};
+use crate::support::session::new_session;
+use crate::support::{provider_done_end_turn_for, user_input_for};
 
 fn turn_ids_touching(session: &Session, agent: &AgentId) -> Vec<u64> {
     session

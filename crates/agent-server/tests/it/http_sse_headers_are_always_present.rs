@@ -3,10 +3,9 @@
 //! / Ingress / 内部 LB）默认缓冲会把流式响应变成一次性吐完，server 一次发对
 //! 全链路才老实。
 
-mod support;
-
-use support::http_client;
-use support::server::FakeServer;
+use crate::support;
+use crate::support::http_client;
+use crate::support::server::FakeServer;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn every_sse_response_carries_both_headers() {

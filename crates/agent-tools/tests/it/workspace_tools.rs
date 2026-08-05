@@ -1,10 +1,8 @@
 //! 可撤回文本写入的公开 ToolExecutor 接口验收。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn call(executor: &ToolExecutor, tool: &str, input: Value) -> Value {
     let output = executor.execute(tool, &input).unwrap();

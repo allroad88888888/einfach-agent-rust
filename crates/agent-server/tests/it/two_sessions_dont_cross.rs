@@ -2,12 +2,11 @@
 //! 线程互不共享。两个假服务器各自只认自己的那家会话，靠回复文本互不相同来
 //! 证明「session A 的订阅者只看得到 A 的文本」。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
-use support::server::{FakeServer, Script};
-use support::wire::text_reply;
+use crate::support::server::{FakeServer, Script};
+use crate::support::wire::text_reply;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn two_sessions_run_concurrently_without_crossing_events() {
@@ -26,10 +25,16 @@ async fn two_sessions_run_concurrently_without_crossing_events() {
     let mut sub_b = handle_b.subscribe();
 
     handle_a
-        .send(agent_server::Command::Input("hi from a".to_string()))
+        .send(agent_server::Command::Input {
+            text: "hi from a".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
     handle_b
-        .send(agent_server::Command::Input("hi from b".to_string()))
+        .send(agent_server::Command::Input {
+            text: "hi from b".to_string(),
+            images: Vec::new(),
+        })
         .unwrap();
 
     let events_a = support::collect_until_terminal(&mut sub_a, Duration::from_secs(5)).await;

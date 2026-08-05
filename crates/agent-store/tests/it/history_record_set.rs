@@ -6,8 +6,7 @@
 //! 验收 1（prev/next 都对 + seq 递增）、验收 3（值相等不进日志）、验收 7（prev 当场
 //! 捕获的时序链条）。
 
-mod common;
-use common::*;
+use crate::common::*;
 
 use agent_store::{History, Store, record_set};
 

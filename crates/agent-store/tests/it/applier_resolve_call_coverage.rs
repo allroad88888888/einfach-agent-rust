@@ -2,14 +2,12 @@
 //! 每个 change 的 key 都必须经过 resolve，不管这个 atom 是不是已经在 family 里
 //! ——已存在的 atom 不能因为"反正找得到"就被走另一条路径跳过 resolve。
 
-mod common;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, Change, Entry, Store, apply_prev};
-use common::{TestValue as V, num};
+use crate::common::{TestValue as V, num};
 
 #[test]
 fn every_change_key_goes_through_resolve_no_special_casing() {

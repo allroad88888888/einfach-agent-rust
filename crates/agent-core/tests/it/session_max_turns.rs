@@ -1,11 +1,10 @@
 //! 026 等价重写自 `max_turns.rs`：撞顶时能停住，且调用方能区分「答完了」
 //! （`Done{truncated:false}`）和「被截断了」（`Done{truncated:true}`）。
 
-mod support;
-
+use crate::support;
 use agent_core::{Effect, Notice, TurnStatus};
 
-use support::session::{new_session, thinking_session};
+use crate::support::session::{new_session, thinking_session};
 
 /// 默认上限是 32——016 的裁决，钉成回归断言。原子图版本多一层意思：这个默认值
 /// 来自 `graph::Slot::default_value()`，而它取的是 `engine::state` 的同一个常量，

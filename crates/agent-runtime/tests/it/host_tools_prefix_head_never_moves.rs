@@ -8,13 +8,11 @@
 //! 把 `tool_table_host.rs` 里的 `self.specs.push(spec)` 改成 `insert(0, spec)`
 //! （或者把 `with_host_tools` 挪到装配链的前面）这条就红。
 
-mod host_tools_bytes_support;
-
-use agent_providers::wire_name;
-use host_tools_bytes_support::{
-    DECLARED, assert_same_bytes, baseline_table, encode, items, providers, table_with, text,
-    tools_segment, wire_tools_bytes,
+use crate::host_tools_bytes_support::{
+    assert_same_bytes, baseline_table, encode, items, providers, table_with, text, tools_segment,
+    wire_tools_bytes, DECLARED,
 };
+use agent_providers::wire_name;
 use serde_json::Value;
 
 #[test]

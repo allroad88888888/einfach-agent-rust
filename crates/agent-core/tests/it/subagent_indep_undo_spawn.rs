@@ -11,13 +11,11 @@
 //! 黑盒来源：docs/issues/028-multi-agent-graph.md 「裁决：轮内 spawn 的子在
 //! undo 之后是什么」+ 验收第 4 条、docs/STATE-MODEL.md §「子 agent」。
 
-mod support;
-
 use agent_core::{
     AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use support::session::new_session;
-use support::{provider_done_end_turn_for, user_input_for};
+use crate::support::session::new_session;
+use crate::support::{provider_done_end_turn_for, user_input_for};
 
 fn child_slot_count(session: &Session, child: &AgentId) -> usize {
     session

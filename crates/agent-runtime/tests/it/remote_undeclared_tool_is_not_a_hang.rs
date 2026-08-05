@@ -12,13 +12,11 @@
 //! 对照组同在这个文件里：**真在表里**的 `browser_action`（也是 `Location::Web`）
 //! 照旧进槽——证明这道闸判的是「声明了没有」，不是「远端一律不许挂起」。
 
-mod support;
-
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
 use agent_providers::wire_name;
-use agent_runtime::{ToolTable, run_turn};
+use agent_runtime::{run_turn, ToolTable};
 
-use support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
+use crate::support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
 
 fn tool_results(session: &Session) -> Vec<(String, bool)> {
     session

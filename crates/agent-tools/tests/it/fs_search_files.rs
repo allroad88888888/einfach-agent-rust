@@ -1,10 +1,8 @@
 //! `srv:fs/search_files` 的功能与确定性输出预算。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::{Value, json};
-use support::TestRoot;
+use crate::support::TestRoot;
 
 fn run_search(root: &TestRoot, input: Value) -> Value {
     serde_json::from_str(&run_raw(root, input)).unwrap()

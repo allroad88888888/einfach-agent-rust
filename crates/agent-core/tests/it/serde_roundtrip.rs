@@ -1,8 +1,7 @@
 //! 验收 1：契约可序列化（红线 3 精神）。`Effect`、`Event`、`Notice` 每个变体都要
 //! serde 往返；`Effect::ExecuteTool` 带一个真实的 `ToolCallRequest` 快照。
 
-mod support;
-
+use crate::support;
 use std::sync::Arc;
 
 use agent_core::{
@@ -88,6 +87,7 @@ fn event_user_input_roundtrip() {
     roundtrip(&Event::UserInput {
         agent: support::agent(),
         text: Arc::from("hello"),
+        images: Vec::new(),
     });
 }
 

@@ -2,12 +2,11 @@
 //! runner 真执行 `srv:fs/read`（临时目录里的真文件），第二跳回 `EndTurn`。
 //! 断言终态 `Done`、消息历史完整、`GuardReport` 产出。
 
-mod support;
-
+use crate::support;
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
-use agent_runtime::{RunnerEvent, run_turn};
+use agent_runtime::{run_turn, RunnerEvent};
 
-use support::ScriptedResponse;
+use crate::support::ScriptedResponse;
 
 /// 第一跳：DeepSeek 的 wire 形状（工具名转义 `srv:fs/read` → `srv_3Afs_2Fread`，
 /// 跟 `agent-providers/src/deepseek/mod.rs` 里已经验证过的录制帧同一套写法，

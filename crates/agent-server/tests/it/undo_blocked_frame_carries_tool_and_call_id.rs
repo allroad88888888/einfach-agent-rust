@@ -6,14 +6,13 @@
 //! agent-core 的公共读口）现查出来的工具名/call_id/label，不是甩一个裸的
 //! `barrier_seq` 数字给 web 端猜（027 的原则：让人明白自己在确认什么）。
 
-mod support;
-
+use crate::support;
 use std::time::Duration;
 
 use agent_server::{Frame, SessionEvent, UndoOutcome};
 
-use support::http_client;
-use support::server::{FakeServer, Script};
+use crate::support::http_client;
+use crate::support::server::{FakeServer, Script};
 
 /// 第一跳：模型声明一次 `srv:shell/exec`（wire 上的函数名是转义过的，
 /// `srv:shell/exec` → `srv_3Ashell_2Fexec`，`agent-providers/src/wire/

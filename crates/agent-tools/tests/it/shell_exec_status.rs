@@ -3,11 +3,9 @@
 //! spawn_failed/timeout 才是 `Err`，退出码非零、有 stderr 都是「模型该看见的
 //! 信息」，不是「工具执行失败」。
 
-mod support;
-
 use agent_tools::ToolExecutor;
 use serde_json::json;
-use support::TestRoot;
+use crate::support::TestRoot;
 
 #[test]
 fn nonzero_exit_code_is_ok_with_exit_code_marker() {
