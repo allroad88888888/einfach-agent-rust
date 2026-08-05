@@ -36,7 +36,7 @@ class AgentProxyRemoteToolProtocolTest {
 
         URI baseUri = URI.create("http://127.0.0.1:" + upstream.getAddress().getPort() + "/");
         AgentRuntimeProperties properties = new AgentRuntimeProperties(
-                null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, 0);
         AgentServerProcess process = new AgentServerProcess(properties, new ObjectMapper());
         ReflectionTestUtils.setField(process, "baseUri", baseUri);
         AgentProxyController controller = new AgentProxyController(WebClient.create(), process);

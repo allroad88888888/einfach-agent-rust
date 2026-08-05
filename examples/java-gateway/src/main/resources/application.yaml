@@ -9,4 +9,5 @@ agent:
     key-env: ${AGENT_API_KEY_ENV:DEEPSEEK_API_KEY}
     startup-timeout: 20s
     shutdown-timeout: 30s
+    remote-tool-timeout: ${AGENT_REMOTE_TOOL_TIMEOUT:10m}
     poll-wait-ms: 25000

@@ -21,6 +21,7 @@ public record AgentRuntimeProperties(
         String keyEnv,
         Duration startupTimeout,
         Duration shutdownTimeout,
+        Duration remoteToolTimeout,
         int pollWaitMs) {
 
     private static final Pattern ENVIRONMENT_VARIABLE = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
@@ -33,6 +34,7 @@ public record AgentRuntimeProperties(
         keyEnv = defaultIfBlank(keyEnv, "DEEPSEEK_API_KEY");
         startupTimeout = defaultIfNull(startupTimeout, Duration.ofSeconds(20));
         shutdownTimeout = defaultIfNull(shutdownTimeout, Duration.ofSeconds(30));
+        remoteToolTimeout = defaultIfNull(remoteToolTimeout, Duration.ofMinutes(10));
         pollWaitMs = pollWaitMs == 0 ? 25_000 : pollWaitMs;
 
         if (!ENVIRONMENT_VARIABLE.matcher(keyEnv).matches()) {
@@ -43,6 +45,9 @@ public record AgentRuntimeProperties(
         }
         if (shutdownTimeout.isNegative() || shutdownTimeout.isZero()) {
             throw new IllegalArgumentException("agent.runtime.shutdown-timeout 必须大于 0");
+        }
+        if (remoteToolTimeout.compareTo(Duration.ofMillis(1)) < 0) {
+            throw new IllegalArgumentException("agent.runtime.remote-tool-timeout 必须至少为 1ms");
         }
         if (pollWaitMs < 1 || pollWaitMs > 60_000) {
             throw new IllegalArgumentException("agent.runtime.poll-wait-ms 必须在 1 到 60000 之间");

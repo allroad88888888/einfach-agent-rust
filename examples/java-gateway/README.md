@@ -100,6 +100,7 @@ They do not contain a secret:
         key-env: ${AGENT_API_KEY_ENV:DEEPSEEK_API_KEY}
         startup-timeout: 20s
         shutdown-timeout: 30s
+        remote-tool-timeout: ${AGENT_REMOTE_TOOL_TIMEOUT:10m}
         poll-wait-ms: 25000
 
 Put provider selection, model, and the matching key variable name in the TOML
@@ -133,6 +134,11 @@ to the child environment, and never adds its value to an argument, ready file,
 property, or Java-authored log line. Keep providers.toml out of source control
 when it contains deployment-specific configuration; use api_key_env rather
 than an inline key.
+
+`remote-tool-timeout` is the maximum time between a browser/desktop host
+claiming a remote tool call and committing its result. Keep the 10-minute
+default for interactive tools; use `AGENT_REMOTE_TOOL_TIMEOUT` (for example
+`750ms` or `2m`) when the host needs a different operational deadline.
 
 If `java` reports "Unable to locate a Java Runtime" on macOS you are hitting
 the `/usr/bin/java` stub. Point JAVA_HOME at a real JDK, for example

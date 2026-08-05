@@ -59,6 +59,9 @@ public final class AgentServerProcess {
             // ProcessBuilder 默认继承环境；显式放回所选变量使配置语义一目了然。
             // 绝不记录这个值，也不把它放进 argv、providers.toml 或 ready file。
             builder.environment().put(properties.keyEnv(), System.getenv(properties.keyEnv()));
+            builder.environment().put(
+                    "AGENT_REMOTE_TOOL_TIMEOUT_MS",
+                    Long.toString(properties.remoteToolTimeout().toMillis()));
             process = builder.start();
             copyChildOutput(process);
             baseUri = awaitReadyFile(process, readyFile);
