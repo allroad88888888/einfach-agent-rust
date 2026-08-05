@@ -1,51 +1,136 @@
 # einfach-agent
 
-企业级 Agent 运行时。核心是一个**原子状态引擎**——agent 的全部状态活在一张依赖
-图里，因此 **undo / redo / 崩溃恢复 / 审计回放是同一套机制的四个投影**，不是四个
-功能。同一个核心库，四种形态，全部经真实世界验收：
+> English is the primary project language. [简体中文](README.zh-CN.md)
 
-| 形态 | 入口 | 能干什么 |
+An embeddable agent runtime that lets each host application supply its own tools and skills—without
+turning the model context or the Rust core into an integration dump.
+
+The standout feature is a complete host-capability loop:
+
+```text
+Browser / Desktop / Java capabilities
+                 │
+          compact skill index
+                 │
+          AI activates one bundle
+                 │
+      instructions + tools appear
+                 │
+       one host claims execution
+                 │
+       Rust commits one final result
+```
+
+## Why It Is Different
+
+### Host applications can teach the agent new capabilities
+
+A host supplies session-scoped tools and skills when it creates a conversation. The same Rust agent
+can therefore operate inside a finance application, an admin console, a design product, or a desktop
+shell without hard-coding each product integration into the core.
+
+- `web:` tools execute in a browser or web host.
+- `desk:` tools execute in a desktop host.
+- Skills package domain instructions together with related tools.
+- Built-in server tools can be disabled per session.
+
+Declarations are validated, deterministically ordered, journaled with the session, and restored with
+the conversation. A later deployment change cannot silently rewrite the capability surface of an
+existing conversation.
+
+### Large capability catalogs stay lazy
+
+Large tool surfaces can be grouped into skills. Initially, the model sees only a compact index of
+skill names and descriptions. It explicitly activates the relevant skill before the full instructions
+and its tool schemas enter the request.
+
+This keeps unrelated domain knowledge out of the prompt, avoids context growth proportional to the
+entire catalog, and preserves stable prefixes for provider prompt caching. Small, always-available
+host tools may still be declared directly.
+
+### Remote tools have a real execution protocol
+
+When several tabs or host processes observe the same tool call, they do not race to perform the side
+effect. Rust atomically grants one claim inside the session actor. Only the winner may execute.
+
+Result delivery is strongly acknowledged:
+
+- `committed` means the actor verified and applied the terminal result—not merely queued it;
+- retrying an identical submission returns `duplicate` without advancing the model twice;
+- changing an already-used submission returns `result_conflict`;
+- cancellation, expiry, stale calls, and claim mismatches have distinct structured outcomes.
+
+The protocol also refuses to lie about distributed uncertainty. If nobody claimed a call, it ends as
+`unclaimed_timeout`. If a host claimed it and then disappeared, it ends as `outcome_unknown`, because
+the external side effect may already have happened and must not be retried silently.
+
+### State is the source of truth
+
+Every piece of agent state lives in one atomic dependency graph. Undo, redo, crash recovery, and
+audit replay are four projections of the same mechanism rather than four loosely synchronized
+features.
+
+A turn removed by `/undo` is genuinely absent from the model's reconstructed memory. Reversibility
+barriers prevent accidental rollback across irreversible work, while explicit override remains
+available when the operator intends it.
+
+### Provider differences stay outside the core
+
+The core contains no provider-specific branching. Adapters translate intent for DeepSeek, Kimi, and
+GLM and report every unavoidable adjustment as observable data. Prefix-byte checks, response
+accounting, and rolling cache telemetry make prompt-cache regressions visible during the turn rather
+than on the next invoice.
+
+## Real-World Verification
+
+The host execution path has been exercised end to end, not only through mocks:
+
+- 100 real-TCP concurrent claim races produced exactly one winner per round;
+- two real browsers connected through the Java gateway with the same `chatid`;
+- only the winning browser performed the side effect;
+- retry after a simulated lost HTTP response returned `duplicate`;
+- disconnect after claim produced `outcome_unknown`, while the observing browser and session
+  continued normally.
+
+The detailed protocol and evidence are recorded in
+[Host-Native Tools and Skills](docs/issues/092-remote-tool-result-protocol.md).
+
+## Runtime Surfaces
+
+| Surface | Entry point | Purpose |
 |---|---|---|
-| CLI | `cargo run -p agent-cli -- --session s.jsonl` | 对话、模型调工具、`/undo`（prompt 级真回滚）、`/undo!` 越不可逆屏障、`kill -9` 重启续聊 |
-| 浏览器 | `cargo run -p agent-server --example serve` + `pnpm --filter web dev` | SSE 流式、模型 spawn 子 agent 并行（帧带归属）、断开自动取消在飞 |
-| 独立 server | `cargo run -p agent-server-bin -- --sessions-dir ./sessions` | 六端点 HTTP/SSE，企业网关挡在前面即可（无鉴权是设计，见决策 11） |
-| 桌面 | `pnpm --filter desktop tauri build` | Tauri 内嵌同一个 server 库 + 同一套 web 前端（逐文件同哈希） |
+| CLI | `cargo run -p agent-cli` | Conversation, tools, agents, undo/redo, and crash recovery |
+| Standalone server | `cargo run -p agent-server-bin -- --sessions-dir ./sessions` | HTTP/SSE runtime behind an application gateway |
+| Web | `pnpm --filter web dev` | Streaming UI and browser-hosted tool execution |
+| Desktop | `pnpm --filter desktop tauri build` | Tauri host using the same server library and Web UI |
+| Java gateway | `examples/java-gateway/` | Spring WebFlux embedding and proxy reference |
 
-企业内嵌参考：`examples/java-gateway/`（Spring WebFlux 反向代理，拷走改）。
-
-## 起步
+## Run Locally
 
 ```bash
-cp providers.example.toml providers.toml   # 填 DeepSeek / Kimi / GLM 任一家的 key
-cargo test --workspace                     # 954 个测试
+cp providers.example.toml providers.toml
+# Add a DeepSeek, Kimi, or GLM API key to providers.toml.
+
 cargo run -p agent-cli
 ```
 
-## 三个不寻常之处
+To run the standalone HTTP/SSE server:
 
-1. **状态即真理**：完整状态 = 所有 primitive atom 的值。恢复 = 快照 + redo，
-   字面上同一个函数（`apply_next`）。被 `/undo` 撤销的轮次在模型的记忆里不存在。
-2. **模型差异关在 adapter 里**：core 一条模型相关判断都没有（红线 12，编译期
-   保障）。core 说意图，adapter 做不到就报 `Adjustment`——可见、可审计。
-   三家（DeepSeek/Kimi/GLM）的实测差异档案在 `probes/PROVIDERS.md`。
-3. **缓存是钱**：前缀缓存命中差价最高 120 倍。三层兜底（发前字节比对 / 收后
-   对账 / 滚动窗口）让缓存失效从「月底看账单」变成「当轮看告警」。
+```bash
+cargo run -p agent-server-bin -- --sessions-dir ./sessions
+```
 
-## 文档
+This repository intentionally has no hosted build pipeline. Tests and invariant checks are run
+locally when changing the relevant component.
 
-新会话/新人从 [CLAUDE.md](CLAUDE.md) 的文档地图进。要点：
-[ROADMAP](docs/ROADMAP.md)（20 条已拍板决策 + 未决问题）·
-[INVARIANTS](docs/INVARIANTS.md)（12 条红线，违反不报错所以才是红线）·
-[STATE-MODEL](docs/STATE-MODEL.md) · [ADAPTER](docs/ADAPTER.md) ·
-[issues/](docs/issues/README.md)（37 个已完成 issue，每个带实做与合并记录）。
+## Documentation
 
-红线由 `scripts/check-invariants.sh` 在编辑钩子与本地收工检查中执行。
+- [Architecture](docs/ARCHITECTURE.md)
+- [State model](docs/STATE-MODEL.md)
+- [Provider adapter contract](docs/ADAPTER.md)
+- [Hard invariants](docs/INVARIANTS.md)
+- [Roadmap and decisions](docs/ROADMAP.md)
+- [Implementation issues](docs/issues/README.md)
 
-## 状态
-
-M1–M5 全部完成并真实验收（2026-08）。M6（MCP 接入）与插队的 M7（子 agent 可观测，
-[ROADMAP §二](docs/ROADMAP.md)）进行中：M7 四个 issue（core 派生读 / CLI `/agents` /
-SSE 快照事件 / web 活树面板）代码均已交、typecheck + build 前台跑绿，**真浏览器终验**
-（spawn 子 agent 实时长树、`/undo` 回退、断线重连恢复）待做。未排期（等真实使用
-反馈）：前后端工具闭环收尾、多租户。上游血缘：状态引擎 fork 自
-[einfach](https://github.com/allroad88888888/einfach) 的 Rust 原子引擎，独立演进。
+The state engine originated as a fork of the Rust atomic engine in
+[einfach](https://github.com/allroad88888888/einfach) and now evolves independently.
