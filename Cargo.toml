@@ -23,6 +23,17 @@ members = [
 [workspace.package]
 edition = "2024"
 
+# 2026-08-05 构建瘦身：两天开发期 target 曾膨胀到 58GB / deps 88 万文件，rustc 每次
+# 启动都要枚举整个 deps 目录，文件数一过几十万就是分钟级——构建自己拖慢自己。
+# 全量类型调试信息是体积大头，日常开发保留行号（panic 栈可读）就够；
+# 需要 lldb 单步调试时临时改回 `debug = true` 再 build。
+[profile.dev]
+debug = "line-tables-only"
+
+# 第三方依赖连行号都不留：不会去单步调试它们，panic 栈里它们的帧有函数名就够。
+[profile.dev.package."*"]
+debug = false
+
 [workspace.dependencies]
 # 消息历史 append 要 O(log n) 且结构共享（红线 5：大值 Arc 包住/结构共享，不能每次
 # append 都整体深拷 Vec）。`im` 已停止维护，`imbl` 是维护中的 fork，接口基本兼容。
