@@ -8,6 +8,7 @@
 
 mod cli;
 mod ready_file;
+mod remote_tool_timeout;
 mod run;
 
 #[tokio::main]

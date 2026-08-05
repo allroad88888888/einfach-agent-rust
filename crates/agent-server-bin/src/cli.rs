@@ -102,6 +102,9 @@ OPTIONS:
 ENV:
     AGENT_PROVIDERS_CONFIG    同 --config，命令行参数优先
     AGENT_SERVER_PORT         同 --port，命令行参数优先
+    AGENT_REMOTE_TOOL_TIMEOUT_MS
+                              远程工具领取后等待结果的正整数毫秒数；不给则使用
+                              运行时默认值 600000（10 分钟）
     AGENT_BIND                覆盖监听地址（默认只绑 127.0.0.1，红线 8：监听
                               全部网卡必须显式设这个变量）
 

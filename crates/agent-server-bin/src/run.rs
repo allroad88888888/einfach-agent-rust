@@ -14,7 +14,7 @@ use agent_server::{
 };
 use agent_transport::Client;
 
-use crate::{cli::Cli, ready_file};
+use crate::{cli::Cli, ready_file, remote_tool_timeout};
 
 /// 跟 `agent-cli`/`examples/serve.rs` 一字不差——三个宿主对「一个简洁诚实的
 /// 助手」这句话的判断此前各写一遍，这不是巧合，是这个仓库目前唯一的默认
@@ -55,6 +55,7 @@ pub async fn run(cli: Cli) {
         history_cap: None,
         snapshot_every: None,
         provider_timeout: None,
+        remote_tool_timeout: remote_tool_timeout::from_environment().unwrap_or_else(|e| fail(&e)),
     })
     .unwrap_or_else(|e| fail(&format!("{e}")));
 

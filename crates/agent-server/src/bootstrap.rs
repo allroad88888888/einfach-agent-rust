@@ -56,6 +56,8 @@ pub struct BootstrapOptions {
     pub history_cap: Option<usize>,
     pub snapshot_every: Option<u64>,
     pub provider_timeout: Option<Duration>,
+    /// 前端/桌面端远程工具被领取后的结果等待上限；`None` 使用运行时默认值。
+    pub remote_tool_timeout: Option<Duration>,
 }
 
 /// 装配失败的三类原因，判据顺序跟 `agent-cli`/`examples/serve.rs` 原来各自
@@ -122,11 +124,7 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
             history_cap: options.history_cap,
             snapshot_every: options.snapshot_every,
             provider_timeout: options.provider_timeout,
-            // 060：`BootstrapOptions` 不为它开一格——远端工具超时的默认值
-            // （10 分钟）对所有 bin 宿主都合适，而这条装配路径的调用方
-            // （`agent-server-bin`、`examples/serve.rs`）没有一个开了 `web:`/
-            // `desk:` 工具。真需要调时再往 `BootstrapOptions` 加，不提前造。
-            remote_tool_timeout: None,
+            remote_tool_timeout: options.remote_tool_timeout,
         },
         provider_name,
     })

@@ -60,6 +60,7 @@ async fn main() {
         history_cap: None,
         snapshot_every: None,
         provider_timeout: None,
+        remote_tool_timeout: None,
     })
     .unwrap_or_else(|e| fail(&format!("{e}")));
 
