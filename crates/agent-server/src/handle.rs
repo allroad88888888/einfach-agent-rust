@@ -1,5 +1,5 @@
 //! [`SessionHandle`]：外界持有的、指向一个 actor 线程的全部东西——一个
-//! `mpsc::Sender<Command>`、一份可以直接旁路写的取消标志、一个 `broadcast`
+//! `mpsc::Sender<ActorMessage>`、一份可以直接旁路写的取消标志、一个 `broadcast`
 //! 发送端（订阅入口）。**不含 `JoinHandle`**——`join` 是 [`crate::registry::
 //! SessionRegistry`] 优雅关闭时才做的事，一个到处克隆的句柄不该持有它
 //! （`JoinHandle` 也不是 `Clone`，硬塞会逼 `SessionHandle` 变得不能自由复制）。
@@ -25,8 +25,9 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
 
 use agent_core::{AgentId, AgentTree};
-use agent_runtime::RemoteToolWaiting;
+use agent_runtime::{RemoteToolStatusSnapshot, RemoteToolWaiting};
 
+use crate::actor::message::ActorMessage;
 use crate::command::Command;
 use crate::event::{Frame, SessionEvent};
 
@@ -54,12 +55,12 @@ impl std::error::Error for SessionClosed {}
 /// 两份会各自漂移的取消协议。
 #[derive(Clone)]
 pub(crate) struct CancelHandle {
-    tx: mpsc::Sender<Command>,
+    tx: mpsc::Sender<ActorMessage>,
     cancel: Arc<AtomicBool>,
 }
 
 impl CancelHandle {
-    pub(crate) fn new(tx: mpsc::Sender<Command>, cancel: Arc<AtomicBool>) -> Self {
+    pub(crate) fn new(tx: mpsc::Sender<ActorMessage>, cancel: Arc<AtomicBool>) -> Self {
         CancelHandle { tx, cancel }
     }
 
@@ -68,7 +69,9 @@ impl CancelHandle {
     /// actor 线程已经不在了。
     pub(crate) fn cancel(&self) -> Result<(), SessionClosed> {
         self.cancel.store(true, Ordering::Relaxed);
-        self.tx.send(Command::Cancel).map_err(|_| SessionClosed)
+        self.tx
+            .send(ActorMessage::Command(Command::Cancel))
+            .map_err(|_| SessionClosed)
     }
 
     /// 取消标志此刻的值——只给独测断言用（`crate::http::hub::guard` 的三条
@@ -104,6 +107,9 @@ pub struct SessionHandle {
     /// 当前命令才刷新，客户端就有一个「收到帧 → 去问 → 说没有」的窗口——那是漏活，
     /// 比重复执行更隐蔽（要等 060 的十分钟截止线才有症状）。
     pub(crate) pending_tools: Arc<Mutex<Vec<RemoteToolWaiting>>>,
+    /// 092：认领协议的完整状态快照。跟 `tree` / `pending_tools` 一样由 actor 内
+    /// `RunnerCtx` 的变更回调覆盖，查询不需要排队等待 actor 完成后续 provider IO。
+    pub(crate) tool_status: Arc<Mutex<RemoteToolStatusSnapshot>>,
 }
 
 impl SessionHandle {
@@ -118,7 +124,11 @@ impl SessionHandle {
         if matches!(cmd, Command::Cancel) {
             return self.canceller.cancel();
         }
-        self.canceller.tx.send(cmd).map_err(|_| SessionClosed)
+        self.enqueue(ActorMessage::Command(cmd))
+    }
+
+    pub(crate) fn enqueue(&self, message: ActorMessage) -> Result<(), SessionClosed> {
+        self.canceller.tx.send(message).map_err(|_| SessionClosed)
     }
 
     /// 便捷方法：等价于 `send(Command::Cancel)`。
@@ -191,17 +201,19 @@ impl Subscription {
 mod tests {
     use super::*;
 
-    fn handle() -> (SessionHandle, mpsc::Receiver<Command>) {
+    fn handle() -> (SessionHandle, mpsc::Receiver<ActorMessage>) {
         let (tx, rx) = mpsc::channel();
         let (events, _) = broadcast::channel(16);
         let tree = Arc::new(Mutex::new(AgentTree { nodes: Vec::new() }));
         let pending_tools = Arc::new(Mutex::new(Vec::new()));
+        let tool_status = Arc::new(Mutex::new(RemoteToolStatusSnapshot::default()));
         (
             SessionHandle {
                 canceller: CancelHandle::new(tx, Arc::new(AtomicBool::new(false))),
                 events,
                 tree,
                 pending_tools,
+                tool_status,
             },
             rx,
         )
@@ -212,20 +224,31 @@ mod tests {
         let (handle, rx) = handle();
         handle.send(Command::Cancel).unwrap();
         assert!(handle.canceller.is_cancelled(), "取消标志该立刻生效");
-        assert_eq!(
+        assert!(matches!(
             rx.try_recv().unwrap(),
-            Command::Cancel,
-            "等待远端工具时 actor 需要被唤醒"
-        );
+            ActorMessage::Command(Command::Cancel)
+        ));
     }
 
     #[test]
     fn other_commands_are_queued_in_order() {
         let (handle, rx) = handle();
-        handle.send(Command::Input("a".to_string())).unwrap();
+        handle
+            .send(Command::Input {
+                text: "a".to_string(),
+                images: Vec::new(),
+            })
+            .unwrap();
         handle.send(Command::Redo).unwrap();
-        assert_eq!(rx.try_recv().unwrap(), Command::Input("a".to_string()));
-        assert_eq!(rx.try_recv().unwrap(), Command::Redo);
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            ActorMessage::Command(Command::Input { text, images })
+                if text == "a" && images.is_empty()
+        ));
+        assert!(matches!(
+            rx.try_recv().unwrap(),
+            ActorMessage::Command(Command::Redo)
+        ));
     }
 
     #[test]

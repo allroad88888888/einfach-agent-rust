@@ -95,11 +95,19 @@ fn expired(ctx: &mut RunnerCtx, now: Instant) -> Vec<Event> {
     ctx.take_expired_remote_tools(now)
         .into_iter()
         .map(|pending| {
-            let error = format!(
-                "[remote_tool_timeout] 远端宿主在 {}s 内没有回传 {} 的结果，这次调用按失败收尾",
-                budget.as_secs_f64(),
-                pending.request.tool,
-            );
+            let error = if pending.claim_id.is_some() {
+                format!(
+                    "[remote_tool_outcome_unknown] 远端工具结果超时：宿主已领取 {}，但在 {}s 内没有回传结果",
+                    pending.request.tool,
+                    budget.as_secs_f64(),
+                )
+            } else {
+                format!(
+                    "[remote_tool_timeout][remote_tool_unclaimed_timeout] 远端工具领取超时：宿主在 {}s 内没有领取 {}，这次调用按失败收尾",
+                    budget.as_secs_f64(),
+                    pending.request.tool,
+                )
+            };
             ctx.emit(
                 &pending.agent,
                 RunnerEvent::ToolExecuted {

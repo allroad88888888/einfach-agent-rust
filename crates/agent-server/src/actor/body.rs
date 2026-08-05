@@ -10,14 +10,14 @@ use std::time::Instant;
 use tokio::sync::broadcast;
 
 use agent_core::{AgentId, AgentTree, Session, SessionConfig};
-use agent_runtime::{AgentEvent, RemoteToolWaiting, RunnerCtx};
+use agent_runtime::{AgentEvent, RemoteToolStatusSnapshot, RemoteToolWaiting, RunnerCtx};
 use agent_tools::ToolExecutor;
 
-use crate::command::Command;
 use crate::event::{Frame, SessionEvent};
 use crate::registry::OpenSpec;
 
-use super::{capabilities, commands};
+use super::message::ActorMessage;
+use super::{capabilities, commands, inbox};
 
 /// 握手消息：`Ok(cancel)` = 起好了，`cancel` 是 [`RunnerCtx::cancel_flag`]
 /// （[`crate::handle::SessionHandle::cancel`] 直接旁路写的那个原子标志）；
@@ -36,11 +36,12 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
 
 pub(super) fn run(
     spec: OpenSpec,
-    rx: mpsc::Receiver<Command>,
+    rx: mpsc::Receiver<ActorMessage>,
     events_tx: broadcast::Sender<Frame>,
     ready_tx: mpsc::Sender<ReadyMsg>,
     tree: Arc<Mutex<AgentTree>>,
     pending_tools: Arc<Mutex<Vec<RemoteToolWaiting>>>,
+    tool_status: Arc<Mutex<RemoteToolStatusSnapshot>>,
 ) {
     let agent = AgentId::root();
     let history_cap = spec.history_cap.unwrap_or(agent_core::DEFAULT_HISTORY_CAP);
@@ -195,6 +196,11 @@ pub(super) fn run(
     // 立刻来问，问到的必然已经是含这条调用的新投影——见 `SessionHandle::pending_tools`。
     .with_pending_remote_tools(Box::new(move |waiting: Vec<RemoteToolWaiting>| {
         *pending_tools.lock().unwrap() = waiting;
+    }))
+    // 092：完整状态投影同样直接写共享单元格。尤其是提交回执先 commit、再 ack、
+    // 随后可能继续做 provider IO；GET 状态不能被那段网络等待堵在 actor 队列里。
+    .with_remote_tool_status(Box::new(move |status: RemoteToolStatusSnapshot| {
+        *tool_status.lock().unwrap() = status;
     }));
     if let Some(timeout) = spec.provider_timeout {
         ctx = ctx.with_provider_timeout(timeout);
@@ -226,33 +232,14 @@ pub(super) fn run(
     drop(ready_tx);
 
     loop {
-        let Some(cmd) = next_command(&rx, &mut session, &mut ctx, &events_tx) else {
+        let Some(message) = next_message(&rx, &mut session, &mut ctx, &events_tx) else {
             return;
         };
-        match cmd {
-            Command::Input(text) => {
-                commands::handle_input(&mut session, &mut ctx, &events_tx, &text)
-            }
-            Command::Undo { granularity, force } => {
-                commands::handle_undo(&mut session, &mut ctx, &events_tx, granularity, force)
-            }
-            Command::Redo => commands::handle_redo(&mut session, &mut ctx, &events_tx),
-            Command::Cancel => commands::handle_cancel(&mut session, &mut ctx, &events_tx),
-            Command::RemoteToolResult {
-                agent,
-                call_id,
-                content,
-                is_error,
-            } => commands::handle_remote_tool_result(
-                &mut session,
-                &mut ctx,
-                &events_tx,
-                agent,
-                call_id,
-                content,
-                is_error,
-            ),
-            Command::Shutdown => break,
+        if matches!(
+            inbox::dispatch(message, &mut session, &mut ctx, &events_tx),
+            inbox::LoopControl::Break
+        ) {
+            break;
         }
     }
 }
@@ -268,12 +255,12 @@ pub(super) fn run(
 ///
 /// 没有等待槽时（绝大多数会话的绝大多数时间）走的还是裸 `recv()`——不轮询、不
 /// 起定时器、一分钱开销不多付。`None` = 命令队列的发送端全没了，线程该退出了。
-fn next_command(
-    rx: &mpsc::Receiver<Command>,
+fn next_message(
+    rx: &mpsc::Receiver<ActorMessage>,
     session: &mut Session,
     ctx: &mut RunnerCtx,
     events_tx: &broadcast::Sender<Frame>,
-) -> Option<Command> {
+) -> Option<ActorMessage> {
     loop {
         let Some(deadline) = ctx.next_remote_deadline() else {
             return rx.recv().ok();

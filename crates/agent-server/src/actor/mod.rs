@@ -22,6 +22,9 @@
 mod body;
 mod capabilities;
 mod commands;
+mod inbox;
+pub(crate) mod message;
+mod remote_tools;
 
 use std::panic::AssertUnwindSafe;
 use std::sync::mpsc;
@@ -31,7 +34,7 @@ use std::thread;
 use tokio::sync::broadcast;
 
 use agent_core::{AgentId, AgentTree};
-use agent_runtime::RemoteToolWaiting;
+use agent_runtime::{RemoteToolStatusSnapshot, RemoteToolWaiting};
 
 use crate::event::{Frame, SessionEvent};
 use crate::handle::{CancelHandle, SessionHandle};
@@ -86,12 +89,14 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
     // 空 `Vec` 是**真实**初值（不是占位）：一个刚起来的会话确实一件远端活都没欠，
     // 所以这里不像 `tree` 那样需要 `body::run` 在握手前覆盖一次。
     let pending_tools: Arc<Mutex<Vec<RemoteToolWaiting>>> = Arc::new(Mutex::new(Vec::new()));
+    let tool_status = Arc::new(Mutex::new(RemoteToolStatusSnapshot::default()));
 
     let thread_name = format!("session-actor-{}", spec.id);
     let events_for_thread = events_tx.clone();
     let died_for_thread = Arc::clone(&died);
     let tree_for_thread = Arc::clone(&tree);
     let pending_for_thread = Arc::clone(&pending_tools);
+    let status_for_thread = Arc::clone(&tool_status);
 
     let join = thread::Builder::new()
         .name(thread_name)
@@ -102,7 +107,15 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
             let events_for_panic = events_for_thread.clone();
             let ready_for_panic = ready_tx.clone();
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                body::run(spec, cmd_rx, events_for_thread, ready_tx, tree_for_thread, pending_for_thread);
+                body::run(
+                    spec,
+                    cmd_rx,
+                    events_for_thread,
+                    ready_tx,
+                    tree_for_thread,
+                    pending_for_thread,
+                    status_for_thread,
+                );
             }));
             if let Err(payload) = result {
                 // `&*payload`，不是 `&payload`：`payload: Box<dyn Any + Send>`，
@@ -136,6 +149,7 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
                 events: events_tx,
                 tree,
                 pending_tools,
+                tool_status,
             };
             Ok(SpawnedActor { handle, join, died })
         }

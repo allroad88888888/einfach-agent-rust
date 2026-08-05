@@ -26,11 +26,13 @@
 //! `tool_executing` 广播出去了；投影晚一步，客户端就有一个「收到帧 → 去问 →
 //! 说没有」的窗口，那是漏活。
 
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use agent_core::{AgentId, Epoch, ToolCallId, ToolCallRequest};
 
 use crate::ctx::RunnerCtx;
+use crate::remote_tool_protocol::RemoteToolTerminalStatus;
+use crate::remote_tool_receipt::RemoteToolReceipts;
 
 /// 一条还欠着的远端调用，**投影形状**（072）：宿主执行前唯一要问的两件事——
 /// 「这次调用还欠着吗」「欠的是什么」。
@@ -51,6 +53,10 @@ pub(crate) struct PendingRemoteTool {
     pub(crate) call_id: ToolCallId,
     pub(crate) epoch: Epoch,
     pub(crate) request: ToolCallRequest,
+    pub(crate) claim_id: Option<String>,
+    pub(crate) claimed_at: Option<SystemTime>,
+    pub(crate) registered_at: SystemTime,
+    pub(crate) deadline_at: SystemTime,
     /// 060：登记那一刻按 [`RunnerCtx::with_remote_tool_timeout`] 的预算算好的
     /// **绝对时刻**。存绝对时刻而不是存 `Duration` + 起始点：判过期是热路径上
     /// 反复做的事（宿主每次空闲等命令都要问一次「最早的一条什么时候到点」），
@@ -59,7 +65,11 @@ pub(crate) struct PendingRemoteTool {
 }
 
 #[derive(Default)]
-pub(crate) struct PendingRemoteTools(Vec<PendingRemoteTool>);
+pub(crate) struct PendingRemoteTools {
+    pub(crate) pending: Vec<PendingRemoteTool>,
+    pub(crate) receipts: RemoteToolReceipts,
+    pub(crate) revision: u64,
+}
 
 impl RunnerCtx {
     /// 登记一个仅能由远端宿主回传的调用。重复 id 违反 provider 协议；保留较早
@@ -76,20 +86,30 @@ impl RunnerCtx {
     ) {
         if self
             .pending_remote_tools
-            .0
+            .pending
             .iter()
             .any(|pending| pending.agent == agent && pending.call_id == call_id)
         {
             return;
         }
+        let registered_at = SystemTime::now();
+        let deadline_at = registered_at
+            .checked_add(self.remote_tool_timeout)
+            .unwrap_or(registered_at);
         let deadline = Instant::now() + self.remote_tool_timeout;
-        self.pending_remote_tools.0.push(PendingRemoteTool {
+        self.pending_remote_tools.pending.push(PendingRemoteTool {
             agent,
             call_id,
             epoch,
             request,
+            claim_id: None,
+            claimed_at: None,
+            registered_at,
+            deadline_at,
             deadline,
         });
+        self.pending_remote_tools.bump_revision();
+        self.publish_remote_tool_status();
         self.publish_pending_remote_tools();
     }
 
@@ -101,10 +121,10 @@ impl RunnerCtx {
     ) -> Option<PendingRemoteTool> {
         let index = self
             .pending_remote_tools
-            .0
+            .pending
             .iter()
             .position(|pending| &pending.agent == agent && &pending.call_id == call_id)?;
-        let taken = self.pending_remote_tools.0.remove(index);
+        let taken = self.pending_remote_tools.pending.remove(index);
         self.publish_pending_remote_tools();
         Some(taken)
     }
@@ -114,12 +134,25 @@ impl RunnerCtx {
     pub(crate) fn take_expired_remote_tools(&mut self, now: Instant) -> Vec<PendingRemoteTool> {
         let mut expired = Vec::new();
         let mut index = 0;
-        while index < self.pending_remote_tools.0.len() {
-            if self.pending_remote_tools.0[index].deadline > now {
+        while index < self.pending_remote_tools.pending.len() {
+            if self.pending_remote_tools.pending[index].deadline > now {
                 index += 1;
                 continue;
             }
-            expired.push(self.pending_remote_tools.0.remove(index));
+            let pending = self.pending_remote_tools.pending.remove(index);
+            let status = if pending.claim_id.is_some() {
+                RemoteToolTerminalStatus::OutcomeUnknown
+            } else {
+                RemoteToolTerminalStatus::UnclaimedTimeout
+            };
+            self.record_remote_tool_terminal(
+                &pending,
+                status,
+                crate::remote_tool_protocol::RemoteToolTerminalOrigin::Deadline,
+                None,
+                None,
+            );
+            expired.push(pending);
         }
         // 072 第二个必接的变更点：截止线取走的槽**已经按失败收尾**，投影得在这一刻
         // 就收缩——漏了它，宿主刷新后会去执行一个早已收场的调用（本 issue 的病换个
@@ -138,7 +171,7 @@ impl RunnerCtx {
     /// [`crate::sweep_remote_tool_deadlines`]。
     pub fn next_remote_deadline(&self) -> Option<Instant> {
         self.pending_remote_tools
-            .0
+            .pending
             .iter()
             .map(|pending| pending.deadline)
             .min()
@@ -147,17 +180,26 @@ impl RunnerCtx {
     /// 还有几个远端调用在等回传。宿主/测试用来判断「这次派发到底有没有进等待
     /// 槽」——060 验收第一条（未声明的 `web:` 名字**不进槽**）就断言它是 0。
     pub fn pending_remote_tool_count(&self) -> usize {
-        self.pending_remote_tools.0.len()
+        self.pending_remote_tools.pending.len()
     }
 
     /// 取消、撤回或会话终止后切断未完成远端调用，防止迟到回传写入新 epoch。
     pub fn discard_remote_tools(&mut self) {
         // 072 第三个必接的变更点。空表时直接返回：`/undo` `/redo` `/cancel` 每次都
         // 会调它一次，绝大多数会话根本没有远端等待，不该为此每条命令都扰动一次投影。
-        if self.pending_remote_tools.0.is_empty() {
+        if self.pending_remote_tools.pending.is_empty() {
             return;
         }
-        self.pending_remote_tools.0.clear();
+        let discarded = std::mem::take(&mut self.pending_remote_tools.pending);
+        for pending in discarded {
+            self.record_remote_tool_terminal(
+                &pending,
+                RemoteToolTerminalStatus::Cancelled,
+                crate::remote_tool_protocol::RemoteToolTerminalOrigin::Session,
+                None,
+                None,
+            );
+        }
         self.publish_pending_remote_tools();
     }
 
@@ -168,7 +210,7 @@ impl RunnerCtx {
     /// 测试都拿它，跟 [`RunnerCtx::pending_remote_tool_count`] 同一类口子。
     pub fn pending_remote_tools(&self) -> Vec<RemoteToolWaiting> {
         self.pending_remote_tools
-            .0
+            .pending
             .iter()
             .map(|pending| RemoteToolWaiting {
                 agent: pending.agent.clone(),

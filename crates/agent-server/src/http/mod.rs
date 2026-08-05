@@ -34,6 +34,7 @@ mod routes;
 mod sessions_handle;
 mod state;
 mod static_files;
+mod tool_protocol;
 
 pub use config::{ServerConfig, SessionTemplate};
 pub use sessions_handle::SessionsHandle;
@@ -56,6 +57,11 @@ pub(crate) use capabilities::Capabilities;
 pub(crate) use pending::PendingToolsResponse;
 #[cfg(feature = "ts")]
 pub(crate) use poll_protocol::PollResponse;
+#[cfg(feature = "ts")]
+pub(crate) use tool_protocol::{
+    ToolClaimRequest, ToolClaimResponse, ToolResultResponse, ToolResultV2Request,
+    ToolStatusResponse,
+};
 
 /// `AgentServer::new(config)` 之后拿到的东西：路由已经装好，还没绑端口。
 pub struct AgentServer {

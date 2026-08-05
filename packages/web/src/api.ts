@@ -12,7 +12,7 @@
 // ts-rs 导出（`crates/agent-server/src/http/capabilities/`），所以它跟下行那些
 // 一样是生成物,不该在前端手写镜像（决策 2；`packages/protocol/src/index.ts`
 // 那段 061 的注释记的是同一件事）。
-import type { AgentId, AgentTree, Capabilities, Granularity, PendingTool, PendingToolsResponse, ToolCallId } from "@agent/protocol";
+import type { AgentTree, Capabilities, Granularity, PendingTool, PendingToolsResponse } from "@agent/protocol";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -85,8 +85,18 @@ export async function fetchPendingTools(id: string): Promise<PendingTool[]> {
   return ((await res.json()) as PendingToolsResponse).pending;
 }
 
-export function sendInput(id: string, text: string): Promise<void> {
-  return postJson(`/sessions/${encodeURIComponent(id)}/input`, { text });
+export async function sendInput(id: string, text: string, images: readonly File[] = []): Promise<void> {
+  // 不选图必须停在原来的对象字面量：JSON.stringify 后仍逐字节是
+  // `{"text":"..."}`，不能为了统一形状平白加一个 `images: []`。
+  const body = images.length === 0 ? { text } : { text, images: await Promise.all(images.map(encodeImage)) };
+  return postJson(`/sessions/${encodeURIComponent(id)}/input`, body);
+}
+
+/** HTTP 的上行图片形状（085 的 `InputImage`），只在这里把浏览器 `File` 的
+ * 二进制搬成 JSON 数组；下行协议类型仍只从 `@agent/protocol` 导入。 */
+async function encodeImage(file: File): Promise<{ name?: string; mime: string; bytes: number[] }> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return { name: file.name || undefined, mime: file.type, bytes: Array.from(bytes) };
 }
 
 export function sendUndo(id: string, granularity: Granularity, force: boolean): Promise<void> {
@@ -99,28 +109,4 @@ export function sendRedo(id: string): Promise<void> {
 
 export function sendCancel(id: string): Promise<void> {
   return postJson(`/sessions/${encodeURIComponent(id)}/cancel`);
-}
-
-/** 一次前端工具调用的结果。字段名是 wire 形状（`snake_case`），照抄
- * `crates/agent-server/src/http/routes/tool_result.rs` 的 `ToolResult`——
- * `is_error` 那边带 `#[serde(default)]`，但这边始终显式发，别让「没写 = false」
- * 变成一条要靠记忆维护的默认值。 */
-export interface ToolResultBody {
-  content: string;
-  is_error: boolean;
-}
-
-/** `POST /sessions/:id/tool_result`（066）：把一次由 SSE 派发下来的远端工具
- * （`Location::Web`）的结果送回去，server 侧 `resolve_remote_tool` 让**这一轮**
- * 当场续上（202 Accepted，跟另外四个命令端点一样是 fire-and-forget）。
- *
- * **没有 epoch 参数，这不是遗漏**：epoch 由 server 侧的 `RunnerCtx` 保管，
- * 结果必须精确匹配仍在等待的 `(agent, call_id)`——客户端伪造不了，也就不该在
- * 这个签名里出现（`tool_result.rs` 模块文档写死了这条）。
- *
- * `content` 超过 1 MiB 会被那边 400 掉（`MAX_RESULT_BYTES`）——**截断是调用方
- * 的事**（`./tool-exec` 的 `fitToLimit`）：截多少、怎么在内容里说明，都是
- * 「给模型看的东西」，不是 HTTP 这一层该替它做的决定。 */
-export function sendToolResult(id: string, agent: AgentId, toolCallId: ToolCallId, result: ToolResultBody): Promise<void> {
-  return postJson(`/sessions/${encodeURIComponent(id)}/tool_result`, { agent, tool_call_id: toolCallId, result });
 }

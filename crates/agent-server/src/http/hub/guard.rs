@@ -69,16 +69,20 @@ mod tests {
     /// 断言无害：宽限计时器读写的是测试自己手上这份 `Arc<SseHub>`（订阅计数、
     /// `grace_task`、`canceller`），跟 drain 任务和那张表没有关系。
     fn fake_hub(grace: Duration) -> Arc<SseHub> {
-        let (tx, _rx) = mpsc::channel::<crate::Command>();
+        let (tx, _rx) = mpsc::channel::<crate::actor::message::ActorMessage>();
         let (events, _keep_alive) = broadcast::channel(4);
         let tree = Arc::new(Mutex::new(agent_core::AgentTree { nodes: Vec::new() }));
         let canceller = crate::handle::CancelHandle::new(tx, Arc::new(AtomicBool::new(false)));
         let pending_tools = Arc::new(Mutex::new(Vec::new()));
+        let tool_status = Arc::new(Mutex::new(
+            agent_runtime::RemoteToolStatusSnapshot::default(),
+        ));
         let handle = crate::SessionHandle {
             canceller,
             events,
             tree,
             pending_tools,
+            tool_status,
         };
         let hubs = Arc::new(Mutex::new(HashMap::new()));
         SseHub::spawn(handle, 8, grace, SessionId::from("guard-test"), hubs)

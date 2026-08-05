@@ -363,8 +363,21 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 | [075](075-tool-table-drops-duplicate-names.md) | **工具表自己不判重**（074 的兜底那一层）：同一批数据里 spec 走 `Vec::push` 两条都留、可逆性走 `BTreeMap::insert` 后来居上。修法：私有 `push_spec`，重名整条丢弃（spec 与可逆性一起跳过）+ `debug_assert!` 点名。069 已证实**当前装配链没有实际撞名**，所以它是护栏不是修 bug | 069 拍板的代码清单 | sonnet | ✅ |
 | [076](076-per-session-builtin-switches.md) | **建会话时挑选内置能力**：`capabilities` 加一个**减法**字段，关掉的工具连名字都不进 prompt。两条不商量的约束：**只能减不能加**（客户端不许突破部署方的天花板）+ **开关进 store**（073 那条规矩，否则恢复出来跟当初不一样）。子 agent 不单独配，整棵树共用 | **用户提出** 2026-08-04 | **opus** | ✅ |
 | [077](077-flaky-under-load.md) ✅ | **测试套件在高负载下假红**（20 轮里 10 轮红、15 条测试，一个病十几副面孔）。根因：BSD/macOS 上 `accept()` 出来的 socket **继承** listener 的 `O_NONBLOCK`，`WouldBlock` 被当成 EOF → 空请求照样记账 + 吃掉脚本槽位 + 弄坏客户端那次真调用。定性：**测试写得不严，不是运行时重发**（第二次请求是有声的合法重试 `Notice::Retrying`，无静默双倍计费）。修后 20/20 全绿，断言一个字没动 | 076 代收时发现 | **opus** | ✅ |
-| [078](078-server-form-mcp-is-dormant.md) | **server 形态下 MCP 是休眠的**：`with_mcp` 在 `agent-server` 里一次都没被调用，只有 CLI 装 MCP——经 HTTP 起的会话里没有任何 `mcp:` 工具。跟 064 的「skill 休眠」同形状；挡住 068 第四条的后半句（两条 MCP 路共存） | 068 真机时撞上 | sonnet | ✅ |
-| [077](077-flaky-under-load.md) | **测试套件在高负载下假红**：定性结论是**测试写得不严，不是运行时重发**。三份假上游把 listener 设了非阻塞，而 BSD/macOS 上 accept 出来的 socket **继承** O_NONBLOCK——请求字节晚到一瞬就被当成「没带请求」，于是**多记一次假请求 + 错位脚本 + 把客户端那次真调用弄坏**。`request_count()` 数的是连接不是请求。修计数口径与构造，`== 1` 那条断言一个字没动 | 076 收工代收 | **opus** | ✅ |
+| [078](078-server-form-mcp-is-dormant.md) | **server 形态下 MCP 是休眠的**：`with_mcp` 在 `agent-server` 里一次都没被调用，只有 CLI 装 MCP——经 HTTP 起的会话里没有任何 `mcp:` 工具。跟 064 的「skill 休眠」同形状；挡住 068 第四条的后半句（两条 MCP 路共存） | 068 真机时撞上 | sonnet | |
+| [079](079-image-content-block.md) ✅ | **`ContentBlock::Image` 变体**（`reference`/`mime`/`name`，`reference` 对 core 完全不透明，同 `ToolCallId`）。四处落点已查明并写进 issue：**只有 `wire/messages.rs:62` 会编译报错**，另三处是 `_ =>` 兜底、对图片恰好正确 | **用户提出** 2026-08-04 | **haiku** | ✅ |
+| [080](080-adjustment-images-dropped.md) ✅ | **`Adjustment::ImagesDropped` 变体**（只加类型，不写触发逻辑）+ ts 导出一致性 + 前端 `switch` 补分支 | 同上 | **haiku** | ✅ |
+| [081](081-image-user-input.md) ✅ | **用户输入带图**：`Event::UserInput` 带图片块，**块顺序定死**（文本在前、图片按宿主给的顺序在后，红线 11）；undo/redo/落盘逐字段复原 | 同上 | sonnet | ✅ |
+| [082](082-image-array-encoding.md) ✅ | **wire 的数组编码机制**：有图才用数组、**无图逐字节不变**（现有 golden 一个都不该改）；「吃不吃图」由调用方传进来，不许在共用文件里 `match provider` | 同上 | sonnet | ✅ |
+| [083](083-image-provider-fallback.md) ✅ | **三家接线与降级告警**：实测 Kimi ✓ / DeepSeek ✗ / GLM ✗；吃不下的编成占位文本**并报 `ImagesDropped`**——**静默丢图是 M11 唯一用户永远发现不了的失败** | 同上 | sonnet | ✅ |
+| [084](084-transport-files-upload.md) ✅ | **transport 的图片上传**：`POST /files`（`purpose:"image"`）→ 拼 `ms://<id>`；超限在发之前拦下；假 server 记得 `set_nonblocking(false)`（077 的坑） | 同上 | sonnet | ✅ |
+| [085](085-http-image-ingress.md) ✅ | **HTTP 上行**：`InputRequest` 加图片字段（不带图逐字节不变）；**先上传成功再 dispatch**，失败 400 且 store 不留残骸；**上传绝不能放进 `provider_call::start`**（会把多 agent 并行掐死，且不报错） | 同上 | sonnet | ✅ |
+| [086](086-image-frontend.md) ✅ | **前端选图 / 粘贴 / 拖拽**：三条入口（粘贴最常用）、缩略图可删、`revokeObjectURL`、非图片当场拦下 | 同上 | **haiku** | ✅ |
+| [087](087-image-dogfood.md) ✅ | **图片真机 dogfood ← M11 终点**：真浏览器 + 真 Kimi，六条——模型答出图里埋的四位数、第 2 轮缓存对账、undo/redo 后仍看得见、**DeepSeek/GLM 上降级告警可见**、不选图老路不变、多张图 | 同上 | 主会话真机 | ✅ |
+| [088](088-kimi-upload-endpoint.md) ✅ | **Kimi 上传端点不能从聊天 endpoint 推导**：显式传递上传 API base，使 `/files` 不再追加到 `/chat/completions` | 087 真机发现 | 主会话真机 | ✅ |
+| [089](089-kimi-image-cache-accounting.md) ✅ | **Kimi 图片历史的缓存预测差**：历史 `ms://` 图片以实测视觉 cache block 对账，真实第 2 轮为 `predicted=1834`、`actual=1834` | 087 真机发现 | 主会话真机 | ✅ |
+| [090](090-image-undo-timeline.md) ✅ | **图片卡片未随 undo/redo 还原**：server history 已恢复，浏览器时间线却在 undo 后仍留图 | 087 真机发现 | sonnet | ✅ |
+| [091](091-nonvisual-image-ingress.md) ✅ | **非视觉 provider 在 adapter 降级前被 HTTP 上传短路**：必须使 `ImagesDropped` 能实际抵达用户 | 087 真机发现 | **opus** | ✅ |
+| [092](092-remote-tool-result-protocol.md) | **远端工具认领、终态回执与结果协议**：claim 后执行，稳定 submission 幂等重投，区分未认领超时与结果未知 | 用户提出 | **gpt-5.6-sol / xhigh** | 协议闭环 ✅；Java/浏览器真机待验 |
 
 另有一份 [DOC-AUDIT.md](../DOC-AUDIT.md)（文档↔实现一致性审计：危险 10 / 过时 40 /
 小瑕疵 19 / 疑似代码问题 4）。TOOLS/STATE-MODEL/ARCHITECTURE/CLAUDE.md 的修正已落地，
@@ -392,3 +405,6 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 只在 undo、崩溃恢复、账单或「加第四家 provider」时浮出来。
 
 模型适配层的接缝定义在 [../ADAPTER.md](../ADAPTER.md)，022/023/024 动手前必读。
+
+**M11（图片附件）的四条 079–082 动手前必读 [../IMAGES.md](../IMAGES.md)**——决定、
+实测证据、以及「上传该放在哪」这个最容易放错的落点都在那里，别在 issue 里重新讨论。

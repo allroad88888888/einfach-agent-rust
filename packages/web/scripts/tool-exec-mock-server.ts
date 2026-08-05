@@ -1,74 +1,77 @@
-// 唯一职责：一个**逐条复刻 agent-server 契约**的 mock 端点，给
-// `verify-tool-exec.ts` 的断言当对手。断言本身不在这里（那是那个文件的职责）。
-//
-// 复刻的是两个端点：
-//
-// | 端点 | Rust 源 | 复刻了什么 |
-// |---|---|---|
-// | `POST /sessions/:id/tool_result` | `http/routes/tool_result.rs` | 同一个 1 MiB 上限（**UTF-8 字节**口径）、同一条「超了 400」、成功 202 Accepted |
-// | `GET /sessions/:id/pending_tools` | `http/routes/pending_tools.rs` + `http/pending.rs` | 同一个 `{ pending: [{agent, call_id, request}] }` 形状（072） |
-//
-// 所以「截断之后还会不会被拒」「重放的那一帧还该不该执行」都是真的被判出来的，
-// 不是读代码读出来的。
-//
-// **`pending` 这张表就是服务端的等待槽**（`RunnerCtx` 里那张）：测试自己往里
-// 放（= `register_remote_tool`），收到回传就删掉（= `take_remote_tool` 取走）。
-// 072 的整个判据建立在「投影跟槽同生同灭」上，mock 这一侧必须同样成立，否则
-// 断言的是一个不存在的服务端。
+// 唯一职责：为 tool-exec 验收复刻远端工具 v2 的最小 HTTP 状态机。
 import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import type { ToolCallRequest } from "@agent/protocol";
+import type { ToolCallRequest, ToolCallState, ToolOutcome } from "@agent/protocol";
 
-/** 跟 `crates/agent-server/src/http/routes/tool_result.rs` 的 `MAX_RESULT_BYTES`
- * 同一个数。那边量的是 `String::len()`（UTF-8 字节），对应 Node 的
- * `Buffer.byteLength`——**不是** `.length`（UTF-16 码元）。 */
 export const MAX_RESULT_BYTES = 1024 * 1024;
 
-/** mock 收到的一次 `POST /tool_result`，连同它按服务端契约算出来的状态码。 */
 export interface Received {
   path: string;
   status: number;
-  body: { agent?: string; tool_call_id?: string; result?: { content?: string; is_error?: boolean } };
+  body: Record<string, unknown>;
 }
 
-/** 一个还欠着的调用在 mock 侧的样子（`call_id` 是这张表的键，所以不在值里）。 */
-export interface MockPending {
+interface PendingCall {
   agent: string;
   request: ToolCallRequest;
+  claimId?: string;
+  state: ToolCallState;
+  submission?: { id: string; outcome: ToolOutcome };
 }
 
 export interface MockServer {
   base: string;
   received: Received[];
-  /** 服务端的等待槽。测试自己放/删，`GET /pending_tools` 读它。 */
-  pending: Map<string, MockPending>;
+  pending: Map<string, PendingCall>;
+  statusQueries: number;
+  failNextClaimResponse: boolean;
+  failNextResultResponse: boolean;
+  dropNextClaimResponse: boolean;
+  dropNextResultResponse: boolean;
   close: () => Promise<void>;
 }
 
 export async function startMockServer(): Promise<MockServer> {
   const received: Received[] = [];
-  const pending = new Map<string, MockPending>();
+  const pending = new Map<string, PendingCall>();
+  let statusQueries = 0;
+  let failNextClaimResponse = false;
+  let failNextResultResponse = false;
+  let dropNextClaimResponse = false;
+  let dropNextResultResponse = false;
 
   const server = createServer((req, res) => {
     void (async () => {
-      if (req.method === "GET" && (req.url ?? "").endsWith("/pending_tools")) {
-        const listing = [...pending.entries()].map(([call_id, owed]) => ({ agent: owed.agent, call_id, request: owed.request }));
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ pending: listing }));
-        return;
+      const path = req.url ?? "";
+      if (req.method === "GET" && path.includes("/pending_tools")) {
+        return json(res, 200, { pending: [...pending.entries()]
+          .filter(([, call]) => call.state === "pending_unclaimed" || call.state === "claimed")
+          .map(([call_id, call]) => ({ agent: call.agent, call_id, request: call.request })) });
       }
-      const raw = await readBody(req);
-      const body = JSON.parse(raw) as Received["body"];
-      const tooBig = Buffer.byteLength(body.result?.content ?? "", "utf8") > MAX_RESULT_BYTES;
-      const status = tooBig ? 400 : 202;
-      // 回传收下了 = 那个槽被 `take_remote_tool` 取走了，投影必须同步收缩。
-      // 400 的那一支**不删**：server 那边根本没走到 `resolve_remote_tool`，
-      // 槽还欠着（这正是 `tool-exec.ts` 要先截断再发的原因）。
-      if (!tooBig && body.tool_call_id !== undefined) pending.delete(body.tool_call_id);
-      received.push({ path: req.url ?? "", status, body });
-      res.writeHead(status, { "Content-Type": "application/json" });
-      res.end(tooBig ? '{"error":{"code":"bad_request","message":"tool result content 不能超过 1048576 bytes"}}' : "");
+      if (req.method === "GET" && path.includes("/tool_status")) {
+        statusQueries += 1;
+        const callId = new URL(path, "http://localhost").searchParams.get("tool_call_id") ?? "";
+        const call = pending.get(callId);
+        if (call === undefined) return error(res, 404, "tool_call_unknown");
+        return json(res, 200, { state: call.state, revision: 1, retention_floor_revision: null, agent: call.agent, tool_call_id: callId, request: call.state === "pending_unclaimed" || call.state === "claimed" ? call.request : null, created_at_unix_ms: 1, updated_at_unix_ms: 1, deadline_at_unix_ms: null, claimed_by_me: false, submission_id: call.submission?.id ?? null, terminal_origin: call.state === "outcome_unknown" || call.state === "unclaimed_timeout" ? "deadline" : call.state === "cancelled" ? "session" : call.submission === undefined ? null : "host" });
+      }
+      const body = JSON.parse(await readBody(req)) as Record<string, unknown>;
+      if (req.method === "POST" && path.endsWith("/tool_claim")) {
+        const fail = failNextClaimResponse;
+        failNextClaimResponse = false;
+        const destroy = dropNextClaimResponse;
+        dropNextClaimResponse = false;
+        return claim(res, received, pending, path, body, fail, destroy);
+      }
+      if (req.method === "POST" && path.endsWith("/tool_result")) {
+        const fail = failNextResultResponse;
+        failNextResultResponse = false;
+        const destroy = dropNextResultResponse;
+        dropNextResultResponse = false;
+        return result(res, received, pending, path, body, fail, destroy);
+      }
+      error(res, 404, "not_found");
     })();
   });
 
@@ -78,19 +81,77 @@ export async function startMockServer(): Promise<MockServer> {
     base: `http://127.0.0.1:${port}`,
     received,
     pending,
-    close: () =>
-      new Promise<void>((resolve) => {
-        server.closeAllConnections();
-        server.close(() => resolve());
-      }),
+    get statusQueries() { return statusQueries; },
+    get failNextClaimResponse() { return failNextClaimResponse; },
+    set failNextClaimResponse(value: boolean) { failNextClaimResponse = value; },
+    get failNextResultResponse() { return failNextResultResponse; },
+    set failNextResultResponse(value: boolean) { failNextResultResponse = value; },
+    get dropNextClaimResponse() { return dropNextClaimResponse; },
+    set dropNextClaimResponse(value: boolean) { dropNextClaimResponse = value; },
+    get dropNextResultResponse() { return dropNextResultResponse; },
+    set dropNextResultResponse(value: boolean) { dropNextResultResponse = value; },
+    close: () => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }),
   };
+}
+
+function claim(res: import("node:http").ServerResponse, received: Received[], pending: Map<string, PendingCall>, path: string, body: Record<string, unknown>, fail: boolean, destroy: boolean): void {
+  const callId = String(body.tool_call_id ?? "");
+  const call = pending.get(callId);
+  if (call === undefined) return error(res, 404, "tool_call_unknown");
+  received.push({ path, status: 200, body });
+  if (fail) return error(res, 503, "temporarily_unavailable");
+  if (!isActive(call.state)) return error(res, 410, "tool_call_terminal");
+  const claimId = String(body.claim_id ?? "");
+  if (call.claimId !== undefined && call.claimId !== claimId) return error(res, 409, "tool_claimed_by_other");
+  const disposition = call.claimId === undefined ? "claimed" : "already_claimed_by_you";
+  call.claimId = claimId;
+  call.state = "claimed";
+  if (destroy) return res.destroy();
+  json(res, 200, { disposition, agent: call.agent, tool_call_id: callId, request: call.request, revision: 1 });
+}
+
+function result(res: import("node:http").ServerResponse, received: Received[], pending: Map<string, PendingCall>, path: string, body: Record<string, unknown>, fail: boolean, destroy: boolean): void {
+  const callId = String(body.tool_call_id ?? "");
+  const call = pending.get(callId);
+  const outcome = body.outcome as ToolOutcome | undefined;
+  const content = outcome?.status === "succeeded" ? outcome.content : outcome?.status === "failed" ? outcome.error.message : outcome?.reason ?? "";
+  if (Buffer.byteLength(content, "utf8") > MAX_RESULT_BYTES) return error(res, 400, "bad_request");
+  if (call === undefined) return error(res, 404, "tool_call_unknown");
+  received.push({ path, status: 200, body });
+  if (fail) return error(res, 503, "temporarily_unavailable");
+  if (!isActive(call.state)) {
+    if (call.submission?.id === body.submission_id) return json(res, 200, receipt("duplicate", call, callId, String(body.submission_id)));
+    return error(res, 410, "tool_call_terminal");
+  }
+  if (call.claimId !== body.claim_id) return error(res, 409, "tool_claim_required");
+  call.submission = { id: String(body.submission_id), outcome: outcome! };
+  call.state = outcome!.status;
+  if (destroy) return res.destroy();
+  json(res, 200, receipt("committed", call, callId, call.submission.id));
+}
+
+function receipt(disposition: string, call: PendingCall, callId: string, submissionId: string): object {
+  return { disposition, terminal_status: call.state, agent: call.agent, tool_call_id: callId, submission_id: submissionId, revision: 2 };
+}
+
+function isActive(state: ToolCallState): boolean {
+  return state === "pending_unclaimed" || state === "claimed";
+}
+
+function json(res: import("node:http").ServerResponse, status: number, body: object): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+function error(res: import("node:http").ServerResponse, status: number, code: string): void {
+  json(res, status, { error: { code, message: code } });
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve) => {
     let raw = "";
     req.setEncoding("utf8");
-    req.on("data", (chunk: string) => (raw += chunk));
+    req.on("data", (chunk: string) => { raw += chunk; });
     req.on("end", () => resolve(raw));
   });
 }

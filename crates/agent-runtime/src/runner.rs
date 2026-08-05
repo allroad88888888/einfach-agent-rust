@@ -51,7 +51,7 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
+use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus, UserImage};
 
 use crate::ctx::RunnerCtx;
 use crate::deadline;
@@ -84,6 +84,19 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// 已经是 `Idle`）——`Session::begin_turn` 是显式命令（026 判断 13：turn 边界
 /// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
 pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
+    run_turn_with_images(session, ctx, user_input, Vec::new())
+}
+
+/// 跑一整轮，连同已经由宿主准备好的用户图片一起喂入。
+///
+/// 图片引用在进入这里之前已经是不可变的纯数据；上传之类的 IO 属于宿主边界，
+/// 不属于事件泵。保留 [`run_turn`] 的原签名，使没有图片的所有既有调用逐字不变。
+pub fn run_turn_with_images(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    user_input: &str,
+    images: Vec<UserImage>,
+) -> TurnStatus {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
     resume(
@@ -92,6 +105,7 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
         Event::UserInput {
             agent: root,
             text: Arc::from(user_input),
+            images,
         },
     )
 }
@@ -101,6 +115,17 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
 /// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
 /// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
 pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event) -> TurnStatus {
+    resume_after_first_commit(session, ctx, initial, |_| {})
+}
+
+/// Resume the pump, invoking `after_commit` once after the initial event is committed and
+/// persisted, but before any effect from that event is dispatched.
+pub(crate) fn resume_after_first_commit(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    initial: Event,
+    after_commit: impl FnOnce(&mut RunnerCtx),
+) -> TurnStatus {
     // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
     // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
     // 断开——在飞与否由下面这张表回答，不是由 channel 的连接状态回答。
@@ -121,6 +146,7 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
     // 才会跟它比出差异、触发一次回调，`run_turn` 被反复调用（一轮接一轮）也不会
     // 在每轮开头都白白重发一次跟上一轮收尾时完全相同的树（见 `maybe_emit_tree`）。
     let mut last_tree: Option<AgentTree> = ctx.tree_events_enabled().then(|| session.agent_tree());
+    let mut after_commit = Some(after_commit);
 
     pending.push_back(initial);
 
@@ -131,6 +157,9 @@ pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event)
             let source = event.agent().clone();
             let effects = session.step(event);
             persist::sync(ctx, session);
+            if let Some(after_commit) = after_commit.take() {
+                after_commit(ctx);
+            }
             maybe_emit_tree(ctx, session, &mut last_tree);
             for effect in effects {
                 match dispatch::run_effect(session, ctx, &mut subtree, &tx, &source, effect) {

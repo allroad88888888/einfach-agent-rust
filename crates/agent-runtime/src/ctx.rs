@@ -106,6 +106,11 @@ pub struct RunnerCtx {
     /// `tool_executing` 了。设/不设与语义全在那个文件的模块文档里。
     pub(crate) on_pending_remote_tools:
         Option<Box<dyn FnMut(Vec<crate::ctx_remote_tools::RemoteToolWaiting>)>>,
+    /// 092：认领协议的完整状态投影。它独立于旧版 waiting-only 投影，包含 revision、
+    /// claim 归属与有界终态回执；服务端把它写进共享单元格，使只读状态查询不会排在
+    /// actor 正在执行的 provider 网络调用之后。
+    pub(crate) on_remote_tool_status:
+        Option<Box<dyn FnMut(crate::remote_tool_protocol::RemoteToolStatusSnapshot)>>,
 }
 
 impl RunnerCtx {
@@ -147,6 +152,7 @@ impl RunnerCtx {
             on_event,
             on_tree_change: None,
             on_pending_remote_tools: None,
+            on_remote_tool_status: None,
         }
     }
 

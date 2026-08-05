@@ -54,3 +54,18 @@ export type { Capabilities } from "./generated/Capabilities";
 export type { CapabilityTool } from "./generated/CapabilityTool";
 export type { CapabilitySkill } from "./generated/CapabilitySkill";
 export type { CapabilityReversibility } from "./generated/CapabilityReversibility";
+
+// 092：远端宿主工具的强确认协议。执行端必须从这个入口取得 claim/result/status
+// 的请求、回执和判别联合，不能镜像 Rust wire 类型；否则重试/状态语义容易漂移。
+export type { ToolClaimRequest } from "./generated/ToolClaimRequest";
+export type { ToolClaimResponse } from "./generated/ToolClaimResponse";
+export type { ToolClaimDisposition } from "./generated/ToolClaimDisposition";
+export type { ToolResultV2Request } from "./generated/ToolResultV2Request";
+export type { ToolResultResponse } from "./generated/ToolResultResponse";
+export type { ToolResultDisposition } from "./generated/ToolResultDisposition";
+export type { ToolOutcome } from "./generated/ToolOutcome";
+export type { ToolFailure } from "./generated/ToolFailure";
+export type { ToolStatusResponse } from "./generated/ToolStatusResponse";
+export type { ToolCallState } from "./generated/ToolCallState";
+export type { ToolTerminalStatus } from "./generated/ToolTerminalStatus";
+export type { ToolTerminalOrigin } from "./generated/ToolTerminalOrigin";

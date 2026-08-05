@@ -26,8 +26,8 @@ serde_json = { workspace = true }
 tokio = { version = "1", features = ["sync", "net", "time", "rt"] }
 
 # 031：下行 SSE、上行 POST 的 HTTP 面。只启用直接用到的 feature——不要 ws/
-# multipart/form/query（这个仓库没有文件上传、没有查询参数协议）。
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+# multipart/form（092 的 tool-status 是首个查询参数协议）。
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 
 # 只要 `wrappers::ReceiverStream`——把 `tokio::sync::mpsc::Receiver<BufferedFrame>`
 # 包成 `Stream`，喂给 axum 的 SSE 响应（`crate::http::routes::sse`）。

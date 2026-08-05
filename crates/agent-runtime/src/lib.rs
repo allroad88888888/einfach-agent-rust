@@ -75,6 +75,12 @@ mod mcp_call;
 mod orphan;
 mod provider_call;
 mod remote_tool;
+mod remote_tool_claim;
+mod remote_tool_digest;
+mod remote_tool_protocol;
+mod remote_tool_receipt;
+mod remote_tool_status;
+mod remote_tool_submission;
 mod reply;
 mod runner;
 mod skill;
@@ -107,7 +113,16 @@ pub use persist::{
 pub use remote_tool::{
     RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool,
 };
-pub use runner::run_turn;
+pub use remote_tool_claim::claim_remote_tool;
+pub use remote_tool_protocol::{
+    RemoteToolActive, RemoteToolActiveState, RemoteToolClaimDecision, RemoteToolClaimGrant,
+    RemoteToolClaimRequest, RemoteToolFailure, RemoteToolReceipt, RemoteToolStatusSnapshot,
+    RemoteToolSubmitDecision, RemoteToolSubmitOutcome, RemoteToolSubmitRequest,
+    RemoteToolTerminalOrigin, RemoteToolTerminalStatus,
+};
+pub use remote_tool_receipt::REMOTE_TOOL_RECEIPT_CAP;
+pub use remote_tool_submission::submit_remote_tool_result;
+pub use runner::{run_turn, run_turn_with_images};
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_tool::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};

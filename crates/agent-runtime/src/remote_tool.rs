@@ -11,6 +11,7 @@ use agent_core::{AgentId, Event, Session, ToolCallId, TurnStatus};
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::runner;
+use crate::{RemoteToolTerminalOrigin, RemoteToolTerminalStatus};
 
 /// 远端宿主确认工具执行的两种结果。
 pub enum RemoteToolOutput {
@@ -52,7 +53,7 @@ pub fn resolve_remote_tool(
             agent: agent.clone(),
             call_id: call_id.clone(),
         })?;
-    let (event, output_len, is_error) = match output {
+    let (event, output_len, is_error, terminal_status) = match output {
         RemoteToolOutput::Success(content) => (
             Event::ToolResult {
                 agent: pending.agent.clone(),
@@ -62,6 +63,7 @@ pub fn resolve_remote_tool(
             },
             content.len(),
             false,
+            RemoteToolTerminalStatus::Succeeded,
         ),
         RemoteToolOutput::Failure(error) => (
             Event::ToolFailed {
@@ -72,18 +74,35 @@ pub fn resolve_remote_tool(
             },
             error.len(),
             true,
+            RemoteToolTerminalStatus::Failed,
         ),
     };
-    ctx.emit(
-        &pending.agent,
-        RunnerEvent::ToolExecuted {
-            call_id: pending.call_id,
-            tool: pending.request.tool,
-            output_len,
-            is_error,
+    let event_agent = pending.agent.clone();
+    let event_call = pending.call_id.clone();
+    let event_tool = pending.request.tool.clone();
+    Ok(runner::resume_after_first_commit(
+        session,
+        ctx,
+        event,
+        move |ctx| {
+            ctx.record_remote_tool_terminal(
+                &pending,
+                terminal_status,
+                RemoteToolTerminalOrigin::Host,
+                None,
+                None,
+            );
+            ctx.emit(
+                &event_agent,
+                RunnerEvent::ToolExecuted {
+                    call_id: event_call,
+                    tool: event_tool,
+                    output_len,
+                    is_error,
+                },
+            );
         },
-    );
-    Ok(runner::resume(session, ctx, event))
+    ))
 }
 
 /// 中止 Web 宿主尚未完成的调用，并把取消事件送回同一条事件泵。
