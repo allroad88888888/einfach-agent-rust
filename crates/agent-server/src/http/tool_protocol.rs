@@ -20,6 +20,7 @@ pub(crate) struct ToolClaimRequest {
 pub(crate) enum ToolClaimDisposition {
     Claimed,
     AlreadyClaimedByYou,
+    Ignored,
 }
 
 #[derive(Clone, Debug, Serialize)]

@@ -46,11 +46,13 @@ pub(in crate::http) async fn claim(
             request: grant.request,
             revision: grant.revision,
         })),
-        RemoteToolClaimDecision::ClaimedByOther => Err(ApiError::remote_tool(
-            StatusCode::CONFLICT,
-            "tool_claimed_by_other",
-            "这个 tool call 已由另一位宿主认领",
-        )),
+        RemoteToolClaimDecision::ClaimedByOther(grant) => Ok(Json(ToolClaimResponse {
+            disposition: ToolClaimDisposition::Ignored,
+            agent: body.agent,
+            tool_call_id: body.tool_call_id,
+            request: grant.request,
+            revision: grant.revision,
+        })),
         RemoteToolClaimDecision::Terminal(receipt) => Err(terminal_error(&receipt)),
         RemoteToolClaimDecision::StatusNotRetained => Err(ApiError::remote_tool(
             StatusCode::GONE,

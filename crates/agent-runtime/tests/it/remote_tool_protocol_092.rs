@@ -92,10 +92,10 @@ fn claim_is_exclusive_and_the_same_claim_id_is_idempotent() {
         ),
         "a retry after a lost claim response must not make the executor run twice"
     );
-    assert_eq!(
+    assert!(matches!(
         claim_remote_tool(&session, &mut ctx, claim("claim-1", "executor-b")),
-        RemoteToolClaimDecision::ClaimedByOther
-    );
+        RemoteToolClaimDecision::ClaimedByOther(_)
+    ));
     assert!(matches!(
         ctx.remote_tool_status().active.as_slice(),
         [active] if matches!(&active.state, RemoteToolActiveState::Claimed { claim_id } if claim_id == "executor-a")

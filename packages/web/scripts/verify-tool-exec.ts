@@ -78,7 +78,7 @@ async function main(): Promise<void> {
     eq("副作用只做一次", sideEffects, 1);
     eq("终态是 succeeded", mock.pending.get("call-1")?.state, "succeeded");
 
-    console.log("\n[3] 两执行器同时收到同一帧，只有原子认领赢家执行");
+    console.log("\n[3] 两执行器同时收到同一帧，首个确认执行，后续确认静默忽略");
     const first = createToolExecutor("s-1");
     const second = createToolExecutor("s-1");
     dispatch(mock, first, "call-race", "web:verify/counted");

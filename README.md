@@ -16,9 +16,9 @@ Browser / Desktop / Java capabilities
                  │
       instructions + tools appear
                  │
-       one host claims execution
+        host executes the tool
                  │
-       Rust commits one final result
+       result continues the turn
 ```
 
 ## Why It Is Different
@@ -48,22 +48,6 @@ This keeps unrelated domain knowledge out of the prompt, avoids context growth p
 entire catalog, and preserves stable prefixes for provider prompt caching. Small, always-available
 host tools may still be declared directly.
 
-### Remote tools have a real execution protocol
-
-When several tabs or host processes observe the same tool call, they do not race to perform the side
-effect. Rust atomically grants one claim inside the session actor. Only the winner may execute.
-
-Result delivery is strongly acknowledged:
-
-- `committed` means the actor verified and applied the terminal result—not merely queued it;
-- retrying an identical submission returns `duplicate` without advancing the model twice;
-- changing an already-used submission returns `result_conflict`;
-- cancellation, expiry, stale calls, and claim mismatches have distinct structured outcomes.
-
-The protocol also refuses to lie about distributed uncertainty. If nobody claimed a call, it ends as
-`unclaimed_timeout`. If a host claimed it and then disappeared, it ends as `outcome_unknown`, because
-the external side effect may already have happened and must not be retried silently.
-
 ### State is the source of truth
 
 Every piece of agent state lives in one atomic dependency graph. Undo, redo, crash recovery, and
@@ -80,20 +64,6 @@ The core contains no provider-specific branching. Adapters translate intent for 
 GLM and report every unavoidable adjustment as observable data. Prefix-byte checks, response
 accounting, and rolling cache telemetry make prompt-cache regressions visible during the turn rather
 than on the next invoice.
-
-## Real-World Verification
-
-The host execution path has been exercised end to end, not only through mocks:
-
-- 100 real-TCP concurrent claim races produced exactly one winner per round;
-- two real browsers connected through the Java gateway with the same `chatid`;
-- only the winning browser performed the side effect;
-- retry after a simulated lost HTTP response returned `duplicate`;
-- disconnect after claim produced `outcome_unknown`, while the observing browser and session
-  continued normally.
-
-The detailed protocol and evidence are recorded in
-[Host-Native Tools and Skills](docs/issues/092-remote-tool-result-protocol.md).
 
 ## Runtime Surfaces
 

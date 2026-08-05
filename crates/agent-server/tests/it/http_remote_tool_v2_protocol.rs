@@ -95,8 +95,9 @@ async fn v2_claim_submit_replay_conflict_and_status_are_actor_confirmed() {
         &format!("/sessions/{id}/tool_claim"),
         Some(&other_claim.to_string()),
     );
-    assert_eq!(other_claim.status, 409, "{}", other_claim.body);
-    assert_eq!(error_code(&other_claim.body), "tool_claimed_by_other");
+    assert_eq!(other_claim.status, 200, "{}", other_claim.body);
+    let other_claim: Value = serde_json::from_str(&other_claim.body).unwrap();
+    assert_eq!(other_claim["disposition"], "ignored");
 
     let active = http_client::request_with_headers(
         server.addr,

@@ -1,4 +1,4 @@
-//! 092-D：两个真实 TCP/HTTP 客户端并发认领时，每轮只能有一个执行者获胜。
+//! 092-D：两个真实 TCP/HTTP 客户端并发确认时，每轮只能有一个开始执行。
 
 use std::sync::{Arc, Barrier};
 use std::time::Duration;
@@ -56,7 +56,7 @@ fn wait_for_terminal(sse: &mut http_client::SseReader) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn one_of_two_real_http_clients_wins_each_of_one_hundred_claim_races() {
+async fn only_one_of_two_http_clients_starts_each_call() {
     let scripts = (0..ROUNDS)
         .flat_map(|round| {
             [
@@ -114,24 +114,28 @@ async fn one_of_two_real_http_clients_wins_each_of_one_hundred_claim_races() {
         let outcomes = contenders.map(|thread| thread.join().expect("认领客户端不应 panic"));
         let statuses = outcomes.each_ref().map(|(_, response)| response.status);
 
-        let winners: Vec<_> = outcomes
+        let executors: Vec<_> = outcomes
             .iter()
-            .filter(|(_, response)| response.status == 200)
+            .filter(|(_, response)| {
+                serde_json::from_str::<Value>(&response.body)
+                    .is_ok_and(|body| body["disposition"] == "claimed")
+            })
             .collect();
-        let losers: Vec<_> = outcomes
+        let ignored: Vec<_> = outcomes
             .iter()
-            .filter(|(_, response)| response.status == 409)
+            .filter(|(_, response)| {
+                serde_json::from_str::<Value>(&response.body)
+                    .is_ok_and(|body| body["disposition"] == "ignored")
+            })
             .collect();
-        assert_eq!(winners.len(), 1, "round {round}: statuses={statuses:?}");
-        assert_eq!(losers.len(), 1, "round {round}: statuses={statuses:?}");
-        let loser: Value = serde_json::from_str(&losers[0].1.body).unwrap();
-        assert_eq!(loser["error"]["code"], "tool_claimed_by_other");
+        assert_eq!(executors.len(), 1, "round {round}: statuses={statuses:?}");
+        assert_eq!(ignored.len(), 1, "round {round}: statuses={statuses:?}");
 
-        let winner_claim_id = winners[0].0;
+        let executor_claim_id = executors[0].0;
         let result = json!({
             "agent": agent,
             "tool_call_id": call_id,
-            "claim_id": winner_claim_id,
+            "claim_id": executor_claim_id,
             "submission_id": format!("submission-{round}"),
             "outcome": { "status": "succeeded", "content": "done" },
         });

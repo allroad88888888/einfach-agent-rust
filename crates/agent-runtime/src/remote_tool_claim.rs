@@ -57,7 +57,10 @@ pub fn claim_remote_tool(
                 revision: ctx.pending_remote_tools.revision,
             })
         }
-        Some(_) => RemoteToolClaimDecision::ClaimedByOther,
+        Some(_) => RemoteToolClaimDecision::ClaimedByOther(RemoteToolClaimGrant {
+            request: ctx.pending_remote_tools.pending[index].request.clone(),
+            revision: ctx.pending_remote_tools.revision,
+        }),
         None => {
             let claimed_at = SystemTime::now();
             let deadline_at = claimed_at

@@ -78,7 +78,10 @@ async function drive(sessionId: string, pending: PendingTool, attempt: Execution
     }
 
     const grant = await claimRemoteTool(sessionId, pending.agent, pending.call_id, attempt.claim);
-    if (grant.disposition !== "claimed" && grant.disposition !== "already_claimed_by_you") return;
+    if (grant.disposition === "ignored") {
+      attempt.closed = true;
+      return;
+    }
 
     // 使用 claim 响应里的 request，而不是 SSE/待办中的副本；这份是 CAS 同一事务给出的 grant。
     attempt.submission = createRemoteToolSubmission(await produceOutcome(grant.request));
@@ -107,10 +110,6 @@ async function reportProtocolState(
   claim: RemoteToolClaim,
   error: RemoteToolProtocolError,
 ): Promise<void> {
-  if (error.code === "tool_claimed_by_other") {
-    console.info(`[web-tool] ${pending.request.tool}（${pending.call_id}）已由另一执行端认领，本端不执行`);
-    return;
-  }
   if (error.code === "tool_call_unknown" || error.code === "status_not_retained") {
     console.info(`[web-tool] ${pending.request.tool}（${pending.call_id}）${error.code}，本端不执行`);
     return;

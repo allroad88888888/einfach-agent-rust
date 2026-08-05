@@ -102,7 +102,9 @@ function claim(res: import("node:http").ServerResponse, received: Received[], pe
   if (fail) return error(res, 503, "temporarily_unavailable");
   if (!isActive(call.state)) return error(res, 410, "tool_call_terminal");
   const claimId = String(body.claim_id ?? "");
-  if (call.claimId !== undefined && call.claimId !== claimId) return error(res, 409, "tool_claimed_by_other");
+  if (call.claimId !== undefined && call.claimId !== claimId) {
+    return json(res, 200, { disposition: "ignored", agent: call.agent, tool_call_id: callId, request: call.request, revision: 1 });
+  }
   const disposition = call.claimId === undefined ? "claimed" : "already_claimed_by_you";
   call.claimId = claimId;
   call.state = "claimed";
