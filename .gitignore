@@ -2,6 +2,7 @@ target/
 node_modules/
 dist/
 .DS_Store
+.claude/
 
 # crates/agent-server/examples/serve.rs 起在仓库根跑时，每个 session 的工具
 # 路径监狱落在这里（issue 033）——运行时产物，不进版本控制。
