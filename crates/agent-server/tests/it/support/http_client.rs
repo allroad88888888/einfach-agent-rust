@@ -5,37 +5,14 @@
 //! 函数的返回值。
 #![allow(dead_code)]
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
-use super::http_chunked::{ChunkDecoder, find};
+use super::http_chunked::find;
+use super::http_request::{connect_and_send, header, read_head, with_private_capability};
+pub use super::http_request::{request, request_exact_headers, request_with_headers};
 pub use super::http_response::HttpResponse;
-
-/// 发一个小请求（body 可选），同步读完整个响应。不是流式的——`POST` 那几个
-/// 端点的响应体很小，不值得为它们复用 SSE 那套增量读取。
-pub fn request(addr: SocketAddr, method: &str, path: &str, body: Option<&str>) -> HttpResponse {
-    request_with_headers(addr, method, path, &[], body)
-}
-
-/// 发一个带额外请求头的小请求。状态查询用它携带认领凭据；凭据不能退回 query，
-/// 否则反向代理的访问日志可能保留它。
-pub fn request_with_headers(
-    addr: SocketAddr,
-    method: &str,
-    path: &str,
-    headers: &[(&str, &str)],
-    body: Option<&str>,
-) -> HttpResponse {
-    let mut reader = connect_and_send(addr, method, path, headers, body);
-    let (status, headers) = read_head(&mut reader);
-    let body = read_full_body(&mut reader, &headers);
-    HttpResponse {
-        status,
-        headers,
-        body,
-    }
-}
 
 /// 打开一条 SSE 连接（不发 body），返回状态行/headers 和一个可以增量
 /// `next_event` 的读取器。真实浏览器的 `EventSource` 长这样：一次 `GET`,
@@ -50,7 +27,8 @@ pub fn connect_sse(
         .into_iter()
         .collect();
     let extra_refs: Vec<(&str, &str)> = extra.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let mut reader = connect_and_send(addr, "GET", path, &extra_refs, None);
+    let headers = with_private_capability(&extra_refs);
+    let mut reader = connect_and_send(addr, "GET", path, &headers, None);
     let (status, headers) = read_head(&mut reader);
     let chunked = header(&headers, "transfer-encoding")
         .map(|v| v.eq_ignore_ascii_case("chunked"))
@@ -66,128 +44,6 @@ pub fn connect_sse(
             done: false,
         },
     )
-}
-
-fn connect_and_send(
-    addr: SocketAddr,
-    method: &str,
-    path: &str,
-    extra_headers: &[(&str, &str)],
-    body: Option<&str>,
-) -> BufReader<TcpStream> {
-    let stream = TcpStream::connect(addr).expect("连接假浏览器目标地址");
-    stream
-        .set_read_timeout(Some(Duration::from_millis(50)))
-        .expect("设置短读超时,给增量轮询用");
-    let mut stream = stream;
-
-    let mut head = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n");
-    for (k, v) in extra_headers {
-        head.push_str(&format!("{k}: {v}\r\n"));
-    }
-    if let Some(b) = body {
-        head.push_str("Content-Type: application/json\r\n");
-        head.push_str(&format!("Content-Length: {}\r\n", b.len()));
-    }
-    head.push_str("\r\n");
-    stream.write_all(head.as_bytes()).expect("写请求头");
-    if let Some(b) = body {
-        stream.write_all(b.as_bytes()).expect("写请求体");
-    }
-    stream.flush().expect("flush 请求");
-    BufReader::new(stream)
-}
-
-/// 读状态行 + headers（直到空行）。短读超时下 `read_line` 可能因为数据还没
-/// 到齐而超时——headers 阶段数据量小、发送方几乎是原子写完的，重试几次足够,
-/// 不必做成通用的「跨超时累积一行」。
-fn read_head(reader: &mut BufReader<TcpStream>) -> (u16, Vec<(String, String)>) {
-    let status_line = read_line_retrying(reader);
-    let status = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-
-    let mut headers = Vec::new();
-    loop {
-        let line = read_line_retrying(reader);
-        if line.is_empty() {
-            break;
-        }
-        if let Some((k, v)) = line.split_once(':') {
-            headers.push((k.trim().to_string(), v.trim().to_string()));
-        }
-    }
-    (status, headers)
-}
-
-fn read_line_retrying(reader: &mut BufReader<TcpStream>) -> String {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut line = String::new();
-    loop {
-        line.clear();
-        match reader.read_line(&mut line) {
-            Ok(0) => return String::new(), // 连接关了
-            Ok(_) => return line.trim_end_matches(['\r', '\n']).to_string(),
-            Err(e)
-                if e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut =>
-            {
-                if Instant::now() >= deadline {
-                    panic!("读响应头超时");
-                }
-            }
-            Err(e) => panic!("读响应头失败：{e}"),
-        }
-    }
-}
-
-fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    headers
-        .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case(name))
-        .map(|(_, v)| v.as_str())
-}
-
-/// 读完整个 body——按 `Content-Length`，没有就按 `Transfer-Encoding: chunked`
-/// 拼到终止块为止，两个都没有就读到连接关闭（`POST` 端点的小响应体，三种框架
-/// 里出现哪种都不奇怪，写全了比赌 axum 的实现细节稳）。
-fn read_full_body(reader: &mut BufReader<TcpStream>, headers: &[(String, String)]) -> String {
-    if let Some(len) = header(headers, "content-length").and_then(|v| v.parse::<usize>().ok()) {
-        let mut buf = vec![0u8; len];
-        reader.read_exact(&mut buf).unwrap_or(());
-        return String::from_utf8_lossy(&buf).into_owned();
-    }
-    if header(headers, "transfer-encoding")
-        .map(|v| v.eq_ignore_ascii_case("chunked"))
-        .unwrap_or(false)
-    {
-        let mut decoder = ChunkDecoder::default();
-        let mut tmp = [0u8; 4096];
-        loop {
-            match reader.read(&mut tmp) {
-                Ok(0) => break,
-                Ok(n) => {
-                    decoder.feed(&tmp[..n]);
-                    if decoder.done {
-                        break;
-                    }
-                }
-                Err(e)
-                    if e.kind() == std::io::ErrorKind::WouldBlock
-                        || e.kind() == std::io::ErrorKind::TimedOut =>
-                {
-                    continue;
-                }
-                Err(_) => break,
-            }
-        }
-        return String::from_utf8_lossy(&decoder.decoded).into_owned();
-    }
-    let mut buf = Vec::new();
-    let _ = reader.read_to_end(&mut buf);
-    String::from_utf8_lossy(&buf).into_owned()
 }
 
 /// 一条 SSE 事件：`id`（没有 `id:` 行就是 `None`，这个仓库的服务端每一帧都会

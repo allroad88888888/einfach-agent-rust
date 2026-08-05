@@ -16,6 +16,10 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
     match cli::parse(&args) {
         cli::ParsedArgs::Help => println!("{}", cli::HELP),
+        cli::ParsedArgs::Invalid(message) => {
+            eprintln!("{message}\n\n{}", cli::HELP);
+            std::process::exit(2);
+        }
         cli::ParsedArgs::Run(opts) => run::run(opts).await,
     }
 }

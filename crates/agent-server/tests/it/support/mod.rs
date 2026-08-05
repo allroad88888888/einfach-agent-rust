@@ -3,6 +3,7 @@
 
 mod http_chunked;
 pub mod http_client;
+mod http_request;
 mod http_response;
 pub mod http_server;
 pub mod routed;

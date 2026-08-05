@@ -27,6 +27,7 @@ use std::{
 /// 在负载高的机器上假红。
 const DEADLINE: Duration = Duration::from_secs(30);
 const TICK: Duration = Duration::from_millis(25);
+const PRIVATE_CAPABILITY: &str = "test-private-capability-0123456789abcdefghi";
 
 static SEQUENCE: AtomicUsize = AtomicUsize::new(0);
 
@@ -71,13 +72,16 @@ impl Fixture {
             .args(["--config", self.path("providers.toml").to_str().unwrap()])
             .args(["--sessions-dir", self.path("sessions").to_str().unwrap()])
             .args(["--port", "0"])
-            .stdin(Stdio::null())
+            .arg("--private-capability-stdin")
+            .stdin(Stdio::piped())
             .stdout(Stdio::from(log.try_clone().unwrap()))
             .stderr(Stdio::from(log));
         if let Some(path) = ready_file {
             command.args(["--ready-file", path.to_str().unwrap()]);
         }
-        command.spawn().unwrap()
+        let mut child = command.spawn().unwrap();
+        writeln!(child.stdin.take().unwrap(), "{PRIVATE_CAPABILITY}").unwrap();
+        child
     }
 
     fn log(&self) -> String {
@@ -107,6 +111,9 @@ fn http(port: u16, request_line: &str, body: Option<&str>) -> String {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
     let mut request =
         format!("{request_line} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
+    request.push_str(&format!(
+        "x-agent-server-capability: {PRIVATE_CAPABILITY}\r\n"
+    ));
     if let Some(body) = body {
         request.push_str(&format!(
             "Content-Type: application/json\r\nContent-Length: {}\r\n",

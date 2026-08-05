@@ -77,6 +77,7 @@ pub async fn start_on(
 ) -> TestServer {
     let tools_root = super::temp_dir("tools");
     let server_config = ServerConfig::new(template(endpoint, tools_root))
+        .with_private_capability(crate::support::http_server::PRIVATE_CAPABILITY)
         .with_ring_capacity(config.ring_capacity)
         .with_cancel_grace(config.cancel_grace)
         .with_sse_keep_alive(config.sse_keep_alive);

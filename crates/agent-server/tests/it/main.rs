@@ -35,6 +35,7 @@ mod http_indep_support;
 mod http_indep_undo_redo_wire;
 mod http_pending_remote_tools_projection;
 mod http_post_input_streams_deltas_then_terminal;
+mod http_private_capability;
 mod http_reconnect_past_buffer_gets_a_gap_frame;
 mod http_reconnect_with_last_event_id_replays_missed_frames;
 mod http_remote_tool_v2_protocol;

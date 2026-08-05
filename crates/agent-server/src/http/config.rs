@@ -157,6 +157,7 @@ pub struct ServerConfig {
     pub(crate) cancel_grace: Duration,
     pub(crate) sse_keep_alive: Duration,
     pub(crate) static_dir: Option<PathBuf>,
+    pub(crate) private_capability: Option<Arc<str>>,
 }
 
 impl ServerConfig {
@@ -167,6 +168,7 @@ impl ServerConfig {
             cancel_grace: DEFAULT_CANCEL_GRACE,
             sse_keep_alive: DEFAULT_SSE_KEEP_ALIVE,
             static_dir: None,
+            private_capability: None,
         }
     }
 
@@ -197,6 +199,12 @@ impl ServerConfig {
     /// [`crate::http::static_files`]。
     pub fn with_static_dir(mut self, dir: PathBuf) -> Self {
         self.static_dir = Some(dir);
+        self
+    }
+
+    /// 启用私有 session API 的进程级 capability。公开改写 API 不使用它。
+    pub fn with_private_capability(mut self, capability: impl Into<Arc<str>>) -> Self {
+        self.private_capability = Some(capability.into());
         self
     }
 }

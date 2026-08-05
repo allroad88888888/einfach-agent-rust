@@ -11,9 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use axum::http::HeaderMap;
+
 use crate::http::config::{ServerConfig, SessionTemplate};
 use crate::http::error::ApiError;
 use crate::http::hub::SseHub;
+use crate::http::private_capability;
 use crate::registry::{SessionId, SessionQuery, SessionRegistry};
 use crate::{Command, SessionHandle};
 
@@ -27,6 +30,7 @@ struct Inner {
     ring_capacity: usize,
     cancel_grace: Duration,
     sse_keep_alive: Duration,
+    private_capability: Option<Arc<str>>,
     /// session id 生成器：`sess-<进程 pid>-<单调计数器>`。够用（M3 单副本、
     /// 进程内单调），不为此拉一个 uuid 依赖——见 `crate::http::state` 模块
     /// 文档「三件事」第一件。
@@ -42,6 +46,7 @@ impl AppState {
             ring_capacity: config.ring_capacity,
             cancel_grace: config.cancel_grace,
             sse_keep_alive: config.sse_keep_alive,
+            private_capability: config.private_capability,
             next_id: AtomicU64::new(0),
         }))
     }
@@ -61,6 +66,10 @@ impl AppState {
 
     pub(crate) fn sse_keep_alive(&self) -> Duration {
         self.0.sse_keep_alive
+    }
+
+    pub(crate) fn accepts_private_capability(&self, headers: &HeaderMap) -> bool {
+        private_capability::matches(headers, self.0.private_capability.as_deref())
     }
 
     /// 查一个 id：活着就给句柄,`None`/死了就给对应的 [`ApiError`]

@@ -29,6 +29,8 @@ pub struct Cli {
     /// `--ready-file <path>`：成功 bind 后原子发布端口、pid 与版本，让父进程
     /// 不必把人类日志当协议解析。文件协议及原子写入细节在 `ready_file` 模块。
     pub ready_file: Option<PathBuf>,
+    /// 从 stdin 单行读取 Java 为此子进程随机生成的 private API capability。
+    pub private_capability_stdin: bool,
 }
 
 pub enum ParsedArgs {
@@ -36,6 +38,7 @@ pub enum ParsedArgs {
     /// 用法退出（`--help` 可读是 035 的验收条目之一，不该因为当前目录没有
     /// `providers.toml` 就先报一个无关的配置错误）。
     Help,
+    Invalid(String),
     Run(Cli),
 }
 
@@ -51,6 +54,7 @@ pub fn parse(args: &[String]) -> ParsedArgs {
         sessions_dir: None,
         port: None,
         ready_file: None,
+        private_capability_stdin: false,
     };
     let mut i = 0;
     while i < args.len() {
@@ -75,6 +79,10 @@ pub fn parse(args: &[String]) -> ParsedArgs {
         } else if arg == "--ready-file" {
             i += 1;
             cli.ready_file = args.get(i).map(PathBuf::from);
+        } else if arg == "--private-capability-stdin" {
+            cli.private_capability_stdin = true;
+        } else if arg.starts_with('-') {
+            return ParsedArgs::Invalid(format!("unknown option: {arg}"));
         }
         i += 1;
     }
@@ -97,6 +105,7 @@ OPTIONS:
                               两个都没有就是 0（操作系统挑一个空闲端口）
     --ready-file <path>       成功 bind 后原子发布 JSON 就绪文件；内容含
                               port、pid、version，供父进程读取实际端口
+    --private-capability-stdin 从 stdin 读取一行私有 API capability；Java 托管时必需
     -h, --help                打印这条帮助然后退出
 
 ENV:
@@ -123,6 +132,7 @@ mod tests {
         match parsed {
             ParsedArgs::Run(cli) => cli,
             ParsedArgs::Help => panic!("期望 Run，拿到 Help"),
+            ParsedArgs::Invalid(message) => panic!("期望 Run，参数错误：{message}"),
         }
     }
 
@@ -133,6 +143,7 @@ mod tests {
         assert!(cli.sessions_dir.is_none());
         assert!(cli.port.is_none());
         assert!(cli.ready_file.is_none());
+        assert!(!cli.private_capability_stdin);
     }
 
     #[test]
@@ -147,6 +158,7 @@ mod tests {
             "8080",
             "--ready-file",
             "/tmp/agent-server.ready",
+            "--private-capability-stdin",
         ])));
         assert_eq!(cli.config, Some(PathBuf::from("/tmp/providers.toml")));
         assert_eq!(cli.sessions_dir, Some(PathBuf::from("/tmp/sessions")));
@@ -155,6 +167,7 @@ mod tests {
             cli.ready_file,
             Some(PathBuf::from("/tmp/agent-server.ready"))
         );
+        assert!(cli.private_capability_stdin);
     }
 
     #[test]
@@ -186,6 +199,14 @@ mod tests {
         assert!(matches!(
             parse(&args(&["agent-server", "--port", "1", "--help"])),
             ParsedArgs::Help
+        ));
+    }
+
+    #[test]
+    fn unknown_options_fail_instead_of_being_ignored() {
+        assert!(matches!(
+            parse(&args(&["agent-server", "--misspelled-option"])),
+            ParsedArgs::Invalid(message) if message.contains("--misspelled-option")
         ));
     }
 

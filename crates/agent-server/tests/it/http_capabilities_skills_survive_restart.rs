@@ -150,7 +150,10 @@ async fn undoing_the_activation_takes_the_body_out_of_the_next_round() {
 }
 
 async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
-    let server = AgentServer::new(ServerConfig::new(template));
+    let server = AgentServer::new(
+        ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     let sessions = server.sessions();
     let bound = server
         .bind("127.0.0.1:0".parse().unwrap())

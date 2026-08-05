@@ -18,9 +18,9 @@ mod tool_result;
 mod tool_status;
 mod undo;
 
-use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
+use axum::{Router, middleware};
 
 use crate::http::state::AppState;
 
@@ -47,5 +47,9 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions/{id}/undo", post(undo::undo))
         .route("/sessions/{id}/redo", post(undo::redo))
         .route("/sessions/{id}/cancel", post(cancel::cancel))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::http::private_capability::authorize,
+        ))
         .with_state(state)
 }

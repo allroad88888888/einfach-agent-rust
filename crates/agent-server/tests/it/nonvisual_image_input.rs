@@ -116,7 +116,10 @@ fn image_request_body(raw_image_bytes: usize) -> String {
 }
 
 async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
-    let server = AgentServer::new(ServerConfig::new(template));
+    let server = AgentServer::new(
+        ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     let sessions = server.sessions();
     let bound = server
         .bind("127.0.0.1:0".parse().expect("loopback 地址"))

@@ -14,7 +14,10 @@ async fn concurrent_create_of_same_chatid_returns_one_created_and_rest_existing(
     let upstream = FakeServer::start(vec![]);
     let mut template = support::http_server::session_template(upstream.endpoint());
     template.default_sessions_dir = Some(support::temp_dir("concurrent-chatid"));
-    let server = AgentServer::new(ServerConfig::new(template));
+    let server = AgentServer::new(
+        ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     let sessions = server.sessions();
     let bound = server.bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
     let addr = bound.local_addr();

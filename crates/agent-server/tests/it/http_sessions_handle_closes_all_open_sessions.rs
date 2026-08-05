@@ -13,7 +13,10 @@ use crate::support::http_server::session_template;
 #[tokio::test(flavor = "multi_thread")]
 async fn close_all_closes_every_session_created_over_http() {
     let template = session_template("http://127.0.0.1:1/unused".to_string());
-    let server = agent_server::AgentServer::new(agent_server::ServerConfig::new(template));
+    let server = agent_server::AgentServer::new(
+        agent_server::ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     // 跟 `AgentServer::sessions` 文档说的用法一致：在 `bind` 消费掉 `server`
     // 之前先借出这份把手。
     let sessions = server.sessions();

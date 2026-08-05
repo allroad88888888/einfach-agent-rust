@@ -16,6 +16,14 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    pub(crate) fn private_access_denied() -> Self {
+        ApiError {
+            status: StatusCode::UNAUTHORIZED,
+            code: "private_access_denied",
+            message: "private agent API requires capability".to_string(),
+        }
+    }
+
     /// 远端工具 v2 状态机的可判别错误。状态码与稳定 code 由路由的决策映射给出，
     /// 仍复用本类型这一处 JSON 形状，避免协议错误另长一套响应 envelope。
     pub(crate) fn remote_tool(

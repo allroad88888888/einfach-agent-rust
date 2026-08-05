@@ -30,6 +30,7 @@ mod hub;
 mod json;
 mod pending;
 mod poll_protocol;
+mod private_capability;
 mod routes;
 mod sessions_handle;
 mod state;

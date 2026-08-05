@@ -15,6 +15,10 @@ pub struct TestServer {
     pub addr: SocketAddr,
 }
 
+/// 集成测试的私有 API 凭据。生产二进制只接受 Java 经 stdin 交付的随机值；测试
+/// 通过这里显式注入，避免把「未配置 capability 时 fail-closed」悄悄改回去。
+pub const PRIVATE_CAPABILITY: &str = "test-private-capability-4ZVPC55IXztIFd_SnzxY0eI";
+
 /// 默认配置：DeepSeek 假上游、5 帧的环形缓冲（测试要能故意撑爆它验证 gap，
 /// 256 帧太大跑不动这类断言）、200ms 断开取消宽限期（不是 issue 原文的 5s——
 /// 「可配」正是为了让测试不用真的等 5 秒）、100ms SSE 心跳（默认 15s 太长——
@@ -59,7 +63,7 @@ pub async fn start_at_with_template(
     template: SessionTemplate,
     customize: impl FnOnce(ServerConfig) -> ServerConfig,
 ) -> TestServer {
-    let config = customize(ServerConfig::new(template));
+    let config = customize(ServerConfig::new(template)).with_private_capability(PRIVATE_CAPABILITY);
     let server = AgentServer::new(config);
     let bound = server.bind(addr).await.expect("bind 测试服务器");
     let addr = bound.local_addr();

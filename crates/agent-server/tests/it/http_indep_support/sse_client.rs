@@ -36,6 +36,9 @@ impl SseClient {
         let mut req = format!(
             "GET /sessions/{session_id}/events HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n"
         );
+        req.push_str("x-agent-server-capability: ");
+        req.push_str(crate::support::http_server::PRIVATE_CAPABILITY);
+        req.push_str("\r\n");
         if let Some(id) = last_event_id {
             req.push_str(&format!("Last-Event-ID: {id}\r\n"));
         }

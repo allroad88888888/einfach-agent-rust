@@ -49,6 +49,14 @@ pub fn request(
         TcpStream::connect(addr).unwrap_or_else(|e| panic!("connect {addr} 失败：{e}"));
     let body = body.unwrap_or(&[]);
     let mut req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
+    if !extra_headers
+        .iter()
+        .any(|(name, _)| name.eq_ignore_ascii_case("x-agent-server-capability"))
+    {
+        req.push_str("x-agent-server-capability: ");
+        req.push_str(crate::support::http_server::PRIVATE_CAPABILITY);
+        req.push_str("\r\n");
+    }
     if !body.is_empty() {
         req.push_str("Content-Type: application/json\r\n");
         req.push_str(&format!("Content-Length: {}\r\n", body.len()));

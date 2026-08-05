@@ -5,6 +5,7 @@
 //! 的输入、启动横幅打什么、Ctrl-C 或 Unix SIGTERM 触发时怎么收尾。`main.rs` 只解析参数、调
 //! [`run`]，装配细节不出现在那个文件里。
 
+use std::io::BufRead;
 use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
@@ -22,6 +23,7 @@ use crate::{cli::Cli, ready_file, remote_tool_timeout};
 const SYSTEM_PROMPT: &str = "你是一个简洁、诚实的助手。";
 
 pub async fn run(cli: Cli) {
+    let private_capability = read_private_capability(&cli);
     if let Some(path) = &cli.config {
         // SAFETY: 这一刻 main 函数刚起步、`#[tokio::main]` 的执行器还没起
         // 第二个线程——单线程期间改进程级环境变量没有并发风险
@@ -73,7 +75,13 @@ pub async fn run(cli: Cli) {
 
     let provider_name = assembled.provider_name.clone();
     let model = assembled.template.model.clone();
-    let server = AgentServer::new(ServerConfig::new(assembled.template));
+    let config = match private_capability {
+        Some(capability) => {
+            ServerConfig::new(assembled.template).with_private_capability(capability)
+        }
+        None => ServerConfig::new(assembled.template),
+    };
+    let server = AgentServer::new(config);
     // 优雅关闭用的把手——在 `bind` 消费掉 `server` 之前先借出来
     // （`AgentServer::sessions` 文档）。
     let sessions = server.sessions();
@@ -109,6 +117,27 @@ pub async fn run(cli: Cli) {
             eprintln!("已关闭 {} 个会话，退出。", outcomes.len());
         }
     }
+}
+
+fn read_private_capability(cli: &Cli) -> Option<String> {
+    if !cli.private_capability_stdin {
+        return None;
+    }
+    let mut line = String::new();
+    let read = std::io::stdin()
+        .lock()
+        .read_line(&mut line)
+        .unwrap_or_else(|_| fail("读取 private API capability 失败"));
+    let capability = line.trim_end_matches(['\r', '\n']);
+    if read == 0
+        || capability.len() != 43
+        || !capability
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    {
+        fail("private API capability 无效");
+    }
+    Some(capability.to_owned())
 }
 
 fn print_banner(bound: &BoundAgentServer, provider_name: &str, model: &str, cli: &Cli) {

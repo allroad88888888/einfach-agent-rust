@@ -141,7 +141,10 @@ async fn a_session_with_history_refuses_a_new_switch() {
 }
 
 async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
-    let server = AgentServer::new(ServerConfig::new(template));
+    let server = AgentServer::new(
+        ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     let sessions = server.sessions();
     let bound = server
         .bind("127.0.0.1:0".parse().unwrap())

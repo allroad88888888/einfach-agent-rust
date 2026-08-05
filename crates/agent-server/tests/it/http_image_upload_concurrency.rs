@@ -96,7 +96,10 @@ async fn slow_upload_leaves_its_session_actor_available_until_the_reference_is_r
 }
 
 async fn start(template: SessionTemplate) -> (SocketAddr, SessionsHandle) {
-    let server = AgentServer::new(ServerConfig::new(template));
+    let server = AgentServer::new(
+        ServerConfig::new(template)
+            .with_private_capability(support::http_server::PRIVATE_CAPABILITY),
+    );
     let sessions = server.sessions();
     let bound = server
         .bind("127.0.0.1:0".parse().expect("loopback 地址"))
