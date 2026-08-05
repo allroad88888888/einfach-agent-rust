@@ -1,6 +1,6 @@
 # 092 远端工具认领、终态回执与结果协议
 
-**里程碑** M12 · **依赖** 060 + 066 + 072 · **状态** 协议闭环已实现，待 Java 联调与真机 dogfood
+**里程碑** M12 · **依赖** 060 + 066 + 072 · **状态** 协议、Java 透传与 100 轮压测已完成，待双端真机 dogfood
 
 ## 目标
 
@@ -190,14 +190,17 @@ unclaimed_timeout | outcome_unknown`，合计七种状态。每次状态迁移�
 │  ├─ HTTP 200 必须代表 actor 已提交，不是仅入队
 │  ├─ 相同提交重放不产生第二条 tool_result
 │  └─ undo/超时/迟到回传与 epoch 闸
-└─ [ ] 092-D 真机 dogfood（主 agent，需 Java 网关与浏览器环境）
-   ├─ 浏览器 + Java 网关同 chatid 并连，不重复副作用
-   ├─ 回传响应丢失后重试得到 duplicate
-   └─ 已认领断线显示 outcome_unknown，不谎报普通 timeout
+└─ [ ] 092-D 集成验证与真机 dogfood（主 agent）
+   ├─ [x] Java 通配代理无损转发 claim/status/v2 result 协议
+   ├─ [x] 100 轮真实 TCP 双客户端并发 claim，每轮恰好一个获胜
+   ├─ [ ] 浏览器 + Java 网关同 chatid 并连，不重复副作用
+   ├─ [ ] 回传响应丢失后重试得到 duplicate
+   └─ [ ] 已认领断线显示 outcome_unknown，不谎报普通 timeout
 ```
 
-执行结果：root 已冻结公开语义；A、B、C、T 已完成并通过自动化验收。D 需要 Java 网关和
-浏览器真机共同接入，不能用 Rust/Web mock 冒充完成。
+执行结果：root 已冻结公开语义；A、B、C、T 已完成并通过自动化验收。D 的 Java 代理透传和
+100 轮真实 TCP 并发压测已通过；浏览器与 Java 网关仍需以同一 `chatid` 真机共同接入，不能用
+Rust/Web mock 冒充完成。
 
 ## 文件职责预案
 
@@ -227,7 +230,9 @@ unclaimed_timeout | outcome_unknown`，合计七种状态。每次状态迁移�
   配置开关留待后续 issue 验收。
 - [x] `cargo test -p agent-runtime`、`cargo test -p agent-server --features ts`、Web
   typecheck/协议验证/build、`scripts/check-invariants.sh --all` 通过。
-- [ ] Java 网关与浏览器真机 dogfood，并补 100 轮真实双客户端并发 claim 压测。
+- [x] Java 通配代理自动化验证 method/path/query/header/body/response 均可承载 v2 协议。
+- [x] 100 轮真实 TCP 双客户端并发 claim 压测，每轮恰好一个 `claimed`、一个 409。
+- [ ] Java 网关与浏览器使用同一 `chatid` 完成真机 dogfood。
 
 ## 红线与注意
 

@@ -377,7 +377,7 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 | [089](089-kimi-image-cache-accounting.md) ✅ | **Kimi 图片历史的缓存预测差**：历史 `ms://` 图片以实测视觉 cache block 对账，真实第 2 轮为 `predicted=1834`、`actual=1834` | 087 真机发现 | 主会话真机 | ✅ |
 | [090](090-image-undo-timeline.md) ✅ | **图片卡片未随 undo/redo 还原**：server history 已恢复，浏览器时间线却在 undo 后仍留图 | 087 真机发现 | sonnet | ✅ |
 | [091](091-nonvisual-image-ingress.md) ✅ | **非视觉 provider 在 adapter 降级前被 HTTP 上传短路**：必须使 `ImagesDropped` 能实际抵达用户 | 087 真机发现 | **opus** | ✅ |
-| [092](092-remote-tool-result-protocol.md) | **远端工具认领、终态回执与结果协议**：claim 后执行，稳定 submission 幂等重投，区分未认领超时与结果未知 | 用户提出 | **gpt-5.6-sol / xhigh** | 协议闭环 ✅；Java/浏览器真机待验 |
+| [092](092-remote-tool-result-protocol.md) | **远端工具认领、终态回执与结果协议**：claim 后执行，稳定 submission 幂等重投，区分未认领超时与结果未知 | 用户提出 | **gpt-5.6-sol / xhigh** | 协议/Java 透传/100 轮压测 ✅；双端真机待验 |
 
 另有一份 [DOC-AUDIT.md](../DOC-AUDIT.md)（文档↔实现一致性审计：危险 10 / 过时 40 /
 小瑕疵 19 / 疑似代码问题 4）。TOOLS/STATE-MODEL/ARCHITECTURE/CLAUDE.md 的修正已落地，
