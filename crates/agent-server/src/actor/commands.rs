@@ -12,9 +12,10 @@
 
 use tokio::sync::broadcast::Sender as BroadcastSender;
 
-use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus};
+use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus, UserImage};
 use agent_runtime::{
-    RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool, run_turn,
+    RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool,
+    run_turn_with_images,
 };
 
 use crate::command::Granularity;
@@ -46,12 +47,13 @@ pub(super) fn handle_input(
     ctx: &mut RunnerCtx,
     events: &Events,
     text: &str,
+    images: Vec<UserImage>,
 ) {
     if session.status().is_terminal() {
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
     }
-    let status = run_turn(session, ctx, text);
+    let status = run_turn_with_images(session, ctx, text, images);
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         erase_cancelled_turn(session, ctx, events);
     }
@@ -173,7 +175,7 @@ pub(super) fn handle_remote_tool_timeout(
 /// `undo_turn`。结果照样走 [`SessionEvent::Undo`]——对客户端来说，「这一轮被
 /// 取消后自动擦除」和「用户主动 `/undo`」产出的是同一种事件，语义也确实相同
 /// （都是一次 `undo_turn`），不必另开变体。
-fn erase_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
+pub(super) fn erase_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
     let report = session.undo_turn();
     agent_runtime::persist::sync(ctx, session);
     emit_root(

@@ -2,11 +2,13 @@
 // 不含渲染逻辑（render/）、不含协议解析（connection.ts）、不含工具执行
 // （tool-exec.ts）,纯接线,跟 `crates/agent-cli/src/main.rs` 的自我定位
 // （「纯接线」）是同一个判据。
-import { cancelBtn, composerEl, inputEl, redoBtn, statusEl, undoBtn } from "./dom";
+import { cancelBtn, composerEl, imageAttachmentsEl, imageInputEl, imageMessageEl, inputEl, redoBtn, statusEl, undoBtn } from "./dom";
 import { createSession, fetchAgentTree, sendCancel, sendInput, sendRedo, sendUndo } from "./api";
 import { webCapabilities } from "./capabilities";
+import { createImageAttachments } from "./composer/image_attachments";
 import { connect, type ConnectionState } from "./connection";
 import { createRenderer } from "./render/dispatch";
+import { createUserInputTimeline } from "./render/user_input";
 import { createToolExecutor } from "./tool-exec";
 import { renderAgentTree } from "./render/agent_tree";
 import { connectMcpServers, describeStatus, registerMcpTools } from "./mcp";
@@ -32,13 +34,20 @@ async function main(): Promise<void> {
   // 这一次机会（接缝 §三：不做运行时增删）。067 接 MCP 后要在这一行**之前**
   // 把翻译好的工具 `registerWebTool` 进去,晚了就赶不上这个会话。
   const sessionId = await createSession(webCapabilities());
+  const attachments = createImageAttachments({
+    form: composerEl,
+    fileInput: imageInputEl,
+    tray: imageAttachmentsEl,
+    message: imageMessageEl,
+  });
 
   // 同一条 SSE 上并排挂两个消费者：**渲染**（画出来）和**执行**（066：模型
   // 点名的 `web:` 工具在这个浏览器里跑掉、结果 `POST /tool_result` 回去）。
   // 两件事分开而不是把执行塞进 `render/dispatch.ts` 的 `switch`——那个文件的
   // 唯一职责是「一帧 → 该调渲染层哪个函数」,执行工具不是渲染。
   // 顺序：先渲染再执行,让卡片在工具真跑起来之前就出现在时间线上。
-  const render = createRenderer(sessionId);
+  const userInputs = createUserInputTimeline();
+  const render = createRenderer(sessionId, userInputs);
   const executeTools = createToolExecutor(sessionId);
   connect(sessionId, (frame) => {
     render(frame);
@@ -64,9 +73,11 @@ async function main(): Promise<void> {
   composerEl.addEventListener("submit", (event) => {
     event.preventDefault();
     const text = inputEl.value.trim();
-    if (!text) return;
+    const images = attachments.takeFiles();
+    if (!text && images.length === 0) return;
     inputEl.value = "";
-    void sendInput(sessionId, text).catch(reportError);
+    userInputs.submit(text, images);
+    void sendInput(sessionId, text, images).catch(reportError);
   });
 
   // Undo/Redo 按钮只发默认档（turn 粒度、非 force）——`undo_blocked` 的确认

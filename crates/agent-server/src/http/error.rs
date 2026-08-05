@@ -16,6 +16,20 @@ pub struct ApiError {
 }
 
 impl ApiError {
+    /// 远端工具 v2 状态机的可判别错误。状态码与稳定 code 由路由的决策映射给出，
+    /// 仍复用本类型这一处 JSON 形状，避免协议错误另长一套响应 envelope。
+    pub(crate) fn remote_tool(
+        status: StatusCode,
+        code: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
+        ApiError {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
+
     /// 这个 session id 从没 `open` 过。
     pub fn not_found(message: impl Into<String>) -> Self {
         ApiError {

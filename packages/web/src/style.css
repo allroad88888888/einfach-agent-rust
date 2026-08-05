@@ -8,6 +8,8 @@
    把它跟 `#timeline` 摆成左右两栏的容器规则（issue 049 范围条款 2：树面板
    答「谁在干啥、树长啥样」，帧流答「说了什么」，两者互补不替代）。 */
 @import "./tree-panel.css";
+@import "./composer/image_attachments.css";
+@import "./render/user_input.css";
 
 :root {
   color-scheme: light dark;
@@ -194,6 +196,8 @@ header h1 {
 
 #composer {
   display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 0.5rem;
   padding: 0.6rem 1rem;
   border-top: 1px solid var(--border);

@@ -234,17 +234,20 @@ fn parked_collect() -> (Session, AgentId, AgentId, ToolCallId) {
     let _ = session.step(Event::UserInput {
         agent: root.clone(),
         text: Arc::from("拆一个后台的"),
+        images: Vec::new(),
     });
 
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
+        images: Vec::new(),
     });
     let decoy = session.spawn_child(&root, ChildConfig::default()).unwrap();
     let _ = session.step(Event::UserInput {
         agent: decoy.clone(),
         text: Arc::from("DECOY"),
+        images: Vec::new(),
     });
 
     let call_id = ToolCallId::new("call_collect");
@@ -314,12 +317,14 @@ fn finished_background_child() -> (Session, AgentId, Epoch) {
     let _ = session.step(Event::UserInput {
         agent: root.clone(),
         text: Arc::from("拆一个"),
+        images: Vec::new(),
     });
     let spawned_at = session.epoch();
     let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
+        images: Vec::new(),
     });
     finish(&mut session, &child);
     (session, child, spawned_at)

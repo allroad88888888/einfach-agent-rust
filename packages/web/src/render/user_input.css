@@ -1,0 +1,31 @@
+/* 唯一职责：时间线中本地用户输入及其图片的呈现。 */
+.user-input {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem;
+}
+.user-input-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.user-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.user-image {
+  margin: 0;
+}
+.user-image img {
+  display: block;
+  max-block-size: 14rem;
+  max-inline-size: min(22rem, 100%);
+  object-fit: contain;
+}
+.user-image figcaption {
+  color: var(--muted);
+  font-size: 0.75rem;
+}

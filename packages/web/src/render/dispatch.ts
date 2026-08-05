@@ -26,8 +26,9 @@ import * as notice from "./notice";
 import { renderUndoOutcome } from "./undo";
 import { turnGuard } from "./guard";
 import { renderAgentTree } from "./agent_tree";
+import type { UserInputTimeline } from "./user_input";
 
-export function createRenderer(sessionId: string): (frame: Frame) => void {
+export function createRenderer(sessionId: string, userInputs: UserInputTimeline): (frame: Frame) => void {
   const stream = new StreamCursor();
 
   return function dispatch(frame: Frame): void {
@@ -70,10 +71,12 @@ export function createRenderer(sessionId: string): (frame: Frame) => void {
         return;
       case "undo":
         stream.interrupt();
+        if (event.data.type === "applied") userInputs.undo();
         renderUndoOutcome("undo", event.data, sessionId, agent);
         return;
       case "redo":
         stream.interrupt();
+        if (event.data.type === "applied") userInputs.redo();
         renderUndoOutcome("redo", event.data, sessionId, agent);
         return;
       case "lagged":

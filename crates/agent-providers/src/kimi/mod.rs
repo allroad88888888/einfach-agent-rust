@@ -29,7 +29,11 @@
 
 mod decode;
 mod encode;
+#[cfg(test)]
+mod encode_tests;
 mod errors;
+mod image_cache;
+mod late_tools;
 
 #[cfg(test)]
 mod test_support;
@@ -51,6 +55,10 @@ pub(crate) const CACHE_BLOCK: u32 = 256;
 pub struct Kimi;
 
 impl Provider for Kimi {
+    fn supports_images(&self) -> bool {
+        true
+    }
+
     fn encode(&self, ing: &Ingredients<'_>) -> Encoded {
         encode::encode(ing)
     }
@@ -118,6 +126,14 @@ mod tests {
                 wanted: Arc::from("srv:fs/read"),
                 used: Arc::from("required"),
             }]
+        );
+    }
+
+    #[test]
+    fn kimi_declares_that_the_host_must_prepare_image_references() {
+        assert!(
+            Kimi.supports_images(),
+            "Kimi 的 image_url wire 块必须拿到已经上传的可用引用"
         );
     }
 }

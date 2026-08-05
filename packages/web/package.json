@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
+    "verify:images": "node --import ./scripts/ts-resolve.mjs ./scripts/verify-image-input.ts",
     "verify:mcp": "node --import ./scripts/ts-resolve.mjs ./scripts/verify-mcp.ts",
     "verify:tool-exec": "node --import ./scripts/ts-resolve.mjs ./scripts/verify-tool-exec.ts"
   },

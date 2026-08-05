@@ -44,7 +44,9 @@ pub(super) fn transition(txn: &mut Txn, event: Event) -> Vec<Effect> {
     let event_desc: Arc<str> = Arc::from(format!("{event:?}"));
 
     match event {
-        Event::UserInput { text, .. } => user_input::on_user_input(txn, text, &event_desc),
+        Event::UserInput { text, images, .. } => {
+            user_input::on_user_input(txn, text, images, &event_desc)
+        }
         Event::ProviderDone {
             blocks,
             stop,

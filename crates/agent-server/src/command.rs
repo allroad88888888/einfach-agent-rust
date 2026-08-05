@@ -5,7 +5,7 @@
 //! 打断；会话正等待 Web 工具回传时，actor 也会被这条队列消息唤醒并结束轮次。
 use serde::{Deserialize, Serialize};
 
-use agent_core::{AgentId, ToolCallId};
+use agent_core::{AgentId, ToolCallId, UserImage};
 
 /// undo/redo 的粒度（决策 5 的两档）。031 把 `POST /sessions/:id/undo` 的请求体
 /// 原样搬进这里——issue 原文的 wire 形状是 `{ "granularity": "turn"|"step",
@@ -32,14 +32,18 @@ pub enum Granularity {
 ///
 /// 032：没有 `#[serde(tag = ..)]`，是 serde 默认的外部标签——`Redo`/`Cancel`/
 /// `Shutdown` 这类无字段变体落成裸的字符串字面量（`"Redo"`），带字段的变体落成
-/// 单键对象（`{ "Input": string }`、`{ "Undo": { granularity, force } }`）。跟
+/// 单键对象（`{ "Input": { text, images } }`、`{ "Undo": { granularity, force } }`）。跟
 /// [`SessionEvent`](crate::SessionEvent) 的邻接标签是两套不同形状，**都原样照抄
 /// 现有 serde 属性**，不统一。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Command {
-    /// 一句用户输入，喂给 [`agent_runtime::run_turn`] 跑一整轮。
-    Input(String),
+    /// 一句用户输入与已上传的图片引用，喂给 [`agent_runtime::run_turn_with_images`]
+    /// 跑一整轮。
+    Input {
+        text: String,
+        images: Vec<UserImage>,
+    },
     /// 撤一轮或一条 entry（[`Granularity`]）。`force = true` 越过第一条屏障
     /// （对应 CLI 的 `/undo!`，只对 `Granularity::Turn` 有意义——`Session` 没有
     /// `undo_step` 的 force 变体，`Granularity::Step` 时这个字段被忽略，见

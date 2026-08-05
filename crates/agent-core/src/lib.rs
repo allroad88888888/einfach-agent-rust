@@ -43,7 +43,9 @@ pub use command::{
     DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused, DespawnReport, EntryMeta,
     ReadDenied, Session, SkillError, SpawnRefused, UndoReport, known_label,
 };
-pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};
+pub use engine::{
+    Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus, UserImage,
+};
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
 pub use ids::{AGENT_PATH_SEP, AgentId, MessageId, SkillId, ToolCallId};
 pub use limits::{DEFAULT_TOOL_OUTPUT_BYTES, truncate_tool_output, truncated_content_bytes};

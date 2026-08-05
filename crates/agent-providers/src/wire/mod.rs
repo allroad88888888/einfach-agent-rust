@@ -20,6 +20,9 @@ pub mod numeric;
 pub mod prefix;
 pub mod tools;
 
+#[cfg(test)]
+mod image_encoding_tests;
+
 use serde_json::Value;
 
 /// 规范序列化：`serde_json::Value` 的 `Map` 后端是 `BTreeMap`，输出与插入顺序

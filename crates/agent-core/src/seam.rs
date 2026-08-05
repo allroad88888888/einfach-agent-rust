@@ -45,6 +45,10 @@ pub enum Adjustment {
     LateToolsForcedIntoPrefix { count: u32, est_cost_multiple: f32 },
     /// 工具数超过这家上限，按料单给的优先级从尾部裁掉。
     ToolsTruncated { kept: u32, dropped: u32 },
+    /// 这轮历史有图片，但 provider 无法接受图片内容，只能编成占位文本。
+    ///
+    /// 必须报告：静默丢图会让用户以为模型看见了图片，回答却无法基于图片内容。
+    ImagesDropped { count: u32 },
     /// **中途激活的 skill 正文（`late_system`）在这家只能拼进 system 段尾部**
     /// （039）——不是并成一条新 system 消息。038 实测：这家插一条新的 role:system
     /// 消息会把前缀命中**归零 120x**，改现有 system 段尾部保 ~91%，所以 adapter
@@ -133,6 +137,7 @@ mod tests {
                 count: 3,
                 est_cost_multiple: 120.0,
             },
+            Adjustment::ImagesDropped { count: 2 },
             Adjustment::LateSystemReshapedPrefix {
                 est_cost_multiple: 11.0,
             },

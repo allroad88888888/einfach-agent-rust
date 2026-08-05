@@ -1,0 +1,64 @@
+/* 唯一职责：composer 图片草稿的选择器、缩略图、校验提示与拖拽状态。 */
+.image-attachments,
+.image-message {
+  flex-basis: 100%;
+}
+.image-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.image-message {
+  color: var(--error);
+  font-size: 0.8rem;
+  min-height: 0;
+}
+.image-picker {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+}
+.image-picker:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.image-picker input {
+  block-size: 1px;
+  inline-size: 1px;
+  opacity: 0;
+  position: absolute;
+}
+.image-attachment {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  gap: 0.35rem;
+  max-width: 18rem;
+  padding: 0.25rem;
+}
+.image-attachment img {
+  block-size: 2.5rem;
+  inline-size: 2.5rem;
+  object-fit: cover;
+}
+.image-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-size-warning {
+  color: var(--warn);
+  font-size: 0.75rem;
+}
+.image-attachment button {
+  background: transparent;
+  border: 0;
+  color: var(--error);
+  cursor: pointer;
+  font: inherit;
+}
+#composer.is-dragging {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}

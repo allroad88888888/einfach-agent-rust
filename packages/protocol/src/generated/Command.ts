@@ -4,6 +4,7 @@
 import type { AgentId } from "./AgentId";
 import type { Granularity } from "./Granularity";
 import type { ToolCallId } from "./ToolCallId";
+import type { UserImage } from "./UserImage";
 
 /**
  * 一条对 session 的命令。**这是协议雏形**——032 从这里生成 TS 类型，字段形状
@@ -11,8 +12,8 @@ import type { ToolCallId } from "./ToolCallId";
  *
  * 032：没有 `#[serde(tag = ..)]`，是 serde 默认的外部标签——`Redo`/`Cancel`/
  * `Shutdown` 这类无字段变体落成裸的字符串字面量（`"Redo"`），带字段的变体落成
- * 单键对象（`{ "Input": string }`、`{ "Undo": { granularity, force } }`）。跟
+ * 单键对象（`{ "Input": { text, images } }`、`{ "Undo": { granularity, force } }`）。跟
  * [`SessionEvent`](crate::SessionEvent) 的邻接标签是两套不同形状，**都原样照抄
  * 现有 serde 属性**，不统一。
  */
-export type Command = { "Input": string } | { "Undo": { granularity: Granularity, force: boolean, } } | "Redo" | "Cancel" | { "RemoteToolResult": { agent: AgentId, call_id: ToolCallId, content: string, is_error: boolean, } } | "Shutdown";
+export type Command = { "Input": { text: string, images: Array<UserImage>, } } | { "Undo": { granularity: Granularity, force: boolean, } } | "Redo" | "Cancel" | { "RemoteToolResult": { agent: AgentId, call_id: ToolCallId, content: string, is_error: boolean, } } | "Shutdown";

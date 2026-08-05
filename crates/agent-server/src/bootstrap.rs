@@ -13,7 +13,8 @@
 //! # 这个函数管什么，不管什么
 //!
 //! **管**：读配置文件、选 provider、查 key、拼 [`SessionTemplate`] 里「必须
-//! 读配置文件才知道」的四个字段（`provider`/`endpoint`/`api_key`/`model`）。
+//! 读配置文件才知道」的五个字段（`provider`/`endpoint`/`upload_base_url`/
+//! `api_key`/`model`）。
 //!
 //! **不管**：`--sessions-dir`/`--config`/`--port` 这类命令行参数怎么解析——
 //! 各宿主的参数形状不同（CLI flag、环境变量、桌面壳的配置文件/平台标准目录），
@@ -40,7 +41,7 @@ use crate::registry::ToolTableSpec;
 
 /// [`bootstrap`] 的输入：跟 provider 无关、调用方必须自己决定的那部分
 /// `SessionTemplate` 字段——字段形状直接照抄 `SessionTemplate` 减去
-/// `provider`/`endpoint`/`api_key`/`model` 那四个（那四个只能从配置文件解出，
+/// `provider`/`endpoint`/`upload_base_url`/`api_key`/`model` 那五个（那五个只能从配置文件解出，
 /// 不该由调用方伪造）。
 pub struct BootstrapOptions {
     /// 内置工具路径监狱的根目录——`SessionTemplate::tools_root` 原样转发。
@@ -109,6 +110,7 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
     Ok(Bootstrapped {
         template: SessionTemplate {
             provider,
+            upload_base_url: provider_cfg.base_url.clone(),
             endpoint: provider_cfg.endpoint(),
             api_key,
             model: Arc::from(provider_cfg.model.as_str()),

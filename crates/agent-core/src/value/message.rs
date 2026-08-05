@@ -47,6 +47,16 @@ pub enum ContentBlock {
         content: Arc<str>,
         is_error: bool,
     },
+    /// 一张图。`reference` 对 core 完全不透明：只存、只原样传给 adapter，不
+    /// match、不解析、不按前缀分支。它跟 `ToolCallId` 同一类，都是 provider 铸的
+    /// 字符串；理由与反例见 `docs/IMAGES.md` §七。
+    Image {
+        reference: Arc<str>,
+        /// MIME，如 `image/png`。给 adapter 编码用，也给降级占位文本用。
+        mime: Arc<str>,
+        /// 原始文件名，给人看。没有就是 `None`。
+        name: Option<Arc<str>>,
+    },
 }
 
 /// 历史里的一条消息。
@@ -88,11 +98,45 @@ mod tests {
                     content: Arc::from("file contents"),
                     is_error: false,
                 },
+                ContentBlock::Image {
+                    reference: Arc::from("opaque-reference"),
+                    mime: Arc::from("image/png"),
+                    name: Some(Arc::from("original.png")),
+                },
+                ContentBlock::Image {
+                    reference: Arc::from("another-opaque-reference"),
+                    mime: Arc::from("image/jpeg"),
+                    name: None,
+                },
             ],
         };
         let s = serde_json::to_string(&msg).unwrap();
         let back: Message = serde_json::from_str(&s).unwrap();
         assert_eq!(back, msg);
+    }
+
+    #[test]
+    fn image_name_none_and_empty_roundtrip_differently() {
+        let without_name = ContentBlock::Image {
+            reference: Arc::from("opaque-reference"),
+            mime: Arc::from("image/png"),
+            name: None,
+        };
+        let with_empty_name = ContentBlock::Image {
+            reference: Arc::from("opaque-reference"),
+            mime: Arc::from("image/png"),
+            name: Some(Arc::from("")),
+        };
+
+        let without_name_json = serde_json::to_string(&without_name).unwrap();
+        let with_empty_name_json = serde_json::to_string(&with_empty_name).unwrap();
+        let without_name_back: ContentBlock = serde_json::from_str(&without_name_json).unwrap();
+        let with_empty_name_back: ContentBlock =
+            serde_json::from_str(&with_empty_name_json).unwrap();
+
+        assert_eq!(without_name_back, without_name);
+        assert_eq!(with_empty_name_back, with_empty_name);
+        assert_ne!(without_name_back, with_empty_name_back);
     }
 
     #[test]

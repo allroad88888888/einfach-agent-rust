@@ -47,30 +47,58 @@ fn join_texts<'a>(texts: impl Iterator<Item = &'a str>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// 历史消息 → wire 消息数组（不含 system）。
-pub fn history(messages: &[Message]) -> Vec<Value> {
-    let mut out = Vec::with_capacity(messages.len());
-    for msg in messages {
-        push_message(msg, &mut out);
-    }
-    out
+/// 由调用方声明该请求是否支持图片的历史编码结果。
+///
+/// 共享 wire 层不认识 provider：图片能力是 adapter 传入的数据。不能编码的图片在
+/// 这里降级为确定性文本并计数，调用方据此生成可见的降级信息。
+#[derive(Debug, PartialEq)]
+pub struct EncodedHistory {
+    pub messages: Vec<Value>,
+    pub dropped_images: usize,
 }
 
-fn push_message(msg: &Message, out: &mut Vec<Value>) {
+/// 历史消息 → wire 消息数组（不含 system），按调用方给出的图片能力编码。
+pub fn history_with_image_support(messages: &[Message], supports_images: bool) -> EncodedHistory {
+    let mut out = Vec::with_capacity(messages.len());
+    let mut dropped_images = 0;
+    for msg in messages {
+        dropped_images += push_message(msg, supports_images, &mut out);
+    }
+    EncodedHistory {
+        messages: out,
+        dropped_images,
+    }
+}
+
+fn push_message(msg: &Message, supports_images: bool, out: &mut Vec<Value>) -> usize {
     let mut text = String::new();
+    let mut content = Vec::new();
     let mut tool_calls = Vec::new();
     let mut results = Vec::new();
+    let mut dropped_images = 0;
+    let has_image = msg
+        .blocks
+        .iter()
+        .any(|block| matches!(block, ContentBlock::Image { .. }));
 
     for block in &msg.blocks {
         match block {
             ContentBlock::Text(t) => {
-                if !text.is_empty() {
-                    text.push('\n');
+                append_text(&mut text, t);
+                if has_image && supports_images {
+                    content.push(json!({"type": "text", "text": &**t}));
                 }
-                text.push_str(t);
             }
             // 思考不回传，见模块注释。
             ContentBlock::Thinking(_) => {}
+            ContentBlock::Image { reference, .. } if supports_images => content.push(json!({
+                "type": "image_url",
+                "image_url": {"url": &**reference},
+            })),
+            ContentBlock::Image { name, mime, .. } => {
+                append_text(&mut text, &dropped_image_placeholder(name.as_deref(), mime));
+                dropped_images += 1;
+            }
             ContentBlock::ToolUse { id, name, input } => tool_calls.push(json!({
                 "id": &*id.0,
                 "type": "function",
@@ -88,7 +116,7 @@ fn push_message(msg: &Message, out: &mut Vec<Value>) {
         }
     }
 
-    if !text.is_empty() || !tool_calls.is_empty() {
+    if !text.is_empty() || !content.is_empty() || !tool_calls.is_empty() {
         let mut m = Map::new();
         m.insert(
             "role".into(),
@@ -97,7 +125,14 @@ fn push_message(msg: &Message, out: &mut Vec<Value>) {
                 Role::Assistant => "assistant",
             }),
         );
-        m.insert("content".into(), json!(text));
+        m.insert(
+            "content".into(),
+            if has_image && supports_images {
+                Value::Array(content)
+            } else {
+                json!(text)
+            },
+        );
         if !tool_calls.is_empty() {
             m.insert("tool_calls".into(), Value::Array(tool_calls));
         }
@@ -106,6 +141,25 @@ fn push_message(msg: &Message, out: &mut Vec<Value>) {
     // 工具结果跟在发起它的那条消息之后——wire 上的配对靠 `tool_call_id`，
     // 但顺序错了有的实现会直接拒。
     out.extend(results);
+    dropped_images
+}
+
+/// 将会被 provider 降级的图片变成确定性的、对模型可见的说明。
+///
+/// `name: None` 的措辞固定为「用户上传了图片（mime）」：它只能由图片块本身的
+/// 字段决定，不能随着历史位置或请求次数变化（红线 11）。
+fn dropped_image_placeholder(name: Option<&str>, mime: &str) -> String {
+    match name {
+        Some(name) => format!("[用户上传了图片 {name}（{mime}），当前模型看不到图片内容]"),
+        None => format!("[用户上传了图片（{mime}），当前模型看不到图片内容]"),
+    }
+}
+
+fn append_text(text: &mut String, value: &str) {
+    if !text.is_empty() {
+        text.push('\n');
+    }
+    text.push_str(value);
 }
 
 #[cfg(test)]
@@ -140,28 +194,32 @@ mod tests {
 
     #[test]
     fn tool_use_and_result_become_wire_shapes() {
-        let history = history(&[
-            msg(Role::User, vec![ContentBlock::Text(Arc::from("北京天气"))]),
-            msg(
-                Role::Assistant,
-                vec![
-                    ContentBlock::Thinking(Arc::from("要调工具")),
-                    ContentBlock::ToolUse {
+        let history = history_with_image_support(
+            &[
+                msg(Role::User, vec![ContentBlock::Text(Arc::from("北京天气"))]),
+                msg(
+                    Role::Assistant,
+                    vec![
+                        ContentBlock::Thinking(Arc::from("要调工具")),
+                        ContentBlock::ToolUse {
+                            id: ToolCallId::new("call_1"),
+                            name: Arc::from("srv:fs/read"),
+                            input: Arc::new(json!({"path": "/tmp/a"})),
+                        },
+                    ],
+                ),
+                msg(
+                    Role::User,
+                    vec![ContentBlock::ToolResult {
                         id: ToolCallId::new("call_1"),
-                        name: Arc::from("srv:fs/read"),
-                        input: Arc::new(json!({"path": "/tmp/a"})),
-                    },
-                ],
-            ),
-            msg(
-                Role::User,
-                vec![ContentBlock::ToolResult {
-                    id: ToolCallId::new("call_1"),
-                    content: Arc::from("晴"),
-                    is_error: false,
-                }],
-            ),
-        ]);
+                        content: Arc::from("晴"),
+                        is_error: false,
+                    }],
+                ),
+            ],
+            false,
+        )
+        .messages;
 
         assert_eq!(history.len(), 3);
         assert_eq!(history[0], json!({"role": "user", "content": "北京天气"}));
@@ -182,6 +240,10 @@ mod tests {
     /// 空消息不产出空壳——发出去只会让对方 400。
     #[test]
     fn empty_message_emits_nothing() {
-        assert!(history(&[msg(Role::Assistant, vec![])]).is_empty());
+        assert!(
+            history_with_image_support(&[msg(Role::Assistant, vec![])], false)
+                .messages
+                .is_empty()
+        );
     }
 }

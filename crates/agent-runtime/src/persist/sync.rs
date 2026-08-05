@@ -148,6 +148,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("hi"),
+            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
 
@@ -170,6 +171,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("hi"),
+            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
 
@@ -192,6 +194,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("first"),
+            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
         let _ = session.undo_turn();
@@ -200,6 +203,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("second"),
+            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
 

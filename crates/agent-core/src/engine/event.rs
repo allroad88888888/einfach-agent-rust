@@ -44,6 +44,19 @@ use crate::value::session::{StopReason, TokenUsage};
 
 use super::epoch::Epoch;
 
+/// 宿主已准备好的用户图片。
+///
+/// `reference` 对 core 完全不透明：这里只传进历史，之后原样交给 adapter；不解析、
+/// 不按前缀分支。视觉 provider 的引用由 HTTP 路由上传取得；非视觉 provider 可以
+/// 放不可用标记，adapter 会改写成可见的降级文本（`docs/IMAGES.md` §七、§八）。
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct UserImage {
+    pub reference: Arc<str>,
+    pub mime: Arc<str>,
+    pub name: Option<Arc<str>>,
+}
+
 /// 外面发生的一件事。
 ///
 /// 带 `epoch` 的是**在飞 effect 的回执**，要过闸（红线 6）；不带的是用户意图，
@@ -58,7 +71,14 @@ pub enum Event {
     /// （见 `MessageId` 的注释）。
     ///
     /// 不带 epoch：用户意图针对的永远是当前世界。
-    UserInput { agent: AgentId, text: Arc<str> },
+    ///
+    /// `images` 为空就是没有图片；图片顺序由宿主给定，转移时保持不变。
+    UserInput {
+        agent: AgentId,
+        text: Arc<str>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<UserImage>,
+    },
 
     /// provider 这一轮回完了（宿主已经把流收完、accumulator 已经 `finish`）。
     ///
@@ -173,115 +193,5 @@ impl Event {
             | Event::ToolFailed { epoch, .. }
             | Event::Timeout { epoch, .. } => Some(*epoch),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn all_variants() -> Vec<Event> {
-        vec![
-            Event::UserInput {
-                agent: AgentId::root(),
-                text: Arc::from("读一下 /tmp/a"),
-            },
-            Event::ProviderDone {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                blocks: vec![ContentBlock::Text(Arc::from("好的"))],
-                stop: StopReason::EndTurn,
-                usage: TokenUsage {
-                    prompt: 100,
-                    completion: 20,
-                    cached: None,
-                },
-                prefix: PrefixImage {
-                    segments: Vec::new(),
-                    prompt_tokens: Some(100),
-                },
-                adjustments: vec![Adjustment::ThinkingDisabledForToolChoice],
-            },
-            Event::ProviderFailed {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                class: ErrorClass::Retryable,
-                message: Arc::from("429"),
-            },
-            Event::ToolResult {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                call_id: ToolCallId::new("call_1"),
-                content: Arc::from("file contents"),
-            },
-            Event::ToolFailed {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                call_id: ToolCallId::new("call_2"),
-                error: Arc::from("ENOENT"),
-            },
-            Event::Timeout {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                call_id: Some(ToolCallId::new("call_1")),
-            },
-            Event::Timeout {
-                agent: AgentId::root(),
-                epoch: Epoch(1),
-                call_id: None,
-            },
-            Event::Cancel {
-                agent: AgentId::root(),
-            },
-        ]
-    }
-
-    #[test]
-    fn roundtrip_all_variants() {
-        let events = all_variants();
-        let s = serde_json::to_string(&events).unwrap();
-        assert_eq!(serde_json::from_str::<Vec<Event>>(&s).unwrap(), events);
-    }
-
-    /// 路由的输入端：每个变体都答得出「这是谁的事」。漏一个就是一条不知道该写
-    /// 谁槽位的事件（028）。
-    #[test]
-    fn agent_extractor_is_exhaustive() {
-        for event in all_variants() {
-            assert_eq!(event.agent(), &AgentId::root(), "{event:?}");
-        }
-    }
-
-    /// 闸的输入端：每个变体要不要过闸，逐个断言。漏一个就是一条不校验 epoch 的
-    /// 回写路径（红线 6）。
-    #[test]
-    fn epoch_extractor_is_exhaustive() {
-        for event in all_variants() {
-            let expected = match &event {
-                Event::UserInput { .. } | Event::Cancel { .. } => None,
-                _ => Some(Epoch(1)),
-            };
-            assert_eq!(event.epoch(), expected, "{event:?}");
-        }
-    }
-
-    /// provider 超时和工具超时必须分得出——两者的转移不同。
-    #[test]
-    fn timeout_distinguishes_provider_from_tool() {
-        let provider = Event::Timeout {
-            agent: AgentId::root(),
-            epoch: Epoch(1),
-            call_id: None,
-        };
-        let tool = Event::Timeout {
-            agent: AgentId::root(),
-            epoch: Epoch(1),
-            call_id: Some(ToolCallId::new("call_1")),
-        };
-        assert_ne!(provider, tool);
-        assert_ne!(
-            serde_json::to_string(&provider).unwrap(),
-            serde_json::to_string(&tool).unwrap()
-        );
     }
 }

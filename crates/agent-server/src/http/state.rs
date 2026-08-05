@@ -137,6 +137,7 @@ mod tests {
     fn template() -> SessionTemplate {
         SessionTemplate {
             provider: Arc::new(DeepSeek),
+            upload_base_url: "http://127.0.0.1:1".to_string(),
             endpoint: "http://127.0.0.1:1/unused".to_string(),
             api_key: "fake-key".to_string(),
             model: Arc::from("deepseek-v4-pro"),

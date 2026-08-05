@@ -86,6 +86,59 @@ pub fn assistant(text: &str) -> Value {
     json!({ "role": "assistant", "content": text })
 }
 
+/// 埋了四位数字的测试图，返回 `(那四位数, data URL)`。
+///
+/// 数字由 `nonce` 派生，于是同一次运行内**固定**（多模态那组的几个观测必须看
+/// 同一张图，否则比不了缓存），换一次运行就换一张（冷缓存开始，跟 [`system`]
+/// 把 nonce 放最前面是同一个道理）。
+///
+/// 为什么是「图里印数字」而不是随便一张图：探针要判的是模型**看没看见**，
+/// 不是 API 收没收。只有图里有一个它没处猜的东西，这条才是行为级断言。
+pub fn image_digits(nonce: &str) -> (String, String) {
+    image_digits_scaled(nonce, DEFAULT_SCALE)
+}
+
+/// 默认放大倍数。10 倍时数字 50×70 像素，整图 270×110——肉眼和模型都认得出。
+pub const DEFAULT_SCALE: usize = 10;
+
+/// 同一个数字、换一个放大倍数的同一张图。
+///
+/// 存在理由是**计价**：默认那张只有 270×110，量出来的 token 数不能外推到用户
+/// 真会上传的照片上。换两个尺寸再打一次，才知道那个数字是固定开销还是随面积长。
+pub fn image_digits_scaled(nonce: &str, scale: usize) -> (String, String) {
+    let (digits, png) = image_png_scaled(nonce, scale);
+    (digits, format!("data:image/png;base64,{}", crate::b64::encode(&png)))
+}
+
+/// 同一张图的 PNG 原始字节，返回 `(那四位数, 字节)`。
+///
+/// 单独暴露是给 `bin/multimodal --dump` 用的：手写的 PNG 编码器只被自己的单测
+/// 验过算术，**没被真解码器验过**。图要是坏的，探针会报「模型没看见」，而那跟
+/// 「模型不支持」长得一模一样——两者必须能分开，所以得能把它落成文件给别的
+/// 解码器看。
+pub fn image_png(nonce: &str) -> (String, Vec<u8>) {
+    image_png_scaled(nonce, DEFAULT_SCALE)
+}
+
+/// 见 [`image_digits_scaled`]。留白按倍数一起放大，免得大图挤在边框上。
+pub fn image_png_scaled(nonce: &str, scale: usize) -> (String, Vec<u8>) {
+    let digits = format!("{}", 1000 + fnv1a(nonce) % 9000);
+    let bmp = crate::digits::render(&digits, scale, scale * 2);
+    (digits, crate::png::encode_gray(bmp.width, bmp.height, &bmp.pixels))
+}
+
+/// FNV-1a。要的只是「由 nonce 确定性地散出一个数」，不要密码学强度；
+/// 用标准库的 `DefaultHasher` 反而不行——它的取值**不保证跨版本稳定**，
+/// 而这里的素材必须逐字节可复现。
+fn fnv1a(s: &str) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    for b in s.as_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
 /// 请求骨架。`max_tokens` 压到最小以省输出费。
 pub fn body(provider: &str, model: &str, messages: Value, tools: Vec<Value>) -> Value {
     json!({

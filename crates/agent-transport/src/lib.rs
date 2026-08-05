@@ -34,12 +34,14 @@
 mod backoff;
 mod client;
 mod read_loop;
+mod upload;
 
 pub mod config;
 
 pub use backoff::Backoff;
 pub use client::Client;
 pub use config::{ConfigError, DefaultConfig, ProviderConfig, RootConfig, default_provider, load};
+pub use upload::{ImageUpload, MAX_IMAGE_BYTES, UploadError};
 
 /// 一次 `post_stream` 读到头的方式。
 #[derive(Clone, Debug, PartialEq, Eq)]

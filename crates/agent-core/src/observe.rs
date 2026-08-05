@@ -175,6 +175,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: agent.clone(),
             text: Arc::from(text),
+            images: Vec::new(),
         });
     }
 

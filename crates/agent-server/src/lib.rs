@@ -51,6 +51,7 @@ mod bootstrap;
 mod command;
 mod event;
 mod handle;
+mod handle_remote_tools;
 mod http;
 mod provider_dispatch;
 mod registry;

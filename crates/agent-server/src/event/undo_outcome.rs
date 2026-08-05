@@ -114,6 +114,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: "跑个命令".into(),
+            images: Vec::new(),
         });
         let call_id = ToolCallId::new("call_shell_1");
         let _ = session.step(Event::ProviderDone {

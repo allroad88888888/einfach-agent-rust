@@ -14,7 +14,8 @@ use std::time::Duration;
 
 use crate::backoff::{self, Backoff};
 use crate::read_loop;
-use crate::{StreamOutcome, TransportError};
+use crate::upload;
+use crate::{ImageUpload, StreamOutcome, TransportError, UploadError};
 
 /// 建立连接允许的总耗时（DNS + TCP + TLS 握手）。跟等响应头无关——等响应头
 /// 现在归 [`DEFAULT_SOCKET_TIMEOUT`] 管，两者是不同阶段。
@@ -78,6 +79,10 @@ impl Client {
         backoff: Backoff,
     ) -> Self {
         let agent = ureq::AgentBuilder::new()
+            // ureq 2 会无条件读取 http_proxy，连 127.0.0.1 的假 server 也会被
+            // 送到系统代理；本机代理对 loopback 会回假 502。transport 的上游和
+            // 本地测试都必须直连，代理由部署网络显式处理，不能偷读进程环境。
+            .try_proxy_from_env(false)
             .timeout_connect(connect_timeout)
             .timeout_read(DEFAULT_SOCKET_TIMEOUT)
             .build();
@@ -139,6 +144,20 @@ impl Client {
                 }
             }
         }
+    }
+
+    /// 上传一张图片，返回可直接放入消息历史的完整 `ms://` 引用。
+    ///
+    /// `base_url` 必须是 provider 的 API 基址（例如带 `/v1` 的地址）；本方法
+    /// 只在 transport 层拼接 `/files` 并发出 multipart 请求。上传失败时不会
+    /// 产生可供调用方写入历史的引用。
+    pub fn upload_image(
+        &self,
+        base_url: &str,
+        api_key: &str,
+        image: ImageUpload<'_>,
+    ) -> Result<String, UploadError> {
+        upload::send(&self.agent, base_url, api_key, image)
     }
 
     fn try_connect(

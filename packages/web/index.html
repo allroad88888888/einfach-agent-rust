@@ -24,6 +24,12 @@
       </aside>
     </div>
     <form id="composer">
+      <div id="image-attachments" class="image-attachments" aria-label="待发送图片"></div>
+      <div id="image-message" class="image-message" role="status" aria-live="polite"></div>
+      <label class="image-picker" for="image-input">
+        添加图片
+        <input id="image-input" type="file" accept="image/*" multiple />
+      </label>
       <textarea id="input" placeholder="说点什么…" rows="2"></textarea>
       <button type="submit">发送</button>
     </form>

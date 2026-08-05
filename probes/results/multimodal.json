@@ -1,0 +1,359 @@
+{
+  "deepseek": {
+    "model": "deepseek-v4-pro",
+    "nonce": "1785836317",
+    "observations": [
+      {
+        "content": "0000",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 0,
+        "label": "数组形态·纯文本块",
+        "prompt_tokens": 3994,
+        "usage": {
+          "completion_tokens": 741,
+          "completion_tokens_details": {
+            "reasoning_tokens": 738
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 3994,
+          "prompt_tokens": 3994,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4735
+        }
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"message\":\"Failed to deserialize the JSON body into the target type: messages[1]: unknown variant `image_url`, expected `text` at line 1 column 50572\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·冷",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"message\":\"Failed to deserialize the JSON body into the target type: messages[1]: unknown variant `image_url`, expected `text` at line 1 column 50572\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·原样重发",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"message\":\"Failed to deserialize the JSON body into the target type: messages[1]: unknown variant `image_url`, expected `text` at line 1 column 50572\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·末尾追加一轮",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_cache_hit_tokens",
+        "hit_tokens": 3968,
+        "label": "纯文本·基准（字符串形态）",
+        "prompt_tokens": 3994,
+        "usage": {
+          "completion_tokens": 1000,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1000
+          },
+          "prompt_cache_hit_tokens": 3968,
+          "prompt_cache_miss_tokens": 26,
+          "prompt_tokens": 3994,
+          "prompt_tokens_details": {
+            "cached_tokens": 3968
+          },
+          "total_tokens": 4994
+        }
+      },
+      {
+        "array_error": null,
+        "array_form_accepted": true,
+        "digits_in_image": "6050",
+        "extend_hit": 0,
+        "extend_prompt": 0,
+        "image_accepted": false,
+        "image_answer": null,
+        "image_error": "HTTP 400: {\"error\":{\"message\":\"Failed to deserialize the JSON body into the target type: messages[1]: unknown variant `image_url`, expected `text` at line 1 column 50572\",\"type\":\"invalid_request_error\",\"param\":null,\"code\":\"invalid_request_error\"}}",
+        "image_seen": false,
+        "image_token_cost": -3994,
+        "prompt_array_text_only": 3994,
+        "prompt_image_cold": 0,
+        "prompt_plain_baseline": 3994,
+        "repeat_hit": 0,
+        "repeat_prompt": 0,
+        "size_sweep": null,
+        "summary": "multimodal"
+      }
+    ]
+  },
+  "glm": {
+    "model": "glm-5.2",
+    "nonce": "1785836317",
+    "observations": [
+      {
+        "content": "我没有看到任何图片。请上传包含四位数的图片。",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 0,
+        "label": "数组形态·纯文本块",
+        "prompt_tokens": 4133,
+        "usage": {
+          "completion_tokens": 90,
+          "completion_tokens_details": {
+            "reasoning_tokens": 76
+          },
+          "prompt_tokens": 4133,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 4223
+        }
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"code\":\"1210\",\"message\":\"messages.content.type 参数非法，取值范围 ['text']\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·冷",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"code\":\"1210\",\"message\":\"messages.content.type 参数非法，取值范围 ['text']\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·原样重发",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": null,
+        "error": "HTTP 400: {\"error\":{\"code\":\"1210\",\"message\":\"messages.content.type 参数非法，取值范围 ['text']\"}}",
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·末尾追加一轮",
+        "prompt_tokens": null,
+        "usage": null
+      },
+      {
+        "content": "我没有看到任何图片。请上传包含四位数的图片。",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4096,
+        "label": "纯文本·基准（字符串形态）",
+        "prompt_tokens": 4133,
+        "usage": {
+          "completion_tokens": 90,
+          "completion_tokens_details": {
+            "reasoning_tokens": 76
+          },
+          "prompt_tokens": 4133,
+          "prompt_tokens_details": {
+            "cached_tokens": 4096
+          },
+          "total_tokens": 4223
+        }
+      },
+      {
+        "array_error": null,
+        "array_form_accepted": true,
+        "digits_in_image": "6050",
+        "extend_hit": 0,
+        "extend_prompt": 0,
+        "image_accepted": false,
+        "image_answer": null,
+        "image_error": "HTTP 400: {\"error\":{\"code\":\"1210\",\"message\":\"messages.content.type 参数非法，取值范围 ['text']\"}}",
+        "image_seen": false,
+        "image_token_cost": -4133,
+        "prompt_array_text_only": 4133,
+        "prompt_image_cold": 0,
+        "prompt_plain_baseline": 4133,
+        "repeat_hit": 0,
+        "repeat_prompt": 0,
+        "size_sweep": null,
+        "summary": "multimodal"
+      }
+    ]
+  },
+  "kimi": {
+    "model": "kimi-k3",
+    "nonce": "1785836317",
+    "observations": [
+      {
+        "content": "",
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "数组形态·纯文本块",
+        "prompt_tokens": 4084,
+        "usage": {
+          "completion_tokens": 1000,
+          "completion_tokens_details": {
+            "reasoning_tokens": 997
+          },
+          "prompt_tokens": 4084,
+          "total_tokens": 5084
+        }
+      },
+      {
+        "content": "6050",
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "带图·冷",
+        "prompt_tokens": 4132,
+        "usage": {
+          "completion_tokens": 155,
+          "completion_tokens_details": {
+            "reasoning_tokens": 138
+          },
+          "prompt_tokens": 4132,
+          "total_tokens": 4287
+        }
+      },
+      {
+        "content": "6050",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4120,
+        "label": "带图·原样重发",
+        "prompt_tokens": 4132,
+        "usage": {
+          "cached_tokens": 4120,
+          "completion_tokens": 90,
+          "completion_tokens_details": {
+            "reasoning_tokens": 73
+          },
+          "prompt_tokens": 4132,
+          "prompt_tokens_details": {
+            "cached_tokens": 4120
+          },
+          "total_tokens": 4222
+        }
+      },
+      {
+        "content": "0",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 4120,
+        "label": "带图·末尾追加一轮",
+        "prompt_tokens": 4189,
+        "usage": {
+          "cached_tokens": 4120,
+          "completion_tokens": 110,
+          "completion_tokens_details": {
+            "reasoning_tokens": 94
+          },
+          "prompt_tokens": 4189,
+          "prompt_tokens_details": {
+            "cached_tokens": 4120
+          },
+          "total_tokens": 4299
+        }
+      },
+      {
+        "content": "",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 3840,
+        "label": "纯文本·基准（字符串形态）",
+        "prompt_tokens": 4084,
+        "usage": {
+          "cached_tokens": 3840,
+          "completion_tokens": 1000,
+          "completion_tokens_details": {
+            "reasoning_tokens": 997
+          },
+          "prompt_tokens": 4084,
+          "prompt_tokens_details": {
+            "cached_tokens": 3840
+          },
+          "total_tokens": 5084
+        }
+      },
+      {
+        "content": "6050",
+        "error": null,
+        "hit_field": "prompt_tokens_details.cached_tokens",
+        "hit_tokens": 3840,
+        "label": "尺寸扫描·4x",
+        "prompt_tokens": 4100,
+        "usage": {
+          "cached_tokens": 3840,
+          "completion_tokens": 149,
+          "completion_tokens_details": {
+            "reasoning_tokens": 132
+          },
+          "prompt_tokens": 4100,
+          "prompt_tokens_details": {
+            "cached_tokens": 3840
+          },
+          "total_tokens": 4249
+        }
+      },
+      {
+        "content": "",
+        "error": null,
+        "hit_field": null,
+        "hit_tokens": null,
+        "label": "尺寸扫描·24x",
+        "prompt_tokens": 4332,
+        "usage": {
+          "completion_tokens": 1000,
+          "completion_tokens_details": {
+            "reasoning_tokens": 997
+          },
+          "prompt_tokens": 4332,
+          "total_tokens": 5332
+        }
+      },
+      {
+        "array_error": null,
+        "array_form_accepted": true,
+        "digits_in_image": "6050",
+        "extend_hit": 4120,
+        "extend_prompt": 4189,
+        "image_accepted": true,
+        "image_answer": "6050",
+        "image_error": null,
+        "image_seen": true,
+        "image_token_cost": 48,
+        "prompt_array_text_only": 4084,
+        "prompt_image_cold": 4132,
+        "prompt_plain_baseline": 4084,
+        "repeat_hit": 4120,
+        "repeat_prompt": 4132,
+        "size_sweep": [
+          {
+            "image_cost": 48,
+            "prompt_tokens": 4132,
+            "scale": 10
+          },
+          {
+            "data_url_chars": 6510,
+            "error": null,
+            "image_cost": 16,
+            "prompt_tokens": 4100,
+            "scale": 4
+          },
+          {
+            "data_url_chars": 228574,
+            "error": null,
+            "image_cost": 248,
+            "prompt_tokens": 4332,
+            "scale": 24
+          }
+        ],
+        "summary": "multimodal"
+      }
+    ]
+  }
+}

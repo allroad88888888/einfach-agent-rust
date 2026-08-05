@@ -17,6 +17,9 @@ use super::{CACHE_BLOCK, LATE_SYSTEM_COST_MULTIPLE, LATE_TOOLS_COST_MULTIPLE, MA
 use crate::wire::{canonical, messages, names, numeric, prefix, tools};
 use crate::{Encoded, Ingredients};
 
+/// M11 实测 DeepSeek 拒绝 `image_url`；必须降级为文本并报告 Adjustment。
+const SUPPORTS_IMAGES: bool = false;
+
 pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let mut adjustments = Vec::new();
 
@@ -53,7 +56,13 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
             est_cost_multiple: LATE_SYSTEM_COST_MULTIPLE,
         });
     }
-    let history = messages::history(ing.messages);
+    let encoded_history = messages::history_with_image_support(ing.messages, SUPPORTS_IMAGES);
+    if encoded_history.dropped_images > 0 {
+        adjustments.push(Adjustment::ImagesDropped {
+            count: u32::try_from(encoded_history.dropped_images).unwrap_or(u32::MAX),
+        });
+    }
+    let history = encoded_history.messages;
     let seg = prefix::SegmentBytes {
         tools: canonical(&built.value),
         system: canonical(&system.as_ref().map_or(Value::Null, |s| json!(s))),

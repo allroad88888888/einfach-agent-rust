@@ -11,7 +11,10 @@ use std::path::{Path, PathBuf};
 
 use ts_rs::TS;
 
-use crate::http::{Capabilities, PendingToolsResponse, PollResponse};
+use crate::http::{
+    Capabilities, PendingToolsResponse, PollResponse, ToolClaimRequest, ToolClaimResponse,
+    ToolResultResponse, ToolResultV2Request, ToolStatusResponse,
+};
 use crate::{Command, Frame};
 
 /// 每个生成文件顶部多加的一行。**不是**替换 ts-rs 自己那行
@@ -48,6 +51,11 @@ pub fn export_protocol_types(dir: &Path) -> Result<(), ts_rs::ExportError> {
     // 072：待办投影的响应体。`Frame`/`SessionEvent` 一个字节没动，这是新增的
     // **第三条下行**（推：SSE 帧；拉：poll；求证：这一份）。
     PendingToolsResponse::export_all(&cfg)?;
+    ToolClaimRequest::export_all(&cfg)?;
+    ToolClaimResponse::export_all(&cfg)?;
+    ToolResultV2Request::export_all(&cfg)?;
+    ToolResultResponse::export_all(&cfg)?;
+    ToolStatusResponse::export_all(&cfg)?;
     // 061：上行的另一半——`POST /sessions` 请求体里的 `capabilities`。前端
     // （065）照这份生成的类型拼声明，不手写一份会跟 Rust 侧漂移的镜像。
     Capabilities::export_all(&cfg)?;

@@ -207,6 +207,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("hi"),
+            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
         let _ = session.step(Event::ProviderDone {
@@ -252,6 +253,7 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("hi"),
+            images: Vec::new(),
         });
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),

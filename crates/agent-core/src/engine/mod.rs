@@ -24,8 +24,11 @@ pub mod event;
 pub mod notice;
 pub mod state;
 
+#[cfg(test)]
+mod event_tests;
+
 pub use effect::Effect;
 pub use epoch::Epoch;
-pub use event::Event;
+pub use event::{Event, UserImage};
 pub use notice::Notice;
 pub use state::{Failure, SlotState, ToolSlot, TurnStatus};

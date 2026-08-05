@@ -16,6 +16,9 @@ use super::{CACHE_BLOCK, LATE_TOOLS_COST_MULTIPLE, MAX_TOOLS, PREDICT_MIN};
 use crate::wire::{canonical, messages, names, numeric, prefix, tools};
 use crate::{Encoded, Ingredients};
 
+/// M11 实测 GLM 拒绝 `image_url`；必须降级为文本并报告 Adjustment。
+const SUPPORTS_IMAGES: bool = false;
+
 pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let mut adjustments = Vec::new();
 
@@ -38,7 +41,13 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let tool_choice = translate_intent(ing, &mut adjustments);
 
     let system = messages::system_text(ing.system);
-    let mut history = messages::history(ing.messages);
+    let encoded_history = messages::history_with_image_support(ing.messages, SUPPORTS_IMAGES);
+    if encoded_history.dropped_images > 0 {
+        adjustments.push(Adjustment::ImagesDropped {
+            count: u32::try_from(encoded_history.dropped_images).unwrap_or(u32::MAX),
+        });
+    }
+    let mut history = encoded_history.messages;
     // 中途激活的 skill 正文走消息级（跟 Kimi 一样，038：GLM 插新 system 消息也
     // ~100% 保前缀）。GLM 没有消息级 tools（late_tools 仍并顶层），但**消息级
     // system 它收**——这条差异正是「宁可分不可合」要保住的：late_tools 和
