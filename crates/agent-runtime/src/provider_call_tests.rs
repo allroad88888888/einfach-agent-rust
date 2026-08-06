@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
@@ -93,12 +94,14 @@ fn missing_named_profile_fails_before_provider_start() {
 }
 
 #[test]
-fn finish_uses_start_binding_after_default_switch() {
-    let root = AgentId::root();
-    let mut ctx = build(Arc::new(ClassifiedProvider(ErrorClass::Auth)));
+fn call_cancel_latch_survives_a_later_session_flag_reset() {
+    let session_cancel = AtomicBool::new(false);
+    let call_cancel = Arc::new(AtomicBool::new(session_cancel.load(Ordering::Relaxed)));
+    let ctx = build(Arc::new(DeepSeek));
     let selection = ctx.execution_binding_for(None).unwrap();
     let call = ProviderCall {
-        agent: root.clone(),
+        agent: AgentId::root(),
+        attempt: ProviderAttemptId::allocate(),
         epoch: Epoch::START,
         deadline: Instant::now() + Duration::from_secs(1),
         binding: selection.binding,
@@ -112,6 +115,42 @@ fn finish_uses_start_binding_after_default_switch() {
         },
         one_shot: false,
         hold_deltas: false,
+        replay_sanitized_deltas: false,
+        redact_provider_errors: false,
+        cancel_token: Arc::clone(&call_cancel),
+    };
+
+    session_cancel.store(true, Ordering::Relaxed);
+    call.cancel();
+    session_cancel.store(false, Ordering::Relaxed);
+
+    assert!(call_cancel.load(Ordering::Relaxed));
+}
+
+#[test]
+fn finish_uses_start_binding_after_default_switch() {
+    let root = AgentId::root();
+    let mut ctx = build(Arc::new(ClassifiedProvider(ErrorClass::Auth)));
+    let selection = ctx.execution_binding_for(None).unwrap();
+    let call = ProviderCall {
+        agent: root.clone(),
+        attempt: ProviderAttemptId::allocate(),
+        epoch: Epoch::START,
+        deadline: Instant::now() + Duration::from_secs(1),
+        binding: selection.binding,
+        guard_scope: selection.guard_scope,
+        drift: DriftVerdict::Clean,
+        predicted_cache: 0,
+        adjustments: Vec::new(),
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
+        one_shot: false,
+        hold_deltas: false,
+        replay_sanitized_deltas: false,
+        redact_provider_errors: false,
+        cancel_token: Arc::new(AtomicBool::new(false)),
     };
     ctx.switch_provider(
         Arc::new(ClassifiedProvider(ErrorClass::BadRequest)),
@@ -134,6 +173,7 @@ fn finish_uses_start_binding_after_default_switch() {
             completion: 0,
             cached: None,
         },
+        Vec::new(),
     );
 
     assert!(matches!(
@@ -156,6 +196,7 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
     let old_scope = selection.guard_scope;
     let call = ProviderCall {
         agent: root.clone(),
+        attempt: ProviderAttemptId::allocate(),
         epoch: Epoch::START,
         deadline: Instant::now() + Duration::from_secs(1),
         binding: selection.binding,
@@ -169,6 +210,9 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
         },
         one_shot: false,
         hold_deltas: false,
+        replay_sanitized_deltas: false,
+        redact_provider_errors: false,
+        cancel_token: Arc::new(AtomicBool::new(false)),
     };
 
     ctx.switch_provider(
@@ -190,6 +234,7 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
             completion: 10,
             cached: Some(64),
         },
+        Vec::new(),
     );
 
     assert!(matches!(event, Event::ProviderDone { agent, .. } if agent == root));

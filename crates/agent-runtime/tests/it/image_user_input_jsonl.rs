@@ -49,7 +49,7 @@ fn assert_restored_image(block: &ContentBlock) {
             mime,
             name,
         } => {
-            assert_eq!(reference.as_ref(), "ms://persisted-image");
+            assert_eq!(reference.as_ref(), "attachment://img_42");
             assert_eq!(mime.as_ref(), "image/png");
             assert_eq!(name.as_deref(), Some("留存.png"));
         }
@@ -69,7 +69,7 @@ fn image_user_input_survives_jsonl_reopen_with_all_fields() {
             agent: AgentId::root(),
             text: Arc::from("请保存图片"),
             images: vec![UserImage {
-                reference: Arc::from("ms://persisted-image"),
+                reference: Arc::from("attachment://img_42"),
                 mime: Arc::from("image/png"),
                 name: Some(Arc::from("留存.png")),
             }],

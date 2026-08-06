@@ -14,24 +14,26 @@
 //! （第 1 层判读结论、预测命中、adjustments、这次请求的前缀镜像）——它们必须是
 //! 起飞那一刻的值，不能等落地时回头再算一遍。
 //!
-//! # 超时之后：放弃 IO 线程，不 join，不主动断它的连接
+//! # 超时/取消之后：锁存本次调用的取消，不 join
 //!
-//! 超时只做两件事：把 `Event::Timeout` 塞回 loop、把这张凭据从在飞表里划掉。
-//! **不触碰取消标志**——`agent-transport::client` 顶部记录过同一类权衡（读线程
-//! 可能正卡在最长 60s 的阻塞 read 里，join 会把已经解耦掉的问题接回来）：被放弃
-//! 的 IO 线程接着发的东西，泵按 agent 认不出在飞凭据就丢掉，最坏情况下它占着
-//! 那条连接到 60s 死流兜底或者服务端最终答复为止——这段等待不会产生「重复计费」
-//! （没有主动断线重发），真正的浪费只是「算完了但没人要这个答案了」，跟用户手动
-//! Ctrl-C 打断是同一类代价。
+//! 每张 [`ProviderCall`] 都有一枚独立、只会从 `false` 变成 `true` 的取消标志。
+//! session 取消和截止线都会先锁存它，再划掉在飞凭据；后续轮次即使重置 session
+//! 标志，也不能让这次已放弃的请求复活。请求准备会在每次上传前、两张图片之间和
+//! 构造 chat body 前观察这枚 call-local 标志。已经进入稳定同步上传 API 的请求允许
+//! 物理完成；完成后若已取消，不会继续下一张上传或 chat。
+//!
+//! 这里仍然不保留、也不 join IO 线程。runner 在超时后放弃 `(agent, attempt)` 凭据，
+//! 所以已开始上传的迟到结果无法回写、重试或重新进入本次调用。
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use agent_core::cache::{self, PrefixIntent};
 use agent_core::{
     Adjustment, AgentId, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage, RequestIntent,
-    Session,
+    Segment, Session,
 };
 use agent_providers::{Encoded, Ingredients};
 
@@ -39,14 +41,19 @@ use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::execution_binding::{ExecutionBinding, GuardScope};
 use crate::io_thread::{self, IoMsg};
+use crate::provider_attempt::ProviderAttemptId;
 use crate::subagent;
 
-pub(crate) use crate::provider_call_finish::{finish, thread_gone};
+pub(crate) use crate::provider_call_finish::{
+    finish, preparation_failed, preparation_start_failed, thread_gone,
+};
 
-/// 一次在飞的 provider 调用。**一个 agent 同时最多一张**（`Thinking` 是唯一
-/// 会有 provider 调用在飞的状态，一个 agent 不可能同时处在两次 `Thinking` 里）。
+/// 一次仍由 runner 认领的 provider 调用。**一个 agent 同时最多一张凭据**；超时
+/// 划掉的旧 IO 线程可以与重试短暂重叠，但它持有不同的 [`ProviderAttemptId`]。
 pub(crate) struct ProviderCall {
     pub(crate) agent: AgentId,
+    /// One transport launch. Retries may share an epoch, so epoch cannot correlate IO replies.
+    pub(crate) attempt: ProviderAttemptId,
     /// 起飞时的世代。落地时原样带回事件里过闸（红线 6）。
     pub(crate) epoch: Epoch,
     /// 到点就判超时。每个调用各自一份——两个子 agent 不共享同一条截止线。
@@ -61,9 +68,25 @@ pub(crate) struct ProviderCall {
     pub(crate) prefix: PrefixImage,
     /// This request consumed transient source material and must never be retried.
     pub(crate) one_shot: bool,
-    /// Calls that consumed a transient source overlay suppress live deltas. Their complete
-    /// terminal text is emitted once by `transient_source_completion` after the stream closes.
+    /// Calls whose raw stream may echo request-local image references suppress live deltas.
+    /// Direct visual output is replayed after terminal scrubbing; vision output returns through
+    /// its stable parent Tool envelope.
     pub(crate) hold_deltas: bool,
+    /// Direct visual calls replay their terminal deltas only after exact request-local references
+    /// have been scrubbed. Vision children stay behind their stable parent Tool envelope.
+    pub(crate) replay_sanitized_deltas: bool,
+    /// Vision runs behind a stable Tool envelope, so raw upstream failures must stay private.
+    pub(crate) redact_provider_errors: bool,
+    /// Per-attempt cancellation latch. Unlike the session flag, this is never reset by a later
+    /// turn, so an abandoned upload cannot resume after the runner starts another turn.
+    cancel_token: Arc<AtomicBool>,
+}
+
+impl ProviderCall {
+    /// Permanently cancel this attempt. There is intentionally no inverse operation.
+    pub(crate) fn cancel(&self) {
+        self.cancel_token.store(true, Ordering::Relaxed);
+    }
 }
 
 /// 起飞：取料 → `encode` → 发前第 1 层 → 起 IO 线程。**不等结果。**
@@ -74,7 +97,9 @@ pub(crate) fn start(
     agent: AgentId,
     epoch: Epoch,
 ) -> Result<ProviderCall, Event> {
+    ctx.clear_image_preparation_failure(&agent);
     let profile = session.execution_profile_of(&agent);
+    let redact_provider_errors = profile.as_ref().is_some_and(crate::vision_tool::is_profile);
     let selection = match ctx.execution_binding_for(profile.as_ref()) {
         Ok(selection) => selection,
         Err(_) => {
@@ -152,26 +177,58 @@ pub(crate) fn start(
 
     // 兜底第 1 层：发前比对，花钱之前。M1 恒 `Reuse`——`agent_core::cache`
     // 模块文档：还没有任何一处会有意改前缀。
-    let drift_verdict = cache::check_drift(drift, PrefixIntent::Reuse);
+    let one_shot = prepared.one_shot;
+    let request = match crate::image_materialization::ProviderRequest::new(
+        &binding,
+        body,
+        crate::image_materialization::OwnedIngredients {
+            system,
+            messages: prepared.messages,
+            tools,
+            late_tools,
+            late_system,
+            prev_prefix,
+        },
+        ctx.image_resolver.as_ref().map(Arc::clone),
+    ) {
+        Ok(request) => request,
+        Err(failure) => {
+            return Err(preparation_start_failed(
+                ctx, agent, epoch, one_shot, failure,
+            ));
+        }
+    };
+    let materializes_images = request.materializes_images();
+    let drift_verdict = if materializes_images {
+        predicted_cache = 0;
+        DriftVerdict::Expected {
+            segment: Segment::History,
+        }
+    } else {
+        cache::check_drift(drift, PrefixIntent::Reuse)
+    };
     if matches!(drift_verdict, DriftVerdict::Unexpected { .. }) {
         // 照发不拦（M1 只告警不熔断），但必须立刻可见——这一轮接下来可能
         // 失败/超时/被取消，等不到成功收尾时的 `TurnGuard` 才补一句。
         ctx.emit(&agent, RunnerEvent::PreflightDriftAlert(drift_verdict));
     }
 
+    // Snapshot an already-observed session cancellation, then let this call own a monotonic
+    // latch. The runner propagates later session cancellation and deadlines into the same token.
+    let cancel_token = Arc::new(AtomicBool::new(ctx.cancel_flag().load(Ordering::Relaxed)));
+    let attempt = ProviderAttemptId::allocate();
     io_thread::spawn(
         tx,
         agent.clone(),
-        Arc::clone(&binding.client),
-        Arc::clone(&binding.provider),
-        binding.endpoint.clone(),
-        binding.api_key.clone(),
-        body,
-        ctx.cancel_flag(),
+        attempt,
+        binding.clone(),
+        request,
+        Arc::clone(&cancel_token),
     );
 
     Ok(ProviderCall {
         agent,
+        attempt,
         epoch,
         deadline: Instant::now() + binding.timeout,
         binding,
@@ -180,13 +237,15 @@ pub(crate) fn start(
         predicted_cache,
         adjustments,
         prefix,
-        one_shot: prepared.one_shot,
-        hold_deltas: prepared.one_shot,
+        one_shot,
+        hold_deltas: one_shot || redact_provider_errors || materializes_images,
+        replay_sanitized_deltas: materializes_images && !redact_provider_errors && !one_shot,
+        redact_provider_errors,
+        cancel_token,
     })
 }
 
-/// Suppress live deltas only for a call that actually consumed a transient source overlay.
-/// Ordinary source-capable calls keep the established real-time streaming behavior.
+/// Suppress live deltas when the complete response must cross a later release gate.
 pub(crate) fn gate_delta(call: &mut ProviderCall, event: RunnerEvent) -> Option<RunnerEvent> {
     if call.hold_deltas { None } else { Some(event) }
 }
@@ -194,3 +253,7 @@ pub(crate) fn gate_delta(call: &mut ProviderCall, event: RunnerEvent) -> Option<
 #[cfg(test)]
 #[path = "provider_call_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "provider_attempt_correlation_tests.rs"]
+mod attempt_correlation_tests;

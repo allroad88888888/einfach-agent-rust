@@ -50,6 +50,7 @@ fn successful_child_returns_only_observation_and_stable_metadata() {
         &session.status_of(&child),
         2,
         false,
+        None,
     ));
     assert!(!is_error);
     assert_eq!(body["observation"], "There are two red circles.");
@@ -94,7 +95,7 @@ fn rejected_failed_timed_out_and_cancelled_children_have_stable_safe_codes() {
         (session.status_of(&child), false, "vision_cancelled", false),
     ];
     for (status, timed_out, code, retryable) in cases {
-        let (body, is_error) = parsed(outcome(&session, &child, &status, 1, timed_out));
+        let (body, is_error) = parsed(outcome(&session, &child, &status, 1, timed_out, None));
         assert!(is_error);
         assert_eq!(body["error"]["code"], code);
         assert_eq!(body["error"]["retryable"], retryable);
@@ -120,6 +121,7 @@ fn real_provider_rejection_does_not_leak_its_message() {
         &session.status_of(&child),
         1,
         false,
+        None,
     ));
     assert!(is_error);
     assert_eq!(body["error"]["code"], "vision_rejected");
@@ -153,9 +155,64 @@ fn done_without_non_empty_assistant_text_is_not_reported_as_success() {
         &session.status_of(&child),
         1,
         false,
+        None,
     ));
     assert!(is_error);
     assert_eq!(body["error"]["code"], "vision_child_failed");
     assert_eq!(body["error"]["retryable"], false);
     assert!(body.get("observation").is_none());
+}
+
+#[test]
+fn image_preparation_failures_take_priority_and_keep_stable_codes() {
+    use crate::image_preparation_failure::ImagePreparationFailure;
+
+    let session = Session::new(AgentId::root());
+    let child = AgentId::root().child(1);
+    let cases = [
+        (
+            ImagePreparationFailure::Cancelled,
+            "vision_cancelled",
+            false,
+        ),
+        (
+            ImagePreparationFailure::AttachmentNotFound,
+            "attachment_not_found",
+            false,
+        ),
+        (
+            ImagePreparationFailure::AttachmentUnavailable,
+            "attachment_unavailable",
+            false,
+        ),
+        (
+            ImagePreparationFailure::ImageUnsupported,
+            "image_unsupported",
+            false,
+        ),
+        (
+            ImagePreparationFailure::VisionRejected,
+            "vision_rejected",
+            false,
+        ),
+        (
+            ImagePreparationFailure::VisionUploadFailed,
+            "vision_upload_failed",
+            true,
+        ),
+    ];
+    for (failure, code, retryable) in cases {
+        let (body, is_error) = parsed(outcome(
+            &session,
+            &child,
+            &TurnStatus::Done { truncated: false },
+            1,
+            false,
+            Some(failure),
+        ));
+        assert!(is_error);
+        assert_eq!(body["error"]["code"], code);
+        assert_eq!(body["error"]["retryable"], retryable);
+        assert!(body.get("observation").is_none());
+    }
 }

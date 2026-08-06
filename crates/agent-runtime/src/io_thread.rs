@@ -13,17 +13,16 @@
 //! 029 之前每次调用各自一个 rendezvous channel，调用方就地 `recv_timeout` 等到
 //! 底。多 agent 之后「等」的对象不再是一个 channel 而是**一批**在飞的调用，而
 //! std 没有 select——所以改成所有 IO 线程往泵的同一个
-//! `sync_channel(0)` 里发，消息带上自己是谁（[`IoMsg`] 每个变体第一个字段都是
-//! `agent`）。容量仍然是 0：一个线程发一条增量就等泵收走，天然背压不变。
+//! `sync_channel(0)` 里发，provider 消息带上 `(agent, attempt)`。容量仍然是 0：
+//! 一个线程发一条增量就等泵收走，天然背压不变。
 //!
 //! # 放弃一个在飞调用之后
 //!
-//! 泵超时/取消时把这个调用从在飞表里划掉，**不 join、不断它的连接**
-//! （`provider_call` 模块文档的事故记录）。它继续往共享 channel 里发的东西，
-//! 泵按 (agent, epoch) 认不出来就丢——跟 `Session::step` 对过期 epoch 的处理
-//! 同一条判据：过期回执是正常现象，不是错误。整轮结束后泵连同接收端一起丢掉，
-//! 这些线程下一次 `send` 立刻拿到 `Err`，那才是它们收手的信号
-//! （下面 `on_line` 里的 `ControlFlow::Break`）。
+//! 泵在超时/取消时先锁存该调用独立的取消标志，再把凭据从在飞表划掉。请求准备会在
+//! 每次上传前、两张图片之间和构造 chat body 前观察这枚不可复位的标志；已经进入
+//! 稳定同步上传 API 的请求允许物理完成，但不会再开始下一张上传或 chat。晚到的
+//! [`IoMsg`] 仍按 `(agent, attempt)` 找不到凭据而被丢弃；整轮结束后接收端被丢掉，
+//! 发送端也会在下一次 `send` 收到 `Err`。
 
 use std::ops::ControlFlow;
 use std::sync::Arc;
@@ -31,34 +30,22 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::SyncSender;
 use std::thread;
 
-use agent_core::{AgentId, ContentBlock, StopReason, TokenUsage, ToolCallId};
-use agent_providers::{Provider, StreamEvent};
-use agent_transport::{Client, StreamOutcome, TransportError};
+use agent_core::{AgentId, ToolCallId};
+use agent_providers::StreamEvent;
 
-use crate::event::{AgentEvent, RunnerEvent};
+use crate::event::RunnerEvent;
+use crate::execution_binding::ExecutionBinding;
+use crate::image_materialization::ProviderRequest;
+use crate::provider_attempt::ProviderAttemptId;
+use crate::provider_message::ProviderMessage;
 
 /// 这些线程往泵里发的东西。**两类生产者共用这一条泵 channel**：provider 调用的
 /// IO 线程（本文件）和 MCP `tools/call` 的背景线程（`crate::mcp_call`），泵按各自
 /// 的键认领在飞 credential 再落地（029 起就是「所有 IO 线程发同一个
 /// `sync_channel(0)`，消息自带谁是谁」这一形状）。
 pub(crate) enum IoMsg {
-    /// 中途的增量，已经带好归属（`AgentEvent`）。
-    Delta(AgentEvent),
-    /// 流到头之后的终态一次性打包。
-    Done {
-        agent: AgentId,
-        result: Result<StreamOutcome, TransportError>,
-        blocks: Vec<ContentBlock>,
-        stop: StopReason,
-        usage: TokenUsage,
-    },
-    /// 这个线程没留下 [`IoMsg::Done`] 就没了（它 panic 了）。
-    ///
-    /// 029 之前这件事由「per-call channel 的发送端被 drop → 调用方 `recv` 拿到
-    /// `Disconnected`」自然表达；换成一条共享 channel 之后发送端永远还在别的线程
-    /// 手里，那个信号消失了，只能显式补一条——否则一个 panic 掉的 IO 线程会让
-    /// 它那个 agent 一直挂到超时预算耗尽，把一个即刻可判的 bug 拖成 120 秒。
-    Gone { agent: AgentId },
+    /// Provider deltas and terminal outcomes, all correlated by `(agent, attempt)`.
+    Provider(ProviderMessage),
     /// 一次在飞的 MCP `tools/call` 报回结果（043）。`content`/`is_error` 已由
     /// `agent-mcp::flatten_tool_result` 从 wire 拍平——泵这边只按 `(agent, call_id)`
     /// 认领 `crate::mcp_call::McpCall` credential，epoch 由 credential 提供、回写前
@@ -75,74 +62,92 @@ pub(crate) enum IoMsg {
 /// 起线程发一次请求。**不返回 `JoinHandle`**——超时路径要能放弃这个线程而不
 /// join 它（`provider_call` 模块文档的事故记录），给了 `JoinHandle` 只会诱使
 /// 调用方去 join。
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn(
     tx: SyncSender<IoMsg>,
     agent: AgentId,
-    client: Arc<Client>,
-    provider: Arc<dyn Provider>,
-    endpoint: String,
-    api_key: String,
-    body: Vec<u8>,
-    cancel: Arc<AtomicBool>,
+    attempt: ProviderAttemptId,
+    binding: ExecutionBinding,
+    request: ProviderRequest,
+    cancel_token: Arc<AtomicBool>,
 ) {
     thread::spawn(move || {
         // 线程从这一刻起欠泵一条终态消息。正常路径由 `settle` 还上；panic 路径
-        // 由 `Drop` 还上（`IoMsg::Gone`）——两条路都还，泵因此永远不会为一个
+        // 由 `Drop` 还上（`ProviderMessage::gone`）——两条路都还，泵因此永远不会为一个
         // 已经死掉的线程干等。
         let mut debt = DoneDebt {
             agent: agent.clone(),
+            attempt,
             tx: tx.clone(),
             settled: false,
         };
 
-        let mut acc = provider.accumulator();
-        let result = client.post_stream(&endpoint, &api_key, &body, &cancel, |line| {
-            for ev in acc.push_line(line) {
-                let Some(event) = translate(ev) else { continue };
-                let delta = IoMsg::Delta(AgentEvent {
-                    agent: agent.clone(),
-                    event,
-                });
-                if tx.send(delta).is_err() {
-                    // 接收端没了：泵已经收工（或者已经放弃这次调用），没有理由
-                    // 继续读下去。
-                    return ControlFlow::Break(());
-                }
+        let prepared = match request.prepare(&binding, &cancel_token) {
+            Ok(prepared) => prepared,
+            Err(failure) => {
+                debt.settle(ProviderMessage::preparation_failed(
+                    agent.clone(),
+                    attempt,
+                    failure,
+                ));
+                return;
             }
-            ControlFlow::Continue(())
-        });
+        };
+        let private_references = prepared.private_references().to_vec();
+        let mut acc = binding.provider.accumulator();
+        let result = binding.client.post_stream(
+            &binding.endpoint,
+            &binding.api_key,
+            prepared.body(),
+            &cancel_token,
+            |line| {
+                for ev in acc.push_line(line) {
+                    let Some(event) = translate(ev) else { continue };
+                    let delta =
+                        IoMsg::Provider(ProviderMessage::delta(agent.clone(), attempt, event));
+                    if tx.send(delta).is_err() {
+                        // 接收端没了：泵已经收工（或者已经放弃这次调用），没有理由
+                        // 继续读下去。
+                        return ControlFlow::Break(());
+                    }
+                }
+                ControlFlow::Continue(())
+            },
+        );
         let (blocks, stop, usage) = acc.finish();
-        debt.settle(IoMsg::Done {
-            agent: agent.clone(),
+        debt.settle(ProviderMessage::done(
+            agent.clone(),
+            attempt,
             result,
             blocks,
             stop,
             usage,
-        });
+            private_references,
+        ));
     });
 }
 
-/// 「这个线程还欠泵一条终态消息」。见 [`IoMsg::Gone`]。
+/// 「这个线程还欠泵一条终态消息」。panic 时发送 [`ProviderMessage::gone`]。
 struct DoneDebt {
     agent: AgentId,
+    attempt: ProviderAttemptId,
     tx: SyncSender<IoMsg>,
     settled: bool,
 }
 
 impl DoneDebt {
-    fn settle(&mut self, msg: IoMsg) {
+    fn settle(&mut self, msg: ProviderMessage) {
         self.settled = true;
-        let _ = self.tx.send(msg);
+        let _ = self.tx.send(IoMsg::Provider(msg));
     }
 }
 
 impl Drop for DoneDebt {
     fn drop(&mut self) {
         if !self.settled {
-            let _ = self.tx.send(IoMsg::Gone {
-                agent: self.agent.clone(),
-            });
+            let _ = self.tx.send(IoMsg::Provider(ProviderMessage::gone(
+                self.agent.clone(),
+                self.attempt,
+            )));
         }
     }
 }

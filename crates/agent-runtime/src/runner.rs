@@ -60,7 +60,8 @@ use crate::io_thread::IoMsg;
 use crate::mcp_call::{self, McpCall};
 use crate::orphan;
 use crate::persist;
-use crate::provider_call::{self, ProviderCall};
+use crate::provider_call::ProviderCall;
+use crate::provider_message;
 use crate::subtree::Subtree;
 
 /// actor 线程轮询统一 channel 的间隔。不需要跟超时预算同量级，只要比测试用的
@@ -174,7 +175,12 @@ pub(crate) fn resume_after_first_commit(
                     // 会话级取消：在飞的流由取消标志斩断（它们各自会以
                     // `StreamOutcome::Cancelled` 回来），队列里还没喂进去的
                     // 待办在这里斩断——见 `Dispatched::CancelAll` 的文档。
-                    Dispatched::CancelAll => pending.clear(),
+                    Dispatched::CancelAll => {
+                        for call in &calls {
+                            call.cancel();
+                        }
+                        pending.clear();
+                    }
                 }
             }
             // 子 agent 可能就在刚才那一步里落了终态（它自己的 `ProviderDone`）。
@@ -200,6 +206,9 @@ pub(crate) fn resume_after_first_commit(
                 ctx.transient_sources.purge_all();
                 persist::maybe_snapshot(ctx, session);
             }
+            // Preparation failures are request-local routing metadata. Vision child slots have
+            // already consumed theirs; root and generic failures must not cross a run boundary.
+            ctx.clear_image_preparation_failures();
             return status;
         }
 
@@ -267,7 +276,15 @@ fn speak_for_root_on_cancel(
     pending: &mut VecDeque<Event>,
     seen: &mut bool,
 ) {
-    if *seen || !ctx.cancel_flag().load(Ordering::Relaxed) {
+    if !ctx.cancel_flag().load(Ordering::Relaxed) {
+        return;
+    }
+    // The session flag is reset when a later turn starts. Every in-flight attempt therefore
+    // receives its own irreversible snapshot before the runner considers returning control.
+    for call in calls {
+        call.cancel();
+    }
+    if *seen {
         return;
     }
     *seen = true;
@@ -287,39 +304,15 @@ fn receive(
     pending: &mut VecDeque<Event>,
 ) {
     match rx.recv_timeout(POLL_INTERVAL) {
-        Ok(IoMsg::Delta(delta)) => {
-            // 已经被放弃的调用（超时划掉）接着发来的增量：丢。跟 `Session::step`
-            // 对过期 epoch 的处理同一条判据——过期回执是正常现象，不是错误，
-            // 每条喊一声只会刷屏。
-            if let Some(call) = calls.iter_mut().find(|call| call.agent == delta.agent) {
-                let agent = call.agent.clone();
-                if let Some(event) = provider_call::gate_delta(call, delta.event) {
-                    ctx.emit(&agent, event);
-                }
-            }
-        }
-        Ok(IoMsg::Done {
-            agent,
-            result,
-            blocks,
-            stop,
-            usage,
-        }) => {
-            if let Some(call) = take_call(calls, &agent) {
-                pending.push_back(provider_call::finish(
-                    ctx, call, result, blocks, stop, usage,
-                ));
-            }
-        }
-        Ok(IoMsg::Gone { agent }) => {
-            if let Some(call) = take_call(calls, &agent) {
-                pending.push_back(provider_call::thread_gone(ctx, call));
-            }
+        // Provider replies are claimed by `(agent, attempt)` in one place. Late messages from an
+        // abandoned attempt are expected and disappear without touching its same-agent retry.
+        Ok(IoMsg::Provider(message)) => {
+            provider_message::land(ctx, calls, pending, message);
         }
         // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
         // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
         // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
-        // 返回 `None` 同款。
+        // 不命中 provider attempt 同款。
         Ok(IoMsg::McpDone {
             agent,
             call_id,
@@ -335,9 +328,4 @@ fn receive(
         // 下一圈 C 的截止线扫描会兜住任何真的没人再说话的情况。
         Err(RecvTimeoutError::Disconnected) => {}
     }
-}
-
-fn take_call(calls: &mut Vec<ProviderCall>, agent: &AgentId) -> Option<ProviderCall> {
-    let at = calls.iter().position(|call| &call.agent == agent)?;
-    Some(calls.remove(at))
 }

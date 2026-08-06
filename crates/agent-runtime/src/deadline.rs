@@ -1,8 +1,8 @@
 //! 截止线：谁到点了，到点变成哪条事件。
 //!
-//! 泵里有两类「在等一个也许永远不来的东西」，各有各的截止线，但**到点之后做的
-//! 事是同一件**——不 join、不断连接，只把那个凭据从表里划掉，换成一条事件喂回
-//! 转移表，让 core 决定重试还是收敛：
+//! 泵里有两类「在等一个也许永远不来的东西」，各有各的截止线。到点都会把凭据从
+//! 表里划掉，换成一条事件喂回转移表，让 core 决定重试还是收敛；provider 调用还
+//! 会先锁存它独立的取消标志，使本地准备/上传等待/流读取及时收敛：
 //!
 //! | 在等什么 | 凭据 | 到点注入 |
 //! |---|---|---|
@@ -36,8 +36,9 @@ use crate::subtree::Subtree;
 
 /// 泵里的一次截止线扫描：到点的 provider 调用和到点的远端等待都翻成待办事件。
 ///
-/// 每个在飞调用各有各的截止线（它们不是同时起飞的）。到点的从表里划掉——
-/// **不 join、不断连接**，理由见 `provider_call` 模块文档。
+/// 每个在飞调用各有各的截止线（它们不是同时起飞的）。provider 到点时先锁存
+/// call-local 取消再划掉凭据；不 join，也不承诺物理中断已经进入底层的阻塞请求，
+/// 具体边界见 `provider_call` 模块文档。
 pub(crate) fn sweep(
     ctx: &mut RunnerCtx,
     calls: &mut Vec<ProviderCall>,
@@ -52,6 +53,9 @@ pub(crate) fn sweep(
             continue;
         }
         let call = calls.remove(i);
+        // Removing the credential abandons the result; latch cancellation as well so request
+        // preparation releases its leases and cannot continue to another upload or chat call.
+        call.cancel();
         subtree.record_provider_timeout(&call.agent);
         if call.one_shot {
             ctx.transient_sources

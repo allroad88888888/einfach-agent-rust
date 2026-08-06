@@ -3,10 +3,11 @@
 //! provider 分类只在这里解释一次；正文始终经过 `agent_core::vision` 生成，绝不把
 //! provider body、route、model 或 key 带回父 agent。
 
-use agent_core::vision::{VisionChildTerminal, vision_child_outcome};
+use agent_core::vision::{VisionChildTerminal, VisionToolOutcome, vision_child_outcome};
 use agent_core::{AgentId, ErrorClass, Failure, Session, TurnStatus};
 
 use crate::child_outcome::final_text_if_present;
+use crate::image_preparation_failure::ImagePreparationFailure;
 
 pub(crate) fn outcome(
     session: &Session,
@@ -14,7 +15,12 @@ pub(crate) fn outcome(
     status: &TurnStatus,
     images_inspected: usize,
     timed_out: bool,
+    preparation_failure: Option<ImagePreparationFailure>,
 ) -> (String, bool) {
+    if let Some(failure) = preparation_failure {
+        let outcome = VisionToolOutcome::failure(failure.vision_failure());
+        return (outcome.content.to_string(), outcome.is_error);
+    }
     let terminal = match status {
         TurnStatus::Done { truncated } => match final_text_if_present(session, child) {
             Some(observation) => VisionChildTerminal::Succeeded {

@@ -24,7 +24,13 @@ const VISION_PROFILE: &str = "vision";
 const PROVIDER_NEUTRAL_IMAGE_MIME: &str = "application/octet-stream";
 
 pub(crate) fn is_enabled(ctx: &RunnerCtx) -> bool {
-    ctx.execution_bindings.contains_key(&profile_id())
+    ctx.execution_bindings
+        .get(&profile_id())
+        .is_some_and(|binding| binding.provider.supports_images())
+}
+
+pub(crate) fn is_profile(profile: &ExecutionProfileId) -> bool {
+    profile.as_str() == VISION_PROFILE
 }
 
 pub(crate) fn is_root(session: &Session, agent: &AgentId) -> bool {
@@ -159,3 +165,7 @@ fn finish(
 #[cfg(test)]
 #[path = "vision_tool_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "vision_profile_tests.rs"]
+mod profile_tests;

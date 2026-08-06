@@ -82,6 +82,9 @@ pub struct RunnerCtx {
     /// Reserved source inputs/results live only here.  This vault is process-local and has no
     /// serialization surface; durable core state contains policy placeholders only.
     pub(crate) transient_sources: crate::transient_source_vault::TransientSourceVault,
+    pub(crate) image_resolver: Option<Arc<dyn crate::ImageResolver>>,
+    pub(crate) image_preparation_failures:
+        BTreeMap<AgentId, crate::image_preparation_failure::ImagePreparationFailure>,
     /// 011 的端口，027 上岗：`persist::sync` 每条命令之后转发进它，
     /// `persist::recover` 启动时从它读回。
     pub(crate) session_store: Box<SessionBackend>,
@@ -154,6 +157,8 @@ impl RunnerCtx {
             guard_histories: BTreeMap::new(),
             pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools::default(),
             transient_sources: crate::transient_source_vault::TransientSourceVault::default(),
+            image_resolver: None,
+            image_preparation_failures: BTreeMap::new(),
             session_store,
             persisted_seq: None,
             snapshot_every: DEFAULT_SNAPSHOT_EVERY,

@@ -65,17 +65,23 @@
 //! 的轮末清算认这条。
 
 mod child_outcome;
+mod child_slot;
 mod collect_tool;
 mod ctx_remote_tools;
 mod deadline;
 mod dispatch;
 mod execution_binding;
 mod guard;
+mod image_materialization;
+mod image_preparation_failure;
+mod image_resolver;
 mod io_thread;
 mod mcp_call;
 mod orphan;
+mod provider_attempt;
 mod provider_call;
 mod provider_call_finish;
+mod provider_message;
 mod remote_tool;
 mod remote_tool_claim;
 mod remote_tool_digest;
@@ -105,6 +111,7 @@ mod transient_source_recovery;
 mod transient_source_tests;
 mod transient_source_vault;
 mod vision_child_outcome;
+mod vision_output_privacy;
 mod vision_tool;
 
 pub mod ctx;
@@ -122,6 +129,7 @@ pub use ctx_remote_tools::RemoteToolWaiting;
 pub use deadline::sweep_remote_tool_deadlines;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
+pub use image_resolver::{ImageResolveError, ImageResolver, ResolvedImageLease};
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
