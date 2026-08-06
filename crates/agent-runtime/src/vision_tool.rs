@@ -76,6 +76,7 @@ pub(crate) fn intercept(
         ChildConfig {
             tools_allowed: Vec::new(),
             execution_profile: Some(profile_id()),
+            max_retries: Some(0),
         },
     ) {
         Ok(child) => child,

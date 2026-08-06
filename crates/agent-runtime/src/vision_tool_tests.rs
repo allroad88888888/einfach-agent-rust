@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use agent_core::vision::{VISION_INSPECT_TOOL, vision_inspect_spec};
 use agent_core::{
-    AgentId, ChildConfig, Effect, Epoch, Event, ExecutionProfileId, Reversibility, Session,
-    SessionConfig, ToolCallId,
+    AgentId, ChildConfig, Effect, Epoch, ErrorClass, Event, ExecutionProfileId, Failure,
+    Reversibility, Session, SessionConfig, ToolCallId,
 };
 use agent_providers::deepseek::DeepSeek;
 use agent_providers::kimi::Kimi;
@@ -176,7 +176,7 @@ fn root_dispatch_without_profile_uses_stable_failure_and_child_cannot_use_host_s
 }
 
 #[test]
-fn launch_sends_only_selected_images_and_question_to_a_toolless_fresh_child() {
+fn launch_is_isolated_and_retryable_failure_never_repeats_the_paid_call() {
     let root = AgentId::root();
     let mut session = Session::new(root.clone());
     let mut ctx = context(true);
@@ -224,4 +224,31 @@ fn launch_sends_only_selected_images_and_question_to_a_toolless_fresh_child() {
     );
     assert!(subtree.is_awaited(&child));
     assert!(subagent::tools_for(&session, &ctx, &child).is_empty());
+
+    let first_effects = session.step(Event::UserInput {
+        agent: child.clone(),
+        text,
+        images,
+    });
+    assert!(
+        first_effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::CallProvider { agent, .. } if agent == &child))
+    );
+    let terminal_effects = session.step(Event::ProviderFailed {
+        agent: child.clone(),
+        epoch: session.epoch(),
+        class: ErrorClass::Retryable,
+        message: Arc::from("transient failure must not trigger a second paid call"),
+    });
+    assert!(
+        terminal_effects
+            .iter()
+            .all(|effect| !matches!(effect, Effect::CallProvider { .. })),
+        "the dedicated vision child has a zero automatic-retry budget"
+    );
+    assert_eq!(
+        session.status_of(&child),
+        agent_core::TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable))
+    );
 }

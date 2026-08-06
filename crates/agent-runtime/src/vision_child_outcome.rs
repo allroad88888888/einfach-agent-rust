@@ -6,7 +6,7 @@
 use agent_core::vision::{VisionChildTerminal, vision_child_outcome};
 use agent_core::{AgentId, ErrorClass, Failure, Session, TurnStatus};
 
-use crate::child_outcome::final_text;
+use crate::child_outcome::final_text_if_present;
 
 pub(crate) fn outcome(
     session: &Session,
@@ -16,9 +16,12 @@ pub(crate) fn outcome(
     timed_out: bool,
 ) -> (String, bool) {
     let terminal = match status {
-        TurnStatus::Done { truncated } => VisionChildTerminal::Succeeded {
-            observation: final_text(session, child).into(),
-            truncated: *truncated,
+        TurnStatus::Done { truncated } => match final_text_if_present(session, child) {
+            Some(observation) => VisionChildTerminal::Succeeded {
+                observation: observation.into(),
+                truncated: *truncated,
+            },
+            None => VisionChildTerminal::Failed { retryable: false },
         },
         TurnStatus::Failed(Failure::Cancelled) => VisionChildTerminal::Cancelled,
         TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable)) if timed_out => {

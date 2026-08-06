@@ -125,3 +125,37 @@ fn real_provider_rejection_does_not_leak_its_message() {
     assert_eq!(body["error"]["code"], "vision_rejected");
     assert!(!body.to_string().contains("provider-secret-body"));
 }
+
+#[test]
+fn done_without_non_empty_assistant_text_is_not_reported_as_success() {
+    let mut session = Session::new(AgentId::root());
+    let child = child_in_thinking(&mut session);
+    let _ = session.step(Event::ProviderDone {
+        agent: child.clone(),
+        epoch: session.epoch(),
+        blocks: vec![ContentBlock::Text(Arc::from("  \n "))],
+        stop: StopReason::EndTurn,
+        usage: TokenUsage {
+            prompt: 1,
+            completion: 0,
+            cached: None,
+        },
+        prefix: PrefixImage {
+            segments: Vec::new(),
+            prompt_tokens: None,
+        },
+        adjustments: Vec::new(),
+    });
+
+    let (body, is_error) = parsed(outcome(
+        &session,
+        &child,
+        &session.status_of(&child),
+        1,
+        false,
+    ));
+    assert!(is_error);
+    assert_eq!(body["error"]["code"], "vision_child_failed");
+    assert_eq!(body["error"]["retryable"], false);
+    assert!(body.get("observation").is_none());
+}

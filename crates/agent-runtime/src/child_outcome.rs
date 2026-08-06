@@ -54,13 +54,22 @@ pub(crate) fn outcome(session: &Session, child: &AgentId, status: &TurnStatus) -
 /// 不该由我们替父 agent 决定），`ToolUse` / `ToolResult` 是它的干活痕迹，父 agent
 /// 要的是结论。一条消息里多个 `Text` 块按顺序换行拼接。
 pub(crate) fn final_text(session: &Session, child: &AgentId) -> String {
+    visible_text(session, child).unwrap_or_else(|| "（子 agent 没有产出任何文本）".to_string())
+}
+
+/// 视觉门面只把真正存在的非空正文视为成功，不能把通用占位文案伪装成识图结论。
+pub(crate) fn final_text_if_present(session: &Session, child: &AgentId) -> Option<String> {
+    visible_text(session, child).filter(|text| !text.trim().is_empty())
+}
+
+fn visible_text(session: &Session, child: &AgentId) -> Option<String> {
     let messages = session.messages_of(child);
     let last = messages
         .iter()
         .rev()
         .find(|m| m.role == Role::Assistant && has_text(m));
-    match last {
-        Some(message) => message
+    last.map(|message| {
+        message
             .blocks
             .iter()
             .filter_map(|b| match b {
@@ -68,9 +77,8 @@ pub(crate) fn final_text(session: &Session, child: &AgentId) -> String {
                 _ => None,
             })
             .collect::<Vec<_>>()
-            .join("\n"),
-        None => "（子 agent 没有产出任何文本）".to_string(),
-    }
+            .join("\n")
+    })
 }
 
 fn has_text(message: &Message) -> bool {
