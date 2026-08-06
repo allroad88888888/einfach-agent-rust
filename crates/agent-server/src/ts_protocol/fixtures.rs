@@ -13,7 +13,10 @@ use agent_core::{
     TurnStatus, WindowVerdict,
 };
 
-use crate::{Frame, OrphanFate, SessionEvent, UndoOutcome};
+use crate::{
+    Frame, OrphanFate, SessionEvent, TransientSourceFailureCause, TransientSourceFailureEvent,
+    UndoOutcome,
+};
 
 /// `SessionEvent` 每个变体一个样本，值确定（无时钟无随机——红线 1 的精神延伸到
 /// fixtures：同一次生成必须逐字节相同）。
@@ -83,6 +86,10 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
             child: AgentId::root(),
             fate: OrphanFate::Despawned { descendants: 0 },
         },
+        SessionEvent::TransientSourceFailure(TransientSourceFailureEvent {
+            epoch: 0,
+            cause: TransientSourceFailureCause::PromptPreparation,
+        }),
     ];
 
     skeletons.into_iter().map(cast_sample).collect()
@@ -200,6 +207,15 @@ fn cast_sample(ev: SessionEvent) -> SessionEvent {
                 is_error: false,
             },
         },
+        SessionEvent::TransientSourceFailure(_) => {
+            SessionEvent::TransientSourceFailure(TransientSourceFailureEvent {
+                epoch: 7,
+                cause: TransientSourceFailureCause::TransportHttp {
+                    status: 502,
+                    body: "upstream diagnostic".to_string(),
+                },
+            })
+        }
     }
 }
 

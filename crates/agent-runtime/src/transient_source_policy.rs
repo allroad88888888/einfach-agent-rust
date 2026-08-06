@@ -12,7 +12,6 @@ pub(crate) const SOURCE_READ: &str = "web:source/read";
 pub(crate) const SAFE_RESULT: &str = "[transient_source_result_redacted]";
 pub(crate) const SAFE_ERROR: &str = "[transient_source_error_redacted]";
 pub(crate) const SAFE_CANDIDATE: &str = "[transient_source_candidate_redacted]";
-pub(crate) const SAFE_PROVIDER_ERROR: &str = "transient source provider call failed";
 pub(crate) const SAFE_INGRESS_ERROR: &str = "invalid transient source tool batch";
 
 pub(crate) fn is_transient_source(name: &str) -> bool {

@@ -13,7 +13,7 @@
 //! 原话「`SessionEvent` 的形状别照抄 `RunnerEvent` 的借用结构」在这里落实成
 //! 一个独立类型而不是拿 `RunnerEvent` 改个 derive 了事。
 //!
-//! # 四个 `RunnerEvent` 之外的变体
+//! # `RunnerEvent` 翻译线之外的变体
 //!
 //! - [`SessionEvent::Undo`] / [`SessionEvent::Redo`]：`/undo` `/redo` `/undo!`
 //!   命令的结果（[`UndoOutcome`]，见该类型自己的模块文档——`agent_core::
@@ -32,6 +32,8 @@
 //!   `agent_runtime::RunnerCtx::with_tree_events` 的独立回调发出（`crate::actor::body`
 //!   模块文档），**不经过 `From<RunnerEvent>`**——树快照不是 `RunnerEvent` 的
 //!   第十个变体，是独立于它的一条通道（048 issue 范围条款 1）。
+//! - [`SessionEvent::TransientSourceFailure`]：runtime 把未改写的 terminal provider
+//!   失败事实交给宿主；它不是 `RunnerEvent`，也不应由 runtime 决定展示或脱敏。
 //!
 //! # 协议决定（032 生成 TS 类型的依据，写进 031 实做记录）
 //!
@@ -58,10 +60,12 @@
 
 mod frame;
 mod orphan_fate;
+mod transient_source_failure;
 mod undo_outcome;
 
 pub use frame::Frame;
 pub use orphan_fate::OrphanFate;
+pub use transient_source_failure::{TransientSourceFailureCause, TransientSourceFailureEvent};
 pub use undo_outcome::UndoOutcome;
 
 use std::sync::Arc;
@@ -140,7 +144,7 @@ pub enum SessionEvent {
     /// 判定的，`Gap` 是重连时按帧 id 算出来的。
     Gap { skipped: u64 },
     /// 048：整棵活 agent 树此刻的快照——`agent_core::Session::agent_tree()`
-    /// 原样翻译（推快照不推 diff，本文件模块文档「四个 `RunnerEvent` 之外的
+    /// 原样翻译（推快照不推 diff，本文件模块文档「`RunnerEvent` 翻译线之外的
     /// 变体」）。由 [`agent_runtime::RunnerCtx::with_tree_events`] 的独立回调
     /// 发出（`crate::actor::body`），标 [`agent_core::AgentId::root`]（`crate::
     /// event::frame` 模块文档同一条判据：树是会话级事实，不属于某一个具体
@@ -156,6 +160,9 @@ pub enum SessionEvent {
     /// 帧的 `agent`（[`Frame::agent`]）是**父**——没领是父的编排失误；出事的那个
     /// 子在 `child` 字段里。载荷是事实不是句子（[`OrphanFate`]），措辞归呈现层。
     OrphanedChild { child: AgentId, fate: OrphanFate },
+    /// A terminal provider failure from a request that consumed transient source material.
+    /// The payload carries the raw runtime fact; presentation belongs to the embedding host.
+    TransientSourceFailure(TransientSourceFailureEvent),
 }
 
 impl From<RunnerEvent> for SessionEvent {

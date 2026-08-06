@@ -97,7 +97,8 @@ fn park(
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子 + 一个远端工具");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子 + 一个远端工具")
+        .expect("remote dispatch should not be a source failure");
     assert_eq!(
         status,
         TurnStatus::ToolsPending,

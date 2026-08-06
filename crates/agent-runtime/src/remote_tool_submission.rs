@@ -11,6 +11,7 @@ use crate::remote_tool_protocol::{
     RemoteToolSubmitRequest, RemoteToolTerminalOrigin, RemoteToolTerminalStatus,
 };
 use crate::runner;
+use crate::transient_source_failure::TransientSourceFailure;
 use crate::transient_source_policy::{SAFE_ERROR, SAFE_RESULT, is_transient_source};
 
 /// Submit an outcome through the epoch gate. `acknowledge` is invoked exactly once.  On a new
@@ -21,7 +22,7 @@ pub fn submit_remote_tool_result(
     ctx: &mut RunnerCtx,
     request: RemoteToolSubmitRequest,
     acknowledge: impl FnOnce(RemoteToolSubmitDecision),
-) -> Option<TurnStatus> {
+) -> Result<Option<TurnStatus>, TransientSourceFailure> {
     if let Some(receipt) = ctx
         .remote_tool_receipt(&request.agent, &request.call_id)
         .cloned()
@@ -31,7 +32,7 @@ pub fn submit_remote_tool_result(
             .is_some()
             .then(|| request.outcome.fingerprint());
         acknowledge(replay_decision(&receipt, &request, fingerprint.as_ref()));
-        return None;
+        return Ok(None);
     }
 
     let Some(pending) = ctx
@@ -51,7 +52,7 @@ pub fn submit_remote_tool_result(
             RemoteToolSubmitDecision::UnknownToolCall
         };
         acknowledge(decision);
-        return None;
+        return Ok(None);
     };
 
     if pending.epoch != session.epoch() {
@@ -68,16 +69,16 @@ pub fn submit_remote_tool_result(
             None,
         );
         acknowledge(RemoteToolSubmitDecision::Terminal(receipt));
-        return None;
+        return Ok(None);
     }
     match pending.claim_id.as_deref() {
         None => {
             acknowledge(RemoteToolSubmitDecision::ClaimRequired);
-            return None;
+            return Ok(None);
         }
         Some(claim_id) if claim_id != request.claim_id => {
             acknowledge(RemoteToolSubmitDecision::ClaimedByOther);
-            return None;
+            return Ok(None);
         }
         Some(_) => {}
     }
@@ -112,30 +113,26 @@ pub fn submit_remote_tool_result(
     let event_call = pending.call_id.clone();
     let event_tool = pending.request.tool.clone();
 
-    Some(runner::resume_after_first_commit(
-        session,
-        ctx,
-        event,
-        move |ctx| {
-            let receipt = ctx.record_remote_tool_terminal(
-                &pending,
-                status,
-                RemoteToolTerminalOrigin::Host,
-                Some(submission_id),
-                fingerprint,
-            );
-            acknowledge(RemoteToolSubmitDecision::Committed(receipt));
-            ctx.emit(
-                &event_agent,
-                RunnerEvent::ToolExecuted {
-                    call_id: event_call,
-                    tool: event_tool,
-                    output_len,
-                    is_error,
-                },
-            );
-        },
-    ))
+    runner::resume_after_first_commit(session, ctx, event, move |ctx| {
+        let receipt = ctx.record_remote_tool_terminal(
+            &pending,
+            status,
+            RemoteToolTerminalOrigin::Host,
+            Some(submission_id),
+            fingerprint,
+        );
+        acknowledge(RemoteToolSubmitDecision::Committed(receipt));
+        ctx.emit(
+            &event_agent,
+            RunnerEvent::ToolExecuted {
+                call_id: event_call,
+                tool: event_tool,
+                output_len,
+                is_error,
+            },
+        );
+    })
+    .map(Some)
 }
 
 fn replay_decision(

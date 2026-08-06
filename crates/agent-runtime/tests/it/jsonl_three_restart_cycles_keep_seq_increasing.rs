@@ -122,7 +122,8 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
         });
         let mut ctx = build_ctx(port, &dir, backend);
         let mut session = Session::new(AgentId::root());
-        let status = agent_runtime::run_turn(&mut session, &mut ctx, "cycle one");
+        let status = agent_runtime::run_turn(&mut session, &mut ctx, "cycle one")
+            .expect("first cycle should not be a source failure");
         assert_eq!(status, TurnStatus::Done { truncated: false });
         // 块结束，ctx（连同它的 Jsonl）drop——`Drop` 排干队列，写入真的落盘。
     }
@@ -159,7 +160,8 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
 
         session.begin_turn();
         agent_runtime::persist::sync(&mut ctx, &mut session);
-        let status = agent_runtime::run_turn(&mut session, &mut ctx, turn_text);
+        let status = agent_runtime::run_turn(&mut session, &mut ctx, turn_text)
+            .expect("restarted cycle should not be a source failure");
         assert_eq!(status, TurnStatus::Done { truncated: false });
     }
 

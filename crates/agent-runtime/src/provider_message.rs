@@ -1,16 +1,15 @@
 //! Correlates every provider IO message with the exact in-flight request that produced it.
 
-use std::collections::VecDeque;
-use std::sync::Arc;
-
 use agent_core::{AgentId, ContentBlock, Event, StopReason, TokenUsage};
 use agent_transport::{StreamOutcome, TransportError};
+use std::collections::VecDeque;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::image_preparation_failure::ImagePreparationFailure;
 use crate::provider_attempt::ProviderAttemptId;
 use crate::provider_call::{self, ProviderCall};
+use crate::transient_source_failure::TransientSourceFailure;
 
 /// One message returned by a provider IO thread.
 ///
@@ -30,7 +29,6 @@ enum ProviderMessagePayload {
         blocks: Vec<ContentBlock>,
         stop: StopReason,
         usage: TokenUsage,
-        private_references: Vec<Arc<str>>,
     },
     PreparationFailed(ImagePreparationFailure),
     Gone,
@@ -52,7 +50,6 @@ impl ProviderMessage {
         blocks: Vec<ContentBlock>,
         stop: StopReason,
         usage: TokenUsage,
-        private_references: Vec<Arc<str>>,
     ) -> Self {
         Self {
             agent,
@@ -62,7 +59,6 @@ impl ProviderMessage {
                 blocks,
                 stop,
                 usage,
-                private_references,
             },
         }
     }
@@ -94,7 +90,7 @@ pub(crate) fn land(
     calls: &mut Vec<ProviderCall>,
     pending: &mut VecDeque<Event>,
     message: ProviderMessage,
-) {
+) -> Option<TransientSourceFailure> {
     let ProviderMessage {
         agent,
         attempt,
@@ -104,7 +100,7 @@ pub(crate) fn land(
         .iter()
         .position(|call| call.agent == agent && call.attempt == attempt)
     else {
-        return;
+        return None;
     };
 
     match payload {
@@ -114,32 +110,37 @@ pub(crate) fn land(
             if let Some(event) = provider_call::gate_delta(call, event) {
                 ctx.emit(&agent, event);
             }
+            None
         }
         ProviderMessagePayload::Done {
             result,
             blocks,
             stop,
             usage,
-            private_references,
         } => {
             let call = calls.remove(at);
-            pending.push_back(provider_call::finish(
-                ctx,
-                call,
-                result,
-                blocks,
-                stop,
-                usage,
-                private_references,
-            ));
+            match provider_call::finish(ctx, call, result, blocks, stop, usage) {
+                Ok(event) => {
+                    pending.push_back(event);
+                    None
+                }
+                Err(failure) => Some(failure),
+            }
         }
         ProviderMessagePayload::PreparationFailed(failure) => {
             let call = calls.remove(at);
             pending.push_back(provider_call::preparation_failed(ctx, call, failure));
+            None
         }
         ProviderMessagePayload::Gone => {
             let call = calls.remove(at);
-            pending.push_back(provider_call::thread_gone(ctx, call));
+            match provider_call::thread_gone(ctx, call) {
+                Ok(event) => {
+                    pending.push_back(event);
+                    None
+                }
+                Err(failure) => Some(failure),
+            }
         }
     }
 }

@@ -93,7 +93,8 @@ fn dispatch_uses_the_table_declaration_when_an_active_skill_has_the_same_name() 
         .unwrap();
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "关闭 T-7"),
+        run_turn(&mut session, &mut ctx, "关闭 T-7")
+            .expect("remote dispatch should not be a source failure"),
         TurnStatus::ToolsPending
     );
 
@@ -173,7 +174,8 @@ fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_int
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 crm-flow"),
+        run_turn(&mut session, &mut ctx, "帮我激活 crm-flow")
+            .expect("skill activation should not be a source failure"),
         TurnStatus::Done { truncated: false }
     );
 

@@ -105,7 +105,8 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 三件事一起拆出去");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 三件事一起拆出去")
+        .expect("collection should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // --- 三个 agent_id + 三份答案，各就各位 ---

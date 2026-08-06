@@ -89,7 +89,8 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开个后台的");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 开个后台的")
+        .expect("background collection should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());
@@ -146,7 +147,8 @@ fn blocking_run(tag: &str) -> String {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开个前台的");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 开个前台的")
+        .expect("foreground collection should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());

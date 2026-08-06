@@ -33,7 +33,8 @@ fn parked_call(
     };
     let mut session = Session::new(AgentId::root());
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "render a card"),
+        run_turn(&mut session, &mut ctx, "render a card")
+            .expect("remote dispatch should not be a source failure"),
         TurnStatus::ToolsPending,
         "precondition: the declared web tool must occupy a waiting slot"
     );
@@ -68,7 +69,8 @@ fn submit(
             outcome,
         },
         |decision| *acknowledgement.borrow_mut() = Some(decision),
-    );
+    )
+    .expect("remote result submission should not be a source failure");
     (
         status,
         acknowledgement
@@ -247,7 +249,11 @@ fn deadlines_distinguish_unclaimed_from_claimed_outcome_unknown() {
             ));
         }
         std::thread::sleep(Duration::from_millis(30));
-        assert!(sweep_remote_tool_deadlines(&mut session, &mut ctx).is_some());
+        assert!(
+            sweep_remote_tool_deadlines(&mut session, &mut ctx)
+                .expect("deadline sweep should not be a source failure")
+                .is_some()
+        );
         assert!(matches!(
             ctx.remote_tool_status().recent_terminal.as_slice(),
             [receipt] if receipt.status == expected && receipt.submission_id.is_none() && receipt.payload_digest.is_none() && receipt.payload_len.is_none()

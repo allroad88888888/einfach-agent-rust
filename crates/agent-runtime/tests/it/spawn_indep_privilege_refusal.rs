@@ -67,7 +67,8 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
         &mut session,
         &mut ctx,
         "kickoff4 delegate with a deliberately narrow tool set",
-    );
+    )
+    .expect("tool refusal is represented in the turn status");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

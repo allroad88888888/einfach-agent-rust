@@ -9,7 +9,7 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Failure, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::support::routed::{Route, RoutedServer};
 
@@ -94,7 +94,8 @@ fn one_child_failing_becomes_an_is_error_tool_result_and_the_parent_carries_on()
     ]);
     let (mut ctx, mut session) = ctx_and_session(server.port, &dir);
 
-    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙");
+    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙")
+        .expect("child provider failures stay within the turn");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },
@@ -132,7 +133,8 @@ fn the_ninth_child_is_refused_as_an_is_error_tool_result_and_the_loop_keeps_goin
     ]);
     let (mut ctx, mut session) = ctx_and_session(server.port, &dir);
 
-    let status = run_turn(&mut session, &mut ctx, "把活拆成九份");
+    let status = run_turn(&mut session, &mut ctx, "把活拆成九份")
+        .expect("a rejected child spawn is not a source failure");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },
@@ -194,7 +196,8 @@ fn cancelling_mid_turn_cuts_every_child_and_fails_the_session() {
     });
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙");
+    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙")
+        .expect("cancellation is not a source failure");
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));

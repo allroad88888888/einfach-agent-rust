@@ -12,7 +12,7 @@ use crate::support;
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, ContentBlock, Role, Session, TurnStatus};
-use agent_runtime::{run_turn, RunnerEvent, ToolTable};
+use agent_runtime::{RunnerEvent, ToolTable, run_turn};
 
 use crate::support::routed::{Route, RoutedServer};
 
@@ -74,7 +74,8 @@ fn two_children_run_in_parallel_and_the_parent_waits_for_both() {
     );
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙");
+    let status = run_turn(&mut session, &mut ctx, "分头去查甲和乙")
+        .expect("ordinary child execution is not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // —— 1. 并行：两个子 agent 的请求在服务端的服务区间有交叠 ——————
@@ -198,7 +199,8 @@ fn undoing_the_turn_takes_the_whole_subtree_and_the_next_prompt_has_no_trace_of_
     );
     let mut session = Session::new(AgentId::root());
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "分头去查甲和乙"),
+        run_turn(&mut session, &mut ctx, "分头去查甲和乙")
+            .expect("ordinary child execution is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
 
@@ -221,7 +223,8 @@ fn undoing_the_turn_takes_the_whole_subtree_and_the_next_prompt_has_no_trace_of_
     );
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "再问一次"),
+        run_turn(&mut session, &mut ctx, "再问一次")
+            .expect("ordinary child execution is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
     let reask = server.call("再问一次").expect("重问那一跳该被服务过");

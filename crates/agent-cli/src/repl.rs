@@ -94,7 +94,13 @@ pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig, mcp:
         // 取消标志的清零在 `run_turn` 内部做（跟 022 时代 `repl::run` 手动
         // `cancel.store(false, ..)` 是同一个理由：上一轮遗留的标志不该提前
         // 打断这一轮还没开始的请求），这里不用重复。
-        let status = run_turn(session, ctx, input);
+        let status = match run_turn(session, ctx, input) {
+            Ok(status) => status,
+            Err(failure) => {
+                eprintln!("{failure:?}");
+                continue;
+            }
+        };
         crate::print::turn_outcome(&status);
 
         if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {

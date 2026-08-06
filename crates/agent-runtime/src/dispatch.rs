@@ -60,6 +60,9 @@ pub(crate) enum Dispatched {
     Events(Vec<Event>),
     /// 起了一次 provider 调用，凭据交给泵的在飞表。
     Call(ProviderCall),
+    /// A transient-source request failed before it could produce a session event. Its original
+    /// terminal reason belongs to the embedding host, not the session transition table.
+    TransientSourceFailure(crate::TransientSourceFailure),
     /// 起了一次异步 MCP `tools/call`（第四路，043），凭据交给泵的 MCP 在飞表。
     /// 跟 [`Dispatched::Call`] 分两个变体：一个是工具结果、一个是模型响应，泵按
     /// 各自的键落地（`crate::mcp_call` / `crate::provider_call`）。
@@ -88,7 +91,10 @@ pub(crate) fn run_effect(
             subtree.record_provider_start(&agent);
             match provider_call::start(session, ctx, tx.clone(), agent, epoch) {
                 Ok(call) => Dispatched::Call(call),
-                Err(event) => Dispatched::Event(event),
+                Err(provider_call::StartFailure::Event(event)) => Dispatched::Event(event),
+                Err(provider_call::StartFailure::TransientSource(failure)) => {
+                    Dispatched::TransientSourceFailure(failure)
+                }
             }
         }
         Effect::ExecuteTool {

@@ -135,7 +135,8 @@ fn the_resident_index_is_in_the_very_first_request_before_any_activation() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "你好"),
+        run_turn(&mut session, &mut ctx, "你好")
+            .expect("skill registry turn should not be a source failure"),
         TurnStatus::Done { truncated: false }
     );
 
@@ -184,7 +185,8 @@ fn activating_mid_turn_injects_body_and_tool_into_the_next_hop_then_undo_removes
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 testskill"),
+        run_turn(&mut session, &mut ctx, "帮我激活 testskill")
+            .expect("skill activation should not be a source failure"),
         TurnStatus::Done { truncated: false }
     );
 

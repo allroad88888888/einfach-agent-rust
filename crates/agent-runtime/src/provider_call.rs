@@ -43,10 +43,18 @@ use crate::execution_binding::{ExecutionBinding, GuardScope};
 use crate::io_thread::{self, IoMsg};
 use crate::provider_attempt::ProviderAttemptId;
 use crate::subagent;
+use crate::transient_source_failure::TransientSourceFailure;
 
 pub(crate) use crate::provider_call_finish::{
     finish, preparation_failed, preparation_start_failed, thread_gone,
 };
+
+/// A provider launch either yields a regular session event or exposes a terminal transient-source
+/// failure to the embedding host.
+pub(crate) enum StartFailure {
+    Event(Event),
+    TransientSource(TransientSourceFailure),
+}
 
 /// 一次仍由 runner 认领的 provider 调用。**一个 agent 同时最多一张凭据**；超时
 /// 划掉的旧 IO 线程可以与重试短暂重叠，但它持有不同的 [`ProviderAttemptId`]。
@@ -68,15 +76,13 @@ pub(crate) struct ProviderCall {
     pub(crate) prefix: PrefixImage,
     /// This request consumed transient source material and must never be retried.
     pub(crate) one_shot: bool,
-    /// Calls whose raw stream may echo request-local image references suppress live deltas.
-    /// Direct visual output is replayed after terminal scrubbing; vision output returns through
-    /// its stable parent Tool envelope.
+    /// Calls with a distinct terminal delivery path suppress live deltas.
+    /// Direct visual output is replayed after completion; vision child output returns through
+    /// its parent Tool envelope.
     pub(crate) hold_deltas: bool,
-    /// Direct visual calls replay their terminal deltas only after exact request-local references
-    /// have been scrubbed. Vision children stay behind their stable parent Tool envelope.
-    pub(crate) replay_sanitized_deltas: bool,
-    /// Vision runs behind a stable Tool envelope, so raw upstream failures must stay private.
-    pub(crate) redact_provider_errors: bool,
+    /// Direct visual calls replay terminal deltas after the request completes. Vision children
+    /// deliver their terminal result through their parent Tool envelope.
+    pub(crate) replay_terminal_deltas: bool,
     /// Per-attempt cancellation latch. Unlike the session flag, this is never reset by a later
     /// turn, so an abandoned upload cannot resume after the runner starts another turn.
     cancel_token: Arc<AtomicBool>,
@@ -96,19 +102,19 @@ pub(crate) fn start(
     tx: SyncSender<IoMsg>,
     agent: AgentId,
     epoch: Epoch,
-) -> Result<ProviderCall, Event> {
+) -> Result<ProviderCall, StartFailure> {
     ctx.clear_image_preparation_failure(&agent);
     let profile = session.execution_profile_of(&agent);
-    let redact_provider_errors = profile.as_ref().is_some_and(crate::vision_tool::is_profile);
+    let vision_child = profile.as_ref().is_some_and(crate::vision_tool::is_profile);
     let selection = match ctx.execution_binding_for(profile.as_ref()) {
         Ok(selection) => selection,
         Err(_) => {
-            return Err(Event::ProviderFailed {
+            return Err(StartFailure::Event(Event::ProviderFailed {
                 agent,
                 epoch,
                 class: ErrorClass::Unknown,
                 message: Arc::from("execution profile is not configured"),
-            });
+            }));
         }
     };
     let binding = selection.binding;
@@ -127,7 +133,9 @@ pub(crate) fn start(
         Ok(prepared) => prepared,
         Err(()) => {
             ctx.transient_sources.purge_agent_epoch(&agent, epoch);
-            return Err(crate::transient_source_completion::failure(agent, epoch));
+            return Err(StartFailure::TransientSource(
+                TransientSourceFailure::PromptPreparation { agent, epoch },
+            ));
         }
     };
     let prev_prefix = session.prev_prefix_of(&agent);
@@ -193,9 +201,9 @@ pub(crate) fn start(
     ) {
         Ok(request) => request,
         Err(failure) => {
-            return Err(preparation_start_failed(
+            return Err(StartFailure::Event(preparation_start_failed(
                 ctx, agent, epoch, one_shot, failure,
-            ));
+            )));
         }
     };
     let materializes_images = request.materializes_images();
@@ -238,9 +246,8 @@ pub(crate) fn start(
         adjustments,
         prefix,
         one_shot,
-        hold_deltas: one_shot || redact_provider_errors || materializes_images,
-        replay_sanitized_deltas: materializes_images && !redact_provider_errors && !one_shot,
-        redact_provider_errors,
+        hold_deltas: one_shot || materializes_images,
+        replay_terminal_deltas: materializes_images && !one_shot && !vision_child,
         cancel_token,
     })
 }

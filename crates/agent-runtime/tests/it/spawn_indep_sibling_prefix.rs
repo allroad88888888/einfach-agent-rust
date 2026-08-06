@@ -65,7 +65,8 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
         &mut session,
         &mut ctx,
         "kickoff5 spawn two siblings with the default tool subset",
-    );
+    )
+    .expect("spawn siblings should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

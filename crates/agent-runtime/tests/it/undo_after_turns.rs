@@ -7,7 +7,7 @@
 
 use crate::support;
 use agent_core::{AgentId, RequestIntent, Session, SessionConfig, TurnStatus, UndoReport};
-use agent_providers::{deepseek::DeepSeek, Ingredients, Provider};
+use agent_providers::{Ingredients, Provider, deepseek::DeepSeek};
 
 use crate::support::ScriptedResponse;
 
@@ -47,14 +47,16 @@ fn undo_after_two_turns_erases_the_second_and_the_next_request_does_not_carry_it
 
     // 第一轮：一次工具调用 + 收尾。四条消息。
     let status =
-        agent_runtime::run_turn(&mut session, &mut ctx, "读一下 hello.txt，秘密指令 ALPHA");
+        agent_runtime::run_turn(&mut session, &mut ctx, "读一下 hello.txt，秘密指令 ALPHA")
+            .expect("ordinary tool execution is not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(session.messages().len(), 4);
     let snapshot_after_turn_1 = session.primitives();
 
     // 第二轮：显式 begin_turn（`run_turn` 不替调用方决定，见它的文档）。
     session.begin_turn();
-    let status = agent_runtime::run_turn(&mut session, &mut ctx, "第二轮独有的问题 BETA");
+    let status = agent_runtime::run_turn(&mut session, &mut ctx, "第二轮独有的问题 BETA")
+        .expect("ordinary provider reply is not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(session.messages().len(), 6, "两轮各两条/四条消息叠加");
 

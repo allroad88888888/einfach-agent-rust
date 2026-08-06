@@ -81,7 +81,8 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
         &mut session,
         &mut ctx,
         "kickoff-refusal one of them will try to peek",
-    );
+    )
+    .expect("status refusal is represented in the turn status");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },

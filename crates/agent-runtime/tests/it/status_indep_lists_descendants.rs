@@ -83,7 +83,8 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
         &mut session,
         &mut ctx,
         "kickoff-status split this in two and watch them",
-    );
+    )
+    .expect("status query should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

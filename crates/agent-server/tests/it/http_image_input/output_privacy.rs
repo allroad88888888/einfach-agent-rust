@@ -1,4 +1,4 @@
-//! Uploaded references remain request-local even when a direct visual provider echoes them.
+//! Direct visual provider output is relayed unchanged after the request completes.
 
 use std::time::{Duration, Instant};
 
@@ -12,12 +12,11 @@ use crate::support::http_client;
 
 const SESSION_ID: &str = "uploaded-reference-privacy";
 const UPLOADED_REFERENCE: &str = "ms://uploaded-image";
-const REDACTED_REFERENCE: &str = "[private image reference]";
 const BEFORE: &str = "VISUAL_BEFORE";
 const AFTER: &str = "VISUAL_AFTER";
 
 #[tokio::test(flavor = "multi_thread")]
-async fn direct_visual_success_replays_only_scrubbed_terminal_text() {
+async fn direct_visual_success_replays_raw_terminal_text() {
     let run = run(ChatReply::Chunks(vec![
         format!("{BEFORE} ms://uploaded"),
         format!("-image {AFTER}"),
@@ -26,21 +25,19 @@ async fn direct_visual_success_replays_only_scrubbed_terminal_text() {
 
     assert!(matches!(run.status, TurnStatus::Done { .. }));
     assert_request_materialized(&run.upstream);
-    assert_public_surfaces_are_scrubbed(&run);
     let frames = serde_json::to_string(&run.frames).expect("serialize public frames");
-    assert!(frames.contains(REDACTED_REFERENCE));
-    assert!(run.journal.contains(REDACTED_REFERENCE));
+    assert!(frames.contains(UPLOADED_REFERENCE));
     assert!(run.frames.iter().any(|frame| matches!(
         &frame.event,
         SessionEvent::TextDelta(text)
-            if text.as_ref() == format!("{BEFORE} {REDACTED_REFERENCE} {AFTER}")
+            if text.as_ref() == format!("{BEFORE} {UPLOADED_REFERENCE} {AFTER}")
     )));
     assert!(run.journal.contains(BEFORE));
     assert!(run.journal.contains(AFTER));
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn direct_visual_http_failure_scrubs_echoed_reference_before_publication() {
+async fn direct_visual_http_failure_preserves_the_provider_body() {
     let body = format!(r#"{{"error":"{BEFORE} {UPLOADED_REFERENCE} {AFTER}"}}"#);
     let run = run(ChatReply::StatusBody(400, body)).await;
 
@@ -49,11 +46,12 @@ async fn direct_visual_http_failure_scrubs_echoed_reference_before_publication()
         TurnStatus::Failed(Failure::Provider(ErrorClass::BadRequest))
     );
     assert_request_materialized(&run.upstream);
-    assert_public_surfaces_are_scrubbed(&run);
+    let frames = serde_json::to_string(&run.frames).expect("serialize public frames");
+    assert!(frames.contains(UPLOADED_REFERENCE));
     assert!(run.frames.iter().any(|frame| matches!(
         &frame.event,
         SessionEvent::TransportTrouble(message)
-            if message.contains(REDACTED_REFERENCE)
+            if message.contains(UPLOADED_REFERENCE)
     )));
 }
 
@@ -133,11 +131,4 @@ fn assert_request_materialized(upstream: &ImageUploadUpstream) {
         .next()
         .expect("one visual chat request");
     assert!(chat.contains(UPLOADED_REFERENCE));
-}
-
-fn assert_public_surfaces_are_scrubbed(run: &Run) {
-    let frames = serde_json::to_string(&run.frames).expect("serialize public frames");
-    for surface in [&frames, &run.journal] {
-        assert!(!surface.contains(UPLOADED_REFERENCE), "leaked: {surface}");
-    }
 }

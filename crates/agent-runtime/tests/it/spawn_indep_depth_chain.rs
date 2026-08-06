@@ -100,7 +100,8 @@ fn a_depth_three_chain_completes_and_the_depth_four_attempt_is_refused() {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "startchain please go deep");
+    let status = run_turn(&mut session, &mut ctx, "startchain please go deep")
+        .expect("spawn chain should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // --- 树的形状：四个 agent，没有第五个 ---

@@ -16,7 +16,7 @@ use std::time::Duration;
 use agent_core::{
     AgentActivity, AgentId, AgentLimits, AgentTree, ErrorClass, Failure, Session, TurnStatus,
 };
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::support::routed::{Route, RoutedServer};
 
@@ -69,7 +69,8 @@ fn spawning_a_child_emits_a_tree_snapshot_that_includes_it() {
     let (mut ctx, trees) = collect_trees(ctx);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "帮我spawn个子agent查天气");
+    let status = run_turn(&mut session, &mut ctx, "帮我spawn个子agent查天气")
+        .expect("ordinary child execution is not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let trees = trees.borrow();
@@ -130,7 +131,8 @@ fn a_provider_timeout_retry_that_leaves_status_unchanged_does_not_re_emit() {
     let mut session = Session::new(AgentId::root());
     session.set_max_retries(1);
 
-    let status = run_turn(&mut session, &mut ctx, "你好");
+    let status = run_turn(&mut session, &mut ctx, "你好")
+        .expect("ordinary provider timeout is not a source failure");
     assert_eq!(
         status,
         TurnStatus::Failed(Failure::Provider(ErrorClass::Retryable))

@@ -174,7 +174,7 @@ fn submit(
         ack.into_inner(),
         Some(RemoteToolSubmitDecision::Committed(_))
     ));
-    status
+    status.expect("successful source result must finish the turn")
 }
 
 fn assert_private_surfaces(session: &Session, events: &[RunnerEvent]) {
@@ -226,7 +226,8 @@ fn pull_search_read_then_terminal_candidate_stays_private() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "synthetic diagnosis"),
+        run_turn(&mut session, &mut ctx, "synthetic diagnosis")
+            .expect("initial source request is not a terminal source failure"),
         TurnStatus::ToolsPending
     );
     assert_eq!(
@@ -255,7 +256,8 @@ fn pull_search_read_then_terminal_candidate_stays_private() {
 
     session.begin_turn();
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "fresh public turn"),
+        run_turn(&mut session, &mut ctx, "fresh public turn")
+            .expect("fresh public turn is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
     assert_private_surfaces(&session, &events.borrow());

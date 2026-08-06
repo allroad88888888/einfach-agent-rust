@@ -240,7 +240,9 @@ pub(super) fn run(
         && (agent_runtime::has_unresolved_tool_calls(&session)
             || agent_runtime::recovered_transient_source_needs_fail_close(&session))
     {
-        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+        if let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx) {
+            commands::emit_transient_source_failure(&events_tx, failure);
+        }
     }
 
     let cancel = ctx.cancel_flag();

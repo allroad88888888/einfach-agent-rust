@@ -12,11 +12,12 @@ use agent_transport::{Client, StreamOutcome, TransportError};
 use serde_json::json;
 
 use crate::RunnerCtx;
+use crate::TransientSourceFailure;
 use crate::event::RunnerEvent;
 use crate::execution_binding::GuardScope;
 use crate::tool_table::ToolTable;
 use crate::transient_source_completion::{Metadata, finish};
-use crate::transient_source_policy::{SAFE_CANDIDATE, SAFE_PROVIDER_ERROR, SOURCE_READ};
+use crate::transient_source_policy::{SAFE_CANDIDATE, SOURCE_READ};
 use crate::transient_source_vault::CapturedSource;
 
 const PRIVATE_INPUT: &str = "private-input-7b7d";
@@ -90,13 +91,6 @@ fn assert_purged(ctx: &RunnerCtx, agent: &AgentId, call_id: &ToolCallId) {
     );
 }
 
-fn assert_fixed_failure(event: &Event) {
-    assert!(matches!(
-        event,
-        Event::ProviderFailed { message, .. } if &**message == SAFE_PROVIDER_ERROR
-    ));
-}
-
 #[test]
 fn sensitive_terminal_candidate_reaches_only_the_private_event_boundary() {
     let (mut ctx, events) = test_ctx();
@@ -112,7 +106,8 @@ fn sensitive_terminal_candidate_reaches_only_the_private_event_boundary() {
             ContentBlock::Text(Arc::from(PRIVATE_CANDIDATE)),
         ],
         StopReason::EndTurn,
-    );
+    )
+    .expect("a valid transient-source completion should succeed");
 
     let Event::ProviderDone { blocks, stop, .. } = &event else {
         panic!("expected provider success: {event:?}");
@@ -144,7 +139,7 @@ fn invalid_terminal_shape_fails_without_releasing_partial_text() {
     let (mut ctx, events) = test_ctx();
     let agent = AgentId::root();
     let call_id = seed_private_source(&mut ctx, &agent);
-    let event = finish(
+    let failure = finish(
         &mut ctx,
         metadata(agent.clone()),
         Ok(StreamOutcome::Finished),
@@ -157,22 +152,29 @@ fn invalid_terminal_shape_fails_without_releasing_partial_text() {
             },
         ],
         StopReason::EndTurn,
-    );
+    )
+    .expect_err("an invalid transient-source completion must fail");
 
-    assert_fixed_failure(&event);
+    assert!(matches!(
+        failure,
+        TransientSourceFailure::InvalidCompletion {
+            agent: failure_agent,
+            epoch: Epoch::START,
+        } if failure_agent == agent
+    ));
     assert_purged(&ctx, &agent, &call_id);
     let emitted = format!("{:?}", events.borrow());
     assert!(!emitted.contains(PRIVATE_CANDIDATE));
     assert!(!emitted.contains(PRIVATE_INPUT));
-    assert!(emitted.contains("provider_completion_failed"));
+    assert!(events.borrow().is_empty());
 }
 
 #[test]
-fn transport_failure_purges_source_and_sanitizes_provider_body() {
+fn transport_failure_purges_source_and_preserves_provider_body() {
     let (mut ctx, events) = test_ctx();
     let agent = AgentId::root();
     let call_id = seed_private_source(&mut ctx, &agent);
-    let event = finish(
+    let failure = finish(
         &mut ctx,
         metadata(agent.clone()),
         Err(TransportError::Http {
@@ -181,13 +183,21 @@ fn transport_failure_purges_source_and_sanitizes_provider_body() {
         }),
         vec![ContentBlock::Text(Arc::from(PRIVATE_CANDIDATE))],
         StopReason::EndTurn,
-    );
+    )
+    .expect_err("a transport failure must leave the runtime as the original error");
 
-    assert_fixed_failure(&event);
+    assert!(matches!(
+        failure,
+        TransientSourceFailure::Transport {
+            agent: failure_agent,
+            epoch: Epoch::START,
+            error: TransportError::Http { status: 500, body },
+        } if failure_agent == agent && body == PRIVATE_CANDIDATE
+    ));
     assert_purged(&ctx, &agent, &call_id);
     let emitted = format!("{:?}", events.borrow());
     assert!(!emitted.contains(PRIVATE_CANDIDATE));
-    assert!(emitted.contains("provider_completion_failed"));
+    assert!(events.borrow().is_empty());
 }
 
 #[test]
@@ -201,7 +211,8 @@ fn cancellation_purges_source_without_emitting_the_candidate() {
         Ok(StreamOutcome::Cancelled),
         vec![ContentBlock::Text(Arc::from(PRIVATE_CANDIDATE))],
         StopReason::EndTurn,
-    );
+    )
+    .expect("a cancellation is still a session event");
 
     assert!(matches!(event, Event::Cancel { .. }));
     assert_purged(&ctx, &agent, &call_id);

@@ -71,7 +71,8 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个慢的后台子，马上就领");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个慢的后台子，马上就领")
+        .expect("collection should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // --- 结果真的回来了，而且是走 collect 那个槽回来的 ---

@@ -48,7 +48,7 @@ fn ordinary_delta_arrives_before_done_when_source_tools_are_available() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "hello"),
+        run_turn(&mut session, &mut ctx, "hello").expect("ordinary stream is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
     assert!(terminal_started.load(Ordering::Acquire));

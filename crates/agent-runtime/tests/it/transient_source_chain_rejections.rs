@@ -2,13 +2,11 @@
 
 use std::sync::Arc;
 
-use agent_core::{
-    AgentId, ErrorClass, Failure, Reversibility, Session, ToolCallId, ToolSpec, TurnStatus,
-};
+use agent_core::{AgentId, Reversibility, Session, ToolCallId, ToolSpec, TurnStatus};
 use agent_runtime::{
     RemoteToolClaimDecision, RemoteToolClaimRequest, RemoteToolSubmitOutcome,
-    RemoteToolSubmitRequest, RunnerEvent, ToolTable, claim_remote_tool, run_turn,
-    submit_remote_tool_result,
+    RemoteToolSubmitRequest, RunnerEvent, ToolTable, TransientSourceFailure, claim_remote_tool,
+    run_turn, submit_remote_tool_result,
 };
 use serde_json::{Value, json};
 
@@ -95,7 +93,8 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
     let (mut ctx, events) = build_ctx_with_store(port, &dir, tool_table(), None);
     let mut session = Session::new(AgentId::root());
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "synthetic rejection"),
+        run_turn(&mut session, &mut ctx, "synthetic rejection")
+            .expect("initial source request is not a terminal source failure"),
         TurnStatus::ToolsPending
     );
 
@@ -113,7 +112,7 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
     };
     assert_eq!(grant.request.input["opaque"], PRIVATE_INPUT);
 
-    let status = submit_remote_tool_result(
+    let failure = submit_remote_tool_result(
         &mut session,
         &mut ctx,
         RemoteToolSubmitRequest {
@@ -126,11 +125,12 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
             },
         },
         |_| {},
-    );
-    assert_eq!(
-        status,
-        Some(TurnStatus::Failed(Failure::Provider(ErrorClass::Unknown)))
-    );
+    )
+    .expect_err("invalid source continuation must escape the core unclassified");
+    assert!(matches!(
+        failure,
+        TransientSourceFailure::InvalidCompletion { agent, .. } if agent == AgentId::root()
+    ));
     assert_eq!(bodies.lock().unwrap().len(), 2);
 
     let durable = serde_json::to_string(&session.primitives()).unwrap();

@@ -50,7 +50,8 @@ fn a_host_without_spawn_declared_treats_it_as_an_unknown_tool_and_the_tree_does_
         &mut session,
         &mut ctx,
         "kickoff3 try to spawn even though nobody declared it",
-    );
+    )
+    .expect("undeclared tool is represented in the turn status");
 
     assert_eq!(
         status,

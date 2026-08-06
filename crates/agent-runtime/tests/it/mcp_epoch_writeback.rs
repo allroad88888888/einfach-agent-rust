@@ -55,7 +55,8 @@ fn in_flight_mcp_result_is_dropped_by_the_epoch_gate_after_a_mid_flight_cancel()
 
     let mut session = Session::new(AgentId::root());
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "调个慢 MCP 工具");
+    let status = run_turn(&mut session, &mut ctx, "调个慢 MCP 工具")
+        .expect("cancellation is not a source failure");
     let elapsed = start.elapsed();
 
     // 取消真的生效了（epoch 被 bump 过——闸才有可比的对象）。

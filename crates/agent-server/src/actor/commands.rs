@@ -14,8 +14,9 @@ use tokio::sync::broadcast::Sender as BroadcastSender;
 
 use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus, UserImage};
 use agent_runtime::{
-    RemoteToolOutput, RunnerCtx, cancel_pending_remote_tools, resolve_remote_tool,
-    run_turn_with_images,
+    RemoteToolOutput, ResolveRemoteToolError, RunnerCtx,
+    TransientSourceFailure as RuntimeTransientSourceFailure, cancel_pending_remote_tools,
+    resolve_remote_tool, run_turn_with_images,
 };
 
 use crate::command::Granularity;
@@ -32,6 +33,18 @@ fn emit_root(events: &Events, event: SessionEvent) {
     let _ = events.send(Frame {
         agent: AgentId::root(),
         event,
+    });
+}
+
+/// Forward a raw runtime failure without deciding how it should be presented to an end user.
+pub(super) fn emit_transient_source_failure(
+    events: &Events,
+    failure: RuntimeTransientSourceFailure,
+) {
+    let agent = failure.agent().clone();
+    let _ = events.send(Frame {
+        agent,
+        event: SessionEvent::TransientSourceFailure(failure.into()),
     });
 }
 
@@ -53,9 +66,10 @@ pub(super) fn handle_input(
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
     }
-    let status = run_turn_with_images(session, ctx, text, images);
-    if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
-        erase_cancelled_turn(session, ctx, events);
+    match run_turn_with_images(session, ctx, text, images) {
+        Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
+        Ok(_) => {}
+        Err(failure) => emit_transient_source_failure(events, failure),
     }
 }
 
@@ -119,9 +133,10 @@ pub(super) fn handle_cancel(session: &mut Session, ctx: &mut RunnerCtx, events: 
     if session.status().is_terminal() {
         return;
     }
-    let status = cancel_pending_remote_tools(session, ctx);
-    if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
-        erase_cancelled_turn(session, ctx, events);
+    match cancel_pending_remote_tools(session, ctx) {
+        Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
+        Ok(_) => {}
+        Err(failure) => emit_transient_source_failure(events, failure),
     }
 }
 
@@ -144,10 +159,13 @@ pub(super) fn handle_remote_tool_result(
     match resolve_remote_tool(session, ctx, agent, call_id, output) {
         Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
         Ok(_) => {}
-        Err(error) => emit_root(
+        Err(ResolveRemoteToolError::InvalidResult(error)) => emit_root(
             events,
             SessionEvent::TransportTrouble(std::sync::Arc::from(error.to_string())),
         ),
+        Err(ResolveRemoteToolError::TransientSource(failure)) => {
+            emit_transient_source_failure(events, failure)
+        }
     }
 }
 
@@ -163,8 +181,13 @@ pub(super) fn handle_remote_tool_timeout(
     ctx: &mut RunnerCtx,
     events: &Events,
 ) {
-    let Some(status) = agent_runtime::sweep_remote_tool_deadlines(session, ctx) else {
-        return;
+    let status = match agent_runtime::sweep_remote_tool_deadlines(session, ctx) {
+        Ok(Some(status)) => status,
+        Ok(None) => return,
+        Err(failure) => {
+            emit_transient_source_failure(events, failure);
+            return;
+        }
     };
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         erase_cancelled_turn(session, ctx, events);

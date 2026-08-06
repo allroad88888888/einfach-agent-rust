@@ -61,7 +61,8 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子然后不管它");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子然后不管它")
+        .expect("background cleanup should not be a source failure");
     let elapsed = start.elapsed();
 
     // ① 真的返回了，而且有界（泵还要等那条在飞的凭据落地，所以 >= CHILD 是对的，

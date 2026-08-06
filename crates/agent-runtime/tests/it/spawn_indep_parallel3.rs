@@ -81,7 +81,8 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
         &mut session,
         &mut ctx,
         "kickoff please split into three parallel workers",
-    );
+    )
+    .expect("parallel children should not be a source failure");
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Done { truncated: false });

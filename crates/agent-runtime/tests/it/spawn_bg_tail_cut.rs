@@ -80,7 +80,8 @@ fn run(
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个多轮后台子");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 一个多轮后台子")
+        .expect("background cleanup should not be a source failure");
     let elapsed = start.elapsed();
     let events = events.borrow().clone();
     (server, session, events, status, elapsed)

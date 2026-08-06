@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use agent_core::{
-    Adjustment, AgentId, ContentBlock, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage,
-    StopReason, TokenUsage,
+    Adjustment, AgentId, ContentBlock, DriftVerdict, Epoch, Event, PrefixImage, StopReason,
+    TokenUsage,
 };
 use agent_transport::{StreamOutcome, TransportError};
 
@@ -12,9 +12,8 @@ use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::execution_binding::GuardScope;
 use crate::guard;
-use crate::transient_source_policy::{SAFE_CANDIDATE, SAFE_PROVIDER_ERROR, is_transient_source};
-
-const PROVIDER_COMPLETION_FAILED: &str = "provider_completion_failed";
+use crate::transient_source_failure::TransientSourceFailure;
+use crate::transient_source_policy::{SAFE_CANDIDATE, is_transient_source};
 
 enum PrivateCompletion {
     Terminal {
@@ -40,68 +39,57 @@ pub(crate) fn finish(
     result: Result<StreamOutcome, TransportError>,
     blocks: Vec<ContentBlock>,
     stop: StopReason,
-) -> Event {
+) -> Result<Event, TransientSourceFailure> {
     match result {
         Ok(StreamOutcome::Finished) => match private_completion(blocks, stop) {
             Ok(PrivateCompletion::Terminal { candidate, stop }) => {
                 ctx.transient_sources
                     .purge_agent_epoch(&metadata.agent, metadata.epoch);
                 emit_terminal_candidate(ctx, &metadata.agent, candidate);
-                success(
+                Ok(success(
                     ctx,
                     metadata,
                     vec![ContentBlock::Text(Arc::from(SAFE_CANDIDATE))],
                     stop,
-                )
+                ))
             }
             Ok(PrivateCompletion::SourceTools(blocks)) => {
-                success(ctx, metadata, blocks, StopReason::ToolUse)
+                Ok(success(ctx, metadata, blocks, StopReason::ToolUse))
             }
             Err(()) => {
                 ctx.transient_sources
                     .purge_agent_epoch(&metadata.agent, metadata.epoch);
-                provider_completion_failed(ctx, metadata.agent, metadata.epoch)
+                Err(TransientSourceFailure::InvalidCompletion {
+                    agent: metadata.agent,
+                    epoch: metadata.epoch,
+                })
             }
         },
         Ok(StreamOutcome::Cancelled) => {
             ctx.transient_sources
                 .purge_agent_epoch(&metadata.agent, metadata.epoch);
-            Event::Cancel {
+            Ok(Event::Cancel {
                 agent: metadata.agent,
-            }
+            })
         }
-        Ok(StreamOutcome::Broken(_)) | Err(_) => {
+        Ok(StreamOutcome::Broken(message)) => {
             ctx.transient_sources
                 .purge_agent_epoch(&metadata.agent, metadata.epoch);
-            provider_completion_failed(ctx, metadata.agent, metadata.epoch)
+            Err(TransientSourceFailure::StreamBroken {
+                agent: metadata.agent,
+                epoch: metadata.epoch,
+                message,
+            })
         }
-    }
-}
-
-pub(crate) fn provider_completion_failed(
-    ctx: &mut RunnerCtx,
-    agent: AgentId,
-    epoch: Epoch,
-) -> Event {
-    observed_failure(ctx, agent, epoch, PROVIDER_COMPLETION_FAILED)
-}
-
-fn observed_failure(
-    ctx: &mut RunnerCtx,
-    agent: AgentId,
-    epoch: Epoch,
-    reason: &'static str,
-) -> Event {
-    ctx.emit(&agent, RunnerEvent::TransportTrouble(Arc::from(reason)));
-    failure(agent, epoch)
-}
-
-pub(crate) fn failure(agent: AgentId, epoch: Epoch) -> Event {
-    Event::ProviderFailed {
-        agent,
-        epoch,
-        class: ErrorClass::Unknown,
-        message: Arc::from(SAFE_PROVIDER_ERROR),
+        Err(error) => {
+            ctx.transient_sources
+                .purge_agent_epoch(&metadata.agent, metadata.epoch);
+            Err(TransientSourceFailure::Transport {
+                agent: metadata.agent,
+                epoch: metadata.epoch,
+                error,
+            })
+        }
     }
 }
 

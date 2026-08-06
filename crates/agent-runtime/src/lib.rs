@@ -103,6 +103,7 @@ mod tool_table;
 mod transient_source_completion;
 #[cfg(test)]
 mod transient_source_completion_tests;
+mod transient_source_failure;
 mod transient_source_ingress;
 mod transient_source_policy;
 mod transient_source_prompt;
@@ -111,7 +112,6 @@ mod transient_source_recovery;
 mod transient_source_tests;
 mod transient_source_vault;
 mod vision_child_outcome;
-mod vision_output_privacy;
 mod vision_tool;
 
 pub mod ctx;
@@ -135,7 +135,8 @@ pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
 };
 pub use remote_tool::{
-    RemoteToolOutput, RemoteToolResultError, cancel_pending_remote_tools, resolve_remote_tool,
+    RemoteToolOutput, RemoteToolResultError, ResolveRemoteToolError, cancel_pending_remote_tools,
+    resolve_remote_tool,
 };
 pub use remote_tool_claim::claim_remote_tool;
 pub use remote_tool_protocol::{
@@ -151,4 +152,5 @@ pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry}
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::ToolTable;
+pub use transient_source_failure::TransientSourceFailure;
 pub use transient_source_recovery::recovered_transient_source_needs_fail_close;

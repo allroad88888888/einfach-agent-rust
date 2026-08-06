@@ -29,7 +29,7 @@ fn ctrl_c_during_call_provider_cancels_the_turn() {
 
     let mut session = Session::new(AgentId::root());
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "你好");
+    let status = run_turn(&mut session, &mut ctx, "你好").expect("cancellation is not a source failure");
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));

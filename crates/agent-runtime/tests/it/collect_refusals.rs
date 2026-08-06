@@ -87,7 +87,8 @@ fn collecting_twice_an_unknown_id_or_a_non_descendant_all_come_back_as_errors() 
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个，然后乱领一通");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个，然后乱领一通")
+        .expect("tool refusals are represented in the turn status");
 
     // 三次拒绝一次都没有打断这一轮。
     assert_eq!(

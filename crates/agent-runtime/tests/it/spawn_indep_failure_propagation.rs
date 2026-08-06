@@ -64,7 +64,8 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
         &mut session,
         &mut ctx,
         "kickoff2 split into a doomed half and a good half",
-    );
+    )
+    .expect("child failure is represented in the turn status");
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
     assert_eq!(

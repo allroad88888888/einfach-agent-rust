@@ -57,7 +57,8 @@ fn undo_after_a_spawn_turn_leaves_no_trace_in_the_next_real_request() {
         &mut session,
         &mut ctx,
         "firstturn please delegate to a helper SECRET_ALPHA",
-    );
+    )
+    .expect("first turn should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(session.live_agents().len(), 2, "root + 一个子");
     assert!(!session.messages().is_empty());
@@ -81,7 +82,8 @@ fn undo_after_a_spawn_turn_leaves_no_trace_in_the_next_real_request() {
         &mut session,
         &mut ctx,
         "secondturn totally unrelated question",
-    );
+    )
+    .expect("second turn should not be a source failure");
     assert_eq!(status2, TurnStatus::Done { truncated: false });
 
     let second_request = server

@@ -34,7 +34,6 @@ pub(crate) enum ProviderRequest {
 pub(crate) struct PreparedProviderRequest {
     body: Vec<u8>,
     _leases: Vec<Box<dyn ResolvedImageLease>>,
-    private_references: Vec<Arc<str>>,
 }
 
 impl ProviderRequest {
@@ -67,7 +66,6 @@ impl ProviderRequest {
             Self::Encoded(body) => Ok(PreparedProviderRequest {
                 body,
                 _leases: Vec::new(),
-                private_references: Vec::new(),
             }),
             Self::Deferred {
                 mut ingredients,
@@ -80,11 +78,6 @@ impl ProviderRequest {
 impl PreparedProviderRequest {
     pub(crate) fn body(&self) -> &[u8] {
         &self.body
-    }
-
-    /// Exact request-local values returned by successful uploads; never durable configuration.
-    pub(crate) fn private_references(&self) -> &[Arc<str>] {
-        &self.private_references
     }
 }
 
@@ -129,11 +122,9 @@ fn prepare_images(
     ensure_not_cancelled(cancel)?;
     replace_references(&mut ingredients.messages, &references, &leases, &handles);
     let body = encode(binding.provider.as_ref(), binding, ingredients);
-    let private_references = references.values().cloned().collect();
     Ok(PreparedProviderRequest {
         body,
         _leases: leases,
-        private_references,
     })
 }
 

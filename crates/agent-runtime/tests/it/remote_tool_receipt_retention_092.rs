@@ -37,7 +37,8 @@ fn submit(
             outcome: RemoteToolSubmitOutcome::Succeeded { content },
         },
         |decision| *acknowledgement.borrow_mut() = Some(decision),
-    );
+    )
+    .expect("remote result submission should not be a source failure");
     acknowledgement
         .into_inner()
         .expect("actor must acknowledge")
@@ -63,7 +64,8 @@ fn terminal_ledger_is_capped_and_eviction_is_honest() {
         let call_id = format!("cap-{index}");
         let mut session = Session::new(AgentId::root());
         assert_eq!(
-            run_turn(&mut session, &mut ctx, "render"),
+            run_turn(&mut session, &mut ctx, "render")
+                .expect("remote dispatch should not be a source failure"),
             TurnStatus::ToolsPending
         );
         latest_registered_at = Some(ctx.remote_tool_status().active[0].registered_at);

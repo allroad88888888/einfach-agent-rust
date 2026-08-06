@@ -77,19 +77,19 @@ fn missing_named_profile_fails_before_provider_start() {
     let mut ctx = build(Arc::new(DeepSeek));
     let (tx, _) = sync_channel(1);
 
-    let event = match start(&session, &mut ctx, tx, child.clone(), Epoch::START) {
-        Err(event) => event,
+    let failure = match start(&session, &mut ctx, tx, child.clone(), Epoch::START) {
+        Err(failure) => failure,
         Ok(_) => panic!("unconfigured profile must not start an HTTP call"),
     };
 
     assert!(matches!(
-        event,
-        Event::ProviderFailed {
+        failure,
+        StartFailure::Event(Event::ProviderFailed {
             agent,
             epoch: Epoch::START,
             class: ErrorClass::Unknown,
             ..
-        } if agent == child
+        }) if agent == child
     ));
 }
 
@@ -115,8 +115,7 @@ fn call_cancel_latch_survives_a_later_session_flag_reset() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_sanitized_deltas: false,
-        redact_provider_errors: false,
+        replay_terminal_deltas: false,
         cancel_token: Arc::clone(&call_cancel),
     };
 
@@ -148,8 +147,7 @@ fn finish_uses_start_binding_after_default_switch() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_sanitized_deltas: false,
-        redact_provider_errors: false,
+        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     };
     ctx.switch_provider(
@@ -173,8 +171,8 @@ fn finish_uses_start_binding_after_default_switch() {
             completion: 0,
             cached: None,
         },
-        Vec::new(),
-    );
+    )
+    .expect("an ordinary provider failure should remain a session event");
 
     assert!(matches!(
         event,
@@ -210,8 +208,7 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_sanitized_deltas: false,
-        redact_provider_errors: false,
+        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     };
 
@@ -234,8 +231,8 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
             completion: 10,
             cached: Some(64),
         },
-        Vec::new(),
-    );
+    )
+    .expect("an ordinary provider completion should remain a session event");
 
     assert!(matches!(event, Event::ProviderDone { agent, .. } if agent == root));
     assert_ne!(old_scope, new_scope);

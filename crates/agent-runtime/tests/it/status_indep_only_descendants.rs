@@ -105,7 +105,8 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
         &mut session,
         &mut ctx,
         "kickoff-scope two branches, the left one goes deeper",
-    );
+    )
+    .expect("status query should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

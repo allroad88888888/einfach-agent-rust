@@ -62,8 +62,7 @@ fn call(ctx: &RunnerCtx, attempt: ProviderAttemptId) -> ProviderCall {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_sanitized_deltas: false,
-        redact_provider_errors: false,
+        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     }
 }
@@ -94,7 +93,6 @@ fn stale_messages_cannot_touch_same_agent_retry_in_same_epoch() {
                 completion: 0,
                 cached: None,
             },
-            Vec::new(),
         ),
         ProviderMessage::preparation_failed(
             agent.clone(),
@@ -105,7 +103,7 @@ fn stale_messages_cannot_touch_same_agent_retry_in_same_epoch() {
     ];
 
     for message in messages {
-        provider_message::land(&mut ctx, &mut calls, &mut pending, message);
+        assert!(provider_message::land(&mut ctx, &mut calls, &mut pending, message).is_none());
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].attempt, current);
         assert!(pending.is_empty());

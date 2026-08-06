@@ -60,7 +60,8 @@ fn collecting_a_failed_background_child_yields_an_error_result_and_the_turn_goes
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个后台的，等会儿去领");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个后台的，等会儿去领")
+        .expect("child failure is represented in the turn status");
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
     assert_eq!(

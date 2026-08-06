@@ -133,28 +133,28 @@ fn fixtures_json_matches_committed_snapshot() {
 /// 穷举覆盖的直接实检（issue 032 验收原文「`SessionEvent` 全部变体在 fixtures
 /// 里各至少一个样本」）。`cast_sample` 的穷举 match 保证「变体存在就必须处理」，
 /// 但保证不了「骨架数组本身没有手抖漏一个、错重一个」——这条测试补的正是这个
-/// 缺口：16 个变体、16 个样本、互不相同（048 加了 `AgentTree`，054 加了
+/// 缺口：17 个变体、17 个样本、互不相同（048 加了 `AgentTree`，054 加了
 /// `OrphanedChild`）。变体数变了，先确认 `fixtures::cast_sample` 也跟着改了，
-/// 再改这里的 `16`。
+/// 再改这里的 `17`。
 #[test]
 fn sample_events_cover_every_variant_at_least_once() {
     let samples = sample_session_events();
     assert_eq!(
         samples.len(),
-        16,
-        "SessionEvent 目前有 16 个变体，样本数应该跟它一一对应"
+        17,
+        "SessionEvent 目前有 17 个变体，样本数应该跟它一一对应"
     );
 
     let kinds: BTreeSet<&'static str> = samples.iter().map(session_event_kind).collect();
     assert_eq!(
         kinds.len(),
-        16,
+        17,
         "样本里有重复变体，说明漏了另一个——样本种类：{kinds:?}"
     );
 }
 
-/// 给样本判别一个 `&'static str`，只给上面那条覆盖率测试用：判断「16 个样本是
-/// 不是 16 种不同的变体」而不是「凑巧 16 条但有重复」。穷举、无 `_`——新增变体
+/// 给样本判别一个 `&'static str`，只给上面那条覆盖率测试用：判断「17 个样本是
+/// 不是 17 种不同的变体」而不是「凑巧 17 条但有重复」。穷举、无 `_`——新增变体
 /// 这里也编译不过，第三处强制更新点。
 fn session_event_kind(ev: &crate::SessionEvent) -> &'static str {
     use crate::SessionEvent::*;
@@ -175,5 +175,6 @@ fn session_event_kind(ev: &crate::SessionEvent) -> &'static str {
         Gap { .. } => "Gap",
         AgentTree(_) => "AgentTree",
         OrphanedChild { .. } => "OrphanedChild",
+        TransientSourceFailure(_) => "TransientSourceFailure",
     }
 }

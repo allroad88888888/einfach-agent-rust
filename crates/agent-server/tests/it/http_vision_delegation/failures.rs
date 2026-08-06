@@ -5,16 +5,16 @@ use super::fixture::{OBSERVATION, Scenario};
 use crate::image_upload_upstream::ChatReply;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn retryable_kimi_failure_returns_one_sanitized_child_outcome_without_retrying() {
-    assert_child_failure(ChatReply::Status(503), true).await;
+async fn retryable_kimi_failure_keeps_the_raw_provider_failure_outside_the_parent_outcome() {
+    assert_child_failure(ChatReply::Status(503), true, true).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn empty_kimi_completion_returns_one_non_retryable_child_outcome() {
-    assert_child_failure(ChatReply::Empty, false).await;
+    assert_child_failure(ChatReply::Empty, false, false).await;
 }
 
-async fn assert_child_failure(reply: ChatReply, retryable: bool) {
+async fn assert_child_failure(reply: ChatReply, retryable: bool, exposes_provider_failure: bool) {
     let scenario = Scenario::run(reply).await;
 
     assert_eq!(scenario.root.request_count(), 2, "root must resume once");
@@ -39,10 +39,13 @@ async fn assert_child_failure(reply: ChatReply, retryable: bool) {
         assert!(!body.contains("attachment://"));
     }
     assert!(!scenario.root_bodies()[1].contains(OBSERVATION));
-    scenario.assert_provider_material_absent(&scenario.journal);
     assert!(scenario.journal.contains("attachment://"));
     let frames = serde_json::to_string(&scenario.frames).expect("serialize SSE frames");
-    scenario.assert_provider_material_absent(&frames);
+    assert_eq!(
+        frames.contains("vision-upstream-secret"),
+        exposes_provider_failure,
+        "raw provider failure should not be rewritten by agent-runtime"
+    );
     assert!(!frames.contains("attachment://"));
     assert!(scenario.frames.iter().any(|frame| matches!(
         &frame.event,

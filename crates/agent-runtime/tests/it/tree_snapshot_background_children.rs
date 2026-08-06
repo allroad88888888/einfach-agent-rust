@@ -23,11 +23,11 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use agent_core::{AgentActivity, AgentId, AgentLimits, AgentTree, Session, TurnStatus};
-use agent_runtime::{run_turn, RunnerCtx, ToolTable};
+use agent_runtime::{RunnerCtx, ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir, wire_tool_name, Route,
-    RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
+    wire_tool_name,
 };
 
 /// 两个后台子都跑这么久——比 root 的后续几跳（零延迟）慢得多，于是「root 已经
@@ -115,7 +115,8 @@ fn two_background_children_are_on_the_tree_at_once_while_the_parent_thinks() {
     let (mut ctx, trees) = collect_trees(ctx);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 两个后台子，随后各领各的");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 两个后台子，随后各领各的")
+        .expect("ordinary background children are not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let trees = trees.borrow();
@@ -205,7 +206,8 @@ fn a_reaped_orphan_disappears_from_the_pushed_tree() {
     let (mut ctx, trees) = collect_trees(ctx);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子然后不管它");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子然后不管它")
+        .expect("ordinary background child is not a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let trees = trees.borrow();

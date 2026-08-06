@@ -11,6 +11,7 @@ use agent_core::{AgentId, Event, Session, ToolCallId, TurnStatus};
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::runner;
+use crate::transient_source_failure::TransientSourceFailure;
 use crate::{RemoteToolTerminalOrigin, RemoteToolTerminalStatus};
 
 /// 远端宿主确认工具执行的两种结果。
@@ -39,6 +40,14 @@ impl fmt::Display for RemoteToolResultError {
 
 impl std::error::Error for RemoteToolResultError {}
 
+/// A remote-tool continuation either rejected the host callback or exposed the original
+/// transient-source provider failure.
+#[derive(Debug)]
+pub enum ResolveRemoteToolError {
+    InvalidResult(RemoteToolResultError),
+    TransientSource(TransientSourceFailure),
+}
+
 /// 校验并消费一个等待中的远端工具调用，然后从该结果恢复事件泵。
 pub fn resolve_remote_tool(
     session: &mut Session,
@@ -46,20 +55,22 @@ pub fn resolve_remote_tool(
     agent: AgentId,
     call_id: ToolCallId,
     output: RemoteToolOutput,
-) -> Result<TurnStatus, RemoteToolResultError> {
+) -> Result<TurnStatus, ResolveRemoteToolError> {
     if ctx.pending_remote_tools.pending.iter().any(|pending| {
         pending.agent == agent
             && pending.call_id == call_id
             && crate::transient_source_policy::is_transient_source(&pending.request.tool)
     }) {
-        return Err(RemoteToolResultError { agent, call_id });
+        return Err(ResolveRemoteToolError::InvalidResult(
+            RemoteToolResultError { agent, call_id },
+        ));
     }
-    let pending = ctx
-        .take_remote_tool(&agent, &call_id)
-        .ok_or_else(|| RemoteToolResultError {
+    let pending = ctx.take_remote_tool(&agent, &call_id).ok_or_else(|| {
+        ResolveRemoteToolError::InvalidResult(RemoteToolResultError {
             agent: agent.clone(),
             call_id: call_id.clone(),
-        })?;
+        })
+    })?;
     let (event, output_len, is_error, terminal_status) = match output {
         RemoteToolOutput::Success(content) => (
             Event::ToolResult {
@@ -87,36 +98,35 @@ pub fn resolve_remote_tool(
     let event_agent = pending.agent.clone();
     let event_call = pending.call_id.clone();
     let event_tool = pending.request.tool.clone();
-    Ok(runner::resume_after_first_commit(
-        session,
-        ctx,
-        event,
-        move |ctx| {
-            ctx.record_remote_tool_terminal(
-                &pending,
-                terminal_status,
-                RemoteToolTerminalOrigin::Host,
-                None,
-                None,
-            );
-            ctx.emit(
-                &event_agent,
-                RunnerEvent::ToolExecuted {
-                    call_id: event_call,
-                    tool: event_tool,
-                    output_len,
-                    is_error,
-                },
-            );
-        },
-    ))
+    runner::resume_after_first_commit(session, ctx, event, move |ctx| {
+        ctx.record_remote_tool_terminal(
+            &pending,
+            terminal_status,
+            RemoteToolTerminalOrigin::Host,
+            None,
+            None,
+        );
+        ctx.emit(
+            &event_agent,
+            RunnerEvent::ToolExecuted {
+                call_id: event_call,
+                tool: event_tool,
+                output_len,
+                is_error,
+            },
+        );
+    })
+    .map_err(ResolveRemoteToolError::TransientSource)
 }
 
 /// 中止 Web 宿主尚未完成的调用，并把取消事件送回同一条事件泵。
 ///
 /// actor 处理 `Cancel` 时既已翻转共享取消标记，又会调用此函数，因此等待 Web
 /// 回传的空闲会话也能立即结束；迟到结果会因等待槽已清空被安全拒绝。
-pub fn cancel_pending_remote_tools(session: &mut Session, ctx: &mut RunnerCtx) -> TurnStatus {
+pub fn cancel_pending_remote_tools(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.discard_remote_tools();
     runner::resume(
         session,

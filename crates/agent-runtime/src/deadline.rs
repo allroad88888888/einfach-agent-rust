@@ -33,6 +33,7 @@ use crate::event::RunnerEvent;
 use crate::provider_call::ProviderCall;
 use crate::runner;
 use crate::subtree::Subtree;
+use crate::transient_source_failure::TransientSourceFailure;
 
 /// 泵里的一次截止线扫描：到点的 provider 调用和到点的远端等待都翻成待办事件。
 ///
@@ -44,7 +45,7 @@ pub(crate) fn sweep(
     calls: &mut Vec<ProviderCall>,
     subtree: &mut Subtree,
     pending: &mut std::collections::VecDeque<Event>,
-) {
+) -> Option<TransientSourceFailure> {
     let now = Instant::now();
     let mut i = 0;
     while i < calls.len() {
@@ -60,11 +61,10 @@ pub(crate) fn sweep(
         if call.one_shot {
             ctx.transient_sources
                 .purge_agent_epoch(&call.agent, call.epoch);
-            pending.push_back(
-                crate::transient_source_completion::provider_completion_failed(
-                    ctx, call.agent, call.epoch,
-                ),
-            );
+            return Some(TransientSourceFailure::ProviderDeadlineExceeded {
+                agent: call.agent,
+                epoch: call.epoch,
+            });
         } else {
             pending.push_back(Event::Timeout {
                 agent: call.agent,
@@ -74,13 +74,15 @@ pub(crate) fn sweep(
         }
     }
     pending.extend(expired(ctx, now));
+    None
 }
 
 /// 宿主侧入口：空闲等命令等到远端截止线了，调它一次（060）。
 ///
-/// `None` = 这一刻没有任何槽过期（提前醒了 / 竞态里刚好被真回传收敛了），宿主
-/// 照旧回去等命令。`Some(status)` = 至少一个槽被判失败并驱动了事件泵，返回的是
-/// 泵停下来时的轮次状态，宿主按自己那套处理（`agent-server` 的
+/// `Ok(None)` = 这一刻没有任何槽过期（提前醒了 / 竞态里刚好被真回传收敛了），宿主
+/// 照旧回去等命令。`Ok(Some(status))` = 至少一个槽被判失败并驱动了事件泵，返回的是
+/// 泵停下来时的轮次状态，宿主按自己那套处理；`Err` 保留 transient-source provider
+/// 调用的原始失败事实（`agent-server` 的
 /// `commands::handle_remote_tool_timeout`）。
 ///
 /// 多个槽同时过期时逐个恢复：每次 [`runner::resume`] 把泵驱动到静止，剩下的槽
@@ -88,13 +90,13 @@ pub(crate) fn sweep(
 pub fn sweep_remote_tool_deadlines(
     session: &mut Session,
     ctx: &mut RunnerCtx,
-) -> Option<TurnStatus> {
+) -> Result<Option<TurnStatus>, TransientSourceFailure> {
     let events = expired(ctx, Instant::now());
     let mut status = None;
     for event in events {
-        status = Some(runner::resume(session, ctx, event));
+        status = Some(runner::resume(session, ctx, event)?);
     }
-    status
+    Ok(status)
 }
 
 /// 到点的远端等待槽 → 一条 `is_error` 的工具结果事件。

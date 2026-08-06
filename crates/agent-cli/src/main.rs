@@ -206,7 +206,9 @@ fn main() {
     // 会话是无害的空操作，不需要在这里分支判断「是不是恢复出来的」。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
     if recovered_source_needs_fail_close {
-        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+        if let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx) {
+            eprintln!("{failure:?}");
+        }
     }
 
     let cancel = ctx.cancel_flag();

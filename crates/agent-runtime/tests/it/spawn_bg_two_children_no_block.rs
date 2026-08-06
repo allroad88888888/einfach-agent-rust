@@ -78,7 +78,8 @@ fn two_background_children_run_while_the_parent_keeps_going_and_never_write_back
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 两个后台子");
+    let status = run_turn(&mut session, &mut ctx, "kickoff 两个后台子")
+        .expect("background children should not be a source failure");
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
 

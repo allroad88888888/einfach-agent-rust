@@ -219,5 +219,21 @@ export const events = [
         }
       }
     }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "transient_source_failure",
+      "data": {
+        "epoch": 7,
+        "cause": {
+          "type": "transport_http",
+          "data": {
+            "status": 502,
+            "body": "upstream diagnostic"
+          }
+        }
+      }
+    }
   }
 ] as const;

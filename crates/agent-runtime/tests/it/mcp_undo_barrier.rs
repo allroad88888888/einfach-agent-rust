@@ -29,7 +29,8 @@ fn run_one_mcp_turn(dir: &std::path::Path, tool: &str, read_only: bool) -> Sessi
         &script,
     );
     let mut session = Session::new(AgentId::root());
-    let status = run_turn(&mut session, &mut ctx, "调个 MCP 工具");
+    let status = run_turn(&mut session, &mut ctx, "调个 MCP 工具")
+        .expect("MCP call should not be a source failure");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },

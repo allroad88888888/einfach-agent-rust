@@ -1,9 +1,4 @@
 //! P0 boundary: transient source bytes may enter one provider request, never durable/public state.
-
-use std::cell::RefCell;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use agent_core::{AgentId, ContentBlock, Reversibility, Session, ToolCallId, ToolSpec, TurnStatus};
 use agent_runtime::{
     RemoteToolClaimDecision, RemoteToolClaimRequest, RemoteToolSubmitDecision,
@@ -11,6 +6,9 @@ use agent_runtime::{
     run_turn, submit_remote_tool_result,
 };
 use serde_json::{Value, json};
+use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::support::{
     ScriptedResponse, build_ctx_with_observer, build_ctx_with_store, spawn_recording_server,
@@ -147,7 +145,8 @@ fn raw_source_is_one_shot_and_terminal_candidate_stays_private() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "inspect configuration"),
+        run_turn(&mut session, &mut ctx, "inspect configuration")
+            .expect("initial source request is not a terminal source failure"),
         TurnStatus::ToolsPending
     );
     let status = format!("{:#?}", ctx.remote_tool_status());
@@ -181,7 +180,8 @@ fn raw_source_is_one_shot_and_terminal_candidate_stays_private() {
             },
         },
         |decision| *ack.borrow_mut() = Some(decision),
-    );
+    )
+    .expect("valid source continuation is not a terminal source failure");
     assert_eq!(done, Some(TurnStatus::Done { truncated: false }));
     assert!(matches!(
         ack.into_inner(),
@@ -217,7 +217,8 @@ fn raw_source_is_one_shot_and_terminal_candidate_stays_private() {
 
     session.begin_turn();
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "continue safely"),
+        run_turn(&mut session, &mut ctx, "continue safely")
+            .expect("ordinary continuation is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
     drop(ctx);
@@ -245,7 +246,8 @@ fn raw_echo_final_is_private_and_cannot_be_reused() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "inspect configuration"),
+        run_turn(&mut session, &mut ctx, "inspect configuration")
+            .expect("initial source request is not a terminal source failure"),
         TurnStatus::ToolsPending
     );
     let claim = claim_remote_tool(
@@ -272,7 +274,8 @@ fn raw_echo_final_is_private_and_cannot_be_reused() {
             },
         },
         |_| {},
-    );
+    )
+    .expect("invalid final source reply is represented by a terminal placeholder");
     assert_eq!(status, Some(TurnStatus::Done { truncated: false }));
     assert_absent(&serde_json::to_string(&session.primitives()).unwrap());
     assert_absent(&format!("{:#?}", session.history()));
@@ -285,7 +288,8 @@ fn raw_echo_final_is_private_and_cannot_be_reused() {
     // placeholder, and the consumed overlay cannot enter its provider request again.
     session.begin_turn();
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "must not recover raw"),
+        run_turn(&mut session, &mut ctx, "must not recover raw")
+            .expect("ordinary recovery turn is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
     let bodies = bodies.lock().unwrap();

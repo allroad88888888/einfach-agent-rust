@@ -10,17 +10,17 @@ use crate::event::RunnerEvent;
 use crate::guard;
 use crate::image_preparation_failure::ImagePreparationFailure;
 use crate::provider_call::ProviderCall;
+use crate::transient_source_failure::TransientSourceFailure;
 
 /// 落地：把 IO 线程的终态翻译成一个 loop 事件。
 pub(crate) fn finish(
     ctx: &mut RunnerCtx,
     call: ProviderCall,
     result: Result<StreamOutcome, TransportError>,
-    mut blocks: Vec<ContentBlock>,
-    mut stop: StopReason,
+    blocks: Vec<ContentBlock>,
+    stop: StopReason,
     usage: TokenUsage,
-    private_references: Vec<Arc<str>>,
-) -> Event {
+) -> Result<Event, TransientSourceFailure> {
     let ProviderCall {
         agent,
         epoch,
@@ -31,11 +31,9 @@ pub(crate) fn finish(
         adjustments,
         prefix,
         one_shot,
-        replay_sanitized_deltas,
-        redact_provider_errors,
+        replay_terminal_deltas,
         ..
     } = call;
-    crate::vision_output_privacy::scrub_terminal(&mut blocks, &mut stop, &private_references);
     if one_shot {
         return crate::transient_source_completion::finish(
             ctx,
@@ -55,7 +53,7 @@ pub(crate) fn finish(
     }
     match result {
         Ok(StreamOutcome::Finished) => {
-            if replay_sanitized_deltas {
+            if replay_terminal_deltas {
                 replay_deltas(ctx, &agent, &blocks);
             }
             guard::report_success(
@@ -67,7 +65,7 @@ pub(crate) fn finish(
                 predicted_cache,
                 adjustments.clone(),
             );
-            Event::ProviderDone {
+            Ok(Event::ProviderDone {
                 agent,
                 epoch,
                 blocks,
@@ -75,41 +73,35 @@ pub(crate) fn finish(
                 usage,
                 prefix,
                 adjustments,
-            }
+            })
         }
-        Ok(StreamOutcome::Cancelled) => Event::Cancel { agent },
-        Ok(StreamOutcome::Broken(message)) => transport_trouble(
+        Ok(StreamOutcome::Cancelled) => Ok(Event::Cancel { agent }),
+        Ok(StreamOutcome::Broken(message)) => Ok(transport_trouble(
             ctx,
             agent,
             epoch,
             ErrorClass::Retryable,
-            scrub_provider_text(message, &private_references),
-            redact_provider_errors,
-        ),
-        Err(TransportError::Connect { message, .. }) => transport_trouble(
+            message,
+        )),
+        Err(TransportError::Connect { message, .. }) => Ok(transport_trouble(
             ctx,
             agent,
             epoch,
             ErrorClass::Retryable,
-            scrub_provider_text(message, &private_references),
-            redact_provider_errors,
-        ),
+            message,
+        )),
         Err(TransportError::Http { status, body }) => {
             let class = binding.provider.classify(status, &body);
-            if redact_provider_errors {
-                return private_provider_failure(ctx, agent, epoch, class);
-            }
-            let body = scrub_provider_text(body, &private_references);
             ctx.emit(
                 &agent,
                 RunnerEvent::TransportTrouble(Arc::from(format!("HTTP {status}: {body}"))),
             );
-            Event::ProviderFailed {
+            Ok(Event::ProviderFailed {
                 agent,
                 epoch,
                 class,
                 message: Arc::from(body),
-            }
+            })
         }
     }
 }
@@ -128,25 +120,25 @@ fn replay_deltas(ctx: &mut RunnerCtx, agent: &agent_core::AgentId, blocks: &[Con
     }
 }
 
-fn scrub_provider_text(message: String, private_references: &[Arc<str>]) -> String {
-    crate::vision_output_privacy::scrub_text(&message, private_references)
-}
-
 /// IO 线程 panic 了（provider message 的 `Gone` 终态）——没留下任何终态消息。
-pub(crate) fn thread_gone(ctx: &mut RunnerCtx, call: ProviderCall) -> Event {
+pub(crate) fn thread_gone(
+    ctx: &mut RunnerCtx,
+    call: ProviderCall,
+) -> Result<Event, TransientSourceFailure> {
     if call.one_shot {
         ctx.transient_sources
             .purge_agent_epoch(&call.agent, call.epoch);
-        return crate::transient_source_completion::provider_completion_failed(
-            ctx, call.agent, call.epoch,
-        );
+        return Err(TransientSourceFailure::ProviderThreadGone {
+            agent: call.agent,
+            epoch: call.epoch,
+        });
     }
-    Event::ProviderFailed {
+    Ok(Event::ProviderFailed {
         agent: call.agent,
         epoch: call.epoch,
         class: ErrorClass::Retryable,
         message: Arc::from("IO 线程异常退出（未留下终态消息）"),
-    }
+    })
 }
 
 pub(crate) fn preparation_failed(
@@ -185,11 +177,7 @@ fn transport_trouble(
     epoch: Epoch,
     class: ErrorClass,
     message: String,
-    redact_provider_errors: bool,
 ) -> Event {
-    if redact_provider_errors {
-        return private_provider_failure(ctx, agent, epoch, class);
-    }
     ctx.emit(
         &agent,
         RunnerEvent::TransportTrouble(Arc::from(message.as_str())),
@@ -199,21 +187,5 @@ fn transport_trouble(
         epoch,
         class,
         message: Arc::from(message),
-    }
-}
-
-fn private_provider_failure(
-    ctx: &mut RunnerCtx,
-    agent: agent_core::AgentId,
-    epoch: Epoch,
-    class: ErrorClass,
-) -> Event {
-    const MESSAGE: &str = "private execution profile provider request failed";
-    ctx.emit(&agent, RunnerEvent::TransportTrouble(Arc::from(MESSAGE)));
-    Event::ProviderFailed {
-        agent,
-        epoch,
-        class,
-        message: Arc::from(MESSAGE),
     }
 }

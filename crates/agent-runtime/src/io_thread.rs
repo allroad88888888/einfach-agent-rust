@@ -92,7 +92,6 @@ pub(crate) fn spawn(
                 return;
             }
         };
-        let private_references = prepared.private_references().to_vec();
         let mut acc = binding.provider.accumulator();
         let result = binding.client.post_stream(
             &binding.endpoint,
@@ -121,7 +120,6 @@ pub(crate) fn spawn(
             blocks,
             stop,
             usage,
-            private_references,
         ));
     });
 }

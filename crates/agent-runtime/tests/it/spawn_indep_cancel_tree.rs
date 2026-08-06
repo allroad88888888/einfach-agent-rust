@@ -120,7 +120,8 @@ fn cancel_mid_flight_cuts_every_child_and_the_server_sees_no_further_connections
         &mut session,
         &mut ctx,
         "cancelkick spawn three hanging workers",
-    );
+    )
+    .expect("cancellation is not a source failure");
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));

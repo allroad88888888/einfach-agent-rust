@@ -42,7 +42,8 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
     let mut session = Session::new(AgentId::root());
 
     // 第一步：轮次派出远端调用就地停住（既有行为，不变）。
-    let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片");
+    let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片")
+        .expect("remote dispatch should not be a source failure");
     assert_eq!(
         parked,
         TurnStatus::ToolsPending,
@@ -61,7 +62,9 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
     );
 
     // 第三步：到点扫一次 —— 槽被判失败，事件泵接着把这一轮跑完。
-    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx).expect("到点该有槽过期");
+    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx)
+        .expect("deadline sweep should not be a source failure")
+        .expect("到点该有槽过期");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },

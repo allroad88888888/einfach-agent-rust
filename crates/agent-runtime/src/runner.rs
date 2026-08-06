@@ -63,6 +63,7 @@ use crate::persist;
 use crate::provider_call::ProviderCall;
 use crate::provider_message;
 use crate::subtree::Subtree;
+use crate::transient_source_failure::TransientSourceFailure;
 
 /// actor 线程轮询统一 channel 的间隔。不需要跟超时预算同量级，只要比测试用的
 /// 超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
@@ -73,9 +74,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// `session` 原地推进，返回值只是 **root** 终态的一份拷贝，方便调用方立即判断
 /// 结果——真正的历史/状态变化都已经写进 `session`（并已经同步进持久化后端）。
 ///
-/// **公开签名从 012 起一个字没变**，029 也不许变：`agent-server` 的 session actor
-/// （030）接在它上面，031 的 HTTP/SSE 层又接在 actor 上面。泵是这个函数的内部
-/// 形状，不是它的契约。
+/// 正常收尾的状态仍在 `Ok` 中；如果一条消耗 transient source 的 provider 调用
+/// 无法收尾，原始失败事实在 `Err` 中交给嵌入宿主。宿主决定错误策略，泵只负责
+/// 释放本轮的 transient source 状态。
 ///
 /// 取消标志只在这里清零一次（每轮开始各清一次，理由跟 022 的 `agent-cli::
 /// repl::run` 一致：上一轮遗留的标志不该提前打断这一轮还没开始的请求）；
@@ -84,7 +85,11 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// **调用方必须先 `session.begin_turn()`**（除了会话的第一轮，`Session::new`
 /// 已经是 `Idle`）——`Session::begin_turn` 是显式命令（026 判断 13：turn 边界
 /// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
-pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
+pub fn run_turn(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    user_input: &str,
+) -> Result<TurnStatus, TransientSourceFailure> {
     run_turn_with_images(session, ctx, user_input, Vec::new())
 }
 
@@ -92,13 +97,13 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
 ///
 /// 图片引用进入这里时只是宿主登记好的不可变 attachment handle；真正的
 /// 租约解析与上传由 runtime IO 线程在 provider 请求准备阶段经既有同步上传 API 完成，
-/// 不阻塞事件泵。保留 [`run_turn`] 的原签名，使没有图片的所有既有调用逐字不变。
+/// 不阻塞事件泵。它和 [`run_turn`] 共用相同的终态与错误返回约定。
 pub fn run_turn_with_images(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     user_input: &str,
     images: Vec<UserImage>,
-) -> TurnStatus {
+) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
     resume(
@@ -116,7 +121,11 @@ pub fn run_turn_with_images(
 ///
 /// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
 /// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
-pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event) -> TurnStatus {
+pub(crate) fn resume(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    initial: Event,
+) -> Result<TurnStatus, TransientSourceFailure> {
     resume_after_first_commit(session, ctx, initial, |_| {})
 }
 
@@ -127,7 +136,7 @@ pub(crate) fn resume_after_first_commit(
     ctx: &mut RunnerCtx,
     initial: Event,
     after_commit: impl FnOnce(&mut RunnerCtx),
-) -> TurnStatus {
+) -> Result<TurnStatus, TransientSourceFailure> {
     // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
     // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
     // 断开——在飞与否由下面这张表回答，不是由 channel 的连接状态回答。
@@ -172,6 +181,9 @@ pub(crate) fn resume_after_first_commit(
                     // 给的顺序排进同一批待办。
                     Dispatched::Events(list) => pending.extend(list),
                     Dispatched::Call(call) => calls.push(call),
+                    Dispatched::TransientSourceFailure(failure) => {
+                        return Err(abort_after_transient_source_failure(ctx, &calls, failure));
+                    }
                     Dispatched::McpCall(call) => mcp_calls.push(call),
                     // 会话级取消：在飞的流由取消标志斩断（它们各自会以
                     // `StreamOutcome::Cancelled` 回来），队列里还没喂进去的
@@ -210,7 +222,7 @@ pub(crate) fn resume_after_first_commit(
             // Preparation failures are request-local routing metadata. Vision child slots have
             // already consumed theirs; root and generic failures must not cross a run boundary.
             ctx.clear_image_preparation_failures();
-            return status;
+            return Ok(status);
         }
 
         // C. 到点的在飞调用：注入 `Timeout` 事件，回 A 让转移表决定重试还是失败。
@@ -220,15 +232,34 @@ pub(crate) fn resume_after_first_commit(
         // MCP 调用没有泵级截止线——`tools/call` 自带客户端侧超时（`ctx.mcp_timeout`
         // 传给背景线程），线程必在超时内报回一条 `McpDone`（成功/错误/超时都算），
         // 所以 MCP 凭据一定会被 D 排空，不需要在这里扫。
-        deadline::sweep(ctx, &mut calls, &mut subtree, &mut pending);
+        if let Some(failure) = deadline::sweep(ctx, &mut calls, &mut subtree, &mut pending) {
+            return Err(abort_after_transient_source_failure(ctx, &calls, failure));
+        }
         speak_for_root_on_cancel(session, ctx, &root, &calls, &mut pending, &mut cancel_seen);
         if !pending.is_empty() {
             continue;
         }
 
         // D. 等一条 IO 消息。
-        receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending);
+        if let Some(failure) = receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending) {
+            return Err(abort_after_transient_source_failure(ctx, &calls, failure));
+        }
     }
+}
+
+/// Release all request-local state after a terminal transient-source failure and return its
+/// original reason unchanged. Presentation, classification, and error policy are host concerns.
+fn abort_after_transient_source_failure(
+    ctx: &mut RunnerCtx,
+    calls: &[ProviderCall],
+    failure: TransientSourceFailure,
+) -> TransientSourceFailure {
+    for call in calls {
+        call.cancel();
+    }
+    ctx.transient_sources.purge_all();
+    ctx.clear_image_preparation_failures();
+    failure
 }
 
 /// 048：一次 `session.step` + persist 之后重算 `agent_tree()`，跟 `last_tree`
@@ -303,13 +334,11 @@ fn receive(
     calls: &mut Vec<ProviderCall>,
     mcp_calls: &mut Vec<McpCall>,
     pending: &mut VecDeque<Event>,
-) {
+) -> Option<TransientSourceFailure> {
     match rx.recv_timeout(POLL_INTERVAL) {
         // Provider replies are claimed by `(agent, attempt)` in one place. Late messages from an
         // abandoned attempt are expected and disappear without touching its same-agent retry.
-        Ok(IoMsg::Provider(message)) => {
-            provider_message::land(ctx, calls, pending, message);
-        }
+        Ok(IoMsg::Provider(message)) => provider_message::land(ctx, calls, pending, message),
         // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
         // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
         // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
@@ -323,10 +352,11 @@ fn receive(
             if let Some(call) = mcp_call::take(mcp_calls, &agent, &call_id) {
                 pending.push_back(mcp_call::finish(ctx, call, content, is_error));
             }
+            None
         }
-        Err(RecvTimeoutError::Timeout) => {}
+        Err(RecvTimeoutError::Timeout) => None,
         // 结构上不可达：泵自己握着一份发送端，`rx` 不会断。当成一次空转，
         // 下一圈 C 的截止线扫描会兜住任何真的没人再说话的情况。
-        Err(RecvTimeoutError::Disconnected) => {}
+        Err(RecvTimeoutError::Disconnected) => None,
     }
 }

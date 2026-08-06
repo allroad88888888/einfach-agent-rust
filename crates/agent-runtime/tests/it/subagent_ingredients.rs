@@ -7,7 +7,7 @@
 
 use crate::support;
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::support::routed::{Route, RoutedServer};
 
@@ -49,7 +49,8 @@ fn a_child_sees_only_the_tools_it_was_given_plus_the_fixed_subagent_system() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "找个人去读文件"),
+        run_turn(&mut session, &mut ctx, "找个人去读文件")
+            .expect("ordinary child execution is not a source failure"),
         TurnStatus::Done { truncated: false }
     );
 

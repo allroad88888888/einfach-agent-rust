@@ -31,7 +31,11 @@ pub(super) fn submit(
     let status = submit_remote_tool_result(session, ctx, request, |decision| {
         let _ = reply.send(decision);
     });
-    if matches!(status, Some(TurnStatus::Failed(Failure::Cancelled))) {
-        commands::erase_cancelled_turn(session, ctx, events);
+    match status {
+        Ok(Some(TurnStatus::Failed(Failure::Cancelled))) => {
+            commands::erase_cancelled_turn(session, ctx, events)
+        }
+        Ok(_) => {}
+        Err(failure) => commands::emit_transient_source_failure(events, failure),
     }
 }

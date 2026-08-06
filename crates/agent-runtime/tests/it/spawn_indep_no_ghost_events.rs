@@ -58,7 +58,8 @@ fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
         &mut session,
         &mut ctx,
         "kickoff6 spawn two children then wrap up",
-    );
+    )
+    .expect("spawn completion should not be a source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let events_at_return = events.borrow().len();
