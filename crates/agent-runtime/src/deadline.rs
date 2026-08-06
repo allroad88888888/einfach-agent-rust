@@ -32,6 +32,7 @@ use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::provider_call::ProviderCall;
 use crate::runner;
+use crate::subtree::Subtree;
 
 /// 泵里的一次截止线扫描：到点的 provider 调用和到点的远端等待都翻成待办事件。
 ///
@@ -40,6 +41,7 @@ use crate::runner;
 pub(crate) fn sweep(
     ctx: &mut RunnerCtx,
     calls: &mut Vec<ProviderCall>,
+    subtree: &mut Subtree,
     pending: &mut std::collections::VecDeque<Event>,
 ) {
     let now = Instant::now();
@@ -50,6 +52,7 @@ pub(crate) fn sweep(
             continue;
         }
         let call = calls.remove(i);
+        subtree.record_provider_timeout(&call.agent);
         if call.one_shot {
             ctx.transient_sources
                 .purge_agent_epoch(&call.agent, call.epoch);

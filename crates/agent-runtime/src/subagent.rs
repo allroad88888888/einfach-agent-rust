@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use agent_core::vision::{VISION_INSPECT_TOOL, vision_inspect_spec};
 use agent_core::{AgentId, AgentLimits, Session, SystemChunk, ToolSpec};
 
 use crate::ctx::RunnerCtx;
@@ -45,13 +46,24 @@ pub(crate) fn system_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) ->
 /// 缓存就一次也命不中。过滤保序天然做到这一点，不需要再排一次。
 pub(crate) fn tools_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> Vec<ToolSpec> {
     match session.tools_allowed_of(agent) {
-        // root：不受子集约束，宿主的整张表。
-        None => ctx.tools.specs().to_vec(),
+        // root：宿主表 + 运行时受信任 binding 开启的视觉门面。即使宿主表误注入
+        // 同名声明，也先滤掉，只在 `vision` binding 存在时补 canonical 声明。
+        None => {
+            let mut specs = without_vision(ctx);
+            if crate::vision_tool::is_enabled(ctx) {
+                specs.push(vision_inspect_spec());
+            }
+            specs
+        }
         Some(allowed) => ctx
             .tools
             .specs()
             .iter()
-            .filter(|spec| allowed.iter().any(|name| **name == *spec.name))
+            // vision 是 root-only 门面，不属于可下放的普通工具子集。
+            .filter(|spec| {
+                &*spec.name != VISION_INSPECT_TOOL
+                    && allowed.iter().any(|name| **name == *spec.name)
+            })
             .cloned()
             .collect(),
     }
@@ -68,10 +80,20 @@ pub(crate) fn allowed_names(session: &Session, ctx: &RunnerCtx, agent: &AgentId)
             .tools
             .specs()
             .iter()
+            .filter(|spec| &*spec.name != VISION_INSPECT_TOOL)
             .map(|spec| Arc::clone(&spec.name))
             .collect(),
         Some(allowed) => allowed,
     }
+}
+
+fn without_vision(ctx: &RunnerCtx) -> Vec<ToolSpec> {
+    ctx.tools
+        .specs()
+        .iter()
+        .filter(|spec| &*spec.name != VISION_INSPECT_TOOL)
+        .cloned()
+        .collect()
 }
 
 /// 固定模板本体。上限数字来自会话的 [`AgentLimits`]（决策 20 的「数字参数」），

@@ -11,6 +11,7 @@ fn explicit_config(id: &str) -> ChildConfig {
     ChildConfig {
         tools_allowed: vec![Arc::from("builtin:view_image")],
         execution_profile: Some(ExecutionProfileId::new(id)),
+        ..ChildConfig::default()
     }
 }
 
@@ -90,6 +91,33 @@ fn undo_and_redo_remove_and_restore_the_same_profile() {
     assert!(matches!(session.redo_turn(), UndoReport::Applied { .. }));
     assert_eq!(session.execution_profile_of(&child), Some(profile));
     assert!(session.is_live(&child));
+}
+
+#[test]
+fn child_retry_override_is_atomic_with_the_trusted_profile() {
+    let root = AgentId::root();
+    let mut session = Session::new(root.clone());
+    let child = session
+        .spawn_child(
+            &root,
+            ChildConfig {
+                tools_allowed: Vec::new(),
+                execution_profile: Some(ExecutionProfileId::new("vision")),
+                max_retries: Some(0),
+            },
+        )
+        .expect("vision child");
+
+    assert!(session.primitives().iter().any(|(key, value)| {
+        key == &AtomKey::Agent(child.clone(), Slot::MaxRetries) && value == &AgentValue::U64(0)
+    }));
+    let spawn = session.history().entries().last().unwrap();
+    assert_eq!(spawn.meta.label, "spawn_child");
+    assert_eq!(spawn.changes.len(), 3);
+    assert!(spawn.changes.iter().any(|change| {
+        change.key == AtomKey::Agent(child.clone(), Slot::MaxRetries)
+            && change.next == AgentValue::U64(0)
+    }));
 }
 
 #[test]

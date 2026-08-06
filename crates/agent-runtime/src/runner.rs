@@ -210,7 +210,7 @@ pub(crate) fn resume_after_first_commit(
         // MCP 调用没有泵级截止线——`tools/call` 自带客户端侧超时（`ctx.mcp_timeout`
         // 传给背景线程），线程必在超时内报回一条 `McpDone`（成功/错误/超时都算），
         // 所以 MCP 凭据一定会被 D 排空，不需要在这里扫。
-        deadline::sweep(ctx, &mut calls, &mut pending);
+        deadline::sweep(ctx, &mut calls, &mut subtree, &mut pending);
         speak_for_root_on_cancel(session, ctx, &root, &calls, &mut pending, &mut cancel_seen);
         if !pending.is_empty() {
             continue;

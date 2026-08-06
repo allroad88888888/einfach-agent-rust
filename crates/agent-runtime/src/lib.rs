@@ -104,6 +104,8 @@ mod transient_source_recovery;
 #[cfg(test)]
 mod transient_source_tests;
 mod transient_source_vault;
+mod vision_child_outcome;
+mod vision_tool;
 
 pub mod ctx;
 pub mod event;

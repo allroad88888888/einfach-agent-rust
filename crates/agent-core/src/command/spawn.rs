@@ -101,7 +101,7 @@ impl Session {
     /// 1. 两道闸（深度 / 子数）——超了返回 [`SpawnRefused`]，**不 panic**；
     /// 2. 铸一个不复用的号（见模块文档），`build_agent` 建这个 agent 的整张图
     ///    （整份 `Slot::ALL` + 一个 derived，与 root 同一条路径）；
-    /// 3. 一条 `Entry`：原子写入 `ToolsAllowed` 与已解析的 `ExecutionProfile`。
+    /// 3. 一条 `Entry`：原子写入工具授权、已解析 profile 与可选重试上限。
     ///
     /// # 为什么默认配置的 `changes` 里只有一个槽位
     ///
@@ -161,9 +161,16 @@ impl Session {
             .unwrap_or(crate::value::atom_value::AgentValue::Null);
         let tools_key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
         let profile_key = AtomKey::Agent(child.clone(), Slot::ExecutionProfile);
+        let retries_key = AtomKey::Agent(child.clone(), Slot::MaxRetries);
         self.commit_as(parent, "spawn_child", |txn| {
             txn.set_key(tools_key, tools);
             txn.set_key(profile_key, profile);
+            if let Some(max_retries) = config.max_retries {
+                txn.set_key(
+                    retries_key,
+                    crate::value::atom_value::AgentValue::U64(max_retries as u64),
+                );
+            }
         });
 
         Ok(child)

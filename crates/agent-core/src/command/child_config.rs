@@ -20,4 +20,9 @@ pub struct ChildConfig {
     /// `None` 只用于既有默认 spawn 路径与旧状态兼容；core 不把它解释成某个
     /// provider，也不替 runtime 选择 fallback。
     pub execution_profile: Option<ExecutionProfileId>,
+    /// 子 agent 的 provider 自动重试上限。
+    ///
+    /// `None` 保留 core 默认值；`Some(0)` 用于不允许宿主静默重复付费调用的专用
+    /// child。它和工具授权、执行 profile 在同一条 spawn entry 中原子落盘。
+    pub max_retries: Option<u32>,
 }

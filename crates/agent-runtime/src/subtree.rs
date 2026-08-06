@@ -69,6 +69,17 @@ struct ChildSlot {
     /// 哪个工具占着这个槽。只进 [`RunnerEvent::ToolExecuted`] 通报——通报里写
     /// `spawn` 而槽位其实是 collect 的，面板上就会出现一次对不上任何调用的执行。
     tool: &'static str,
+    outcome: ChildSlotOutcome,
+}
+
+/// 槽位终态的翻译策略。视觉子额外记住图片数与是否真的撞过 provider deadline，
+/// 这样收割时能产出稳定的视觉信封，而不把普通子 agent 的既有文案一起改掉。
+enum ChildSlotOutcome {
+    Generic,
+    Vision {
+        images_inspected: usize,
+        timed_out: bool,
+    },
 }
 
 /// 一个后台（detached）子 agent：没有任何槽位在等它（052）。
@@ -124,7 +135,54 @@ impl Subtree {
             call_id,
             epoch,
             tool,
+            outcome: ChildSlotOutcome::Generic,
         });
+    }
+
+    /// 专用视觉子占住的槽。它仍走同一棵子树的生命周期，只在最终正文翻译上使用
+    /// `agent_core::vision` 的稳定信封。
+    pub(crate) fn record_vision(
+        &mut self,
+        child: AgentId,
+        parent: AgentId,
+        call_id: ToolCallId,
+        epoch: Epoch,
+        images_inspected: usize,
+    ) {
+        self.slots.push(ChildSlot {
+            child,
+            parent,
+            call_id,
+            epoch,
+            tool: crate::vision_tool::VISION_INSPECT_TOOL,
+            outcome: ChildSlotOutcome::Vision {
+                images_inspected,
+                timed_out: false,
+            },
+        });
+    }
+
+    /// provider 截止线真实触发时留下运行时标记。core 的最终状态会把 timeout 与
+    /// 其它可重试 provider 失败都归一成 `Retryable`；这一个 bit 保留稳定
+    /// `vision_timeout` 所需的来源，而不把 endpoint/provider 细节写进 durable 状态。
+    pub(crate) fn record_provider_timeout(&mut self, child: &AgentId) {
+        let Some(slot) = self.slots.iter_mut().find(|slot| &slot.child == child) else {
+            return;
+        };
+        if let ChildSlotOutcome::Vision { timed_out, .. } = &mut slot.outcome {
+            *timed_out = true;
+        }
+    }
+
+    /// A retry starts a new provider attempt. The timeout bit describes the terminal attempt,
+    /// rather than any earlier attempt that core legitimately retried.
+    pub(crate) fn record_provider_start(&mut self, child: &AgentId) {
+        let Some(slot) = self.slots.iter_mut().find(|slot| &slot.child == child) else {
+            return;
+        };
+        if let ChildSlotOutcome::Vision { timed_out, .. } = &mut slot.outcome {
+            *timed_out = false;
+        }
     }
 
     /// 053：这个后台子还在 detached 名单上吗（= 还在跑、还没进 stash）。
@@ -230,7 +288,19 @@ impl Subtree {
             // stash 一次**，轮末再报一句「跑完没人领」：领了，还报。
             // 前台 spawn 的子从来不在这张名单上，这一行对它是空操作。
             self.detached.retain(|entry| entry.child != slot.child);
-            let (content, is_error) = outcome(session, &slot.child, &status);
+            let (content, is_error) = match slot.outcome {
+                ChildSlotOutcome::Generic => outcome(session, &slot.child, &status),
+                ChildSlotOutcome::Vision {
+                    images_inspected,
+                    timed_out,
+                } => crate::vision_child_outcome::outcome(
+                    session,
+                    &slot.child,
+                    &status,
+                    images_inspected,
+                    timed_out,
+                ),
+            };
             ctx.emit(
                 &slot.parent,
                 RunnerEvent::ToolExecuted {

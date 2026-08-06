@@ -39,6 +39,7 @@ use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::status_tool::{self, STATUS_TOOL};
 use crate::subtree::Subtree;
 use crate::tool_exec;
+use crate::vision_tool;
 
 /// 一个 effect 执行完之后泵要接着做什么。
 ///
@@ -82,6 +83,9 @@ pub(crate) fn run_effect(
 ) -> Dispatched {
     match effect {
         Effect::CallProvider { agent, epoch } => {
+            // A retry starts a fresh attempt. Clear a previous vision timeout marker before
+            // starting it so only the terminal attempt determines `vision_timeout`.
+            subtree.record_provider_start(&agent);
             match provider_call::start(session, ctx, tx.clone(), agent, epoch) {
                 Ok(call) => Dispatched::Call(call),
                 Err(event) => Dispatched::Event(event),
@@ -94,6 +98,18 @@ pub(crate) fn run_effect(
             input,
             epoch,
         } => {
+            if &*tool == vision_tool::VISION_INSPECT_TOOL {
+                return if vision_tool::is_root(session, &agent) {
+                    // 根即使在恢复/热更新后已经失去 `vision` binding，也要由专用
+                    // 门面收口成稳定的 `vision_profile_unavailable`，不能掉进普通
+                    // unknown-tool 路径。
+                    vision_tool::intercept(session, ctx, subtree, &agent, call_id, &input, epoch)
+                } else {
+                    // reserved facade 永不下放；即使宿主表里伪造了同名声明，child
+                    // 也不能借它进入本地、MCP 或远端执行链。
+                    vision_tool::refuse_non_root(ctx, &agent, call_id, epoch)
+                };
+            }
             if &*tool == SPAWN_TOOL && ctx.tools.declares(SPAWN_TOOL) {
                 return spawn_tool::intercept(
                     session, ctx, subtree, &agent, call_id, &input, epoch,

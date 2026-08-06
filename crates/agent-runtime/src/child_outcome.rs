@@ -53,7 +53,7 @@ pub(crate) fn outcome(session: &Session, child: &AgentId, status: &TurnStatus) -
 /// 只取 `Text` 块：`Thinking` 是它的思考过程（要不要进 prompt 是 adapter 的判断，
 /// 不该由我们替父 agent 决定），`ToolUse` / `ToolResult` 是它的干活痕迹，父 agent
 /// 要的是结论。一条消息里多个 `Text` 块按顺序换行拼接。
-fn final_text(session: &Session, child: &AgentId) -> String {
+pub(crate) fn final_text(session: &Session, child: &AgentId) -> String {
     let messages = session.messages_of(child);
     let last = messages
         .iter()
