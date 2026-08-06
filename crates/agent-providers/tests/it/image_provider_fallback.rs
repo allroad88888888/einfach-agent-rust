@@ -116,6 +116,34 @@ fn deepseek_and_glm_hide_refs_and_report_every_dropped_image() {
 }
 
 #[test]
+fn deepseek_and_glm_hide_path_shaped_image_names() {
+    for unsafe_name in [
+        "/private/POSIX_NAME_CANARY.png",
+        "../TRAVERSAL_NAME_CANARY.png",
+        r"C:\private\WINDOWS_NAME_CANARY.png",
+        r"\\server\share\UNC_NAME_CANARY.png",
+    ] {
+        let messages = [message(
+            1,
+            vec![image("attachment://img_7", "image/png", Some(unsafe_name))],
+        )];
+        let expected = "[用户上传了图片（image/png），当前模型看不到图片内容；如需视觉证据，请调用 srv:vision/inspect 并传入图片句柄 img_7]";
+
+        for (provider_name, (_, body, adjustments)) in [
+            ("deepseek", body(&DeepSeek, &messages)),
+            ("glm", body(&Glm, &messages)),
+        ] {
+            assert_eq!(body["messages"][0]["content"], json!(expected));
+            assert_eq!(adjustments, vec![Adjustment::ImagesDropped { count: 1 }]);
+            assert!(
+                !body.to_string().contains(unsafe_name),
+                "{provider_name} exposed unsafe image name {unsafe_name:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn fallback_placeholder_is_deterministic_and_independent_of_history_position() {
     let photo = image("ms://same-photo", "image/png", None);
     let early = [message(
