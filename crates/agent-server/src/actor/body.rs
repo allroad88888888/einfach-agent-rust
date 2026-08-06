@@ -2,6 +2,7 @@
 //! 这个线程内部诞生，见 `super` 模块文档），握手告诉 `open()` 「起好了还是
 //! 起失败了」，然后进入命令循环直到 `Shutdown` 或者队列的发送端被丢弃。
 
+use std::collections::BTreeMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -9,8 +10,10 @@ use std::time::Instant;
 
 use tokio::sync::broadcast;
 
-use agent_core::{AgentId, AgentTree, Session, SessionConfig};
-use agent_runtime::{AgentEvent, RemoteToolStatusSnapshot, RemoteToolWaiting, RunnerCtx};
+use agent_core::{AgentId, AgentTree, ExecutionProfileId, Session, SessionConfig};
+use agent_runtime::{
+    AgentEvent, ExecutionBinding, RemoteToolStatusSnapshot, RemoteToolWaiting, RunnerCtx,
+};
 use agent_tools::ToolExecutor;
 
 use crate::event::{Frame, SessionEvent};
@@ -36,6 +39,7 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
 
 pub(super) fn run(
     spec: OpenSpec,
+    execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
     rx: mpsc::Receiver<ActorMessage>,
     events_tx: broadcast::Sender<Frame>,
     ready_tx: mpsc::Sender<ReadyMsg>,
@@ -171,6 +175,7 @@ pub(super) fn run(
         // **替换**整条事件出口，见 `RunnerCtx::with_agent_events` 文档）。
         Box::new(|_| {}),
     )
+    .with_execution_bindings(execution_bindings)
     .with_agent_events(Box::new(move |ev: AgentEvent| {
         let _ = events_for_callback.send(Frame {
             agent: ev.agent,

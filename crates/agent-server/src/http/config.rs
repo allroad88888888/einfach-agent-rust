@@ -17,12 +17,14 @@
 //! 下现造这个路径。宿主直接构造 `SessionTemplate { .. }` 或走
 //! [`crate::bootstrap`] 都能设它；库层默认（`None`）保持 M3 以来的旧行为不变。
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::{HostSkill, Reversibility, SystemChunk, ToolSpec};
+use agent_core::{ExecutionProfileId, HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
+use agent_runtime::ExecutionBinding;
 use agent_transport::Client;
 
 use crate::registry::{OpenSpec, SessionId, ToolTableSpec};
@@ -158,6 +160,8 @@ pub struct ServerConfig {
     pub(crate) sse_keep_alive: Duration,
     pub(crate) static_dir: Option<PathBuf>,
     pub(crate) private_capability: Option<Arc<str>>,
+    /// 进程可信 profile → live provider 绑定，不属于会话模板或 HTTP 请求。
+    pub(crate) execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
 }
 
 impl ServerConfig {
@@ -169,6 +173,7 @@ impl ServerConfig {
             sse_keep_alive: DEFAULT_SSE_KEEP_ALIVE,
             static_dir: None,
             private_capability: None,
+            execution_bindings: BTreeMap::new(),
         }
     }
 
@@ -205,6 +210,16 @@ impl ServerConfig {
     /// 启用私有 session API 的进程级 capability。公开改写 API 不使用它。
     pub fn with_private_capability(mut self, capability: impl Into<Arc<str>>) -> Self {
         self.private_capability = Some(capability.into());
+        self
+    }
+
+    /// 注入启动期解析好的具名 execution profile binding。其 key、client 和
+    /// provider 都只存活在 server runtime，模型和 durable state 只会看到 profile id。
+    pub fn with_execution_bindings(
+        mut self,
+        bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    ) -> Self {
+        self.execution_bindings = bindings;
         self
     }
 }

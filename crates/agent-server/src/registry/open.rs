@@ -4,6 +4,11 @@
 //! 防止两个 actor 写同一份持久化文件。严格调用方遇到占位立即失败；HTTP 的
 //! get-or-create 调用方在条件变量上等待，启动成功便复用，失败则由一个等待方重试。
 
+use std::collections::BTreeMap;
+
+use agent_core::ExecutionProfileId;
+use agent_runtime::ExecutionBinding;
+
 use crate::actor::{self, OpenError};
 use crate::handle::SessionHandle;
 
@@ -30,13 +35,14 @@ impl SessionRegistry {
             }
             sessions.insert(id.clone(), Slot::Opening);
         }
-        self.finish_open(id, spec)
+        self.finish_open(id, spec, BTreeMap::new())
     }
 
     /// 幂等打开：先原子占住 id，再延迟构造 spec；等待者不会误读赢家刚写的历史文件。
     pub(crate) fn open_or_get_with<T, E>(
         &self,
         id: SessionId,
+        execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
         build: impl FnOnce() -> Result<(OpenSpec, T), E>,
     ) -> Result<OpenOrGet<T>, OpenOrGetError<E>> {
         let mut build = Some(build);
@@ -61,7 +67,7 @@ impl SessionRegistry {
                         }
                     };
                     return self
-                        .finish_open(id, spec)
+                        .finish_open(id, spec, execution_bindings)
                         .map(|_| OpenOrGet::Opened(opened_value))
                         .map_err(OpenOrGetError::Open);
                 }
@@ -78,8 +84,9 @@ impl SessionRegistry {
         &self,
         id: super::SessionId,
         spec: OpenSpec,
+        execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
     ) -> Result<SessionHandle, OpenError> {
-        let spawn_result = actor::spawn(spec);
+        let spawn_result = actor::spawn(spec, execution_bindings);
         let mut sessions = self.sessions.lock().unwrap();
         let result = match spawn_result {
             Ok(spawned) => {

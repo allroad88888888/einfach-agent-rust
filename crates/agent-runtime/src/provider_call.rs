@@ -30,17 +30,18 @@ use std::time::Instant;
 
 use agent_core::cache::{self, PrefixIntent};
 use agent_core::{
-    Adjustment, AgentId, ContentBlock, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage,
-    RequestIntent, Session, StopReason, TokenUsage,
+    Adjustment, AgentId, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage, RequestIntent,
+    Session,
 };
 use agent_providers::{Encoded, Ingredients};
-use agent_transport::{StreamOutcome, TransportError};
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
-use crate::guard;
+use crate::execution_binding::{ExecutionBinding, GuardScope};
 use crate::io_thread::{self, IoMsg};
 use crate::subagent;
+
+pub(crate) use crate::provider_call_finish::{finish, thread_gone};
 
 /// 一次在飞的 provider 调用。**一个 agent 同时最多一张**（`Thinking` 是唯一
 /// 会有 provider 调用在飞的状态，一个 agent 不可能同时处在两次 `Thinking` 里）。
@@ -50,15 +51,19 @@ pub(crate) struct ProviderCall {
     pub(crate) epoch: Epoch,
     /// 到点就判超时。每个调用各自一份——两个子 agent 不共享同一条截止线。
     pub(crate) deadline: Instant,
-    drift: DriftVerdict,
-    predicted_cache: u32,
-    adjustments: Vec<Adjustment>,
-    prefix: PrefixImage,
+    pub(crate) binding: ExecutionBinding,
+    /// 起飞时固定的 binding guard scope；落地只能写回这里，不能按当前默认
+    /// provider 或 profile 重新查找。
+    pub(crate) guard_scope: GuardScope,
+    pub(crate) drift: DriftVerdict,
+    pub(crate) predicted_cache: u32,
+    pub(crate) adjustments: Vec<Adjustment>,
+    pub(crate) prefix: PrefixImage,
     /// This request consumed transient source material and must never be retried.
     pub(crate) one_shot: bool,
     /// Calls that consumed a transient source overlay suppress live deltas. Their complete
     /// terminal text is emitted once by `transient_source_completion` after the stream closes.
-    hold_deltas: bool,
+    pub(crate) hold_deltas: bool,
 }
 
 /// 起飞：取料 → `encode` → 发前第 1 层 → 起 IO 线程。**不等结果。**
@@ -69,6 +74,19 @@ pub(crate) fn start(
     agent: AgentId,
     epoch: Epoch,
 ) -> Result<ProviderCall, Event> {
+    let profile = session.execution_profile_of(&agent);
+    let selection = match ctx.execution_binding_for(profile.as_ref()) {
+        Ok(selection) => selection,
+        Err(_) => {
+            return Err(Event::ProviderFailed {
+                agent,
+                epoch,
+                class: ErrorClass::Unknown,
+                message: Arc::from("execution profile is not configured"),
+            });
+        }
+    };
+    let binding = selection.binding;
     // 宿主从状态取料（012，027 换成 `Session` 的读口，029 换成 per-agent 的那
     // 一版）：`imbl::Vector` 不是连续切片，Ingredients 要的是 `&[Message]`，
     // 这里物化一份——克隆的是 `Message`（里面全是 `Arc`），代价是指针拷贝乘
@@ -101,7 +119,7 @@ pub(crate) fn start(
         tools: &tools,
         late_tools: &late_tools,
         late_system: &late_system,
-        config: &ctx.session_config,
+        config: &binding.session_config,
         intent: RequestIntent::Free,
         prev_prefix: prev_prefix.as_ref(),
     };
@@ -111,18 +129,18 @@ pub(crate) fn start(
         mut drift,
         mut predicted_cache,
         mut adjustments,
-    } = ctx.provider.encode(&ing);
+    } = binding.provider.encode(&ing);
     if prepared.one_shot {
         // Prefix mirrors, drift reports and cache predictions are durable/public metadata.
         // Re-encode the placeholder history locally so none of them fingerprints the raw
         // one-shot overlay; only the first body's bytes are sent to the provider.
-        let safe = ctx.provider.encode(&Ingredients {
+        let safe = binding.provider.encode(&Ingredients {
             system: &system,
             messages: &durable_messages,
             tools: &tools,
             late_tools: &late_tools,
             late_system: &late_system,
-            config: &ctx.session_config,
+            config: &binding.session_config,
             intent: RequestIntent::Free,
             prev_prefix: prev_prefix.as_ref(),
         });
@@ -144,10 +162,10 @@ pub(crate) fn start(
     io_thread::spawn(
         tx,
         agent.clone(),
-        Arc::clone(&ctx.client),
-        Arc::clone(&ctx.provider),
-        ctx.endpoint.clone(),
-        ctx.api_key.clone(),
+        Arc::clone(&binding.client),
+        Arc::clone(&binding.provider),
+        binding.endpoint.clone(),
+        binding.api_key.clone(),
         body,
         ctx.cancel_flag(),
     );
@@ -155,7 +173,9 @@ pub(crate) fn start(
     Ok(ProviderCall {
         agent,
         epoch,
-        deadline: Instant::now() + ctx.provider_timeout,
+        deadline: Instant::now() + binding.timeout,
+        binding,
+        guard_scope: selection.guard_scope,
         drift: drift_verdict,
         predicted_cache,
         adjustments,
@@ -171,121 +191,6 @@ pub(crate) fn gate_delta(call: &mut ProviderCall, event: RunnerEvent) -> Option<
     if call.hold_deltas { None } else { Some(event) }
 }
 
-/// 落地：把 IO 线程的终态翻译成一个 loop 事件；成功路径顺带装配 `GuardReport`。
-pub(crate) fn finish(
-    ctx: &mut RunnerCtx,
-    call: ProviderCall,
-    result: Result<StreamOutcome, TransportError>,
-    blocks: Vec<ContentBlock>,
-    stop: StopReason,
-    usage: TokenUsage,
-) -> Event {
-    let ProviderCall {
-        agent,
-        epoch,
-        drift,
-        predicted_cache,
-        adjustments,
-        prefix,
-        one_shot,
-        ..
-    } = call;
-    if one_shot {
-        return crate::transient_source_completion::finish(
-            ctx,
-            crate::transient_source_completion::Metadata {
-                agent,
-                epoch,
-                drift,
-                predicted_cache,
-                adjustments,
-                prefix,
-            },
-            result,
-            blocks,
-            stop,
-        );
-    }
-    match result {
-        Ok(StreamOutcome::Finished) => {
-            guard::report_success(
-                ctx,
-                &agent,
-                &usage,
-                drift,
-                predicted_cache,
-                adjustments.clone(),
-            );
-            Event::ProviderDone {
-                agent,
-                epoch,
-                blocks,
-                stop,
-                usage,
-                prefix,
-                adjustments,
-            }
-        }
-        // 半截的文本/工具调用不喂回 loop——回填回下一轮请求就不诚实了
-        // （跟旧版 `agent-cli::turn::run_turn` 的判断一致）。取消是用户意图，
-        // 不带 epoch。
-        Ok(StreamOutcome::Cancelled) => Event::Cancel { agent },
-        Ok(StreamOutcome::Broken(message)) => {
-            transport_trouble(ctx, agent, epoch, ErrorClass::Retryable, message)
-        }
-        Err(TransportError::Connect { message, .. }) => {
-            transport_trouble(ctx, agent, epoch, ErrorClass::Retryable, message)
-        }
-        Err(TransportError::Http { status, body }) => {
-            let class = ctx.provider.classify(status, &body);
-            ctx.emit(
-                &agent,
-                RunnerEvent::TransportTrouble(Arc::from(format!("HTTP {status}: {body}"))),
-            );
-            Event::ProviderFailed {
-                agent,
-                epoch,
-                class,
-                message: Arc::from(body),
-            }
-        }
-    }
-}
-
-/// IO 线程 panic 了（`IoMsg::Gone`）——没留下任何终态消息。按可重试的传输故障
-/// 处理：`agent-transport::read_loop` 对读线程异常退出是同一个判断（它那边归
-/// `StreamOutcome::Broken`）。
-pub(crate) fn thread_gone(ctx: &mut RunnerCtx, call: ProviderCall) -> Event {
-    if call.one_shot {
-        ctx.transient_sources
-            .purge_agent_epoch(&call.agent, call.epoch);
-        return crate::transient_source_completion::provider_completion_failed(
-            ctx, call.agent, call.epoch,
-        );
-    }
-    Event::ProviderFailed {
-        agent: call.agent,
-        epoch: call.epoch,
-        class: ErrorClass::Retryable,
-        message: Arc::from("IO 线程异常退出（未留下终态消息）"),
-    }
-}
-
-fn transport_trouble(
-    ctx: &mut RunnerCtx,
-    agent: AgentId,
-    epoch: Epoch,
-    class: ErrorClass,
-    message: String,
-) -> Event {
-    ctx.emit(
-        &agent,
-        RunnerEvent::TransportTrouble(Arc::from(message.as_str())),
-    );
-    Event::ProviderFailed {
-        agent,
-        epoch,
-        class,
-        message: Arc::from(message),
-    }
-}
+#[cfg(test)]
+#[path = "provider_call_tests.rs"]
+mod tests;

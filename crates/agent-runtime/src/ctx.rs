@@ -11,18 +11,19 @@
 //! 记录），放弃之后那个 IO 线程要能带着自己那份引用继续跑到自然结束，
 //! `Box` 做不到——这是本 issue 唯一一处偏离 issue 原文字面类型的地方。
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use agent_core::cache::TurnHit;
-use agent_core::{AgentId, AgentTree, Session, SessionConfig, SystemChunk};
+use agent_core::{AgentId, AgentTree, ExecutionProfileId, Session, SessionConfig, SystemChunk};
 use agent_mcp::McpRegistry;
 use agent_providers::Provider;
 use agent_tools::ToolExecutor;
 use agent_transport::Client;
 
 use crate::event::{AgentEvent, RunnerEvent};
+use crate::execution_binding::{ExecutionBinding, GuardScope};
 use crate::persist::SessionBackend;
 use crate::tool_table::ToolTable;
 /// 单次 `CallProvider` 允许占用的总时长，到点注入 `Event::Timeout`（012）。
@@ -58,10 +59,11 @@ pub const DEFAULT_SNAPSHOT_EVERY: u64 = 10;
 pub const DEFAULT_REMOTE_TOOL_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub struct RunnerCtx {
-    pub(crate) provider: Arc<dyn Provider>,
-    pub(crate) client: Arc<Client>,
-    pub(crate) endpoint: String,
-    pub(crate) api_key: String,
+    pub(crate) default_binding: ExecutionBinding,
+    pub(crate) execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    pub(crate) default_guard_scope: GuardScope,
+    pub(crate) execution_guard_scopes: BTreeMap<ExecutionProfileId, GuardScope>,
+    pub(crate) next_guard_scope: u64,
     pub(crate) fs: ToolExecutor,
     pub(crate) tools: ToolTable,
     /// MCP server 的活句柄表（store 外的进程内 registry，红线 3）。dispatch 的第四路
@@ -69,15 +71,13 @@ pub struct RunnerCtx {
     /// client 句柄从不进任何 command/atom。默认空表——没接 MCP 的宿主永远查不到。
     pub(crate) mcp: Arc<McpRegistry>,
     pub(crate) system: Vec<SystemChunk>,
-    pub(crate) session_config: SessionConfig,
     pub(crate) cancel: Arc<AtomicBool>,
-    pub(crate) provider_timeout: Duration,
     /// 单次 MCP `tools/call` 的往返超时（`crate::mcp_call` 传给背景线程）。
     pub(crate) mcp_timeout: Duration,
     /// 远端工具等待宿主回传的截止线预算（060）。登记等待槽时按它算出
     /// `PendingRemoteTool::deadline`，之后这个槽的命运只看那个绝对时刻。
     pub(crate) remote_tool_timeout: Duration,
-    pub(crate) guard_history: Vec<TurnHit>,
+    pub(crate) guard_histories: BTreeMap<GuardScope, Vec<agent_core::cache::TurnHit>>,
     pub(crate) pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools,
     /// Reserved source inputs/results live only here.  This vault is process-local and has no
     /// serialization surface; durable core state contains policy placeholders only.
@@ -133,20 +133,25 @@ impl RunnerCtx {
         let on_event: Box<dyn FnMut(AgentEvent)> =
             Box::new(move |ev: AgentEvent| on_event(ev.event));
         RunnerCtx {
-            provider,
-            client,
-            endpoint,
-            api_key,
+            default_binding: ExecutionBinding::new(
+                provider,
+                client,
+                endpoint,
+                api_key,
+                session_config,
+            ),
+            execution_bindings: BTreeMap::new(),
+            default_guard_scope: GuardScope::INITIAL,
+            execution_guard_scopes: BTreeMap::new(),
+            next_guard_scope: GuardScope::FIRST_DYNAMIC,
             fs,
             tools,
             mcp: Arc::new(McpRegistry::new()),
             system,
-            session_config,
             cancel: Arc::new(AtomicBool::new(false)),
-            provider_timeout: DEFAULT_PROVIDER_TIMEOUT,
             mcp_timeout: agent_mcp::DEFAULT_CALL_TIMEOUT,
             remote_tool_timeout: DEFAULT_REMOTE_TOOL_TIMEOUT,
-            guard_history: Vec::new(),
+            guard_histories: BTreeMap::new(),
             pending_remote_tools: crate::ctx_remote_tools::PendingRemoteTools::default(),
             transient_sources: crate::transient_source_vault::TransientSourceVault::default(),
             session_store,
@@ -234,12 +239,6 @@ impl RunnerCtx {
         self.tools.skill_registry().listing()
     }
 
-    /// 覆盖默认的 120s 超时——测试用短超时把「挂住不回」的场景压到毫秒级。
-    pub fn with_provider_timeout(mut self, timeout: Duration) -> Self {
-        self.provider_timeout = timeout;
-        self
-    }
-
     /// 装上宿主持有的 [`McpRegistry`]（store 外的活句柄表，红线 3）。默认是空表——
     /// 没配 MCP server 的宿主（CLI 尚未接 044/045、浏览器 host 只有 http）dispatch
     /// 查不到任何 server，`mcp:` 工具压根不会进工具表，这个空表也就永远不被查到。
@@ -267,33 +266,6 @@ impl RunnerCtx {
     pub fn with_remote_tool_timeout(mut self, timeout: Duration) -> Self {
         self.remote_tool_timeout = timeout;
         self
-    }
-
-    /// 运行时切 provider（014 `/model <name>`）：换 adapter + endpoint + key +
-    /// model，并清空第 3 层滚动窗口——`guard_history` 记的是「最近几轮的缓存
-    /// 命中观测」，换家之后旧家的观测对新家的命中率毫无意义，留着只会把两家
-    /// 完全不相关的数字拼进同一条趋势线，误导 [`crate::guard`] 的滚动窗口判读。
-    ///
-    /// **不碰的东西，都是刻意的**：
-    /// - 消息历史不在这里——`RunnerCtx` 根本不持有它（027 起活在
-    ///   `Session::messages()`），历史保留是宿主（`agent-cli`）自己决定的事，
-    ///   跨家续聊是合法场景。
-    /// - 前缀镜像（第 1 层比对用）同理不在这里——027 起活在
-    ///   `Session::prev_prefix()`，调用方必须自己清掉（`agent_cli::model_switch`
-    ///   调 `Session::clear_prev_prefix()`；不清的话第 1 层会拿新家的请求去对
-    ///   旧家的镜像，把正常的家族切换误判成前缀漂移）。
-    pub fn switch_provider(
-        &mut self,
-        provider: Arc<dyn Provider>,
-        endpoint: String,
-        api_key: String,
-        model: Arc<str>,
-    ) {
-        self.provider = provider;
-        self.endpoint = endpoint;
-        self.api_key = api_key;
-        self.session_config.model = model;
-        self.guard_history.clear();
     }
 
     /// 发一件事给宿主，带上它出自哪个 agent。

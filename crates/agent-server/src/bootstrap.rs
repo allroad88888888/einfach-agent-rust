@@ -28,11 +28,13 @@
 //! [`bootstrap`]，不需要这一层再单开一个参数通道。`agent-server-bin`/
 //! `examples/serve.rs` 都这么用。
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::SystemChunk;
+use agent_core::{ExecutionProfileId, SessionConfig, SystemChunk};
+use agent_runtime::ExecutionBinding;
 use agent_transport::{Client, config};
 
 use crate::SessionTemplate;
@@ -72,6 +74,11 @@ pub enum BootstrapError {
     UnknownProvider(String),
     /// provider 段既没写 `api_key` 也没有 `api_key_env` 指向的环境变量。
     MissingApiKey,
+    /// execution profile 指向了当前进程没有编译进来的 adapter。
+    UnknownExecutionProfileProvider { profile: String, message: String },
+    /// execution profile 的 provider 没有可用 key；启动时拒绝，不留到子 agent
+    /// 真正请求 provider 时才变成含糊的失败。
+    MissingExecutionProfileApiKey(String),
 }
 
 impl std::fmt::Display for BootstrapError {
@@ -82,6 +89,16 @@ impl std::fmt::Display for BootstrapError {
             BootstrapError::MissingApiKey => write!(
                 f,
                 "provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量"
+            ),
+            BootstrapError::UnknownExecutionProfileProvider { profile, message } => {
+                write!(
+                    f,
+                    "execution profile \"{profile}\" 的 provider 无法使用: {message}"
+                )
+            }
+            BootstrapError::MissingExecutionProfileApiKey(profile) => write!(
+                f,
+                "execution profile \"{profile}\" 的 provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量"
             ),
         }
     }
@@ -96,6 +113,9 @@ impl std::error::Error for BootstrapError {}
 pub struct Bootstrapped {
     pub template: SessionTemplate,
     pub provider_name: String,
+    /// 已解析的 live bindings；只随 server 进程存活，绝不进入 `SessionTemplate`
+    /// 或 durable session state。
+    pub execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
 }
 
 /// 读 `providers.toml` → 选 `[default]` provider → 拼 [`SessionTemplate`]。
@@ -108,6 +128,8 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
     let api_key = provider_cfg
         .resolve_key()
         .ok_or(BootstrapError::MissingApiKey)?;
+    let execution_bindings =
+        resolve_execution_bindings(&root, &options.client, options.provider_timeout)?;
 
     Ok(Bootstrapped {
         template: SessionTemplate {
@@ -127,5 +149,54 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
             remote_tool_timeout: options.remote_tool_timeout,
         },
         provider_name,
+        execution_bindings,
     })
 }
+
+/// 仅在启动时把配置中的 durable id 解析成活 provider 资源。映射一旦写了错
+/// provider、缺 adapter 或缺 key，整个 server 都拒绝启动；不能让会话随后静默
+/// 回落到 default provider。
+fn resolve_execution_bindings(
+    root: &config::RootConfig,
+    client: &Arc<Client>,
+    provider_timeout: Option<Duration>,
+) -> Result<BTreeMap<ExecutionProfileId, ExecutionBinding>, BootstrapError> {
+    let mut bindings = BTreeMap::new();
+    for profile_name in root.execution_profiles.keys() {
+        let (provider_name, provider_config) = root
+            .execution_profile(profile_name)
+            .map_err(BootstrapError::Config)?
+            .expect("enumerated execution profile must resolve to itself");
+        let provider = resolve_provider(provider_name).map_err(|message| {
+            BootstrapError::UnknownExecutionProfileProvider {
+                profile: profile_name.clone(),
+                message,
+            }
+        })?;
+        let api_key = provider_config
+            .resolve_key()
+            .ok_or_else(|| BootstrapError::MissingExecutionProfileApiKey(profile_name.clone()))?;
+        let binding = ExecutionBinding::new(
+            provider,
+            Arc::clone(client),
+            provider_config.endpoint(),
+            api_key,
+            SessionConfig {
+                model: Arc::from(provider_config.model.as_str()),
+                temperature: None,
+                max_tokens: None,
+                context_window: None,
+            },
+        );
+        let binding = match provider_timeout {
+            Some(timeout) => binding.with_timeout(timeout),
+            None => binding,
+        };
+        bindings.insert(ExecutionProfileId::new(profile_name.as_str()), binding);
+    }
+    Ok(bindings)
+}
+
+#[cfg(test)]
+#[path = "bootstrap_execution_bindings_tests.rs"]
+mod tests;

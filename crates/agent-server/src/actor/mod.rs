@@ -26,6 +26,7 @@ mod inbox;
 pub(crate) mod message;
 mod remote_tools;
 
+use std::collections::BTreeMap;
 use std::panic::AssertUnwindSafe;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -33,8 +34,8 @@ use std::thread;
 
 use tokio::sync::broadcast;
 
-use agent_core::{AgentId, AgentTree};
-use agent_runtime::{RemoteToolStatusSnapshot, RemoteToolWaiting};
+use agent_core::{AgentId, AgentTree, ExecutionProfileId};
+use agent_runtime::{ExecutionBinding, RemoteToolStatusSnapshot, RemoteToolWaiting};
 
 use crate::event::{Frame, SessionEvent};
 use crate::handle::{CancelHandle, SessionHandle};
@@ -73,7 +74,10 @@ pub(crate) struct SpawnedActor {
 }
 
 /// 起一个 session actor。
-pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
+pub(crate) fn spawn(
+    spec: OpenSpec,
+    execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+) -> Result<SpawnedActor, OpenError> {
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (events_tx, _initial_receiver) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
     let (ready_tx, ready_rx) = mpsc::channel::<ReadyMsg>();
@@ -109,6 +113,7 @@ pub(crate) fn spawn(spec: OpenSpec) -> Result<SpawnedActor, OpenError> {
             let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
                 body::run(
                     spec,
+                    execution_bindings,
                     cmd_rx,
                     events_for_thread,
                     ready_tx,

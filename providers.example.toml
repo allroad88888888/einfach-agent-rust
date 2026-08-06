@@ -105,3 +105,9 @@ clear_thinking = false
 # ─────────────────────────────────────────────────────────────
 [default]
 provider = "deepseek"
+
+# 可选：持久化 agent 的 execution profile → 本进程可信 provider 配置。
+# 会话/模型只看 profile id；endpoint、client、api_key 仅在 server 运行时解析，
+# 不会被写进会话记录或传给模型。删掉整个表即保持默认执行。
+[execution_profiles]
+# vision = "kimi"

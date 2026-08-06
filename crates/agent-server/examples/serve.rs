@@ -77,7 +77,8 @@ async fn main() {
     // vite 的 dev 代理。本机的 dev 代理历来对 SSE 发飘（M7/M8 两次真机验收都撞上、
     // 502），同源托管把那个变量整个拿掉：验的是 server 本身，不是代理。
     // 不设这个变量时行为一字不变（`None` = 不托管静态文件）。
-    let mut config = ServerConfig::new(assembled.template);
+    let mut config =
+        ServerConfig::new(assembled.template).with_execution_bindings(assembled.execution_bindings);
     let static_dir = std::env::var("AGENT_STATIC_DIR").ok().map(PathBuf::from);
     if let Some(dir) = static_dir.clone() {
         config = config.with_static_dir(dir);

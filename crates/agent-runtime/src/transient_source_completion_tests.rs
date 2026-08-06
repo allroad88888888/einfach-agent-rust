@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::RunnerCtx;
 use crate::event::RunnerEvent;
+use crate::execution_binding::GuardScope;
 use crate::tool_table::ToolTable;
 use crate::transient_source_completion::{Metadata, finish};
 use crate::transient_source_policy::{SAFE_CANDIDATE, SAFE_PROVIDER_ERROR, SOURCE_READ};
@@ -50,6 +51,7 @@ fn metadata(agent: AgentId) -> Metadata {
     Metadata {
         agent,
         epoch: Epoch::START,
+        guard_scope: GuardScope::INITIAL,
         drift: DriftVerdict::Clean,
         predicted_cache: 0,
         adjustments: Vec::new(),

@@ -50,6 +50,7 @@ ts-rs = { workspace = true, optional = true }
 ts = ["dep:ts-rs", "agent-core/ts"]
 
 [dev-dependencies]
+toml = "0.8"
 # 测试要 `.await` Subscription::recv、要 `tokio::time::timeout` 掐轮询上限、
 # 031 的测试还要真的起一个 tokio 多线程运行时同时跑 axum 服务器和假浏览器客户端。
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }

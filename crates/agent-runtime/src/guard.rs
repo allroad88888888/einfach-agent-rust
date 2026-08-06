@@ -8,18 +8,19 @@ use agent_core::{AgentId, TokenUsage};
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
+use crate::execution_binding::GuardScope;
 
 /// 一次成功的 provider 调用之后：对账（第 2 层）+ 滚动窗口（第 3 层，先把
-/// 这一轮记进 [`RunnerCtx::guard_history`] 再算，跟 `agent-core::cache` 模块
+/// 这一轮记进起飞时 binding scope 的 guard history 再算，跟 `agent-core::cache` 模块
 /// 文档的示例顺序一致）→ 拼成 `GuardReport` 经回调交给宿主。
 ///
-/// `guard_history`（第 3 层的滚动窗口）是**整棵树共用一份**：它记的是「这个
-/// 会话最近几轮的缓存命中观测」，而一次会话对 provider 的用量本来就是全树合起来
-/// 的那一笔账。按 agent 分窗会让每个短命子 agent 各自攒一条永远够不到窗口宽度的
-/// 序列，第 3 层对谁都失效——029 的多 agent 没有改变这一层要回答的问题。
+/// `guard_history` 按 binding scope 隔离：同一 binding 的整棵 agent 树共用一个
+/// 窗口，但不同 provider/model 的缓存观测不能混在一起；默认 provider 切换后的
+/// 旧请求也只会写回旧 scope。
 pub(crate) fn report_success(
     ctx: &mut RunnerCtx,
     agent: &AgentId,
+    scope: GuardScope,
     usage: &TokenUsage,
     drift: DriftVerdict,
     predicted_cache: u32,
@@ -27,8 +28,9 @@ pub(crate) fn report_success(
 ) {
     let reconcile = cache::reconcile(predicted_cache, usage.cached, ReconcileParams::default());
 
-    ctx.guard_history.push(TurnHit::from_usage(usage));
-    let window = cache::check_window(&ctx.guard_history, WindowParams::default());
+    let history = ctx.guard_history_for(scope);
+    history.push(TurnHit::from_usage(usage));
+    let window = cache::check_window(history, WindowParams::default());
 
     let report = GuardReport {
         drift,

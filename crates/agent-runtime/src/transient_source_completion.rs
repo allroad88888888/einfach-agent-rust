@@ -10,6 +10,7 @@ use agent_transport::{StreamOutcome, TransportError};
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
+use crate::execution_binding::GuardScope;
 use crate::guard;
 use crate::transient_source_policy::{SAFE_CANDIDATE, SAFE_PROVIDER_ERROR, is_transient_source};
 
@@ -26,6 +27,7 @@ enum PrivateCompletion {
 pub(crate) struct Metadata {
     pub(crate) agent: AgentId,
     pub(crate) epoch: Epoch,
+    pub(crate) guard_scope: GuardScope,
     pub(crate) drift: DriftVerdict,
     pub(crate) predicted_cache: u32,
     pub(crate) adjustments: Vec<Adjustment>,
@@ -176,6 +178,7 @@ fn success(
     guard::report_success(
         ctx,
         &metadata.agent,
+        metadata.guard_scope,
         &usage,
         metadata.drift,
         metadata.predicted_cache,

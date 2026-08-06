@@ -6,12 +6,15 @@
 //! 还是死了并给出统一的 [`ApiError`]（[`AppState::session_handle`]）、拿到
 //! （必要时现造）这个 session 的 SSE hub（[`AppState::hub_for`]）。
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use axum::http::HeaderMap;
+
+use agent_core::ExecutionProfileId;
+use agent_runtime::ExecutionBinding;
 
 use crate::http::config::{ServerConfig, SessionTemplate};
 use crate::http::error::ApiError;
@@ -31,6 +34,7 @@ struct Inner {
     cancel_grace: Duration,
     sse_keep_alive: Duration,
     private_capability: Option<Arc<str>>,
+    execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
     /// session id 生成器：`sess-<进程 pid>-<单调计数器>`。够用（M3 单副本、
     /// 进程内单调），不为此拉一个 uuid 依赖——见 `crate::http::state` 模块
     /// 文档「三件事」第一件。
@@ -47,6 +51,7 @@ impl AppState {
             cancel_grace: config.cancel_grace,
             sse_keep_alive: config.sse_keep_alive,
             private_capability: config.private_capability,
+            execution_bindings: config.execution_bindings,
             next_id: AtomicU64::new(0),
         }))
     }
@@ -62,6 +67,12 @@ impl AppState {
 
     pub(crate) fn registry(&self) -> &SessionRegistry {
         &self.0.registry
+    }
+
+    /// 每个 actor 获得自己的 map 副本；其中 client/provider 都是 `Arc`，密钥仅
+    /// 在这条 server→runtime 链路上短暂复制，绝不放进 `OpenSpec` 或 session。
+    pub(crate) fn execution_bindings(&self) -> BTreeMap<ExecutionProfileId, ExecutionBinding> {
+        self.0.execution_bindings.clone()
     }
 
     pub(crate) fn sse_keep_alive(&self) -> Duration {
@@ -134,7 +145,10 @@ mod tests {
 
     use std::time::Instant;
 
+    use agent_core::SessionConfig;
     use agent_providers::deepseek::DeepSeek;
+    use agent_providers::kimi::Kimi;
+    use agent_runtime::ExecutionBinding;
     use agent_transport::Client;
 
     use crate::http::config::SessionTemplate;
@@ -167,6 +181,31 @@ mod tests {
         let mut ids: Vec<SessionId> = state.0.hubs.lock().unwrap().keys().cloned().collect();
         ids.sort();
         ids
+    }
+
+    /// H3：启动期解析的具名 binding 必须从 `ServerConfig` 进入每次开会话所读取的
+    /// route state；它不是 durable `OpenSpec` 的一部分。
+    #[test]
+    fn app_state_retains_named_execution_binding_for_session_opening() {
+        let profile = ExecutionProfileId::new("vision");
+        let binding = ExecutionBinding::new(
+            Arc::new(Kimi),
+            Arc::new(Client::new()),
+            "https://api.moonshot.cn/v1/chat/completions".to_string(),
+            "vision-key".to_string(),
+            SessionConfig {
+                model: Arc::from("kimi-vision"),
+                temperature: None,
+                max_tokens: None,
+                context_window: None,
+            },
+        );
+        let state = AppState::new(
+            ServerConfig::new(template())
+                .with_execution_bindings(BTreeMap::from([(profile.clone(), binding)])),
+        );
+
+        assert!(state.execution_bindings().contains_key(&profile));
     }
 
     /// issue 059：session 死了，它的 hub 必须从这张表里**摘掉**——不是「少一点」，

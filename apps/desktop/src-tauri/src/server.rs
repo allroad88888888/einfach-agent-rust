@@ -8,7 +8,10 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
-use agent_server::{AgentServer, BootstrapError, BootstrapOptions, ServerConfig, SessionsHandle, ToolTableSpec, bootstrap};
+use agent_server::{
+    AgentServer, BootstrapError, BootstrapOptions, ServerConfig, SessionsHandle, ToolTableSpec,
+    bootstrap,
+};
 use agent_transport::Client;
 use tauri::AppHandle;
 
@@ -74,16 +77,24 @@ pub async fn start(app: &AppHandle) -> Result<Started, StartError> {
         default_sessions_dir: Some(paths::sessions_dir(app).map_err(StartError::Path)?),
         // 跟 `examples/serve.rs` 同一档——开满内置只读集 + shell + spawn，
         // 「与 web 版行为一致」（issue 036 验收）指的正是同一套工具表。
-        tools: ToolTableSpec::Full { spawn_limits: AgentLimits::default() },
-        system: vec![SystemChunk { label: Arc::from("base"), text: Arc::from("你是一个简洁、诚实的助手。") }],
+        tools: ToolTableSpec::Full {
+            spawn_limits: AgentLimits::default(),
+        },
+        system: vec![SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("你是一个简洁、诚实的助手。"),
+        }],
         client: Arc::new(Client::new()),
         history_cap: None,
         snapshot_every: None,
         provider_timeout: None,
+        remote_tool_timeout: None,
     })
     .map_err(StartError::Bootstrap)?;
 
-    let config = ServerConfig::new(bootstrapped.template).with_static_dir(dist_dir);
+    let config = ServerConfig::new(bootstrapped.template)
+        .with_execution_bindings(bootstrapped.execution_bindings)
+        .with_static_dir(dist_dir);
     let server = AgentServer::new(config);
 
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
@@ -97,5 +108,8 @@ pub async fn start(app: &AppHandle) -> Result<Started, StartError> {
         }
     });
 
-    Ok(Started { addr: local_addr, sessions })
+    Ok(Started {
+        addr: local_addr,
+        sessions,
+    })
 }

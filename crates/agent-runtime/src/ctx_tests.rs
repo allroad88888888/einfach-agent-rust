@@ -33,12 +33,14 @@ fn build(model: &str) -> RunnerCtx {
 #[test]
 fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window() {
     let mut ctx = build("deepseek-v4-pro");
-    ctx.guard_history.push(TurnHit::from_usage(&TokenUsage {
-        prompt: 100,
-        completion: 10,
-        cached: Some(64),
-    }));
-    assert!(!ctx.guard_history.is_empty());
+    let old_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
+    ctx.guard_history_for(old_scope)
+        .push(TurnHit::from_usage(&TokenUsage {
+            prompt: 100,
+            completion: 10,
+            cached: Some(64),
+        }));
+    assert!(!ctx.guard_history_for(old_scope).is_empty());
 
     ctx.switch_provider(
         Arc::new(Kimi),
@@ -47,11 +49,16 @@ fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window()
         Arc::from("kimi-k3"),
     );
 
-    assert_eq!(ctx.endpoint, "https://api.moonshot.cn/v1/chat/completions");
-    assert_eq!(ctx.api_key, "kimi-key");
-    assert_eq!(&*ctx.session_config.model, "kimi-k3");
+    assert_eq!(
+        ctx.default_binding.endpoint,
+        "https://api.moonshot.cn/v1/chat/completions"
+    );
+    assert_eq!(ctx.default_binding.api_key, "kimi-key");
+    assert_eq!(&*ctx.default_binding.session_config.model, "kimi-k3");
+    let new_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
+    assert_ne!(new_scope, old_scope);
     assert!(
-        ctx.guard_history.is_empty(),
+        ctx.guard_history_for(new_scope).is_empty(),
         "跨家滚动窗口该清空，不能把 deepseek 的观测带进 kimi 的命中率"
     );
 }
@@ -73,16 +80,19 @@ fn switch_provider_encode_reflects_the_new_family_not_the_old() {
         Arc::from("kimi-k3"),
     );
 
-    let encoded = ctx.provider.encode(&agent_providers::Ingredients {
-        system: &[],
-        messages: &[],
-        tools: &[],
-        late_tools: &[],
-        late_system: &[],
-        config: &ctx.session_config,
-        intent: agent_core::RequestIntent::Free,
-        prev_prefix: None,
-    });
+    let encoded = ctx
+        .default_binding
+        .provider
+        .encode(&agent_providers::Ingredients {
+            system: &[],
+            messages: &[],
+            tools: &[],
+            late_tools: &[],
+            late_system: &[],
+            config: &ctx.default_binding.session_config,
+            intent: agent_core::RequestIntent::Free,
+            prev_prefix: None,
+        });
 
     let body = String::from_utf8(encoded.body).unwrap();
     assert!(

@@ -181,7 +181,7 @@ pub(in crate::http) async fn create(
     };
     let outcome = match state
         .registry()
-        .open_or_get_with(id.clone(), || {
+        .open_or_get_with(id.clone(), state.execution_bindings(), || {
             // 只有原子占住 chatid 的赢家检查历史。并发输家等赢家启动完直接复用，
             // 不能把赢家刚创建的 jsonl 误判成一次“带声明恢复历史”的新请求。
             let has_persisted_history = client_supplied_id

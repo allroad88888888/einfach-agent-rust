@@ -69,11 +69,13 @@ mod collect_tool;
 mod ctx_remote_tools;
 mod deadline;
 mod dispatch;
+mod execution_binding;
 mod guard;
 mod io_thread;
 mod mcp_call;
 mod orphan;
 mod provider_call;
+mod provider_call_finish;
 mod remote_tool;
 mod remote_tool_claim;
 mod remote_tool_digest;
@@ -117,6 +119,7 @@ pub use ctx::RunnerCtx;
 pub use ctx_remote_tools::RemoteToolWaiting;
 pub use deadline::sweep_remote_tool_deadlines;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
+pub use execution_binding::ExecutionBinding;
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,

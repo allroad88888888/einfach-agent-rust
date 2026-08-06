@@ -75,11 +75,11 @@ pub async fn run(cli: Cli) {
 
     let provider_name = assembled.provider_name.clone();
     let model = assembled.template.model.clone();
+    let config =
+        ServerConfig::new(assembled.template).with_execution_bindings(assembled.execution_bindings);
     let config = match private_capability {
-        Some(capability) => {
-            ServerConfig::new(assembled.template).with_private_capability(capability)
-        }
-        None => ServerConfig::new(assembled.template),
+        Some(capability) => config.with_private_capability(capability),
+        None => config,
     };
     let server = AgentServer::new(config);
     // 优雅关闭用的把手——在 `bind` 消费掉 `server` 之前先借出来
