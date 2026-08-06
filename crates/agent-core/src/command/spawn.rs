@@ -26,12 +26,11 @@
 //! 而 undo 日志的键正是这个 id。despawn 刻意留下 `ToolsAllowed` 墓碑，
 //! 为的就是让这个「最大号」在逐出之后仍然单调（见 `despawn.rs`）。
 
-use std::sync::Arc;
-
 use crate::graph::{AtomKey, Slot, build_agent};
 use crate::ids::AgentId;
 use crate::value::str_set;
 
+use super::child_config::ChildConfig;
 use super::session::Session;
 
 /// 深度上限的默认值（决策 20）。root 是深度 0，所以 3 表示最深到 `root/a1/a2/a3`。
@@ -63,25 +62,6 @@ impl Default for AgentLimits {
             max_children: DEFAULT_MAX_CHILDREN,
         }
     }
-}
-
-/// spawn 一个子 agent 时要定的东西。
-///
-/// **目前只有工具子集**：system prompt / 模型这两样按 issue 006 的裁决是「spawn
-/// 工具的入参，进 ToolCall 快照」，而承载它们的槽位（`system_base` / `config`）
-/// 在本仓还没有任何写入点——021 的教训是没被真实使用验证过的槽位跟没写一样。
-/// 029 接线时它们跟着一起长进来，那时这个结构体加字段。
-#[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub struct ChildConfig {
-    /// 这个子 agent 被允许使用的工具全名（如 `srv:fs/read`）。
-    ///
-    /// **spawn 当时的快照**，不是「以后现查工具表」——和 `ToolCallSlot::Request`
-    /// 存发起时 `Reversibility` 是同一个原则（issue 006 §注意）：undo 回到 spawn
-    /// 那一刻，用的必须是当时的工具表。
-    ///
-    /// 落进槽位前会**排序去重**（红线 11）：它要被渲染进子 agent 的 prompt，
-    /// 顺序一漂前缀缓存就全价。调用方不必自己保证顺序。
-    pub tools_allowed: Vec<Arc<str>>,
 }
 
 /// spawn 被拒的理由。**全部是可预期的拒绝**，不是 bug——029 把它翻成 `is_error`
@@ -120,12 +100,12 @@ impl Session {
     ///
     /// 1. 两道闸（深度 / 子数）——超了返回 [`SpawnRefused`]，**不 panic**；
     /// 2. 铸一个不复用的号（见模块文档），`build_agent` 建这个 agent 的整张图
-    ///    （十个 source 槽位 + 一个 derived，与 root 同一条路径）；
-    /// 3. 一条 `Entry`：把 `ToolsAllowed` 从 `Null` 写成工具子集。
+    ///    （整份 `Slot::ALL` + 一个 derived，与 root 同一条路径）；
+    /// 3. 一条 `Entry`：原子写入 `ToolsAllowed` 与已解析的 `ExecutionProfile`。
     ///
-    /// # 为什么 `changes` 里只有一个槽位
+    /// # 为什么默认配置的 `changes` 里只有一个槽位
     ///
-    /// 其余九个槽位此刻**就是**它们的默认值，`record_set` 不给没变的值落 `Change`
+    /// 其余槽位此刻**就是**它们的默认值，`record_set` 不给没变的值落 `Change`
     /// （009 的「幽灵步不落条目」）。这不是记漏了：undo 这一条的语义是「回到 spawn
     /// 之前」，而 spawn 之前它们本来就是默认值。子 agent 在这一轮里后来写的东西
     /// 各有各的 entry，`undo_turn` 一并退掉。
@@ -175,8 +155,16 @@ impl Session {
         // 排序去重后落盘（红线 11），机制在 `value::str_set`——跟 039 激活的 skill
         // 集是同一个「有序字符串集当值」的形状，只有一处编解码。
         let tools = str_set::to_value(config.tools_allowed);
-        let key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
-        self.commit_as(parent, "spawn_child", |txn| txn.set_key(key, tools));
+        let profile = config
+            .execution_profile
+            .map(|id| crate::value::atom_value::AgentValue::Text(id.into_inner()))
+            .unwrap_or(crate::value::atom_value::AgentValue::Null);
+        let tools_key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
+        let profile_key = AtomKey::Agent(child.clone(), Slot::ExecutionProfile);
+        self.commit_as(parent, "spawn_child", |txn| {
+            txn.set_key(tools_key, tools);
+            txn.set_key(profile_key, profile);
+        });
 
         Ok(child)
     }
@@ -206,6 +194,7 @@ fn child_seq(parent: &AgentId, child: &AgentId) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn session() -> Session {
         Session::new(AgentId::root())
@@ -214,6 +203,7 @@ mod tests {
     fn cfg(tools: &[&str]) -> ChildConfig {
         ChildConfig {
             tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect(),
+            ..ChildConfig::default()
         }
     }
 

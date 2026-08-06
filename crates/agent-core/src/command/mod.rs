@@ -16,6 +16,7 @@
 //! | [`session`] | `Session` 结构本身与会话级命令（`new` / `begin_turn` / `set_max_*` / `mark_irreversible`） |
 //! | [`read`] | 公开读口：宿主取料的地方，形状对齐 M1 的 `TurnState` 字段 |
 //! | [`barrier`] | 034：`barrier_info`——描述一条屏障 entry「越过它意味着什么」，CLI 与 server 共用 |
+//! | [`child_config`] | 子 agent 出生时固化的 durable 配置；live provider binding 不进 core |
 //! | [`commit`] | 一次转移 → 一个 batch → 一条 `Entry` |
 //! | [`txn`] | 一次转移的写入事务：类型化读写 + `record_set` 收口 |
 //! | [`step`] | `Session::step`：epoch 闸 + agent 闸 + 分发 |
@@ -41,6 +42,7 @@
 //! 一段代码，是没有代码。
 
 pub mod barrier;
+pub mod child_config;
 pub mod commit;
 pub mod cross_read;
 pub mod despawn;
@@ -60,12 +62,11 @@ pub mod txn;
 pub mod undo;
 
 pub use barrier::BarrierInfo;
+pub use child_config::ChildConfig;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};
 pub use skill::SkillError;
-pub use spawn::{
-    AgentLimits, ChildConfig, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused,
-};
+pub use spawn::{AgentLimits, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused};
 pub use undo::UndoReport;

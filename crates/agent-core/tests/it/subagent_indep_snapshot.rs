@@ -6,9 +6,9 @@
 //! `Session::primitives`/`Session::restore` 文档。`Session::restore` 是公开
 //! API，所以直接测它，不必退到 `to_parts`/`from_parts` 那一层。
 
-use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DEFAULT_HISTORY_CAP, Session};
 use crate::support::session::new_session;
 use crate::support::user_input_for;
+use agent_core::{AgentId, AgentValue, AtomKey, ChildConfig, DEFAULT_HISTORY_CAP, Session};
 
 #[test]
 fn primitives_of_a_two_child_session_cover_the_whole_tree() {
@@ -19,6 +19,7 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("a1");
@@ -27,6 +28,7 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:web/fetch".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("a2");
@@ -42,8 +44,8 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     assert!(agents_present.contains(&a2));
     assert_eq!(
         snap.len(),
-        42,
-        "root + a1 + a2，每个 agent 十四个槽位（073 加了 HostTools、064 加了 HostSkills、076 加了 DisabledBuiltins）"
+        45,
+        "root + a1 + a2，每个 agent 十五个槽位（093 追加了 ExecutionProfile）"
     );
 }
 
@@ -56,6 +58,7 @@ fn primitives_survive_a_serde_round_trip_unchanged() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("a1");
@@ -80,6 +83,7 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("a1");
@@ -88,6 +92,7 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:web/fetch".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("a2");

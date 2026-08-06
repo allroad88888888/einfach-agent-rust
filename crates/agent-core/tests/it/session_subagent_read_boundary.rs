@@ -10,8 +10,8 @@
 
 use std::sync::Arc;
 
-use agent_core::{AgentId, AgentValue, ChildConfig, ReadDenied, Session, Slot, Visibility};
 use crate::support::{user_input_event, user_input_for};
+use agent_core::{AgentId, AgentValue, ChildConfig, ReadDenied, Session, Slot, Visibility};
 
 fn tree() -> (Session, AgentId, AgentId, AgentId) {
     let mut s = Session::new(AgentId::root());
@@ -21,6 +21,7 @@ fn tree() -> (Session, AgentId, AgentId, AgentId) {
             &root,
             ChildConfig {
                 tools_allowed: vec![Arc::from("srv:fs/read")],
+                ..ChildConfig::default()
             },
         )
         .unwrap();

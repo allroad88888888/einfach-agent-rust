@@ -109,7 +109,8 @@ impl Slot {
             | Slot::TurnsUsed
             | Slot::MaxTurns
             | Slot::RetriesUsed
-            | Slot::MaxRetries => Visibility::Private,
+            | Slot::MaxRetries
+            | Slot::ExecutionProfile => Visibility::Private,
         }
     }
 }

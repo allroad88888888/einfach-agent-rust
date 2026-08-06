@@ -22,7 +22,7 @@
 //!    引擎本来也不会让它被逐出（`AtomFamily::evict` 有下游就返回 false）。
 //!    换句话说墓碑不是我们额外留的，是逐出规则自己留下的。
 //!
-//! 代价是每个死掉的子 agent 留一个 atom 而不是零个：十一分之一的残留，
+//! 代价是每个死掉的子 agent 留一个 atom 而不是零个：全部 source 槽位中的一个，
 //! 换「id 一生只属于一个 agent」和一条不会被引擎拒绝的逐出路径。
 //!
 //! ## undo 撤销 despawn，redo **不**重新逐出
@@ -230,74 +230,5 @@ impl Session {
 /// 逐出顺序要直接问 family。其余（记 prev / 自叶向根 / 三种拒绝 / undo 重建）
 /// 走公开面，住在 `tests/session_subagent_despawn.rs`。
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use crate::command::spawn::ChildConfig;
-    use crate::graph::{derived_atom, source_atom};
-
-    use super::*;
-
-    fn session_with_child() -> (Session, AgentId) {
-        let mut s = Session::new(AgentId::root());
-        let child = s
-            .spawn_child(
-                &AgentId::root(),
-                ChildConfig {
-                    tools_allowed: vec![Arc::from("srv:fs/read")],
-                },
-            )
-            .unwrap();
-        (s, child)
-    }
-
-    /// **019 硬约束 1 的反面**：derived 还活着时，它读的那个 primitive 逐不掉
-    /// ——引擎写死的顺序，不是我们的约定。`despawn_child` 之所以能成，
-    /// 正是因为它先销 derived。
-    #[test]
-    fn a_slot_the_childs_derived_still_reads_cannot_be_evicted_first() {
-        let (s, child) = session_with_child();
-        let converged = derived_atom(
-            &s.store,
-            &s.sources,
-            &s.derived,
-            &DerivedKey::ToolsConverged(child.clone()),
-        );
-        let _ = s.store.get(converged); // 算一次，把反向边装上
-
-        let key = AtomKey::Agent(child, Slot::ToolSlots);
-        assert!(
-            !s.sources.borrow_mut().evict(&s.store, &key),
-            "还有下游 derived 时逐出必须被拒绝"
-        );
-    }
-
-    /// **019 硬约束 2**：子树之外还有人读时，整条命令拒绝，而且一个字节都没改。
-    ///
-    /// 这个测试自己造了一个「外人」derived——它捕获了 `AtomId`（红线 4 的孪生条款
-    /// 明令 derived 不许这么干），这里是刻意的：它的唯一职责是**持有一条读边**，
-    /// 从建出来到测试结束都不会被重建。生产代码里的汇聚 derived 一律按逻辑键
-    /// 现查 family（`graph/build.rs`）。
-    #[test]
-    fn an_outside_reader_refuses_the_whole_despawn() {
-        let (mut s, child) = session_with_child();
-        let watched = source_atom(
-            &s.store,
-            &s.sources,
-            &AtomKey::Agent(child.clone(), Slot::Status),
-        );
-        let watcher = s.store.create_derived_ctx(move |args| args.get(watched));
-        let _ = s.store.get(watcher); // 装上反向边
-
-        let before = s.primitives();
-        let history_len = s.history_len();
-
-        let Err(DespawnRefused::StillRead { key }) = s.despawn_child(&child) else {
-            panic!("还有外部读者时必须拒绝");
-        };
-        assert_eq!(key, AtomKey::Agent(child.clone(), Slot::Status));
-        assert_eq!(s.primitives(), before, "拒绝时状态一个字节都不该改");
-        assert_eq!(s.history_len(), history_len, "拒绝不该留下一条 entry");
-        assert!(s.is_live(&child), "拒绝之后子 agent 还活着");
-    }
-}
+#[path = "despawn_tests.rs"]
+mod tests;

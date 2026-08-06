@@ -4,8 +4,8 @@
 //! 「深度 4 / 子数 9 被拒」邻近的号复用段落、cargo doc 的 `command::spawn` /
 //! `command::despawn` 模块文档。不读 `src/command/{spawn,despawn}.rs` 源码。
 
-use agent_core::{AgentValue, AtomKey, ChildConfig, Slot};
 use crate::support::session::new_session;
+use agent_core::{AgentValue, AtomKey, ChildConfig, Slot};
 
 #[test]
 fn despawning_and_respawning_does_not_reuse_the_dead_agents_number() {
@@ -39,12 +39,12 @@ fn a_dead_agents_tombstone_key_exists_with_null_but_is_live_says_no() {
         .filter(|(k, _)| k.agent() == &child)
         .count();
     assert_eq!(
-        before, 14,
-        "每个 agent 一份 `Slot::ALL`（073 加了 HostTools → 12、064 加了 HostSkills → 13、076 加了 DisabledBuiltins → 14）"
+        before, 15,
+        "每个 agent 一份 `Slot::ALL`（093 追加了 ExecutionProfile → 15）"
     );
 
     let report = session.despawn_child(&child).expect("despawn");
-    assert_eq!(report.atoms_evicted, 13);
+    assert_eq!(report.atoms_evicted, 14);
     assert!(!session.is_live(&child), "despawn 之后 is_live 该是假");
 
     let remaining: Vec<_> = session

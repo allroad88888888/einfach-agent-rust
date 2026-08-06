@@ -11,6 +11,7 @@ mod cache_guard_window;
 mod call_provider_thin;
 mod disabled_builtins_indep_restore;
 mod event_epoch_extractor;
+mod execution_profile;
 mod guard_indep_drift;
 mod guard_indep_meta;
 mod guard_indep_reconcile;

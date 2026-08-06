@@ -28,13 +28,13 @@
 
 use std::sync::Arc;
 
-use agent_core::{
-    AgentActivity, AgentId, AgentNode, AgentTree, ChildConfig, Event, Session, TurnStatus,
-    UndoReport,
-};
 use crate::support::{
     provider_done_end_turn, provider_done_end_turn_for, provider_done_tool_use_for,
     user_input_event, user_input_for,
+};
+use agent_core::{
+    AgentActivity, AgentId, AgentNode, AgentTree, ChildConfig, Event, Session, TurnStatus,
+    UndoReport,
 };
 
 fn root() -> AgentId {
@@ -44,6 +44,7 @@ fn root() -> AgentId {
 fn cfg() -> ChildConfig {
     ChildConfig {
         tools_allowed: vec![Arc::from("srv:fs/read")],
+        ..ChildConfig::default()
     }
 }
 

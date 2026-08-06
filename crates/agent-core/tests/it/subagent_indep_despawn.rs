@@ -26,11 +26,11 @@
 //! 测试改为验证约束 2 的正向面：一棵没有外部读者的真实子树，despawn 该顺利
 //! 通过而不会被状态驱动的逐出闸误伤（下面 `despawn_evicts_leaf_first_...`）。
 
+use crate::support::session::new_session;
+use crate::support::{provider_done_tool_use_for, tool_result_for, user_input_for};
 use agent_core::{
     AgentEntry, AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use crate::support::session::new_session;
-use crate::support::{provider_done_tool_use_for, tool_result_for, user_input_for};
 
 fn child_key_count(session: &Session, agent: &AgentId) -> usize {
     session
@@ -80,6 +80,7 @@ fn spawn_and_drive_child(session: &mut Session) -> AgentId {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("spawn child");
@@ -141,8 +142,9 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
     let child = spawn_and_drive_child(&mut session);
     // 槽位数 = `Slot::ALL.len()`（每个 agent 一份，`build_agent` 不给 root 开小灶）：
     // 028 是 10、039 加 `SkillsActive` 是 11、073 加 `HostTools` 是 12、
-    // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14。
-    assert_eq!(child_key_count(&session, &child), 14);
+    // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14、
+    // 093 加 `ExecutionProfile` 是 15。
+    assert_eq!(child_key_count(&session, &child), 15);
 
     let report = session
         .despawn_child(&child)
@@ -150,13 +152,13 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
 
     assert_eq!(report.agents, vec![child.clone()]);
     assert_eq!(
-        report.atoms_evicted, 13,
-        "十四个槽位里只留 ToolsAllowed 一个墓碑"
+        report.atoms_evicted, 14,
+        "十五个槽位里只留 ToolsAllowed 一个墓碑"
     );
     assert_eq!(
         child_key_count(&session, &child),
         1,
-        "其余十三个 atom 该被物理逐出"
+        "其余十四个 atom 该被物理逐出"
     );
     assert!(!session.is_live(&child));
     assert_eq!(
@@ -191,8 +193,8 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     assert_eq!(session.children_of(&root), vec![child.clone()]);
     assert_eq!(
         child_key_count(&session, &child),
-        14,
-        "全部十四个槽位都该被按需重建"
+        15,
+        "全部十五个槽位都该被按需重建"
     );
     assert_eq!(
         value_of(&session, &child, Slot::Status),

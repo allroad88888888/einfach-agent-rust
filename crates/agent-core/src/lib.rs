@@ -47,7 +47,7 @@ pub use engine::{
     Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus, UserImage,
 };
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
-pub use ids::{AGENT_PATH_SEP, AgentId, MessageId, SkillId, ToolCallId};
+pub use ids::{AGENT_PATH_SEP, AgentId, ExecutionProfileId, MessageId, SkillId, ToolCallId};
 pub use limits::{DEFAULT_TOOL_OUTPUT_BYTES, truncate_tool_output, truncated_content_bytes};
 pub use observe::{AgentActivity, AgentNode, AgentTree};
 pub use seam::{

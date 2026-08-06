@@ -15,11 +15,11 @@
 use crate::support;
 use std::sync::Arc;
 
+use crate::support::user_input_event;
+use crate::support::user_input_for;
 use agent_core::{
     AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use crate::support::user_input_event;
-use crate::support::user_input_for;
 
 fn subtree_of(s: &Session, agent: &AgentId) -> Vec<(AtomKey, AgentValue)> {
     s.primitives()
@@ -31,6 +31,7 @@ fn subtree_of(s: &Session, agent: &AgentId) -> Vec<(AtomKey, AgentValue)> {
 fn cfg() -> ChildConfig {
     ChildConfig {
         tools_allowed: vec![Arc::from("srv:fs/read")],
+        ..ChildConfig::default()
     }
 }
 

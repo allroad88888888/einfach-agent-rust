@@ -1,7 +1,7 @@
 //! 跨模块使用的 id 类型。`message.rs` / `tool.rs` / `engine/` 都要引用它们，放进
 //! 其中任何一个都会造成模块间的隐式耦合，所以单独开一个文件（红线 9）。
 //!
-//! [`AgentId`] 住在隔壁 [`agent`] 子模块：它比这里另外两个 id 多一整套**路径代数**
+//! [`AgentId`] 住在隔壁 [`agent`] 子模块：它比这里另外几个 id 多一整套**路径代数**
 //! （父/子/深度/祖先判定，028），那是一个独立的抽象——「一个 agent 在树里的地址」
 //! ——不该和「一次工具调用叫什么」挤在一个文件里。
 
@@ -75,6 +75,28 @@ impl SkillId {
     }
 }
 
+/// 一个已由宿主解析并授权的执行 profile 标识（093）。
+///
+/// core 只把它当作不透明、可持久化的字符串。它对应哪个 provider、endpoint、
+/// model、key、client 或 timeout，全部由 runtime registry 解释，绝不进入 durable
+/// 状态。这里也不校验 id 是否存在：恢复后 registry 缺项时应由 runtime fail closed。
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+pub struct ExecutionProfileId(Arc<str>);
+
+impl ExecutionProfileId {
+    pub fn new(id: impl Into<Arc<str>>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn into_inner(self) -> Arc<str> {
+        self.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +130,13 @@ mod tests {
         let s = serde_json::to_string(&id).unwrap();
         assert_eq!(serde_json::from_str::<SkillId>(&s).unwrap(), id);
         assert_eq!(id.as_str(), "pirate-speak");
+    }
+
+    #[test]
+    fn execution_profile_id_roundtrip() {
+        let id = ExecutionProfileId::new("vision");
+        let s = serde_json::to_string(&id).unwrap();
+        assert_eq!(serde_json::from_str::<ExecutionProfileId>(&s).unwrap(), id);
+        assert_eq!(id.as_str(), "vision");
     }
 }

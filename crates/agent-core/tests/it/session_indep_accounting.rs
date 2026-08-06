@@ -9,13 +9,13 @@
 
 use std::sync::Arc;
 
-use agent_core::command::meta::{AgentChange, AgentEntry};
-use agent_core::{
-    AtomKey, ContentBlock, Role, Slot, SlotState, ToolCallId, ToolCallSlot, TurnStatus,
-};
 use crate::support::session::new_session;
 use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
+};
+use agent_core::command::meta::{AgentChange, AgentEntry};
+use agent_core::{
+    AtomKey, ContentBlock, Role, Slot, SlotState, ToolCallId, ToolCallSlot, TurnStatus,
 };
 
 /// 只有落在这个集合里的键才是「已知的 primitive」。
@@ -40,7 +40,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 064 新增：宿主建会话时声明的 skill。
             | Slot::HostSkills
             // 076 新增：这个会话关掉了哪些内置工具（唯一一个减法槽位）。
-            | Slot::DisabledBuiltins => {}
+            | Slot::DisabledBuiltins
+            // 093 新增：runtime 已解析并授权的不透明执行 profile id。
+            | Slot::ExecutionProfile => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

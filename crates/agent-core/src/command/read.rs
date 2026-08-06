@@ -27,7 +27,7 @@ use imbl::Vector;
 use crate::engine::epoch::Epoch;
 use crate::engine::state::{ToolSlot, TurnStatus};
 use crate::graph::{AtomKey, DerivedKey, Slot, derived_atom};
-use crate::ids::{AgentId, MessageId};
+use crate::ids::{AgentId, ExecutionProfileId, MessageId};
 use crate::seam::PrefixImage;
 use crate::value::atom_value::AgentValue;
 use crate::value::message::Message;
@@ -63,7 +63,7 @@ impl Session {
     /// 对跨 agent 读口下的同一条判断，per-agent 取料口没有理由更宽松。
     ///
     /// 键不在 family 里就落 [`AtomKey::default_value`]：对活着的 agent 这一支永远
-    /// 走不到（`build_agent` 把十个槽位一次建齐），它兜的是「宿主拼错了一个
+    /// 走不到（`build_agent` 把整份 `Slot::ALL` 一次建齐），它兜的是「宿主拼错了一个
     /// `AgentId`」——那种情况下拿到一份默认值，比顺手建一棵幽灵树好。
     fn slot_of(&self, agent: &AgentId, slot: Slot) -> AgentValue {
         let key = AtomKey::Agent(agent.clone(), slot);
@@ -128,6 +128,17 @@ impl Session {
                 .filter_map(|v| v.as_str().map(Arc::from))
                 .collect(),
         )
+    }
+
+    /// 这个 agent 出生时固化的不透明执行 profile id。
+    ///
+    /// `None` 对 root、默认 spawn、旧 snapshot 和已回滚的 spawn 都成立。core 不把
+    /// 它解析成 provider，也不在缺值时选择 fallback；这些判断属于 runtime。
+    pub fn execution_profile_of(&self, agent: &AgentId) -> Option<ExecutionProfileId> {
+        self.slot_of(agent, Slot::ExecutionProfile)
+            .as_text()
+            .cloned()
+            .map(ExecutionProfileId::new)
     }
 
     /// 本轮的工具槽，**顺序就是模型请求的顺序**。

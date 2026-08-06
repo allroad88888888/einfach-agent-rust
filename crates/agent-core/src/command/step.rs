@@ -48,7 +48,7 @@ impl Session {
     /// 事件的 `agent` 字段（001 就有）从 028 起**真正路由**：这一步写的是那个
     /// agent 的槽位，产出的 effect 也带着它。于是每个 agent 的轮状态（status /
     /// 工具槽 / 预算）天然独立——不是「每个 agent 一份 TurnState」，是同一张原子图
-    /// 上按 `AgentId` 分开的十个槽位。
+    /// 上按 `AgentId` 分开的整份 `Slot::ALL`。
     ///
     /// 但**路由权不交给宿主**：事件指向的 agent 不在本会话的活名单上
     /// （[`Session::is_live`]）就直接丢弃，跟 epoch 闸一样返回空 `Vec`、不写

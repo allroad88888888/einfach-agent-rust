@@ -9,13 +9,14 @@
 use crate::support;
 use std::sync::Arc;
 
-use agent_core::{AgentEntry, AgentId, AtomKey, ChildConfig, Session, Slot, TurnStatus};
 use crate::support::user_input_event;
 use crate::support::user_input_for;
+use agent_core::{AgentEntry, AgentId, AtomKey, ChildConfig, Session, Slot, TurnStatus};
 
 fn cfg() -> ChildConfig {
     ChildConfig {
         tools_allowed: vec![Arc::from("srv:fs/read")],
+        ..ChildConfig::default()
     }
 }
 

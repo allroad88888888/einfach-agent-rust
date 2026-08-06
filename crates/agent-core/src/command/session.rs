@@ -67,7 +67,7 @@ pub struct Session {
 }
 
 impl Session {
-    /// 开一个会话：给 root 建图（十个 source 槽位 + 一个 derived，见
+    /// 开一个会话：给 root 建图（整份 `Slot::ALL` + 一个 derived，见
     /// `graph::build_agent`）、空日志、[`Epoch::START`]、`turn_id` 从 1 起、
     /// 子 agent 上限取默认值（[`AgentLimits::default`]）。
     ///

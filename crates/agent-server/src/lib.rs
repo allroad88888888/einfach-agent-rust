@@ -46,6 +46,7 @@
 //! 会话，落盘快照完整之后进程再退出。
 
 mod actor;
+pub mod attachments;
 mod bind;
 mod bootstrap;
 mod command;

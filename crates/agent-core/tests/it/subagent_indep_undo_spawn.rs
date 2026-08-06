@@ -3,7 +3,7 @@
 //! 「连 atom 一起 despawn」）。
 //!
 //! 覆盖：undo 之后子从 `live_agents` 消失、事件被活性闸静默丢弃（无 effect、
-//! 无新 entry、无 primitive 变化）、`primitives()` 里子的十个槽位一个不少（
+//! 无新 entry、无 primitive 变化）、`primitives()` 里子的全部槽位一个不少（
 //! 只是值回默认）——这一点是跟 despawn 墓碑语义（只剩 1 个）的关键区别，见
 //! `subagent_indep_tombstone.rs`。以及：redo 之后整棵子树连带子写过的状态
 //! 一起回来，而且还能接着工作。
@@ -11,11 +11,11 @@
 //! 黑盒来源：docs/issues/028-multi-agent-graph.md 「裁决：轮内 spawn 的子在
 //! undo 之后是什么」+ 验收第 4 条、docs/STATE-MODEL.md §「子 agent」。
 
+use crate::support::session::new_session;
+use crate::support::{provider_done_end_turn_for, user_input_for};
 use agent_core::{
     AgentId, AgentValue, AtomKey, ChildConfig, Session, Slot, TurnStatus, UndoReport,
 };
-use crate::support::session::new_session;
-use crate::support::{provider_done_end_turn_for, user_input_for};
 
 fn child_slot_count(session: &Session, child: &AgentId) -> usize {
     session
@@ -52,6 +52,7 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("spawn child");
@@ -66,7 +67,7 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
         session.history_len() > before_write,
         "子的 UserInput 该留一条 entry"
     );
-    assert_eq!(child_slot_count(&session, &child), 14);
+    assert_eq!(child_slot_count(&session, &child), 15);
 
     let report = session.undo_turn();
     assert!(
@@ -78,10 +79,10 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     assert_eq!(session.live_agents(), vec![root.clone()]);
     assert!(session.children_of(&root).is_empty());
 
-    // 裁决的核心：atom 还在（十四个槽位一个不少），只是值回默认。
+    // 裁决的核心：atom 还在（十五个槽位一个不少），只是值回默认。
     assert_eq!(
         child_slot_count(&session, &child),
-        14,
+        15,
         "undo 不逐出 atom，只回滚值——这是跟 despawn 墓碑语义的关键区别"
     );
     assert_eq!(tools_allowed_of(&session, &child), AgentValue::Null);
@@ -130,6 +131,7 @@ fn redo_brings_the_whole_subtree_back_and_it_keeps_working() {
             &root,
             ChildConfig {
                 tools_allowed: vec!["srv:fs/read".into()],
+                ..ChildConfig::default()
             },
         )
         .expect("spawn child");

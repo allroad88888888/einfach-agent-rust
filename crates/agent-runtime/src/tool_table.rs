@@ -28,7 +28,7 @@ use serde_json::Value;
 
 use crate::collect_tool::collect_spec;
 use crate::skill::SkillRegistry;
-use crate::spawn_tool::spawn_spec;
+use crate::spawn_request::spawn_spec;
 use crate::status_tool::status_spec;
 
 use names::{location_of, reversibility_of};

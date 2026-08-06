@@ -127,6 +127,12 @@ pub enum Slot {
     /// **默认值必须是空数组**——019 的按需重建拿的就是它，若默认成别的，undo 路径上
     /// 凭空重建出来的 atom 会把一个从没关过任何东西的会话的工具表悄悄削掉几项。
     DisabledBuiltins,
+    /// 子 agent 出生时固化的不透明执行 profile id（093）。
+    ///
+    /// `Text(id)` 只负责恢复后还能指向同一个 runtime registry 项；core 不知道该项
+    /// 里是哪家 provider、哪个模型或哪份凭证。`Null` 是 root、既有默认 spawn 与
+    /// 缺少本槽位的旧 snapshot 的兼容值。
+    ExecutionProfile,
 }
 
 /// 一次工具调用自己的槽位。
@@ -218,6 +224,9 @@ impl Slot {
             Slot::DisabledBuiltins => {
                 AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
             }
+            // 旧快照没有这个键时必须保持可恢复。Null 不代表选择了默认 provider；
+            // 如何解释 legacy/default 由 runtime 决定，core 不做能力或路由判断。
+            Slot::ExecutionProfile => AgentValue::Null,
         }
     }
 
@@ -228,7 +237,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 14] = [
+    pub const ALL: [Slot; 15] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -243,6 +252,7 @@ impl Slot {
         Slot::HostTools,
         Slot::HostSkills,
         Slot::DisabledBuiltins,
+        Slot::ExecutionProfile,
     ];
 }
 

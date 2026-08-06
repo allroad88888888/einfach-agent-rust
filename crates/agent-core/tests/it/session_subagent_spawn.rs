@@ -13,6 +13,7 @@ use agent_core::{
 fn cfg(tools: &[&str]) -> ChildConfig {
     ChildConfig {
         tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect(),
+        ..ChildConfig::default()
     }
 }
 

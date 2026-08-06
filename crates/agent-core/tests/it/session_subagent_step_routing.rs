@@ -6,12 +6,15 @@
 use crate::support;
 use std::sync::Arc;
 
+use crate::support::{
+    provider_done_tool_use_for, tool_result_for, user_input_event, user_input_for,
+};
 use agent_core::{AgentId, ChildConfig, Effect, Session, Slot, TurnStatus};
-use crate::support::{provider_done_tool_use_for, tool_result_for, user_input_event, user_input_for};
 
 fn cfg() -> ChildConfig {
     ChildConfig {
         tools_allowed: vec![Arc::from("srv:fs/read")],
+        ..ChildConfig::default()
     }
 }
 

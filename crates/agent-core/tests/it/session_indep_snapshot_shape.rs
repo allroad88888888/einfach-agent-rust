@@ -2,11 +2,11 @@
 //! serde 往返（红线 3：primitive atom 的值必须全部可序列化，用一轮真实对话
 //! 攒出来的完整快照做整份 to_string/from_str 相等断言）。
 
-use agent_core::{AgentValue, AtomKey};
 use crate::support::session::new_session;
 use crate::support::{
     provider_done_end_turn, provider_done_tool_use, tool_result_event, user_input_event,
 };
+use agent_core::{AgentValue, AtomKey};
 
 /// 槽位表的条数**写死在这里**，不从 `Slot::ALL.len()` 取：这个数字就是这个测试
 /// 的全部价值——顺手加一个槽位而没想清楚它进不进快照时，这里会红。
@@ -15,7 +15,8 @@ use crate::support::{
 /// 的活名单）→ 10；039 加了 `Slot::SkillsActive`（激活的 skill id 集）→ 11；
 /// 073 加了 `Slot::HostTools`（宿主建会话时声明的工具）→ 12；
 /// 064 加了 `Slot::HostSkills`（宿主建会话时声明的 skill）→ 13；
-/// 076 加了 `Slot::DisabledBuiltins`（这个会话关掉了哪些内置工具）→ 14。
+/// 076 加了 `Slot::DisabledBuiltins`（这个会话关掉了哪些内置工具）→ 14；
+/// 093 追加 `Slot::ExecutionProfile`（子 agent 的 durable 执行身份）→ 15。
 /// 改这个数之前先问：新槽位是不是真的**必须**进快照。
 ///
 /// `HostTools` 的答案是必须：不进快照 = 一次落快照之后声明就丢了，恢复出来的
@@ -24,7 +25,7 @@ use crate::support::{
 /// 一份**指向空 registry 的激活集**（状态说某个 skill 激活着、正文却取不到）。
 /// `DisabledBuiltins` 也必须：它是**减法**，不进快照 = 恢复出来的会话把当初藏起来
 /// 的工具又端给模型看，而那段历史里从没出现过它们。
-const EXPECTED_SLOT_COUNT: usize = 14;
+const EXPECTED_SLOT_COUNT: usize = 15;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {
