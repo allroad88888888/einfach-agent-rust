@@ -14,7 +14,7 @@
 use agent_core::{ContentBlock, Message, Role, SystemChunk};
 use serde_json::{Map, Value, json};
 
-use super::names;
+use super::{image_placeholder::dropped_image_placeholder, names};
 
 /// 多段 system 拼成一条 system message 的正文。段间用空行分隔。
 /// 全空（没有段、或段的文本都是空）时返回 `None`——不发空的 system 消息。
@@ -113,8 +113,15 @@ fn push_message(
                 "type": "image_url",
                 "image_url": {"url": &**reference},
             })),
-            ContentBlock::Image { name, mime, .. } => {
-                append_text(&mut text, &dropped_image_placeholder(name.as_deref(), mime));
+            ContentBlock::Image {
+                reference,
+                name,
+                mime,
+            } => {
+                append_text(
+                    &mut text,
+                    &dropped_image_placeholder(reference, name.as_deref(), mime),
+                );
                 dropped_images += 1;
             }
             ContentBlock::ToolUse { id, name, input } => tool_calls.push(json!({
@@ -163,17 +170,6 @@ fn push_message(
     // 但顺序错了有的实现会直接拒。
     out.extend(results);
     dropped_images
-}
-
-/// 将会被 provider 降级的图片变成确定性的、对模型可见的说明。
-///
-/// `name: None` 的措辞固定为「用户上传了图片（mime）」：它只能由图片块本身的
-/// 字段决定，不能随着历史位置或请求次数变化（红线 11）。
-fn dropped_image_placeholder(name: Option<&str>, mime: &str) -> String {
-    match name {
-        Some(name) => format!("[用户上传了图片 {name}（{mime}），当前模型看不到图片内容]"),
-        None => format!("[用户上传了图片（{mime}），当前模型看不到图片内容]"),
-    }
 }
 
 fn append_text(text: &mut String, value: &str) {
