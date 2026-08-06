@@ -27,17 +27,18 @@ tokio = { version = "1", features = ["sync", "net", "time", "rt"] }
 
 # 031：下行 SSE、上行 POST 的 HTTP 面。只启用直接用到的 feature——不要 ws/
 # multipart/form（092 的 tool-status 是首个查询参数协议）。
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio"] }
+
+# HTTP 库只发结构化 span/event；全局 subscriber 由 agent-server-bin 或桌面宿主安装。
+tracing = "0.1"
 
 # 只要 `wrappers::ReceiverStream`——把 `tokio::sync::mpsc::Receiver<BufferedFrame>`
 # 包成 `Stream`，喂给 axum 的 SSE 响应（`crate::http::routes::sse`）。
 tokio-stream = { version = "0.1", default-features = false, features = ["sync"] }
 
-# 036：`ServerConfig::with_static_dir` 的 SPA 静态托管。只开 `fs`——
-# `ServeDir`/`ServeFile` 两个类型，不要 `cors`/`trace`/`compression` 这个仓库
-# 用不上的东西。理由见 `crate::http::static_files` 模块文档「为什么选
-# tower-http 而不是手写」。
-tower-http = { version = "0.6", default-features = false, features = ["fs"] }
+# 036：`ServerConfig::with_static_dir` 的 SPA 静态托管用 `fs`；094 的安全 HTTP
+# 请求 span 用 `trace`。其余 feature 继续关闭。
+tower-http = { version = "0.6", default-features = false, features = ["fs", "trace"] }
 
 # 032：`ts` feature 门后面的可选依赖——`crate::ts_protocol` 只在这个 feature 打开时
 # 才编译，正常 `cargo build`/`cargo test`（不开 feature）零 ts-rs 编译痕迹。
@@ -51,6 +52,8 @@ ts = ["dep:ts-rs", "agent-core/ts"]
 
 [dev-dependencies]
 toml = "0.8"
+tower = { version = "0.5", features = ["util"] }
+tracing-subscriber = { version = "0.3", features = ["fmt", "json"] }
 # 测试要 `.await` Subscription::recv、要 `tokio::time::timeout` 掐轮询上限、
 # 031 的测试还要真的起一个 tokio 多线程运行时同时跑 axum 服务器和假浏览器客户端。
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "net"] }

@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
 use agent_server::{
-    AgentServer, BootstrapError, BootstrapOptions, ServerConfig, SessionsHandle, ToolTableSpec,
-    bootstrap,
+    bootstrap, AgentServer, BootstrapError, BootstrapOptions, ServerConfig, SessionsHandle,
+    ToolTableSpec,
 };
 use agent_transport::Client;
 use tauri::AppHandle;
@@ -55,6 +55,17 @@ impl std::fmt::Display for StartError {
 impl StartError {
     pub fn is_missing_config(&self) -> bool {
         matches!(self, StartError::Bootstrap(_))
+    }
+
+    /// Safe operational category; do not record the underlying error because it can include
+    /// provider configuration details that belong only in the first-run UI.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            StartError::Path(_) => "platform_path",
+            StartError::Dist(_) => "web_dist",
+            StartError::Bootstrap(_) => "bootstrap",
+            StartError::Io(_) => "io",
+        }
     }
 }
 
@@ -103,8 +114,11 @@ pub async fn start(app: &AppHandle) -> Result<Started, StartError> {
     let sessions = bound.sessions();
 
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = bound.serve().await {
-            log::error!("内嵌 agent-server 停了: {e}");
+        if bound.serve().await.is_err() {
+            tracing::error!(
+                failure.kind = "serve",
+                "embedded agent server stopped unexpectedly"
+            );
         }
     });
 

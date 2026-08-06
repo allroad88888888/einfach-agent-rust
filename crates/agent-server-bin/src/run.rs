@@ -10,10 +10,11 @@ use std::sync::Arc;
 
 use agent_core::{AgentLimits, SystemChunk};
 use agent_server::{
-    AgentServer, BootstrapOptions, BoundAgentServer, ServerConfig, ToolTableSpec, bootstrap,
+    AgentServer, BootstrapError, BootstrapOptions, ServerConfig, ToolTableSpec, bootstrap,
     default_bind_addr,
 };
 use agent_transport::Client;
+use tracing::{error, info};
 
 use crate::{cli::Cli, ready_file, remote_tool_timeout};
 
@@ -37,7 +38,7 @@ pub async fn run(cli: Cli) {
     // 时的当前工作目录，多一层子目录（`SessionTemplate::open_spec` 现造
     // `tools_root/<session-id>/`）避免不同 session 互相踩脚。
     let tools_root = std::env::current_dir()
-        .unwrap_or_else(|e| fail(&format!("拿不到当前工作目录: {e}")))
+        .unwrap_or_else(|_| fail("working_directory", "agent-server startup failed"))
         .join(".agent-server-tools");
 
     let assembled = bootstrap(BootstrapOptions {
@@ -57,9 +58,15 @@ pub async fn run(cli: Cli) {
         history_cap: None,
         snapshot_every: None,
         provider_timeout: None,
-        remote_tool_timeout: remote_tool_timeout::from_environment().unwrap_or_else(|e| fail(&e)),
+        remote_tool_timeout: remote_tool_timeout::from_environment()
+            .unwrap_or_else(|_| fail("remote_tool_timeout_config", "agent-server startup failed")),
     })
-    .unwrap_or_else(|e| fail(&format!("{e}")));
+    .unwrap_or_else(|error| {
+        fail(
+            bootstrap_failure_class(&error),
+            "agent-server startup failed",
+        )
+    });
 
     let port = cli
         .port
@@ -71,7 +78,8 @@ pub async fn run(cli: Cli) {
         .unwrap_or(0);
     // 红线 8：地址走 `agent_server::default_bind_addr`（默认 loopback，
     // `AGENT_BIND` 显式覆盖），这个文件里不出现全零地址字面量。
-    let addr = default_bind_addr(port).unwrap_or_else(|e| fail(&format!("{e}")));
+    let addr = default_bind_addr(port)
+        .unwrap_or_else(|_| fail("bind_config", "agent-server startup failed"));
 
     let provider_name = assembled.provider_name.clone();
     let model = assembled.template.model.clone();
@@ -88,33 +96,57 @@ pub async fn run(cli: Cli) {
     let bound = server
         .bind(addr)
         .await
-        .unwrap_or_else(|e| fail(&format!("绑定 {addr} 失败: {e}")));
+        .unwrap_or_else(|_| fail("bind", "agent-server startup failed"));
 
     if let Some(path) = &cli.ready_file {
         ready_file::publish(path, bound.local_addr().port())
-            .unwrap_or_else(|e| fail(&format!("发布就绪文件 {} 失败: {e}", path.display())));
+            .unwrap_or_else(|_| fail("ready_file", "agent-server startup failed"));
     }
 
-    print_banner(&bound, &provider_name, &model, &cli);
+    info!(
+        listen_addr = %bound.local_addr(),
+        provider = provider_name.as_str(),
+        model = model.as_ref(),
+        session_count = sessions.ids().len(),
+        "agent-server 监听 http://{}",
+        bound.local_addr()
+    );
 
     tokio::select! {
         result = bound.serve() => {
-            if let Err(e) = result {
-                fail(&format!("serve 失败: {e}"));
+            if result.is_err() {
+                fail("serve", "agent-server stopped with a server failure");
             }
         }
         signal = shutdown_signal() => {
-            eprintln!("\n{}：优雅关闭全部会话（落盘快照）...", signal.description());
+            info!(
+                signal = signal.description(),
+                session_count = sessions.ids().len(),
+                "{}：优雅关闭全部会话（落盘快照）...",
+                signal.description()
+            );
             // `close_all` 内部 `join` 每个 actor 线程，是阻塞调用——扔进
             // `spawn_blocking`，不占用 tokio 的异步 worker（`SessionsHandle::
             // close_all` 文档同一条建议）。
-            let outcomes = tokio::task::spawn_blocking(move || sessions.close_all()).await.unwrap_or_default();
-            for (id, outcome) in &outcomes {
-                if let Err(e) = outcome {
-                    eprintln!("  session {id}：{e}");
+            let outcomes = match tokio::task::spawn_blocking(move || sessions.close_all()).await {
+                Ok(outcomes) => outcomes,
+                Err(_) => {
+                    error!(failure_class = "session_close_task", "agent server session shutdown failed");
+                    Vec::new()
+                }
+            };
+            let mut close_failures = 0usize;
+            for (_, outcome) in &outcomes {
+                if outcome.is_err() {
+                    close_failures += 1;
+                    error!(failure_class = "session_close", "agent server session shutdown failed");
                 }
             }
-            eprintln!("已关闭 {} 个会话，退出。", outcomes.len());
+            info!(
+                closed_session_count = outcomes.len(),
+                close_failure_count = close_failures,
+                "agent server graceful shutdown complete"
+            );
         }
     }
 }
@@ -127,7 +159,12 @@ fn read_private_capability(cli: &Cli) -> Option<String> {
     let read = std::io::stdin()
         .lock()
         .read_line(&mut line)
-        .unwrap_or_else(|_| fail("读取 private API capability 失败"));
+        .unwrap_or_else(|_| {
+            fail(
+                "private_capability_input",
+                "private API capability is invalid",
+            )
+        });
     let capability = line.trim_end_matches(['\r', '\n']);
     if read == 0
         || capability.len() != 43
@@ -135,32 +172,12 @@ fn read_private_capability(cli: &Cli) -> Option<String> {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
     {
-        fail("private API capability 无效");
-    }
-    Some(capability.to_owned())
-}
-
-fn print_banner(bound: &BoundAgentServer, provider_name: &str, model: &str, cli: &Cli) {
-    eprintln!(
-        "agent-server 监听 http://{}（provider={provider_name} model={model} tools=builtin+shell+spawn，开满档）",
-        bound.local_addr()
-    );
-    match &cli.sessions_dir {
-        Some(dir) => eprintln!(
-            "会话目录={}（POST /sessions 不带 session_path 时自动落盘到这里）",
-            dir.display()
-        ),
-        None => eprintln!(
-            "会话目录=（未指定，POST /sessions 不带 session_path 就是内存会话——用 --sessions-dir <dir> 落盘）"
-        ),
-    }
-    if let Some(path) = &cli.ready_file {
-        eprintln!(
-            "就绪文件={}（成功 bind 后原子发布实际端口，供父进程读取）。",
-            path.display()
+        fail(
+            "private_capability_input",
+            "private API capability is invalid",
         );
     }
-    eprintln!("Ctrl-C 或 Unix SIGTERM 退出（优雅：所有会话落盘快照之后才退出）。");
+    Some(capability.to_owned())
 }
 
 enum ShutdownSignal {
@@ -183,7 +200,7 @@ async fn shutdown_signal() -> ShutdownSignal {
         use tokio::signal::unix::{SignalKind, signal};
 
         let mut sigterm = signal(SignalKind::terminate())
-            .unwrap_or_else(|e| fail(&format!("无法监听 SIGTERM: {e}")));
+            .unwrap_or_else(|_| fail("sigterm_listener", "agent-server shutdown failed"));
         tokio::select! {
             _ = tokio::signal::ctrl_c() => ShutdownSignal::CtrlC,
             _ = sigterm.recv() => ShutdownSignal::Sigterm,
@@ -194,12 +211,25 @@ async fn shutdown_signal() -> ShutdownSignal {
     {
         tokio::signal::ctrl_c()
             .await
-            .unwrap_or_else(|e| fail(&format!("无法监听 Ctrl-C: {e}")));
+            .unwrap_or_else(|_| fail("ctrl_c_listener", "agent-server shutdown failed"));
         ShutdownSignal::CtrlC
     }
 }
 
-fn fail(message: &str) -> ! {
+fn bootstrap_failure_class(error: &BootstrapError) -> &'static str {
+    match error {
+        BootstrapError::Config(_) => "provider_config",
+        BootstrapError::UnknownProvider(_) => "provider_selection",
+        BootstrapError::MissingApiKey | BootstrapError::MissingExecutionProfileApiKey(_) => {
+            "provider_authentication"
+        }
+        BootstrapError::UnknownExecutionProfileProvider { .. } => "execution_profile",
+        BootstrapError::VisionExecutionProfileRequiresImages { .. } => "vision_profile",
+    }
+}
+
+fn fail(failure_class: &'static str, message: &str) -> ! {
+    error!(failure_class, "agent server lifecycle failure");
     eprintln!("{message}");
     std::process::exit(1);
 }

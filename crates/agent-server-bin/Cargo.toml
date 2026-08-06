@@ -25,3 +25,5 @@ agent-transport = { path = "../agent-transport" }
 # （Ctrl-C 与 Unix SIGTERM）。不要 `full`——这个仓库的依赖最小化取向（issue 035「注意」条目：
 # clap/手写 args 自选时优先依赖最小，这里同一个取向延伸到 tokio feature 上）。
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

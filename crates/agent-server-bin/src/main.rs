@@ -7,12 +7,16 @@
 //! [`run`] 模块，参数解析在 [`cli`] 模块——三十行以上的装配逻辑不堆在这里。
 
 mod cli;
+mod observability;
 mod ready_file;
 mod remote_tool_timeout;
 mod run;
 
 #[tokio::main]
 async fn main() {
+    if !observability::install() {
+        eprintln!("agent-server: operational logging is unavailable");
+    }
     let args: Vec<String> = std::env::args().collect();
     match cli::parse(&args) {
         cli::ParsedArgs::Help => println!("{}", cli::HELP),

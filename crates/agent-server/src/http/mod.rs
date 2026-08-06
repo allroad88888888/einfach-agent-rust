@@ -29,6 +29,9 @@ mod config;
 mod error;
 mod hub;
 mod json;
+mod observability;
+#[cfg(test)]
+mod observability_tests;
 mod pending;
 mod poll_protocol;
 mod private_capability;
@@ -88,6 +91,7 @@ impl AgentServer {
             Some(dir) => router.fallback_service(static_files::spa_fallback(&dir)),
             None => router,
         };
+        let router = observability::instrument(router);
         AgentServer { router, state }
     }
 
