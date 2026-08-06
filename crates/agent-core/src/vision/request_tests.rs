@@ -57,7 +57,15 @@ fn rejects_external_provider_and_malformed_references_without_echoing_them() {
         assert!(!error.message().contains(bad));
     }
 
-    for bad in ["img_", "img_12x", "IMG_12"] {
+    for bad in [
+        "img_",
+        "img_0",
+        "img_01",
+        "img_12x",
+        "IMG_12",
+        "img_18446744073709551615",
+        "img_18446744073709551616",
+    ] {
         let error = parse_vision_inspect_request(&json!({
             "images": [bad],
             "question": "q"
@@ -93,6 +101,10 @@ fn parser_and_schema_reject_unknown_fields() {
     assert_eq!(&*spec.name, VISION_INSPECT_TOOL);
     assert_eq!(spec.schema["additionalProperties"], false);
     assert_eq!(spec.schema["properties"]["images"]["minItems"], 1);
+    assert_eq!(
+        spec.schema["properties"]["images"]["items"]["pattern"],
+        "^img_[1-9][0-9]*$"
+    );
     assert_eq!(
         spec.schema["properties"]["images"]["maxItems"],
         MAX_VISION_IMAGES

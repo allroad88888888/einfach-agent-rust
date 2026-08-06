@@ -59,7 +59,7 @@ child receives the minimum data required for that inspection.
 {
   "name": "srv:vision/inspect",
   "arguments": {
-    "images": ["img_01"],
+    "images": ["img_1"],
     "question": "Read the visible text and explain the error shown."
   }
 }

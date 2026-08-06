@@ -20,6 +20,7 @@ pub const MAX_VISION_QUESTION_CHARS: usize = 4_096;
 
 const HANDLE_PREFIX: &str = "img_";
 const ATTACHMENT_PREFIX: &str = "attachment://";
+const MAX_HANDLE_NUMBER: u64 = u64::MAX - 1;
 
 /// 已通过语法校验的模型可见图片句柄。
 ///
@@ -41,10 +42,14 @@ impl VisionImageHandle {
 
     fn parse(value: &str) -> Option<Self> {
         let digits = value.strip_prefix(HANDLE_PREFIX)?;
-        if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        if digits.is_empty()
+            || digits.starts_with('0')
+            || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        {
             return None;
         }
-        Some(Self(Arc::from(value)))
+        let number = digits.parse::<u64>().ok()?;
+        (number <= MAX_HANDLE_NUMBER).then(|| Self(Arc::from(value)))
     }
 }
 
@@ -84,7 +89,7 @@ pub fn vision_inspect_spec() -> ToolSpec {
                     "description": "Distinct image handles copied exactly from the user message.",
                     "items": {
                         "type": "string",
-                        "pattern": "^img_[0-9]+$"
+                        "pattern": "^img_[1-9][0-9]*$"
                     },
                     "minItems": 1,
                     "maxItems": MAX_VISION_IMAGES,
@@ -137,7 +142,9 @@ fn parse_images(value: Option<&Value>) -> Result<Vec<VisionImageHandle>, VisionF
             return Err(invalid("Every images item must be a string handle."));
         };
         let Some(handle) = VisionImageHandle::parse(value) else {
-            return Err(invalid("Every image handle must match img_<digits>."));
+            return Err(invalid(
+                "Every image handle must be a canonical positive img_<digits> value.",
+            ));
         };
         if !seen.insert(Arc::clone(&handle.0)) {
             return Err(invalid("images must not contain duplicate handles."));
