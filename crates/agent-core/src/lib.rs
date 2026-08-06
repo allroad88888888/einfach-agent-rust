@@ -29,6 +29,7 @@ pub mod limits;
 pub mod observe;
 pub mod seam;
 pub mod value;
+pub mod vision;
 
 // 缓存兜底：**类型**提到根上，三个判读函数不提——`cache::reconcile(...)` 说得出
 // 是在对什么账，裸的 `reconcile(...)` 说不出。
@@ -58,3 +59,8 @@ pub use value::host_skills::HostSkill;
 pub use value::message::{ContentBlock, Message, Role};
 pub use value::session::{SessionConfig, StopReason, TokenUsage};
 pub use value::tool::{Location, Reversibility, ToolCallRequest, ToolSpec};
+pub use vision::{
+    MAX_VISION_IMAGES, MAX_VISION_QUESTION_CHARS, VISION_INSPECT_TOOL, VisionChildTerminal,
+    VisionFailure, VisionFailureCode, VisionImageHandle, VisionInspectRequest, VisionToolOutcome,
+    parse_vision_inspect_request, vision_child_outcome, vision_inspect_spec,
+};

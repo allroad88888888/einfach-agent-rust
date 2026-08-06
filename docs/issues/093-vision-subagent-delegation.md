@@ -152,7 +152,7 @@ Each leaf is intended to be independently reviewable. `SOL` means `gpt-5.6-sol`;
 │  ├─ F1. Register bytes before actor input
 │  ├─ F2. Persist only safe handles in UserImage references
 │  ├─ F3. Include handles in non-visual placeholders
-│  ├─ F4. Preserve direct Kimi upload behavior
+│  ├─ F4. Preserve direct Kimi vision via request-time materialization
 │  └─ F5. Preserve byte-identical text-only requests
 ├─ G. Vision facade and child launch [SOL, root after B/C/E/F]
 │  ├─ G1. Add strict vision Tool spec and parser
