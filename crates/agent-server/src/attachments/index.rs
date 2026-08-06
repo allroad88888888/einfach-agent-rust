@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -9,11 +9,16 @@ use super::handle::ImageHandle;
 use super::record::ImageData;
 use super::store::AttachmentVaultConfig;
 
+const MAX_CLOSED_SESSIONS: usize = 256;
+const MAX_UNAVAILABLE_HANDLES: usize = 4096;
+
 #[derive(Default)]
 pub(crate) struct Inner {
     records: HashMap<ImageHandle, Record>,
     sessions: HashMap<SessionId, Usage>,
     closed_sessions: HashSet<SessionId>,
+    closed_order: VecDeque<SessionId>,
+    unavailable_order: VecDeque<ImageHandle>,
     global: Usage,
 }
 
@@ -70,7 +75,6 @@ impl Inner {
         }
         Ok(())
     }
-
     pub(crate) fn insert(
         &mut self,
         handle: ImageHandle,
@@ -90,7 +94,6 @@ impl Inner {
             }),
         );
     }
-
     pub(crate) fn lease(
         &mut self,
         owner: &SessionId,
@@ -112,7 +115,6 @@ impl Inner {
             }
         }
     }
-
     pub(crate) fn lease_at(
         &mut self,
         owner: &SessionId,
@@ -133,7 +135,6 @@ impl Inner {
         self.expire_one(handle, now);
         self.lease(owner, handle)
     }
-
     pub(crate) fn expire_one(&mut self, handle: &ImageHandle, now: Instant) {
         let should_expire = matches!(self.records.get(handle), Some(Record::Available(record)) if record.expires_at <= now && record.leases == 0);
         let pending = matches!(self.records.get(handle), Some(Record::Available(record)) if record.expires_at <= now && record.leases > 0);
@@ -146,7 +147,6 @@ impl Inner {
             }
         }
     }
-
     pub(crate) fn sweep(&mut self, now: Instant) -> usize {
         let handles: Vec<_> = self.records.keys().cloned().collect();
         let mut reclaimed = 0;
@@ -161,9 +161,11 @@ impl Inner {
         }
         reclaimed
     }
-
     pub(crate) fn unavailable_session(&mut self, owner: &SessionId) -> usize {
-        self.closed_sessions.insert(owner.clone());
+        if self.closed_sessions.insert(owner.clone()) {
+            self.closed_order.push_back(owner.clone());
+            self.prune_closed_sessions();
+        }
         let handles: Vec<_> = self
             .records
             .iter()
@@ -176,6 +178,24 @@ impl Inner {
             self.make_unavailable(handle);
         }
         handles.len()
+    }
+    pub(crate) fn begin_session(&mut self, owner: &SessionId) {
+        self.closed_sessions.remove(owner);
+        self.closed_order.retain(|id| id != owner);
+    }
+
+    pub(crate) fn seed_unavailable(&mut self, owner: &SessionId, handle: ImageHandle) {
+        if self.records.contains_key(&handle) {
+            return;
+        }
+        self.records.insert(
+            handle.clone(),
+            Record::Unavailable {
+                owner: owner.clone(),
+            },
+        );
+        self.unavailable_order.push_back(handle);
+        self.prune_unavailable_handles();
     }
 
     pub(crate) fn evict(
@@ -215,9 +235,6 @@ impl Inner {
         if let Some(Record::Available(record)) = self.records.get_mut(handle)
             && record.leases > 0
         {
-            // Revoke new reads immediately, but keep the bytes accounted until the
-            // last active lease releases them. Otherwise eviction could let the
-            // process exceed its global byte quota while old readers still own Arcs.
             record.unavailable_pending = true;
             return;
         }
@@ -233,6 +250,8 @@ impl Inner {
                         owner: record.owner,
                     },
                 );
+                self.unavailable_order.push_back(handle.clone());
+                self.prune_unavailable_handles();
             }
             unavailable => {
                 self.records.insert(handle.clone(), unavailable);
@@ -258,5 +277,24 @@ impl Inner {
         }
         self.global.images -= 1;
         self.global.bytes -= bytes;
+    }
+
+    fn prune_closed_sessions(&mut self) {
+        while self.closed_order.len() > MAX_CLOSED_SESSIONS {
+            if let Some(owner) = self.closed_order.pop_front() {
+                self.closed_sessions.remove(&owner);
+            }
+        }
+    }
+
+    fn prune_unavailable_handles(&mut self) {
+        while self.unavailable_order.len() > MAX_UNAVAILABLE_HANDLES {
+            let Some(handle) = self.unavailable_order.pop_front() else {
+                break;
+            };
+            if matches!(self.records.get(&handle), Some(Record::Unavailable { .. })) {
+                self.records.remove(&handle);
+            }
+        }
     }
 }

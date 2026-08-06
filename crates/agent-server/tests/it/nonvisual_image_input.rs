@@ -32,16 +32,12 @@ async fn nonvisual_image_reaches_adapter_without_an_http_upload() {
     let frames = turn(
         addr,
         "deepseek-with-image",
-        r#"{"text":"请检查附件","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71]}]}"#,
+        r#"{"text":"请检查附件","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
     )
     .await;
 
     let request = chat_request(&upstream);
-    assert_eq!(
-        last_user_content(&request),
-        &json!("请检查附件\n[用户上传了图片 receipt.png（image/png），当前模型看不到图片内容]"),
-        "非视觉 adapter 必须拿到图片元数据并生成 083 的确定性占位文本"
-    );
+    assert_nonvisual_placeholder(last_user_content(&request), "请检查附件", "receipt.png");
     assert_eq!(
         upstream.upload_count(),
         0,
@@ -92,11 +88,7 @@ async fn json_over_axum_default_reaches_handler_when_raw_image_fits_the_quota() 
     let _frames = turn(addr, "large-json-image", &body).await;
 
     let request = chat_request(&upstream);
-    assert_eq!(
-        last_user_content(&request),
-        &json!("检查大附件\n[用户上传了图片 large.png（image/png），当前模型看不到图片内容]"),
-        "超过 2 MiB 的合法 JSON 必须穿过路由限制并到达 adapter"
-    );
+    assert_nonvisual_placeholder(last_user_content(&request), "检查大附件", "large.png");
     assert_eq!(upstream.upload_count(), 0, "非视觉路径不得上传大附件");
     assert!(
         sessions
@@ -108,7 +100,14 @@ async fn json_over_axum_default_reaches_handler_when_raw_image_fits_the_quota() 
 }
 
 fn image_request_body(raw_image_bytes: usize) -> String {
-    let mut encoded_bytes = "0,".repeat(raw_image_bytes);
+    const PNG_SIGNATURE_LEN: usize = 8;
+    const PNG_SIGNATURE: &str = "137,80,78,71,13,10,26,10";
+
+    assert!(raw_image_bytes >= PNG_SIGNATURE_LEN);
+    let mut encoded_bytes = format!(
+        "{PNG_SIGNATURE},{}",
+        "0,".repeat(raw_image_bytes - PNG_SIGNATURE_LEN)
+    );
     encoded_bytes.pop();
     format!(
         r#"{{"text":"检查大附件","images":[{{"name":"large.png","mime":"image/png","bytes":[{encoded_bytes}]}}]}}"#
@@ -201,4 +200,17 @@ fn last_user_content(body: &Value) -> &Value {
         .find(|message| message["role"] == "user")
         .map(|message| &message["content"])
         .expect("请求必须有 user 消息")
+}
+
+fn assert_nonvisual_placeholder(content: &Value, text: &str, name: &str) {
+    let content = content
+        .as_str()
+        .expect("非视觉 provider 必须收到文本 content");
+    assert!(content.starts_with(&format!("{text}\n[用户上传了图片 {name}（image/png）")));
+    assert!(content.contains("srv:vision/inspect 并传入图片句柄 img_"));
+    assert!(content.ends_with(']'));
+    assert!(
+        !content.contains("attachment://"),
+        "placeholder 不应暴露 URI：{content}"
+    );
 }

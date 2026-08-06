@@ -16,11 +16,12 @@ use axum::http::HeaderMap;
 use agent_core::ExecutionProfileId;
 use agent_runtime::ExecutionBinding;
 
+use crate::attachments::{AttachmentVault, AttachmentVaultConfig, ImageHandle};
 use crate::http::config::{ServerConfig, SessionTemplate};
 use crate::http::error::ApiError;
 use crate::http::hub::SseHub;
 use crate::http::private_capability;
-use crate::registry::{SessionId, SessionQuery, SessionRegistry};
+use crate::registry::{CloseError, SessionId, SessionQuery, SessionRegistry};
 use crate::{Command, SessionHandle};
 
 #[derive(Clone)]
@@ -28,6 +29,7 @@ pub(crate) struct AppState(Arc<Inner>);
 
 struct Inner {
     registry: SessionRegistry,
+    attachments: AttachmentVault,
     template: SessionTemplate,
     hubs: Arc<Mutex<HashMap<SessionId, Arc<SseHub>>>>,
     ring_capacity: usize,
@@ -45,6 +47,7 @@ impl AppState {
     pub(crate) fn new(config: ServerConfig) -> Self {
         AppState(Arc::new(Inner {
             registry: SessionRegistry::new(),
+            attachments: AttachmentVault::new(AttachmentVaultConfig::default()),
             template: config.template,
             hubs: Arc::new(Mutex::new(HashMap::new())),
             ring_capacity: config.ring_capacity,
@@ -69,10 +72,29 @@ impl AppState {
         &self.0.registry
     }
 
+    pub(crate) fn attachments(&self) -> &AttachmentVault {
+        &self.0.attachments
+    }
+
     /// 每个 actor 获得自己的 map 副本；其中 client/provider 都是 `Arc`，密钥仅
     /// 在这条 server→runtime 链路上短暂复制，绝不放进 `OpenSpec` 或 session。
     pub(crate) fn execution_bindings(&self) -> BTreeMap<ExecutionProfileId, ExecutionBinding> {
         self.0.execution_bindings.clone()
+    }
+
+    pub(crate) fn begin_session(&self, id: &SessionId, recovered_handles: Vec<ImageHandle>) {
+        self.0.attachments.begin_session(id);
+        self.0.attachments.seed_unavailable(id, recovered_handles);
+    }
+
+    /// 摘掉会话后同步撤销它的全部附件读取权。即使 actor 已死，registry 仍会把
+    /// session 从表中移除，所以 `WasDead` 也必须触发回收。
+    pub(crate) fn close_session(&self, id: &SessionId) -> Result<(), CloseError> {
+        let outcome = self.0.registry.close(id);
+        if !matches!(outcome, Err(CloseError::NotFound)) {
+            self.0.attachments.close_session(id);
+        }
+        outcome
     }
 
     pub(crate) fn sse_keep_alive(&self) -> Duration {
@@ -244,8 +266,7 @@ mod tests {
 
         for id in &ids {
             state
-                .registry()
-                .close(id)
+                .close_session(id)
                 .expect("三个都是干净的活会话，优雅关闭不该报错");
         }
 

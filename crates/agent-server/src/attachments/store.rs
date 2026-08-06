@@ -107,7 +107,7 @@ impl AttachmentVault {
 
         let mut inner = self.inner.lock().expect("attachment vault mutex poisoned");
         inner.check_quota(owner, bytes, &self.config)?;
-        let handle = ImageHandle::allocate();
+        let handle = ImageHandle::allocate().ok_or(RegisterError::HandleSpaceExhausted)?;
         inner.insert(
             handle.clone(),
             owner.clone(),
@@ -139,6 +139,29 @@ impl AttachmentVault {
             .lock()
             .expect("attachment vault mutex poisoned")
             .sweep(now)
+    }
+
+    /// 让同一个业务 session id 在一次 close 后重新开始接收附件。旧句柄保留为
+    /// unavailable tombstone，新注册只会得到新句柄。
+    pub fn begin_session(&self, owner: &SessionId) {
+        self.inner
+            .lock()
+            .expect("attachment vault mutex poisoned")
+            .begin_session(owner);
+    }
+
+    /// 将持久化历史中的图片句柄登记为“本会话曾拥有、但本进程没有字节”。
+    /// 这样未来的 facade 能诚实地区分 `unavailable` 与从未存在过的句柄。
+    pub fn seed_unavailable(
+        &self,
+        owner: &SessionId,
+        handles: impl IntoIterator<Item = ImageHandle>,
+    ) {
+        let mut inner = self.inner.lock().expect("attachment vault mutex poisoned");
+        for handle in handles {
+            handle.reserve_next();
+            inner.seed_unavailable(owner, handle);
+        }
     }
 
     /// 关闭 session 后不再允许新的读取；已拿到的 lease 仍持有其安全的只读快照。

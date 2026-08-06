@@ -1,4 +1,4 @@
-//! 085：图片只在 HTTP 边界上传，成功后是 `ms://` 引用才会进入 actor/store。
+//! 093：HTTP 只把图片放进 session vault，actor/store 只保存内部附件句柄。
 
 use crate::support;
 use std::net::SocketAddr;
@@ -15,7 +15,7 @@ use crate::image_upload_upstream::{ImageUploadUpstream, UploadReply};
 use crate::support::http_client::{self, SseReader};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn text_stays_on_the_old_wire_shape_and_uploaded_reference_survives_recovery() {
+async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery() {
     let upstream = ImageUploadUpstream::start(UploadReply::Ok);
     let sessions_dir = support::temp_dir("image-ingress-store");
     let (first_addr, first_sessions) = start(template(
@@ -38,33 +38,27 @@ async fn text_stays_on_the_old_wire_shape_and_uploaded_reference_survives_recove
     turn(
         first_addr,
         "image-store",
-        r#"{"text":"看收据","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71]}]}"#,
+        r#"{"text":"看收据","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
     )
     .await;
     let image_turn = request(&upstream, 1);
-    assert_eq!(
-        last_user_content(&image_turn),
-        &json!([
-            {"type":"text","text":"看收据"},
-            {"type":"image_url","image_url":{"url":"ms://uploaded-image"}}
-        ]),
-        "上传成功后只有完整 ms:// 引用能跨过 actor 边界"
-    );
-    assert_eq!(upstream.upload_count(), 1, "一张附件只允许上传一次");
-    let upload = upstream
-        .calls()
-        .into_iter()
-        .find(|call| call.path.ends_with("/files"))
-        .expect("图片输入必须有一次上传请求");
-    assert_eq!(
-        upload.path, "/v1/files",
-        "上传必须走独立的文件端点，不能把聊天路径继续追加 /files"
-    );
+    let first_reference = attachment_reference(last_user_content(&image_turn));
     assert!(
-        upload.body.contains("name=\"purpose\"\r\n\r\nimage")
-            && upload.body.contains("name=\"file\""),
-        "上传必须保留 purpose=image 和 file multipart 字段：{}",
-        upload.body
+        first_reference.starts_with("attachment://img_"),
+        "HTTP→actor→provider 只能传内部句柄，不能泄露字节：{first_reference}"
+    );
+    assert_eq!(upstream.upload_count(), 0, "输入路由不得上传图片");
+    assert!(
+        upstream
+            .calls()
+            .iter()
+            .all(|call| !call.path.ends_with("/files")),
+        "输入路由不得请求 /files：{:?}",
+        upstream
+            .calls()
+            .iter()
+            .map(|call| &call.path)
+            .collect::<Vec<_>>()
     );
     assert!(
         first_sessions
@@ -96,8 +90,18 @@ async fn text_stays_on_the_old_wire_shape_and_uploaded_reference_survives_recove
         "重开必须是恢复而不是新会话：{}",
         reopened.body
     );
-    turn(second_addr, "image-store", r#"{"text":"继续"}"#).await;
+    turn(
+        second_addr,
+        "image-store",
+        r#"{"text":"再看一张","images":[{"name":"second.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
+    )
+    .await;
     let recovered = request(&upstream, 2);
+    let second_reference = attachment_reference(last_user_content(&recovered));
+    assert_ne!(
+        second_reference, first_reference,
+        "恢复后不得重用旧图片句柄"
+    );
     assert!(
         recovered["messages"]
             .as_array()
@@ -106,10 +110,11 @@ async fn text_stays_on_the_old_wire_shape_and_uploaded_reference_survives_recove
             .any(|message| message["content"]
                 == json!([
                     {"type":"text","text":"看收据"},
-                    {"type":"image_url","image_url":{"url":"ms://uploaded-image"}}
+                    {"type":"image_url","image_url":{"url": first_reference}}
                 ])),
         "恢复后的 store 历史必须仍有完整图片块：{recovered}"
     );
+    assert_eq!(upstream.upload_count(), 0, "恢复后输入同样不得上传");
     assert!(
         second_sessions
             .close_all()
@@ -213,4 +218,13 @@ fn last_user_content(body: &Value) -> &Value {
         .find(|message| message["role"] == "user")
         .map(|message| &message["content"])
         .expect("请求必须有 user 消息")
+}
+
+fn attachment_reference(content: &Value) -> String {
+    content
+        .as_array()
+        .and_then(|blocks| blocks.iter().find(|block| block["type"] == "image_url"))
+        .and_then(|block| block["image_url"]["url"].as_str())
+        .expect("视觉 provider 的 user content 必须带 image_url")
+        .to_owned()
 }

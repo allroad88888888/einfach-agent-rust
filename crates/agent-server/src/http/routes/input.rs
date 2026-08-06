@@ -8,19 +8,19 @@
 //! 这一个端点新引入一条关联机制。
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::Deserialize;
 
-use agent_core::UserImage;
-use agent_transport::ImageUpload;
-
 use crate::Command;
+use crate::attachments::{ImageHandle, ImageRegistration};
 use crate::http::error::ApiError;
 use crate::http::json::ApiJson;
 use crate::http::state::AppState;
 use crate::registry::SessionId;
+use agent_core::UserImage;
 
 use super::input_limits;
 
@@ -48,87 +48,72 @@ pub(in crate::http) async fn input(
     let session_id = SessionId::from(id);
     // 在任何外部 IO 前先确认会话活着，避免给不存在的会话上传付费文件。
     state.session_handle(&session_id)?;
-    let images = prepare_images(&state, body.images).await?;
-    state.dispatch(
+    let images = prepare_images(&state, &session_id, body.images)?;
+    if let Err(error) = state.dispatch(
         &session_id,
         Command::Input {
             text: body.text,
-            images,
+            images: images.images,
         },
-    )?;
+    ) {
+        discard_images(&state, &session_id, &images.handles);
+        return Err(error);
+    }
     Ok(StatusCode::ACCEPTED)
 }
 
-/// 不支持视觉的 adapter 绝不会把这个内部标记序列化到模型请求；它只保留 core
-/// 所需的图片元数据，让 adapter 生成 `ImagesDropped` 和可见占位文本。
-const NONVISUAL_IMAGE_REFERENCE: &str = "unavailable://nonvisual-image";
+#[derive(Debug)]
+struct RegisteredImages {
+    images: Vec<UserImage>,
+    handles: Vec<ImageHandle>,
+}
 
-/// 验证 HTTP 图片，并且仅为实际会消费引用的 provider 上传它们。
-///
-/// 阻塞的 ureq 上传在 tokio 的阻塞池，所以它不会占住任何 session actor。非视觉
-/// provider 则完全没有网络 IO，字节在这里验证后立即释放。
-async fn prepare_images(
+/// 验证 HTTP 图片，并注册到 session-scoped vault。actor/core 只会看到稳定的
+/// `attachment://img_*` 引用；无论当前 provider 是否支持视觉，都不会在入口上传。
+fn prepare_images(
     state: &AppState,
+    owner: &SessionId,
     images: Vec<InputImage>,
-) -> Result<Vec<UserImage>, ApiError> {
+) -> Result<RegisteredImages, ApiError> {
     validate_images(&images)?;
-    if !state.template().provider.supports_images() {
-        return Ok(images.into_iter().map(nonvisual_image).collect());
-    }
-
-    upload_images(state, images).await
-}
-
-fn nonvisual_image(image: InputImage) -> UserImage {
-    UserImage {
-        reference: Arc::from(NONVISUAL_IMAGE_REFERENCE),
-        mime: Arc::from(image.mime),
-        name: image.name.map(Arc::from),
-    }
-}
-
-/// 把视觉 provider 的 HTTP 附件变成 core 只会原样保存的上传引用。
-async fn upload_images(
-    state: &AppState,
-    images: Vec<InputImage>,
-) -> Result<Vec<UserImage>, ApiError> {
-    let template = state.template();
-    let upload_base_url = template.upload_base_url.clone();
-    let api_key = template.api_key.clone();
-    let client = Arc::clone(&template.client);
-    let mut uploaded = Vec::with_capacity(images.len());
+    state.attachments().sweep(Instant::now());
+    let mut registered = RegisteredImages {
+        images: Vec::with_capacity(images.len()),
+        handles: Vec::with_capacity(images.len()),
+    };
 
     for image in images {
-        let (reference, mime, name) = tokio::task::spawn_blocking({
-            let client = Arc::clone(&client);
-            let upload_base_url = upload_base_url.clone();
-            let api_key = api_key.clone();
-            move || {
-                let InputImage { name, mime, bytes } = image;
-                let reference = client
-                    .upload_image(
-                        &upload_base_url,
-                        &api_key,
-                        ImageUpload {
-                            file_name: name.as_deref().unwrap_or("image"),
-                            mime_type: &mime,
-                            bytes: &bytes,
-                        },
-                    )
-                    .map_err(|error| ApiError::bad_request(error.to_string()))?;
-                Ok((reference, mime, name))
+        let handle = match state.attachments().register(
+            owner,
+            ImageRegistration {
+                mime: &image.mime,
+                name: image.name.as_deref(),
+                bytes: &image.bytes,
+            },
+            Instant::now(),
+        ) {
+            Ok(handle) => handle,
+            Err(error) => {
+                discard_images(state, owner, &registered.handles);
+                return Err(ApiError::bad_request(error.to_string()));
             }
-        })
-        .await
-        .map_err(|_| ApiError::bad_request("图片上传任务未能完成"))??;
-        uploaded.push(UserImage {
-            reference: Arc::from(reference),
-            mime: Arc::from(mime),
-            name: name.map(Arc::from),
+        };
+        registered.images.push(UserImage {
+            reference: Arc::from(format!("attachment://{}", handle.as_str())),
+            mime: Arc::from(image.mime),
+            name: image.name.map(Arc::from),
         });
+        registered.handles.push(handle);
     }
 
-    Ok(uploaded)
+    Ok(registered)
+}
+
+/// 已注册但未进入 actor 的图片必须立即不可读，避免失败请求留下可读取字节。
+fn discard_images(state: &AppState, owner: &SessionId, handles: &[ImageHandle]) {
+    for handle in handles {
+        let _ = state.attachments().evict(owner, handle);
+    }
 }
 
 fn validate_images(images: &[InputImage]) -> Result<(), ApiError> {
@@ -174,13 +159,13 @@ mod tests {
         }));
         let error = prepare_images(
             &state,
+            &SessionId::from("oversized"),
             vec![InputImage {
                 name: None,
                 mime: "image/png".to_string(),
                 bytes: vec![0; MAX_IMAGE_BYTES + 1],
             }],
         )
-        .await
         .expect_err("超过上限的附件必须在 HTTP 边界失败");
         let rendered = format!("{error:?}");
 

@@ -9,6 +9,10 @@ use super::{
     RegisterError,
 };
 
+const JPEG: &[u8] = b"\xff\xd8\xff";
+const JPEG_WITH_PAYLOAD: &[u8] = b"\xff\xd8\xffimage";
+const JPEG_OVER_THREE_BYTES: &[u8] = b"\xff\xd8\xffx";
+
 fn vault() -> AttachmentVault {
     AttachmentVault::new(AttachmentVaultConfig {
         max_image_bytes: 16,
@@ -22,8 +26,8 @@ fn vault() -> AttachmentVault {
 
 fn image(bytes: &'static [u8]) -> ImageRegistration<'static> {
     ImageRegistration {
-        mime: "image/png",
-        name: Some("photo.png"),
+        mime: "image/jpeg",
+        name: Some("photo.jpg"),
         bytes,
     }
 }
@@ -37,19 +41,28 @@ fn register_copies_validated_image_and_returns_img_handle() {
     let vault = vault();
     let owner = session("one");
     let now = Instant::now();
-    let handle = vault.register(&owner, image(b"image"), now).unwrap();
+    let handle = vault
+        .register(&owner, image(JPEG_WITH_PAYLOAD), now)
+        .unwrap();
 
     assert!(handle.as_str().starts_with("img_"));
     let lease = vault.lease(&owner, &handle, now).unwrap();
-    assert_eq!(lease.mime(), "image/png");
-    assert_eq!(lease.name(), Some("photo.png"));
-    assert_eq!(lease.bytes(), b"image");
+    assert_eq!(lease.mime(), "image/jpeg");
+    assert_eq!(lease.name(), Some("photo.jpg"));
+    assert_eq!(lease.bytes(), JPEG_WITH_PAYLOAD);
 }
 
 #[test]
 fn exposed_handles_parse_strictly_but_do_not_authorize_access() {
     assert_eq!(ImageHandle::parse("img_42").unwrap().as_str(), "img_42");
-    for invalid in ["img_", "img_-1", "img_42/next", "attachment://img_42"] {
+    for invalid in [
+        "img_",
+        "img_0",
+        "img_042",
+        "img_-1",
+        "img_42/next",
+        "attachment://img_42",
+    ] {
         assert!(
             ImageHandle::parse(invalid).is_none(),
             "accepted {invalid:?}"
@@ -60,7 +73,7 @@ fn exposed_handles_parse_strictly_but_do_not_authorize_access() {
     let owner = session("owner");
     let other = session("other");
     let now = Instant::now();
-    let handle = vault.register(&owner, image(b"one"), now).unwrap();
+    let handle = vault.register(&owner, image(JPEG), now).unwrap();
     let parsed = ImageHandle::parse(handle.as_str()).unwrap();
     assert!(matches!(
         vault.lease(&other, &parsed, now),
@@ -105,20 +118,20 @@ fn quotas_reject_before_mutating_accounting() {
     let now = Instant::now();
 
     assert_eq!(
-        vault.register(&one, image(b"toolarge"), now),
+        vault.register(&one, image(JPEG_OVER_THREE_BYTES), now),
         Err(RegisterError::ImageByteLimit { limit_bytes: 3 })
     );
-    let first = vault.register(&one, image(b"one"), now).unwrap();
+    let first = vault.register(&one, image(JPEG), now).unwrap();
     assert_eq!(
-        vault.register(&one, image(b"two"), now),
+        vault.register(&one, image(JPEG), now),
         Err(RegisterError::SessionImageLimit { limit: 1 })
     );
     assert_eq!(
-        vault.register(&two, image(b"two"), now),
+        vault.register(&two, image(JPEG), now),
         Err(RegisterError::GlobalImageLimit { limit: 1 })
     );
     vault.evict(&one, &first).unwrap();
-    assert!(vault.register(&two, image(b"two"), now).is_ok());
+    assert!(vault.register(&two, image(JPEG), now).is_ok());
 }
 
 #[test]
@@ -135,13 +148,13 @@ fn byte_quotas_are_independent_of_image_count_quotas() {
     let two = session("two");
     let now = Instant::now();
 
-    vault.register(&one, image(b"one"), now).unwrap();
+    vault.register(&one, image(JPEG), now).unwrap();
     assert_eq!(
-        vault.register(&one, image(b"x"), now),
+        vault.register(&one, image(JPEG), now),
         Err(RegisterError::SessionByteLimit { limit_bytes: 3 })
     );
     assert_eq!(
-        vault.register(&two, image(b"xx"), now),
+        vault.register(&two, image(JPEG), now),
         Err(RegisterError::GlobalByteLimit { limit_bytes: 4 })
     );
 }
@@ -152,7 +165,7 @@ fn ownership_hides_handles_belonging_to_other_sessions() {
     let owner = session("one");
     let other = session("two");
     let now = Instant::now();
-    let handle = vault.register(&owner, image(b"one"), now).unwrap();
+    let handle = vault.register(&owner, image(JPEG), now).unwrap();
 
     assert!(matches!(
         vault.lease(&other, &handle, now),
@@ -171,12 +184,12 @@ fn expiry_waits_for_lease_then_becomes_unavailable() {
     let vault = vault();
     let owner = session("one");
     let start = Instant::now();
-    let handle = vault.register(&owner, image(b"one"), start).unwrap();
+    let handle = vault.register(&owner, image(JPEG), start).unwrap();
     let lease = vault.lease(&owner, &handle, start).unwrap();
     let expired = start + Duration::from_secs(2);
 
     assert_eq!(vault.sweep(expired), 0);
-    assert_eq!(lease.bytes(), b"one");
+    assert_eq!(lease.bytes(), JPEG);
     assert!(matches!(
         vault.lease(&owner, &handle, expired),
         Err(LeaseError::Unavailable)
@@ -194,21 +207,21 @@ fn close_and_evict_revoke_new_reads_without_breaking_existing_lease() {
     let owner = session("one");
     let another_owner = session("two");
     let now = Instant::now();
-    let handle = vault.register(&owner, image(b"one"), now).unwrap();
+    let handle = vault.register(&owner, image(JPEG), now).unwrap();
     let lease = vault.lease(&owner, &handle, now).unwrap();
 
     assert_eq!(vault.close_session(&owner), 1);
-    assert_eq!(lease.bytes(), b"one");
+    assert_eq!(lease.bytes(), JPEG);
     assert!(matches!(
         vault.lease(&owner, &handle, now),
         Err(LeaseError::Unavailable)
     ));
     assert_eq!(
-        vault.register(&owner, image(b"two"), now),
+        vault.register(&owner, image(JPEG), now),
         Err(RegisterError::SessionClosed)
     );
 
-    let second = vault.register(&another_owner, image(b"two"), now).unwrap();
+    let second = vault.register(&another_owner, image(JPEG), now).unwrap();
     vault.evict(&another_owner, &second).unwrap();
     assert!(matches!(
         vault.lease(&another_owner, &second, now),
@@ -229,24 +242,24 @@ fn evicted_leased_bytes_remain_accounted_until_release() {
     let one = session("one");
     let two = session("two");
     let now = Instant::now();
-    let handle = vault.register(&one, image(b"one"), now).unwrap();
+    let handle = vault.register(&one, image(JPEG), now).unwrap();
     let lease = vault.lease(&one, &handle, now).unwrap();
 
     vault.evict(&one, &handle).unwrap();
     assert_eq!(
-        vault.register(&two, image(b"two"), now),
+        vault.register(&two, image(JPEG), now),
         Err(RegisterError::GlobalImageLimit { limit: 1 })
     );
 
     drop(lease);
-    assert!(vault.register(&two, image(b"two"), now).is_ok());
+    assert!(vault.register(&two, image(JPEG), now).is_ok());
 }
 
 #[test]
 fn fresh_vault_has_no_previous_handle_record() {
     let owner = session("one");
     let now = Instant::now();
-    let handle = vault().register(&owner, image(b"one"), now).unwrap();
+    let handle = vault().register(&owner, image(JPEG), now).unwrap();
 
     assert!(matches!(
         vault().lease(&owner, &handle, now),
@@ -269,7 +282,7 @@ fn concurrent_registration_obeys_global_quota() {
         .map(|number| {
             let vault = Arc::clone(&vault);
             thread::spawn(move || {
-                vault.register(&session(&format!("s-{number}")), image(b"one"), now)
+                vault.register(&session(&format!("s-{number}")), image(JPEG), now)
             })
         })
         .collect();

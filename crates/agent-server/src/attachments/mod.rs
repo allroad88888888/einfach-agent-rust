@@ -6,6 +6,7 @@
 mod error;
 mod handle;
 mod index;
+mod mime;
 mod record;
 mod store;
 mod validation;
@@ -14,5 +15,7 @@ pub use error::{LeaseError, RegisterError};
 pub use handle::ImageHandle;
 pub use store::{AttachmentVault, AttachmentVaultConfig, ImageLease, ImageRegistration};
 
+#[cfg(test)]
+mod lifecycle_tests;
 #[cfg(test)]
 mod tests;

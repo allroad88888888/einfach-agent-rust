@@ -53,7 +53,7 @@ impl SessionsHandle {
         self.ids()
             .into_iter()
             .map(|id| {
-                let outcome = self.0.registry().close(&id);
+                let outcome = self.0.close_session(&id);
                 (id, outcome)
             })
             .collect()

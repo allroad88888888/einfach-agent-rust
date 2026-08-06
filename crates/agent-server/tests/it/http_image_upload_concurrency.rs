@@ -1,4 +1,4 @@
-//! 085：图片上传等待期间，HTTP session actor 仍须处理后续纯文本输入。
+//! 085：图片入口不等待 /files，慢配置端点不能阻塞 session actor。
 
 use crate::support;
 use std::net::SocketAddr;
@@ -15,7 +15,7 @@ use crate::image_upload_upstream::{ImageUploadUpstream, UploadReply};
 use crate::support::http_client;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_slow_upload_does_not_hold_another_session_actor() {
+async fn a_slow_upload_endpoint_does_not_hold_another_session_actor() {
     let upstream = ImageUploadUpstream::start(UploadReply::SlowOk(Duration::from_millis(700)));
     let (addr, sessions) = start(template(
         upstream.chat_endpoint(),
@@ -32,23 +32,24 @@ async fn a_slow_upload_does_not_hold_another_session_actor() {
             image_addr,
             "POST",
             "/sessions/slow-image/input",
-            Some(r#"{"text":"慢上传","images":[{"mime":"image/png","bytes":[1]}]}"#),
+            Some(
+                r#"{"text":"慢上传","images":[{"mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
+            ),
         )
     });
-    wait_for_upload(&upstream);
-
     let started = Instant::now();
     turn(addr, "plain-during-upload", r#"{"text":"不等图片"}"#).await;
     assert!(
         started.elapsed() < Duration::from_millis(500),
-        "另一会话的 actor 被上传卡住了，普通输入不该等 700ms 上传结束"
+        "另一会话不应等待未被调用的慢 /files 端点"
     );
     let image_response = image_post.await.expect("图片 POST 线程");
     assert_eq!(
         image_response.status, 202,
-        "慢上传最后仍要成功：{}",
+        "图片入口只登记 attachment 引用，应立即受理：{}",
         image_response.body
     );
+    assert_eq!(upstream.upload_count(), 0, "入口不应请求慢 /files 端点");
     assert!(
         sessions
             .close_all()
@@ -58,7 +59,7 @@ async fn a_slow_upload_does_not_hold_another_session_actor() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn slow_upload_leaves_its_session_actor_available_until_the_reference_is_ready() {
+async fn attachment_ingress_does_not_wait_for_a_slow_upload_endpoint() {
     let upstream = ImageUploadUpstream::start(UploadReply::SlowOk(Duration::from_millis(700)));
     let (addr, sessions) = start(template(
         upstream.chat_endpoint(),
@@ -68,25 +69,21 @@ async fn slow_upload_leaves_its_session_actor_available_until_the_reference_is_r
     .await;
     create(addr, "shared-actor");
 
-    let image_addr = addr;
-    let image_post = tokio::task::spawn_blocking(move || {
-        http_client::request(
-            image_addr,
-            "POST",
-            "/sessions/shared-actor/input",
-            Some(r#"{"text":"慢上传","images":[{"mime":"image/png","bytes":[1]}]}"#),
-        )
-    });
-    wait_for_upload(&upstream);
-
     let started = Instant::now();
-    turn(addr, "shared-actor", r#"{"text":"不等图片"}"#).await;
+    let image_response = http_client::request(
+        addr,
+        "POST",
+        "/sessions/shared-actor/input",
+        Some(
+            r#"{"text":"慢上传","images":[{"mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
+        ),
+    );
     assert!(
         started.elapsed() < Duration::from_millis(500),
-        "上传等待落进 session actor，队列后的纯文本不该等 700ms"
+        "attachment 登记不应等待 700ms 的 /files 端点"
     );
-    let image_response = image_post.await.expect("图片 POST 线程");
-    assert_eq!(image_response.status, 202, "慢上传最终必须成功");
+    assert_eq!(image_response.status, 202, "图片入口必须立即受理");
+    assert_eq!(upstream.upload_count(), 0, "入口不应请求慢 /files 端点");
     assert!(
         sessions
             .close_all()
@@ -156,15 +153,4 @@ async fn turn(addr: SocketAddr, id: &str, body: &str) {
         }
     }
     panic!("等待输入轮终态超时");
-}
-
-fn wait_for_upload(upstream: &ImageUploadUpstream) {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        if upstream.upload_count() == 1 {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    panic!("慢上传请求没有到假服务");
 }
