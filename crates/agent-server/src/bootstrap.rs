@@ -79,6 +79,8 @@ pub enum BootstrapError {
     /// execution profile 的 provider 没有可用 key；启动时拒绝，不留到子 agent
     /// 真正请求 provider 时才变成含糊的失败。
     MissingExecutionProfileApiKey(String),
+    /// 固定的视觉 profile 必须绑定到明确支持图片的 adapter。
+    VisionExecutionProfileRequiresImages { provider: String },
 }
 
 impl std::fmt::Display for BootstrapError {
@@ -99,6 +101,10 @@ impl std::fmt::Display for BootstrapError {
             BootstrapError::MissingExecutionProfileApiKey(profile) => write!(
                 f,
                 "execution profile \"{profile}\" 的 provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量"
+            ),
+            BootstrapError::VisionExecutionProfileRequiresImages { provider } => write!(
+                f,
+                "execution profile \"vision\" 的 provider \"{provider}\" 不支持图片输入"
             ),
         }
     }
@@ -173,6 +179,11 @@ fn resolve_execution_bindings(
                 message,
             }
         })?;
+        if profile_name == "vision" && !provider.supports_images() {
+            return Err(BootstrapError::VisionExecutionProfileRequiresImages {
+                provider: provider_name.to_owned(),
+            });
+        }
         let api_key = provider_config
             .resolve_key()
             .ok_or_else(|| BootstrapError::MissingExecutionProfileApiKey(profile_name.clone()))?;
@@ -187,7 +198,8 @@ fn resolve_execution_bindings(
                 max_tokens: None,
                 context_window: None,
             },
-        );
+        )
+        .with_image_upload_base_url(provider_config.base_url.clone());
         let binding = match provider_timeout {
             Some(timeout) => binding.with_timeout(timeout),
             None => binding,

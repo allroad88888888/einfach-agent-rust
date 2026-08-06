@@ -22,6 +22,8 @@
 mod body;
 mod capabilities;
 mod commands;
+mod image_resolver;
+mod image_runtime;
 mod inbox;
 pub(crate) mod message;
 mod remote_tools;
@@ -42,6 +44,8 @@ use crate::handle::{CancelHandle, SessionHandle};
 use crate::registry::OpenSpec;
 
 use body::ReadyMsg;
+pub(crate) use image_resolver::session_image_resolver;
+pub(crate) use image_runtime::SessionImageRuntime;
 
 /// `broadcast` 的环形缓冲容量（issue 030 原文点名 256）。慢订阅者跟不上就会
 /// `Lagged`——`crate::handle::Subscription::recv` 把它翻成显式的
@@ -77,6 +81,7 @@ pub(crate) struct SpawnedActor {
 pub(crate) fn spawn(
     spec: OpenSpec,
     execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    image_runtime: Option<SessionImageRuntime>,
 ) -> Result<SpawnedActor, OpenError> {
     let (cmd_tx, cmd_rx) = mpsc::channel();
     let (events_tx, _initial_receiver) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
@@ -114,6 +119,7 @@ pub(crate) fn spawn(
                 body::run(
                     spec,
                     execution_bindings,
+                    image_runtime,
                     cmd_rx,
                     events_for_thread,
                     ready_tx,

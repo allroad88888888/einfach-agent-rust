@@ -1,10 +1,12 @@
-//! 093：HTTP 只把图片放进 session vault，actor/store 只保存内部附件句柄。
+//! 093：视觉 provider 在请求期解析附件；持久层仍只保存内部句柄。
+
+mod output_privacy;
 
 use crate::support;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
-use agent_core::Notice;
+use agent_core::{ErrorClass, Failure, Notice, TurnStatus};
 use agent_providers::kimi::Kimi;
 use agent_server::{
     AgentServer, Frame, ServerConfig, SessionEvent, SessionTemplate, SessionsHandle,
@@ -15,9 +17,9 @@ use crate::image_upload_upstream::{ImageUploadUpstream, UploadReply};
 use crate::support::http_client::{self, SseReader};
 
 #[tokio::test(flavor = "multi_thread")]
-async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery() {
+async fn visual_request_materializes_images_without_persisting_provider_material() {
     let upstream = ImageUploadUpstream::start(UploadReply::Ok);
-    let sessions_dir = support::temp_dir("image-ingress-store");
+    let sessions_dir = support::temp_dir("image-request-materialization");
     let (first_addr, first_sessions) = start(template(
         upstream.chat_endpoint(),
         upstream.upload_base_url(),
@@ -26,7 +28,10 @@ async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery
     .await;
 
     create(first_addr, "plain-input");
-    turn(first_addr, "plain-input", r#"{"text":"hi"}"#).await;
+    assert!(matches!(
+        turn(first_addr, "plain-input", r#"{"text":"hi"}"#).await,
+        TurnStatus::Done { .. }
+    ));
     let plain = request(&upstream, 0);
     assert_eq!(
         last_user_content(&plain),
@@ -35,31 +40,22 @@ async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery
     );
 
     create(first_addr, "image-store");
-    turn(
-        first_addr,
-        "image-store",
-        r#"{"text":"看收据","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
-    )
-    .await;
+    assert!(matches!(
+        turn(
+            first_addr,
+            "image-store",
+            r#"{"text":"看收据","images":[{"name":"receipt.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
+        )
+        .await,
+        TurnStatus::Done { .. }
+    ));
     let image_turn = request(&upstream, 1);
-    let first_reference = attachment_reference(last_user_content(&image_turn));
-    assert!(
-        first_reference.starts_with("attachment://img_"),
-        "HTTP→actor→provider 只能传内部句柄，不能泄露字节：{first_reference}"
+    assert_eq!(
+        attachment_reference(last_user_content(&image_turn)),
+        "ms://uploaded-image",
+        "只有发往视觉 provider 的请求应使用上传后引用"
     );
-    assert_eq!(upstream.upload_count(), 0, "输入路由不得上传图片");
-    assert!(
-        upstream
-            .calls()
-            .iter()
-            .all(|call| !call.path.ends_with("/files")),
-        "输入路由不得请求 /files：{:?}",
-        upstream
-            .calls()
-            .iter()
-            .map(|call| &call.path)
-            .collect::<Vec<_>>()
-    );
+    assert_eq!(upstream.upload_count(), 1, "视觉 chat 前应上传一次");
     assert!(
         first_sessions
             .close_all()
@@ -67,6 +63,19 @@ async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery
             .all(|(_, result)| result.is_ok()),
         "关闭前必须落盘"
     );
+
+    let journal =
+        std::fs::read_to_string(sessions_dir.join("image-store.jsonl")).expect("读取图片会话日志");
+    assert!(
+        journal.contains("attachment://img_"),
+        "持久历史必须保留 session-local attachment 句柄：{journal}"
+    );
+    for provider_material in ["ms://", "uploaded-image", "test-api-key", "/v1/files"] {
+        assert!(
+            !journal.contains(provider_material),
+            "持久历史不得含 provider 临时材料 {provider_material}：{journal}"
+        );
+    }
 
     let (second_addr, second_sessions) = start(template(
         upstream.chat_endpoint(),
@@ -90,31 +99,14 @@ async fn text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery
         "重开必须是恢复而不是新会话：{}",
         reopened.body
     );
-    turn(
-        second_addr,
-        "image-store",
-        r#"{"text":"再看一张","images":[{"name":"second.png","mime":"image/png","bytes":[137,80,78,71,13,10,26,10]}]}"#,
-    )
-    .await;
-    let recovered = request(&upstream, 2);
-    let second_reference = attachment_reference(last_user_content(&recovered));
-    assert_ne!(
-        second_reference, first_reference,
-        "恢复后不得重用旧图片句柄"
+    let recovered_status = turn(second_addr, "image-store", r#"{"text":"再看一次"}"#).await;
+    assert_eq!(
+        recovered_status,
+        TurnStatus::Failed(Failure::Provider(ErrorClass::BadRequest)),
+        "恢复句柄没有跨进程字节，必须在任何上传/chat 前 fail closed"
     );
-    assert!(
-        recovered["messages"]
-            .as_array()
-            .expect("Kimi 请求必须有 messages")
-            .iter()
-            .any(|message| message["content"]
-                == json!([
-                    {"type":"text","text":"看收据"},
-                    {"type":"image_url","image_url":{"url": first_reference}}
-                ])),
-        "恢复后的 store 历史必须仍有完整图片块：{recovered}"
-    );
-    assert_eq!(upstream.upload_count(), 0, "恢复后输入同样不得上传");
+    assert_eq!(upstream.upload_count(), 1, "不可用的恢复句柄不得重上传");
+    assert_eq!(upstream.chat_count(), 2, "不可用的恢复句柄不得发起 chat");
     assert!(
         second_sessions
             .close_all()
@@ -163,7 +155,7 @@ fn create(addr: SocketAddr, id: &str) {
     assert_eq!(created.status, 201, "创建 {id} 失败：{}", created.body);
 }
 
-async fn turn(addr: SocketAddr, id: &str, body: &str) {
+async fn turn(addr: SocketAddr, id: &str, body: &str) -> TurnStatus {
     let (_, _, mut sse) = http_client::connect_sse(addr, &format!("/sessions/{id}/events"), None);
     let response = http_client::request(addr, "POST", &format!("/sessions/{id}/input"), Some(body));
     assert_eq!(
@@ -171,10 +163,10 @@ async fn turn(addr: SocketAddr, id: &str, body: &str) {
         "输入应被 actor 接收：{}",
         response.body
     );
-    wait_for_terminal(&mut sse);
+    wait_for_terminal(&mut sse)
 }
 
-fn wait_for_terminal(sse: &mut SseReader) {
+fn wait_for_terminal(sse: &mut SseReader) -> TurnStatus {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         let Some(event) = sse.next_event(deadline.saturating_duration_since(Instant::now())) else {
@@ -182,9 +174,10 @@ fn wait_for_terminal(sse: &mut SseReader) {
         };
         let frame: Frame = serde_json::from_str(&event.data)
             .unwrap_or_else(|error| panic!("SSE 不是 Frame：{error}: {}", event.data));
-        if matches!(frame.event, SessionEvent::Notice(Notice::TurnStatusChanged { status }) if status.is_terminal())
+        if let SessionEvent::Notice(Notice::TurnStatusChanged { status }) = frame.event
+            && status.is_terminal()
         {
-            return;
+            return status;
         }
     }
     panic!("等待输入轮终态超时");

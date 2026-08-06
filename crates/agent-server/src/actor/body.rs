@@ -20,7 +20,7 @@ use crate::event::{Frame, SessionEvent};
 use crate::registry::OpenSpec;
 
 use super::message::ActorMessage;
-use super::{capabilities, commands, inbox};
+use super::{SessionImageRuntime, capabilities, commands, inbox};
 
 /// 握手消息：`Ok(cancel)` = 起好了，`cancel` 是 [`RunnerCtx::cancel_flag`]
 /// （[`crate::handle::SessionHandle::cancel`] 直接旁路写的那个原子标志）；
@@ -40,6 +40,7 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
 pub(super) fn run(
     spec: OpenSpec,
     execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    image_runtime: Option<SessionImageRuntime>,
     rx: mpsc::Receiver<ActorMessage>,
     events_tx: broadcast::Sender<Frame>,
     ready_tx: mpsc::Sender<ReadyMsg>,
@@ -174,39 +175,43 @@ pub(super) fn run(
         // 跟 `agent_cli::main` 装配 `RunnerCtx` 的手法同一个模式（`with_agent_events`
         // **替换**整条事件出口，见 `RunnerCtx::with_agent_events` 文档）。
         Box::new(|_| {}),
-    )
-    .with_execution_bindings(execution_bindings)
-    .with_agent_events(Box::new(move |ev: AgentEvent| {
-        let _ = events_for_callback.send(Frame {
-            agent: ev.agent,
-            event: ev.event.into(),
-        });
-    }))
-    // 048：树快照变化——独立回调，不走上面那条 `AgentEvent` 通道（048 issue
-    // 范围条款 1：树是整棵状态的投影，不是 `RunnerEvent` 的第十个变体）。每次
-    // `run_turn` 判定树变了都会调用它一次：先重写共享单元格（`GET .../agents`
-    // 的数据源），再广播一帧标 root 的 `SessionEvent::AgentTree`（`emit_root`——
-    // 跟 `Undo`/`SessionDied`/`Gap` 同一条「会话级事实标 root」的判据，
-    // `crate::event::frame` 模块文档）。写单元格排在广播前面：真的有并发的
-    // `GET` 请求跟这次广播打个照面，它读到的至少是这次广播里同一份新树，不会
-    // 是旧值（两者其实没有严格的先后依赖，只是这个顺序更符合直觉）。
-    .with_tree_events(Box::new(move |snapshot: AgentTree| {
-        *tree_for_callback.lock().unwrap() = snapshot.clone();
-        emit_root(&events_for_tree, SessionEvent::AgentTree(snapshot));
-    }))
-    // 072：远端等待槽变了——只重写共享单元格（`GET .../pending_tools` 的数据源），
-    // **不广播帧**：这份投影是给「要不要执行」当判据的，不是时间线上的一件事；
-    // `tool_executing` 那一帧已经在派活的同一行发过了（`dispatch` 的远端第五路）。
-    // 回调在**槽变化的那一刻**被调（那一行的下一行就是广播），所以客户端拿着帧
-    // 立刻来问，问到的必然已经是含这条调用的新投影——见 `SessionHandle::pending_tools`。
-    .with_pending_remote_tools(Box::new(move |waiting: Vec<RemoteToolWaiting>| {
-        *pending_tools.lock().unwrap() = waiting;
-    }))
-    // 092：完整状态投影同样直接写共享单元格。尤其是提交回执先 commit、再 ack、
-    // 随后可能继续做 provider IO；GET 状态不能被那段网络等待堵在 actor 队列里。
-    .with_remote_tool_status(Box::new(move |status: RemoteToolStatusSnapshot| {
-        *tool_status.lock().unwrap() = status;
-    }));
+    );
+    if let Some(image_runtime) = image_runtime {
+        ctx = image_runtime.inject(ctx);
+    }
+    ctx = ctx
+        .with_execution_bindings(execution_bindings)
+        .with_agent_events(Box::new(move |ev: AgentEvent| {
+            let _ = events_for_callback.send(Frame {
+                agent: ev.agent,
+                event: ev.event.into(),
+            });
+        }))
+        // 048：树快照变化——独立回调，不走上面那条 `AgentEvent` 通道（048 issue
+        // 范围条款 1：树是整棵状态的投影，不是 `RunnerEvent` 的第十个变体）。每次
+        // `run_turn` 判定树变了都会调用它一次：先重写共享单元格（`GET .../agents`
+        // 的数据源），再广播一帧标 root 的 `SessionEvent::AgentTree`（`emit_root`——
+        // 跟 `Undo`/`SessionDied`/`Gap` 同一条「会话级事实标 root」的判据，
+        // `crate::event::frame` 模块文档）。写单元格排在广播前面：真的有并发的
+        // `GET` 请求跟这次广播打个照面，它读到的至少是这次广播里同一份新树，不会
+        // 是旧值（两者其实没有严格的先后依赖，只是这个顺序更符合直觉）。
+        .with_tree_events(Box::new(move |snapshot: AgentTree| {
+            *tree_for_callback.lock().unwrap() = snapshot.clone();
+            emit_root(&events_for_tree, SessionEvent::AgentTree(snapshot));
+        }))
+        // 072：远端等待槽变了——只重写共享单元格（`GET .../pending_tools` 的数据源），
+        // **不广播帧**：这份投影是给「要不要执行」当判据的，不是时间线上的一件事；
+        // `tool_executing` 那一帧已经在派活的同一行发过了（`dispatch` 的远端第五路）。
+        // 回调在**槽变化的那一刻**被调（那一行的下一行就是广播），所以客户端拿着帧
+        // 立刻来问，问到的必然已经是含这条调用的新投影——见 `SessionHandle::pending_tools`。
+        .with_pending_remote_tools(Box::new(move |waiting: Vec<RemoteToolWaiting>| {
+            *pending_tools.lock().unwrap() = waiting;
+        }))
+        // 092：完整状态投影同样直接写共享单元格。尤其是提交回执先 commit、再 ack、
+        // 随后可能继续做 provider IO；GET 状态不能被那段网络等待堵在 actor 队列里。
+        .with_remote_tool_status(Box::new(move |status: RemoteToolStatusSnapshot| {
+            *tool_status.lock().unwrap() = status;
+        }));
     if let Some(timeout) = spec.provider_timeout {
         ctx = ctx.with_provider_timeout(timeout);
     }

@@ -90,8 +90,9 @@ pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) ->
 
 /// 跑一整轮，连同已经由宿主准备好的用户图片一起喂入。
 ///
-/// 图片引用在进入这里之前已经是不可变的纯数据；上传之类的 IO 属于宿主边界，
-/// 不属于事件泵。保留 [`run_turn`] 的原签名，使没有图片的所有既有调用逐字不变。
+/// 图片引用进入这里时只是宿主登记好的不可变 attachment handle；真正的
+/// 租约解析与上传由 runtime IO 线程在 provider 请求准备阶段经既有同步上传 API 完成，
+/// 不阻塞事件泵。保留 [`run_turn`] 的原签名，使没有图片的所有既有调用逐字不变。
 pub fn run_turn_with_images(
     session: &mut Session,
     ctx: &mut RunnerCtx,

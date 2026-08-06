@@ -12,6 +12,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
+use crate::actor::{SessionImageRuntime, session_image_resolver};
 use crate::http::attachment_recovery;
 use crate::http::capabilities::{self, Capabilities};
 use crate::http::error::ApiError;
@@ -182,7 +183,14 @@ pub(in crate::http) async fn create(
     };
     let outcome = match state
         .registry()
-        .open_or_get_with(id.clone(), state.execution_bindings(), || {
+        .open_or_get_with(
+            id.clone(),
+            state.execution_bindings(),
+            Some(SessionImageRuntime::new(
+                session_image_resolver(state.attachments().clone(), id.clone()),
+                state.template().upload_base_url.clone(),
+            )),
+            || {
             // 只有原子占住 chatid 的赢家检查历史。并发输家等赢家启动完直接复用，
             // 不能把赢家刚创建的 jsonl 误判成一次“带声明恢复历史”的新请求。
             let store_path = session_path
@@ -225,7 +233,8 @@ pub(in crate::http) async fn create(
                     ))
                 })?;
             Ok((spec, has_persisted_history))
-        })
+            },
+        )
         .map_err(|error| match error {
             OpenOrGetError::Build(error) => error,
             OpenOrGetError::Open(error) => ApiError::conflict(error.to_string()),

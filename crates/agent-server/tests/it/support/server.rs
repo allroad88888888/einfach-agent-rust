@@ -17,6 +17,9 @@ use std::time::Duration;
 pub enum Script {
     /// 一次性把整段 SSE body 发完，然后关闭连接。
     Immediate(String),
+    /// 根据本次请求体现造 SSE。需要从第一轮上下文里取动态
+    /// 附件句柄的端到端测试使用这个变体。
+    Dynamic(Arc<dyn Fn(&str) -> String + Send + Sync>),
     /// 只写响应头，之后长时间不发任何数据也不关闭——模拟「服务端还在，但
     /// 没数据」，供取消测试复用（跟 `agent-runtime/tests/support`
     /// 的 `HangAfterHeaders` 同一个手法）。
@@ -107,12 +110,13 @@ fn handle_connection(mut stream: TcpStream, bodies: &Mutex<Vec<String>>, scripts
     };
     let idx = {
         let mut guard = bodies.lock().unwrap();
-        guard.push(body);
+        guard.push(body.clone());
         guard.len() - 1
     };
 
     match scripts.get(idx).or_else(|| scripts.last()) {
         Some(Script::Immediate(sse_body)) => write_sse_response(&mut stream, sse_body),
+        Some(Script::Dynamic(response)) => write_sse_response(&mut stream, &response(&body)),
         Some(Script::HangAfterHeaders) | None => {
             write_sse_headers(&mut stream);
             // 后台线程，测试断言完就结束——挂着的连接交给进程退出收场

@@ -19,6 +19,16 @@ pub enum UploadReply {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
+pub enum ChatReply {
+    Text(String),
+    Chunks(Vec<String>),
+    Empty,
+    Status(u16),
+    StatusBody(u16, String),
+}
+
+#[derive(Clone)]
 pub struct Call {
     pub path: String,
     #[allow(dead_code)] // 每个 integration test 单独编译；仅部分断言需要请求体。
@@ -33,6 +43,10 @@ pub struct ImageUploadUpstream {
 
 impl ImageUploadUpstream {
     pub fn start(upload_reply: UploadReply) -> Self {
+        Self::start_with_chat(upload_reply, ChatReply::Text("ok".to_string()))
+    }
+
+    pub fn start_with_chat(upload_reply: UploadReply, chat_reply: ChatReply) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind 图片假上游");
         let port = listener.local_addr().expect("图片假上游地址").port();
         listener
@@ -52,8 +66,9 @@ impl ImageUploadUpstream {
                     Ok((stream, _)) => {
                         let _ = stream.set_nonblocking(false);
                         let calls = Arc::clone(&calls_bg);
-                        let reply = upload_reply.clone();
-                        thread::spawn(move || serve(stream, &calls, reply));
+                        let upload_reply = upload_reply.clone();
+                        let chat_reply = chat_reply.clone();
+                        thread::spawn(move || serve(stream, &calls, upload_reply, chat_reply));
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5))
@@ -94,6 +109,14 @@ impl ImageUploadUpstream {
             .filter(|call| call.path.ends_with("/files"))
             .count()
     }
+
+    #[allow(dead_code)]
+    pub fn chat_count(&self) -> usize {
+        self.calls()
+            .into_iter()
+            .filter(|call| !call.path.ends_with("/files"))
+            .count()
+    }
 }
 
 impl Drop for ImageUploadUpstream {
@@ -102,7 +125,12 @@ impl Drop for ImageUploadUpstream {
     }
 }
 
-fn serve(mut stream: TcpStream, calls: &Mutex<Vec<Call>>, upload_reply: UploadReply) {
+fn serve(
+    mut stream: TcpStream,
+    calls: &Mutex<Vec<Call>>,
+    upload_reply: UploadReply,
+    chat_reply: ChatReply,
+) {
     let Some((path, body)) = read_request(&mut stream) else {
         return;
     };
@@ -122,14 +150,39 @@ fn serve(mut stream: TcpStream, calls: &Mutex<Vec<Call>>, upload_reply: UploadRe
             }
         }
     } else {
-        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).expect("写模型 SSE");
-        stream.flush().expect("flush 模型 SSE");
+        match chat_reply {
+            ChatReply::Text(text) => write_chat_sse(&mut stream, &text),
+            ChatReply::Chunks(chunks) => write_chat_chunks(&mut stream, &chunks),
+            ChatReply::Empty => write_chat_sse(&mut stream, ""),
+            ChatReply::Status(status) => {
+                write_json(&mut stream, status, r#"{"error":"vision-upstream-secret"}"#)
+            }
+            ChatReply::StatusBody(status, body) => write_json(&mut stream, status, &body),
+        }
     }
+}
+
+fn write_chat_sse(stream: &mut TcpStream, text: &str) {
+    write_chat_chunks(stream, &[text.to_owned()]);
+}
+
+fn write_chat_chunks(stream: &mut TcpStream, chunks: &[String]) {
+    assert!(!chunks.is_empty(), "聊天分片 fixture 至少需要一片");
+    let mut body = String::new();
+    for (index, text) in chunks.iter().enumerate() {
+        let finish_reason = (index + 1 == chunks.len()).then_some("stop");
+        let event = serde_json::json!({
+            "choices": [{"delta": {"content": text}, "finish_reason": finish_reason}]
+        });
+        body.push_str(&format!("data: {event}\n\n"));
+    }
+    body.push_str("data: [DONE]\n\n");
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{body}",
+        body.len()
+    );
+    stream.write_all(response.as_bytes()).expect("写模型 SSE");
+    stream.flush().expect("flush 模型 SSE");
 }
 
 fn read_request(stream: &mut TcpStream) -> Option<(String, String)> {
