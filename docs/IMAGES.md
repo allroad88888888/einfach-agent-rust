@@ -1,5 +1,10 @@
 # 图片附件接缝
 
+> ⚠️ **已废弃（superseded by s5）**：本文是 M11 图片附件管线的决策档案。该管线
+> （`ContentBlock::Image` / `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 · **状态** 已拍板，未实做 · **证据** [probes/PROVIDERS.md §八](../probes/PROVIDERS.md)
 
 用户从前端传一张图给 agent。这份文档管**决定和理由**，逐条任务是

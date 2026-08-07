@@ -1,5 +1,10 @@
 # 083 三家接线与降级告警
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 · **依赖** [080](080-adjustment-images-dropped.md) + [082](082-image-array-encoding.md) · **模型** sonnet · **独测** ✅（**静默丢图**是本 issue 的头号风险） · **状态** 完成
 
 **先读 [docs/IMAGES.md](../IMAGES.md) §一**（实测事实）**与 §三-6**（不许静默丢图）。

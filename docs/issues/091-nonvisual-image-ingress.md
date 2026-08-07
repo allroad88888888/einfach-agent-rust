@@ -1,5 +1,10 @@
 # 091 非视觉 provider 在 adapter 降级前被上传短路
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 补充 · **依赖** [083](083-image-provider-fallback.md) + [085](085-http-image-ingress.md) + [087](087-image-dogfood.md) · **模型** opus · **独测** 浏览器 + provider mock · **状态** 完成
 
 由 087 真机续跑发现。083 已规定 DeepSeek/GLM 的图片必须变成占位文本并产生

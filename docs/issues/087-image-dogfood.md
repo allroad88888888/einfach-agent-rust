@@ -1,5 +1,10 @@
 # 087 图片附件真机 dogfood ← M11 终点
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 · **依赖** 079–086 全部 · **模型** 主会话真机 · **独测** 真机 · **状态** 完成
 
 M11 的「能用」终点。照 M6/M8/M9/M10 的规矩：**验收靠一次真实运行，不靠形容词。**
