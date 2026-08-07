@@ -11,8 +11,10 @@ use std::time::{Duration, Instant};
 
 use super::http_chunked::find;
 use super::http_request::{connect_and_send, header, read_head, with_private_capability};
-pub use super::http_request::{request, request_exact_headers, request_with_headers};
-pub use super::http_response::HttpResponse;
+pub use super::http_request::{
+    request, request_bytes_with_headers, request_exact_headers, request_with_headers,
+};
+pub use super::http_response::{HttpResponse, HttpResponseBytes};
 
 /// 打开一条 SSE 连接（不发 body），返回状态行/headers 和一个可以增量
 /// `next_event` 的读取器。真实浏览器的 `EventSource` 长这样：一次 `GET`,
