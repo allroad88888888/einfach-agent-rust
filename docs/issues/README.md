@@ -378,10 +378,12 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 | [090](090-image-undo-timeline.md) ✅ | **图片卡片未随 undo/redo 还原**：server history 已恢复，浏览器时间线却在 undo 后仍留图 | 087 真机发现 | sonnet | ✅ |
 | [091](091-nonvisual-image-ingress.md) ✅ | **非视觉 provider 在 adapter 降级前被 HTTP 上传短路**：必须使 `ImagesDropped` 能实际抵达用户 | 087 真机发现 | **opus** | ✅ |
 | [092](092-remote-tool-result-protocol.md) | **远端工具认领、终态回执与结果协议**：claim 后执行，稳定 submission 幂等重投，区分未认领超时与结果未知 | 用户提出 | **gpt-5.6-sol / xhigh** | 协议/Java 透传/100 轮压测 ✅；双端真机待验 |
+| [093](093-vision-subagent-delegation.md) ⚠️ | **非视觉 agent 委派视觉子 agent**：DeepSeek root → 窄范围 Kimi 子 agent 检查用户图片（旧 vision 委托管线） | — | **gpt-5.6-sol** | ⚠️ 已被 s5 取代 |
+| [094](094-structured-operational-logging.md) ✅ | **结构化操作日志**：一条 tracing 管线贯穿 server/bin/desktop，请求级 span + 安全生命周期事件，`RUST_LOG` 控制过滤，JSON 可切 | — | **gpt-5.6-sol** | ✅ complete |
 
-> ⚠️ **079–091 的 images 管线已被 s5 重构取代**：`ContentBlock::Image` / `POST /files` /
-> `upload_base_url` / `ImagesDropped` / 前端选图这条管线已整体移除，现以 `POST /uploads`
-> 上传端点 + `srv:vision/inspect` 工具取代。上述 13 条仅作历史决策档案保留，不再反映当前实现。
+> ⚠️ **079–091、093 的 images/vision 管线已被 s5 重构取代**：`ContentBlock::Image` / `POST /files` /
+> `upload_base_url` / `ImagesDropped` / 前端选图 / 视觉子 agent 委托这条管线已整体移除，现以 `POST /uploads`
+> 上传端点 + `srv:vision/inspect` 工具取代。上述 14 条仅作历史决策档案保留，不再反映当前实现。
 
 另有一份 [DOC-AUDIT.md](../DOC-AUDIT.md)（文档↔实现一致性审计：危险 10 / 过时 40 /
 小瑕疵 19 / 疑似代码问题 4）。TOOLS/STATE-MODEL/ARCHITECTURE/CLAUDE.md 的修正已落地，
