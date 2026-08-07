@@ -6,4 +6,4 @@ import type { ToolCallId } from "./ToolCallId";
 import type { ToolCallRequest } from "./ToolCallRequest";
 import type { ToolClaimDisposition } from "./ToolClaimDisposition";
 
-export type ToolClaimResponse = { disposition: ToolClaimDisposition, agent: AgentId, tool_call_id: ToolCallId, request: ToolCallRequest, revision: number, };
+export type ToolClaimResponse = { disposition: ToolClaimDisposition, agent: AgentId, tool_call_id: ToolCallId, request?: ToolCallRequest, revision: number, };
