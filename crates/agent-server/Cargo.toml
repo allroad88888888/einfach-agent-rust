@@ -25,9 +25,9 @@ serde_json = { workspace = true }
 # `.await AgentServer::serve(addr)`，不负责替库管理这些任务。
 tokio = { version = "1", features = ["sync", "net", "time", "rt"] }
 
-# 031：下行 SSE、上行 POST 的 HTTP 面。只启用直接用到的 feature——不要 ws/
-# multipart/form（092 的 tool-status 是首个查询参数协议）。
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio"] }
+# 031：下行 SSE、上行 POST 的 HTTP 面。只启用直接用到的 feature；multipart 是
+# s5 上传端点（POST /uploads 收图片）加的——ws 仍不需要。
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "multipart", "query", "tokio"] }
 
 # HTTP 库只发结构化 span/event；全局 subscriber 由 agent-server-bin 或桌面宿主安装。
 tracing = "0.1"

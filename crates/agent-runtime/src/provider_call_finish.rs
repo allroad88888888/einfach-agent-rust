@@ -8,7 +8,6 @@ use agent_transport::{StreamOutcome, TransportError};
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::guard;
-use crate::image_preparation_failure::ImagePreparationFailure;
 use crate::provider_call::ProviderCall;
 use crate::transient_source_failure::TransientSourceFailure;
 
@@ -31,7 +30,6 @@ pub(crate) fn finish(
         adjustments,
         prefix,
         one_shot,
-        replay_terminal_deltas,
         ..
     } = call;
     if one_shot {
@@ -53,9 +51,6 @@ pub(crate) fn finish(
     }
     match result {
         Ok(StreamOutcome::Finished) => {
-            if replay_terminal_deltas {
-                replay_deltas(ctx, &agent, &blocks);
-            }
             guard::report_success(
                 ctx,
                 &agent,
@@ -106,20 +101,6 @@ pub(crate) fn finish(
     }
 }
 
-fn replay_deltas(ctx: &mut RunnerCtx, agent: &agent_core::AgentId, blocks: &[ContentBlock]) {
-    for block in blocks {
-        let event = match block {
-            ContentBlock::Text(text) => RunnerEvent::TextDelta(Arc::clone(text)),
-            ContentBlock::Thinking(text) => RunnerEvent::ThinkingDelta(Arc::clone(text)),
-            ContentBlock::ToolUse { name, .. } => RunnerEvent::ToolCallStarted {
-                name: Arc::clone(name),
-            },
-            ContentBlock::ToolResult { .. } | ContentBlock::Image { .. } => continue,
-        };
-        ctx.emit(agent, event);
-    }
-}
-
 /// IO 线程 panic 了（provider message 的 `Gone` 终态）——没留下任何终态消息。
 pub(crate) fn thread_gone(
     ctx: &mut RunnerCtx,
@@ -139,36 +120,6 @@ pub(crate) fn thread_gone(
         class: ErrorClass::Retryable,
         message: Arc::from("IO 线程异常退出（未留下终态消息）"),
     })
-}
-
-pub(crate) fn preparation_failed(
-    ctx: &mut RunnerCtx,
-    call: ProviderCall,
-    failure: ImagePreparationFailure,
-) -> Event {
-    preparation_start_failed(ctx, call.agent, call.epoch, call.one_shot, failure)
-}
-
-pub(crate) fn preparation_start_failed(
-    ctx: &mut RunnerCtx,
-    agent: agent_core::AgentId,
-    epoch: Epoch,
-    one_shot: bool,
-    failure: ImagePreparationFailure,
-) -> Event {
-    if one_shot {
-        ctx.transient_sources.purge_agent_epoch(&agent, epoch);
-    }
-    ctx.record_image_preparation_failure(agent.clone(), failure);
-    if failure == ImagePreparationFailure::Cancelled {
-        return Event::Cancel { agent };
-    }
-    Event::ProviderFailed {
-        agent,
-        epoch,
-        class: failure.error_class(),
-        message: Arc::from(failure.message()),
-    }
 }
 
 fn transport_trouble(

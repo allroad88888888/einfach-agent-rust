@@ -113,9 +113,7 @@ fn terminal_text(blocks: Vec<ContentBlock>) -> Result<Vec<Arc<str>>, ()> {
         match block {
             ContentBlock::Text(text) => candidate.push(text),
             ContentBlock::Thinking(_) => {}
-            ContentBlock::ToolUse { .. }
-            | ContentBlock::ToolResult { .. }
-            | ContentBlock::Image { .. } => return Err(()),
+            ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } => return Err(()),
         }
     }
     Ok(candidate)
@@ -140,10 +138,11 @@ fn source_tool_uses(blocks: Vec<ContentBlock>) -> Result<Vec<ContentBlock>, ()> 
                 source_count += 1;
                 private_blocks.push(block);
             }
-            ContentBlock::Text(_)
-            | ContentBlock::ToolUse { .. }
-            | ContentBlock::ToolResult { .. }
-            | ContentBlock::Image { .. } => return Err(()),
+            // This completion follows a provider call with private source material. Text
+            // alongside a source tool call can echo that material, so mirror ingress and
+            // discard it before the continuation reaches any durable or public boundary.
+            ContentBlock::Text(_) => {}
+            ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } => return Err(()),
         }
     }
     if source_count == 0 {

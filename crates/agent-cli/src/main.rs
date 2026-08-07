@@ -38,7 +38,7 @@ use std::sync::atomic::Ordering;
 use agent_cli::{mcp, print, provider, repl, session_path};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
 use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
-use agent_tools::ToolExecutor;
+use agent_tools::{ToolExecutor, VisionLinkSource, VisionRuntime};
 use agent_transport::{Client, config};
 
 fn main() {
@@ -67,7 +67,7 @@ fn main() {
         Ok(p) => p,
         Err(e) => fail(&format!("拿不到当前工作目录: {e}")),
     };
-    let fs = match ToolExecutor::new(&tool_root) {
+    let mut fs = match ToolExecutor::new(&tool_root) {
         Ok(fs) => fs,
         Err(e) => fail(&format!(
             "内置工具初始化失败（root={}）: [{}] {}",
@@ -76,6 +76,16 @@ fn main() {
             e.message
         )),
     };
+    // s5：识图工具（srv:vision/inspect，写死 Kimi 3）。CLI 没有 server 的上传
+    // 端点——`image` 按启动目录内的本地相对路径解析（`VisionLinkSource::
+    // LocalRoot`）。没配 kimi 段或没可用 key → 工具不配置、不声明，模型根本
+    // 不知道有它（跟 `agent-server::bootstrap::resolve_vision` 同一个「vision
+    // 是可选项」取舍，只是链接来源换成 LocalRoot）。
+    let vision = resolve_vision(&root, &tool_root);
+    let vision_enabled = vision.is_some();
+    if let Some(v) = vision {
+        fs = fs.with_vision(v);
+    }
 
     // 只打长度/状态，永远不打 key 本身；provider 打的是配置里的名字，不是
     // 写死的字符串——这正是 023 要修的那个接线 bug。
@@ -85,6 +95,14 @@ fn main() {
         provider_cfg.endpoint(),
         api_key.len(),
         tool_root.display(),
+    );
+    eprintln!(
+        "vision={}",
+        if vision_enabled {
+            "可用（kimi 已配置）".to_string()
+        } else {
+            "（未配置 kimi 段，无 srv:vision/inspect）".to_string()
+        }
     );
 
     let args: Vec<String> = std::env::args().collect();
@@ -148,31 +166,37 @@ fn main() {
         agent_runtime::recovered_transient_source_needs_fail_close(&session);
 
     let mut printer = print::EventPrinter::new();
+    // 本地标准工具集含受版本保护、可显式撤回的文件事务；不会把浏览器/桌面
+    // 交互伪装成本地工具。随后保留既有 spawn 开关，上限传的是
+    // `session.agent_limits()`——工具描述里告诉模型的数字，必须跟真正拦它的
+    // 那两道闸是同一组（`ToolTable::with_spawn` 的文档记了这个耦合）。
+    // MCP 工具追加在最后（红线 11：builtin/shell/spawn/skills 的顺序是既有契约，
+    // 只加不改；server 之间按 id、server 内按 tools/list，已在 `mcp::bootstrap` 排好）。
+    // `with_status`（051）/ `with_collect`（053）紧跟在 `with_spawn` 之后、
+    // skills/MCP 之前：这样「静态的那一段工具表」在所有会话里逐字节相同，
+    // 不随装了几个 skill / 几个 MCP 工具而移位（红线 11）。
+    //
+    // 三个一起开：`background=true` 的 spawn 没有 collect 就是个陷阱——模型
+    // 看得见后台这条路，却没有任何办法把结果拿回来，发出去的子全部在轮末被
+    // 拆掉（`ToolTable::with_collect` 的文档记着这条）。
+    let mut tool_table = ToolTable::standard_local()
+        .with_spawn(session.agent_limits())
+        .with_status()
+        .with_collect()
+        .with_skills(skills)
+        .with_mcp(mcp.tools);
+    // s5：配了 kimi 段才声明识图工具，追加在最末（跟 `agent-server` 的
+    // actor 装配同一个语义）——不碰上面既有工具的顺序，红线 11 只加不改。
+    if vision_enabled {
+        tool_table = tool_table.with_vision_inspect();
+    }
     let mut ctx = RunnerCtx::new(
         Arc::from(adapter),
         Arc::new(Client::new()),
         provider_cfg.endpoint(),
         api_key,
         fs,
-        // 本地标准工具集含受版本保护、可显式撤回的文件事务；不会把浏览器/桌面
-        // 交互伪装成本地工具。随后保留既有 spawn 开关，上限传的是
-        // `session.agent_limits()`——工具描述里告诉模型的数字，必须跟真正拦它的
-        // 那两道闸是同一组（`ToolTable::with_spawn` 的文档记了这个耦合）。
-        // MCP 工具追加在最后（红线 11：builtin/shell/spawn/skills 的顺序是既有契约，
-        // 只加不改；server 之间按 id、server 内按 tools/list，已在 `mcp::bootstrap` 排好）。
-        // `with_status`（051）/ `with_collect`（053）紧跟在 `with_spawn` 之后、
-        // skills/MCP 之前：这样「静态的那一段工具表」在所有会话里逐字节相同，
-        // 不随装了几个 skill / 几个 MCP 工具而移位（红线 11）。
-        //
-        // 三个一起开：`background=true` 的 spawn 没有 collect 就是个陷阱——模型
-        // 看得见后台这条路，却没有任何办法把结果拿回来，发出去的子全部在轮末被
-        // 拆掉（`ToolTable::with_collect` 的文档记着这条）。
-        ToolTable::standard_local()
-            .with_spawn(session.agent_limits())
-            .with_status()
-            .with_collect()
-            .with_skills(skills)
-            .with_mcp(mcp.tools),
+        tool_table,
         vec![
             SystemChunk {
                 label: Arc::from("base"),
@@ -235,6 +259,26 @@ fn provider_names(root: &config::RootConfig) -> String {
         .cloned()
         .collect::<Vec<_>>()
         .join(" / ")
+}
+
+/// `srv:vision/inspect` 的 CLI 运行时（写死 Kimi 3）：从 `[providers.kimi]`
+/// 段解 base_url/key/model；`image` 参数按启动目录内的本地相对路径解析
+/// （`VisionLinkSource::LocalRoot`）——CLI 没有 server 的上传端点。kimi 段
+/// 缺失或没配可用 key → `None`（工具不配置、不声明，其余照常），跟
+/// `agent-server::bootstrap::resolve_vision` 同一个取舍。
+fn resolve_vision(
+    root: &config::RootConfig,
+    tool_root: &std::path::PathBuf,
+) -> Option<VisionRuntime> {
+    let kimi = root.providers.get("kimi")?;
+    let api_key = kimi.resolve_key()?;
+    Some(VisionRuntime::new(
+        Arc::new(Client::new()),
+        kimi.base_url.clone(),
+        api_key,
+        Arc::from(kimi.model.as_str()),
+        VisionLinkSource::LocalRoot(tool_root.clone()),
+    ))
 }
 
 fn fail(message: &str) -> ! {

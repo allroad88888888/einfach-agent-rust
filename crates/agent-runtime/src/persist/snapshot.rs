@@ -88,7 +88,6 @@ mod tests {
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("hi"),
-            images: Vec::new(),
         });
         sync(&mut ctx, &mut session);
 

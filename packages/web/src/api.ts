@@ -86,17 +86,30 @@ export async function fetchPendingTools(id: string): Promise<PendingTool[]> {
 }
 
 export async function sendInput(id: string, text: string, images: readonly File[] = []): Promise<void> {
-  // 不选图必须停在原来的对象字面量：JSON.stringify 后仍逐字节是
-  // `{"text":"..."}`，不能为了统一形状平白加一个 `images: []`。
-  const body = images.length === 0 ? { text } : { text, images: await Promise.all(images.map(encodeImage)) };
-  return postJson(`/sessions/${encodeURIComponent(id)}/input`, body);
+  // s5/s6：图片字节绝不进 agent 协议 body——有图时先 POST /uploads 拿链接，
+  // 再把链接拼进 text 当纯文本发（无图时仍是逐字节 `{"text":"..."}`，
+  // 不为统一形状平白加空字段）。模型看到的是链接字符串，识图走
+  // `srv:vision/inspect` 工具（server 配了 kimi 段才可用）。
+  let message = text;
+  if (images.length > 0) {
+    const links = await Promise.all(images.map(uploadImage));
+    const block = links.map((link) => `[图片：${link}]`).join("\n");
+    message = message ? `${message}\n\n${block}` : block;
+  }
+  return postJson(`/sessions/${encodeURIComponent(id)}/input`, { text: message });
 }
 
-/** HTTP 的上行图片形状（085 的 `InputImage`），只在这里把浏览器 `File` 的
- * 二进制搬成 JSON 数组；下行协议类型仍只从 `@agent/protocol` 导入。 */
-async function encodeImage(file: File): Promise<{ name?: string; mime: string; bytes: number[] }> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return { name: file.name || undefined, mime: file.type, bytes: Array.from(bytes) };
+/** s5 极简上传端点（`POST /uploads`）：multipart 字段 `file`，服务端白名单
+ * 校验（png/jpeg/webp/gif、≤100MiB）后落临时目录，返回 `{"url":
+ * "/uploads/<id>"}`。拿到的链接只是纯文本——图片字节在浏览器与上传端点
+ * 之间走完，不进 `Command::Input`、不进任何模型上下文。 */
+async function uploadImage(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/uploads", { method: "POST", body: form });
+  if (!res.ok) throw new Error(await describeError(res));
+  const body = (await res.json()) as { url: string };
+  return body.url;
 }
 
 export function sendUndo(id: string, granularity: Granularity, force: boolean): Promise<void> {

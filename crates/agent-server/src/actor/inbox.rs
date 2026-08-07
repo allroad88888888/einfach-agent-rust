@@ -42,8 +42,8 @@ fn dispatch_command(
     events: &broadcast::Sender<Frame>,
 ) -> LoopControl {
     match command {
-        Command::Input { text, images } => {
-            commands::handle_input(session, ctx, events, &text, images)
+        Command::Input { text } => {
+            commands::handle_input(session, ctx, events, &text)
         }
         Command::Undo { granularity, force } => {
             commands::handle_undo(session, ctx, events, granularity, force)

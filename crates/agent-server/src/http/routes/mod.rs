@@ -6,7 +6,6 @@
 
 mod cancel;
 mod input;
-mod input_limits;
 mod pending_tools;
 mod poll;
 mod remote_tool_actor;
@@ -24,8 +23,13 @@ use axum::{Router, middleware};
 
 use crate::http::state::AppState;
 
+/// `POST /sessions/:id/input` 的 JSON 请求体上限。issue 091 之后输入只有纯文本
+/// （图片不再经这条路上传），1 MiB 对一句用户输入绰绰有余，同时比 axum 默认的
+/// 2 MiB 更紧，保留显式边界而不是悄悄依赖框架默认值。
+const INPUT_BODY_LIMIT_BYTES: usize = 1024 * 1024;
+
 pub(in crate::http) fn router(state: AppState) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/sessions", post(sessions::create))
         .route("/sessions/{id}", get(sessions::status))
         .route("/sessions/{id}/agents", get(sessions::agents))
@@ -34,7 +38,7 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions/{id}/events/poll", get(poll::events))
         .route(
             "/sessions/{id}/input",
-            post(input::input).layer(DefaultBodyLimit::max(input_limits::INPUT_BODY_LIMIT_BYTES)),
+            post(input::input).layer(DefaultBodyLimit::max(INPUT_BODY_LIMIT_BYTES)),
         )
         .route("/sessions/{id}/tool_claim", post(tool_claim::claim))
         .route(
@@ -46,7 +50,21 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions/{id}/tool_status", get(tool_status::status))
         .route("/sessions/{id}/undo", post(undo::undo))
         .route("/sessions/{id}/redo", post(undo::redo))
-        .route("/sessions/{id}/cancel", post(cancel::cancel))
+        .route("/sessions/{id}/cancel", post(cancel::cancel));
+    // s5：配了 `upload_dir` 才挂上传端点——没配就不存在这两个路由，跟
+    // 部署方根本没开图片上传的旧行为逐字节一致。body 上限放开到
+    // `MAX_IMAGE_BYTES`（100 MiB，跟 transport 侧 Moonshot 同一上限），
+    // 不能沿用纯文本输入那 1 MiB。
+    if state.uploads_enabled() {
+        router = router
+            .route(
+                "/uploads",
+                post(crate::http::uploads::upload)
+                    .layer(DefaultBodyLimit::max(agent_transport::MAX_IMAGE_BYTES)),
+            )
+            .route("/uploads/{id}", get(crate::http::uploads::get));
+    }
+    router
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::http::private_capability::authorize,

@@ -88,15 +88,6 @@ pub struct Decoded {
 /// 方法数 = 各家真的不一样的**动作**数。只差常量的适配是数据不是方法
 /// （所以流式累积器是共享类型，不是 trait 方法群）。
 pub trait Provider: Send + Sync {
-    /// 这家 wire 是否会消费图片引用。
-    ///
-    /// `false` 时宿主保留图片元数据交给 `encode` 产出可见的降级说明，绝不能先
-    /// 上传字节；只有返回 `true` 的 adapter 才要求宿主在 dispatch 前准备可用引用。
-    /// 默认保守地不上传，未知/自定义 provider 不会意外产生外部 IO。
-    fn supports_images(&self) -> bool {
-        false
-    }
-
     /// 组装 + 序列化。**唯一允许做模型相关判断的地方。**
     /// 妥协如实记进 `Encoded::adjustments`，静默妥协是本层头号大忌。
     fn encode(&self, ing: &Ingredients<'_>) -> Encoded;

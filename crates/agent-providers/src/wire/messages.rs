@@ -14,7 +14,7 @@
 use agent_core::{ContentBlock, Message, Role, SystemChunk};
 use serde_json::{Map, Value, json};
 
-use super::{image_placeholder::dropped_image_placeholder, names};
+use super::names;
 
 /// 多段 system 拼成一条 system message 的正文。段间用空行分隔。
 /// 全空（没有段、或段的文本都是空）时返回 `None`——不发空的 system 消息。
@@ -46,83 +46,46 @@ fn join_texts<'a>(texts: impl Iterator<Item = &'a str>) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// 由调用方声明该请求是否支持图片的历史编码结果。
-///
-/// 共享 wire 层不认识 provider：图片能力是 adapter 传入的数据。不能编码的图片在
-/// 这里降级为确定性文本并计数，调用方据此生成可见的降级信息。
+/// 历史消息 → wire 消息数组（不含 system）。
 #[derive(Debug, PartialEq)]
 pub struct EncodedHistory {
     pub messages: Vec<Value>,
-    pub dropped_images: usize,
 }
 
-/// 历史消息 → wire 消息数组（不含 system），按调用方给出的图片能力编码。
-pub fn history_with_image_support(messages: &[Message], supports_images: bool) -> EncodedHistory {
-    history(messages, supports_images, false)
+/// 历史消息 → wire 消息数组（不含 system）。
+pub fn history(messages: &[Message]) -> EncodedHistory {
+    history_inner(messages, false)
 }
 
 /// DeepSeek thinking-mode tool continuation: replay reasoning only on the assistant
 /// message that owns tool calls. Other messages and providers keep the default omission.
-pub fn history_with_tool_reasoning(messages: &[Message], supports_images: bool) -> EncodedHistory {
-    history(messages, supports_images, true)
+pub fn history_with_tool_reasoning(messages: &[Message]) -> EncodedHistory {
+    history_inner(messages, true)
 }
 
-fn history(messages: &[Message], supports_images: bool, tool_reasoning: bool) -> EncodedHistory {
+fn history_inner(messages: &[Message], tool_reasoning: bool) -> EncodedHistory {
     let mut out = Vec::with_capacity(messages.len());
-    let mut dropped_images = 0;
     for msg in messages {
-        dropped_images += push_message(msg, supports_images, tool_reasoning, &mut out);
+        push_message(msg, tool_reasoning, &mut out);
     }
-    EncodedHistory {
-        messages: out,
-        dropped_images,
-    }
+    EncodedHistory { messages: out }
 }
 
-fn push_message(
-    msg: &Message,
-    supports_images: bool,
-    tool_reasoning: bool,
-    out: &mut Vec<Value>,
-) -> usize {
+fn push_message(msg: &Message, tool_reasoning: bool, out: &mut Vec<Value>) {
     let mut text = String::new();
     let mut reasoning = String::new();
     let mut saw_reasoning = false;
-    let mut content = Vec::new();
     let mut tool_calls = Vec::new();
     let mut results = Vec::new();
-    let mut dropped_images = 0;
-    let has_image = msg
-        .blocks
-        .iter()
-        .any(|block| matches!(block, ContentBlock::Image { .. }));
 
     for block in &msg.blocks {
         match block {
             ContentBlock::Text(t) => {
                 append_text(&mut text, t);
-                if has_image && supports_images {
-                    content.push(json!({"type": "text", "text": &**t}));
-                }
             }
             ContentBlock::Thinking(value) => {
                 saw_reasoning = true;
                 reasoning.push_str(value);
-            }
-            ContentBlock::Image { reference, .. } if supports_images => content.push(json!({
-                "type": "image_url",
-                "image_url": {"url": &**reference},
-            })),
-            ContentBlock::Image {
-                reference,
-                name,
-                mime,
-            } => {
-                append_text(
-                    &mut text,
-                    &dropped_image_placeholder(reference, name.as_deref(), mime),
-                );
-                dropped_images += 1;
             }
             ContentBlock::ToolUse { id, name, input } => tool_calls.push(json!({
                 "id": &*id.0,
@@ -141,7 +104,7 @@ fn push_message(
         }
     }
 
-    if !text.is_empty() || !content.is_empty() || !tool_calls.is_empty() {
+    if !text.is_empty() || !tool_calls.is_empty() {
         let mut m = Map::new();
         m.insert(
             "role".into(),
@@ -152,11 +115,7 @@ fn push_message(
         );
         m.insert(
             "content".into(),
-            if has_image && supports_images {
-                Value::Array(content)
-            } else {
-                json!(text)
-            },
+            json!(text),
         );
         if !tool_calls.is_empty() {
             m.insert("tool_calls".into(), Value::Array(tool_calls));
@@ -169,7 +128,6 @@ fn push_message(
     // 工具结果跟在发起它的那条消息之后——wire 上的配对靠 `tool_call_id`，
     // 但顺序错了有的实现会直接拒。
     out.extend(results);
-    dropped_images
 }
 
 fn append_text(text: &mut String, value: &str) {
@@ -211,7 +169,7 @@ mod tests {
 
     #[test]
     fn tool_use_and_result_become_wire_shapes() {
-        let history = history_with_image_support(
+        let history = history(
             &[
                 msg(Role::User, vec![ContentBlock::Text(Arc::from("北京天气"))]),
                 msg(
@@ -234,7 +192,6 @@ mod tests {
                     }],
                 ),
             ],
-            false,
         )
         .messages;
 
@@ -273,11 +230,11 @@ mod tests {
             source("call_1", "pull bytes"),
             source("call_2", "read bytes"),
         ];
-        let encoded = history_with_tool_reasoning(&messages, false).messages;
+        let encoded = history_with_tool_reasoning(&messages).messages;
         assert_eq!(encoded[0]["reasoning_content"], json!("pull bytes"));
         assert_eq!(encoded[1]["reasoning_content"], json!("read bytes"));
 
-        let default = history_with_image_support(&messages, false).messages;
+        let default = history(&messages).messages;
         assert!(default[0].get("reasoning_content").is_none());
         assert!(default[1].get("reasoning_content").is_none());
     }
@@ -286,7 +243,7 @@ mod tests {
     #[test]
     fn empty_message_emits_nothing() {
         assert!(
-            history_with_image_support(&[msg(Role::Assistant, vec![])], false)
+            history(&[msg(Role::Assistant, vec![])])
                 .messages
                 .is_empty()
         );

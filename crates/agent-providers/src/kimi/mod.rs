@@ -32,7 +32,6 @@ mod encode;
 #[cfg(test)]
 mod encode_tests;
 mod errors;
-mod image_cache;
 mod late_tools;
 
 #[cfg(test)]
@@ -55,10 +54,6 @@ pub(crate) const CACHE_BLOCK: u32 = 256;
 pub struct Kimi;
 
 impl Provider for Kimi {
-    fn supports_images(&self) -> bool {
-        true
-    }
-
     fn encode(&self, ing: &Ingredients<'_>) -> Encoded {
         encode::encode(ing)
     }
@@ -112,7 +107,7 @@ mod tests {
 
     /// `MustUse(name)` 在 Kimi 上永久做不到，`encode` 必须报降级而不是静默翻译。
     #[test]
-    fn must_use_named_tool_always_downgrades() {
+    fn kimi_must_use_named_tool_always_downgrades() {
         let t = [spec("srv:fs/read")];
         let mut i = ing();
         i.tools = &t;
@@ -126,14 +121,6 @@ mod tests {
                 wanted: Arc::from("srv:fs/read"),
                 used: Arc::from("required"),
             }]
-        );
-    }
-
-    #[test]
-    fn kimi_declares_that_the_host_must_prepare_image_references() {
-        assert!(
-            Kimi.supports_images(),
-            "Kimi 的 image_url wire 块必须拿到已经上传的可用引用"
         );
     }
 }

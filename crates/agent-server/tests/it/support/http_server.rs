@@ -86,7 +86,6 @@ pub fn session_template(endpoint: String) -> SessionTemplate {
     );
     SessionTemplate {
         provider: std::sync::Arc::new(DeepSeek),
-        upload_base_url: endpoint.clone(),
         endpoint,
         api_key: "fake-key".to_string(),
         model: std::sync::Arc::from("deepseek-v4-pro"),
@@ -102,5 +101,7 @@ pub fn session_template(endpoint: String) -> SessionTemplate {
         provider_timeout: Some(Duration::from_secs(5)),
         remote_tool_timeout: None,
         default_sessions_dir: None,
+        upload_dir: None,
+        vision: None,
     }
 }

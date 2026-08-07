@@ -12,7 +12,6 @@ fn all_variants() -> Vec<Event> {
         Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("读一下 /tmp/a"),
-            images: Vec::new(),
         },
         Event::ProviderDone {
             agent: AgentId::root(),

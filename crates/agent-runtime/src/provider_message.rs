@@ -6,7 +6,6 @@ use std::collections::VecDeque;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
-use crate::image_preparation_failure::ImagePreparationFailure;
 use crate::provider_attempt::ProviderAttemptId;
 use crate::provider_call::{self, ProviderCall};
 use crate::transient_source_failure::TransientSourceFailure;
@@ -30,7 +29,6 @@ enum ProviderMessagePayload {
         stop: StopReason,
         usage: TokenUsage,
     },
-    PreparationFailed(ImagePreparationFailure),
     Gone,
 }
 
@@ -60,18 +58,6 @@ impl ProviderMessage {
                 stop,
                 usage,
             },
-        }
-    }
-
-    pub(crate) fn preparation_failed(
-        agent: AgentId,
-        attempt: ProviderAttemptId,
-        failure: ImagePreparationFailure,
-    ) -> Self {
-        Self {
-            agent,
-            attempt,
-            payload: ProviderMessagePayload::PreparationFailed(failure),
         }
     }
 
@@ -126,11 +112,6 @@ pub(crate) fn land(
                 }
                 Err(failure) => Some(failure),
             }
-        }
-        ProviderMessagePayload::PreparationFailed(failure) => {
-            let call = calls.remove(at);
-            pending.push_back(provider_call::preparation_failed(ctx, call, failure));
-            None
         }
         ProviderMessagePayload::Gone => {
             let call = calls.remove(at);

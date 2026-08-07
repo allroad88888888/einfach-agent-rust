@@ -15,7 +15,6 @@ mod host_skills_index_is_byte_deterministic;
 mod host_tools_bytes_support;
 mod host_tools_prefix_head_never_moves;
 mod host_tools_prefix_is_byte_deterministic;
-mod image_user_input_jsonl;
 mod jsonl_restart_continues;
 mod jsonl_three_restart_cycles_keep_seq_increasing;
 mod mcp_epoch_writeback;

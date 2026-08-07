@@ -8,7 +8,6 @@ mod decode_response;
 mod drift_predicted_cache;
 mod encode_determinism;
 mod glm_adapter;
-mod image_provider_fallback;
 mod intent_translation;
 mod invariants_meta;
 mod kimi_adapter;

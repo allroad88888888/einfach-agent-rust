@@ -26,7 +26,6 @@ async fn cancel_during_an_in_flight_turn_lands_failed_cancelled_within_hundreds_
     handle
         .send(Command::Input {
             text: "say something slow".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
 

@@ -61,6 +61,10 @@ async fn main() {
         snapshot_every: None,
         provider_timeout: None,
         remote_tool_timeout: None,
+        // s5：上传端点 + `srv:vision/inspect` 的临时目录（进程退出即丢）。
+        upload_dir: Some(
+            std::env::temp_dir().join(format!("agent-uploads-{}", std::process::id())),
+        ),
     })
     .unwrap_or_else(|e| fail(&format!("{e}")));
 

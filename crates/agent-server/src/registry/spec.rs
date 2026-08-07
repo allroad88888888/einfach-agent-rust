@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use agent_core::{AgentLimits, HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
+use agent_tools::VisionRuntime;
 use agent_transport::Client;
 
 use super::SessionId;
@@ -94,6 +95,11 @@ pub struct OpenSpec {
     ///
     /// 空 = 这次什么都没关，工具表跟 076 之前逐字节相同。
     pub disable_builtin: Vec<Arc<str>>,
+    /// s5 `srv:vision/inspect` 的运行时。`Some` → actor 线程现造 `ToolExecutor`
+    /// 时注入（`ToolExecutor::with_vision`），并把工具追加进工具表
+    /// （`ToolTable::with_vision_inspect`）；`None` → 工具不声明。API key 只随
+    /// 这份 per-session 配置在 actor 线程内部短暂存在，绝不落盘。
+    pub vision: Option<VisionRuntime>,
 }
 
 /// 工具表的五档，跟 `agent_runtime::ToolTable::builtin`/`standard_local`/`standard`/

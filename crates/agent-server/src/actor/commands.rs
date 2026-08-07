@@ -12,11 +12,11 @@
 
 use tokio::sync::broadcast::Sender as BroadcastSender;
 
-use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus, UserImage};
+use agent_core::{AgentId, Failure, Session, ToolCallId, TurnStatus};
 use agent_runtime::{
     RemoteToolOutput, ResolveRemoteToolError, RunnerCtx,
     TransientSourceFailure as RuntimeTransientSourceFailure, cancel_pending_remote_tools,
-    resolve_remote_tool, run_turn_with_images,
+    resolve_remote_tool, run_turn,
 };
 
 use crate::command::Granularity;
@@ -60,13 +60,12 @@ pub(super) fn handle_input(
     ctx: &mut RunnerCtx,
     events: &Events,
     text: &str,
-    images: Vec<UserImage>,
 ) {
     if session.status().is_terminal() {
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
     }
-    match run_turn_with_images(session, ctx, text, images) {
+    match run_turn(session, ctx, text) {
         Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
         Ok(_) => {}
         Err(failure) => emit_transient_source_failure(events, failure),

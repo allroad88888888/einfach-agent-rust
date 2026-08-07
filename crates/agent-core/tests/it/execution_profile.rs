@@ -9,7 +9,7 @@ use agent_core::{
 
 fn explicit_config(id: &str) -> ChildConfig {
     ChildConfig {
-        tools_allowed: vec![Arc::from("builtin:view_image")],
+        tools_allowed: vec![Arc::from("builtin:shell")],
         execution_profile: Some(ExecutionProfileId::new(id)),
         ..ChildConfig::default()
     }
@@ -38,7 +38,7 @@ fn default_is_null_and_explicit_profile_shares_the_spawn_entry() {
     );
 
     let mut explicit_session = Session::new(root.clone());
-    let profile = ExecutionProfileId::new("vision-low-risk");
+    let profile = ExecutionProfileId::new("worker-low-risk");
     let child = explicit_session
         .spawn_child(&root, explicit_config(profile.as_str()))
         .expect("explicit child");
@@ -71,7 +71,7 @@ fn default_is_null_and_explicit_profile_shares_the_spawn_entry() {
     assert_eq!(profile_change.prev, AgentValue::Null);
     assert_eq!(
         profile_change.next,
-        AgentValue::Text(Arc::from("vision-low-risk"))
+        AgentValue::Text(Arc::from("worker-low-risk"))
     );
 }
 
@@ -79,7 +79,7 @@ fn default_is_null_and_explicit_profile_shares_the_spawn_entry() {
 fn undo_and_redo_remove_and_restore_the_same_profile() {
     let root = AgentId::root();
     let mut session = Session::new(root.clone());
-    let profile = ExecutionProfileId::new("vision-replay");
+    let profile = ExecutionProfileId::new("worker-replay");
     let child = session
         .spawn_child(&root, explicit_config(profile.as_str()))
         .expect("child");
@@ -102,11 +102,11 @@ fn child_retry_override_is_atomic_with_the_trusted_profile() {
             &root,
             ChildConfig {
                 tools_allowed: Vec::new(),
-                execution_profile: Some(ExecutionProfileId::new("vision")),
+                execution_profile: Some(ExecutionProfileId::new("worker")),
                 max_retries: Some(0),
             },
         )
-        .expect("vision child");
+        .expect("worker child");
 
     assert!(session.primitives().iter().any(|(key, value)| {
         key == &AtomKey::Agent(child.clone(), Slot::MaxRetries) && value == &AgentValue::U64(0)
@@ -124,7 +124,7 @@ fn child_retry_override_is_atomic_with_the_trusted_profile() {
 fn snapshot_restore_preserves_profile_and_legacy_missing_slot_is_null() {
     let root = AgentId::root();
     let mut session = Session::new(root.clone());
-    let profile = ExecutionProfileId::new("vision-restored");
+    let profile = ExecutionProfileId::new("worker-restored");
     let child = session
         .spawn_child(&root, explicit_config(profile.as_str()))
         .expect("child");

@@ -73,9 +73,9 @@ pub(crate) fn prepare(session: &Session, ctx: &mut RunnerCtx, event: Event) -> E
             // A source-producing generation is sensitive as a whole. Text and thinking
             // siblings can echo the just-generated arguments, so they never cross the
             // durable/event boundary. Provider responses cannot legitimately contain
-            // tool results or images alongside a tool request; fail the whole batch closed.
+            // tool results alongside a tool request; fail the whole batch closed.
             ContentBlock::Text(_) | ContentBlock::Thinking(_) => {}
-            ContentBlock::ToolResult { .. } | ContentBlock::Image { .. } => valid = false,
+            ContentBlock::ToolResult { .. } => valid = false,
         }
     }
     if !valid || ctx.transient_sources.capture_batch(captured).is_err() {

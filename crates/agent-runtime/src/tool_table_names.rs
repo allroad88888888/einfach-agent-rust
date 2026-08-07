@@ -22,7 +22,6 @@
 //! 白白放过一次真的删了东西的调用；反过来只是多问一句。所以保守值必须是**默认值**，
 //! 已知的纯读/可补偿的显式列出，其余一律落进 `_ =>` 那一支，不臆造 `Pure`。
 
-use agent_core::vision::VISION_INSPECT_TOOL;
 use agent_core::{Location, Reversibility};
 
 use crate::collect_tool::COLLECT_TOOL;
@@ -80,9 +79,6 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // 在同一条日志、同一个 turn_id 上。undo 往回走先撞子那条屏障停下来问，
         // 轮不到 collect。跟 spawn 判 `Reversible` 是同一套账（见上一条注释）。
         COLLECT_TOOL => Reversibility::Pure,
-        // 专用视觉门面只读取本轮已注册的附件并返回观察文本；provider 费用不改变
-        // agent timeline 的可逆性，跟其它纯读工具一样不落 undo 屏障。
-        VISION_INSPECT_TOOL => Reversibility::Pure,
         // skill 激活/停用的补偿动作就是彼此（`srv:skill/deactivate` / re-activate），
         // 而且激活走 command 层、journaled——**有明确且可靠的补偿动作** = `Reversible`
         // 的定义。它们走 dispatch 截获、不进 `mark_irreversible`，所以不在日志上留

@@ -23,7 +23,6 @@
 //! `TcpListener::bind`，默认值从哪来是调用方的选择（生产代码该用
 //! `agent_server::default_bind_addr`，`crate::bind` 模块文档有理由）。
 
-mod attachment_recovery;
 mod capabilities;
 mod config;
 mod error;
@@ -40,6 +39,7 @@ mod sessions_handle;
 mod state;
 mod static_files;
 mod tool_protocol;
+mod uploads;
 
 pub use config::{ServerConfig, SessionTemplate};
 pub use sessions_handle::SessionsHandle;

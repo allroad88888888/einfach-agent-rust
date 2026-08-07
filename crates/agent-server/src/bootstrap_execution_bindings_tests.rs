@@ -18,7 +18,7 @@ base_url = "https://api.deepseek.com"
 model = "deepseek-chat"
 
 [providers.kimi]
-api_key = "vision-key"
+api_key = "kimi-key"
 base_url = "https://api.moonshot.cn/v1"
 model = "kimi-k2.5"
 
@@ -26,42 +26,14 @@ model = "kimi-k2.5"
 provider = "deepseek"
 
 [execution_profiles]
-vision = "kimi"
+coder = "kimi"
 "#,
     );
 
     let bindings = resolve_execution_bindings(&root, &Arc::new(Client::new()), None)
         .expect("已配置的 profile 必须在启动期解析");
 
-    assert!(bindings.contains_key(&ExecutionProfileId::new("vision")));
-}
-
-#[test]
-fn startup_rejects_nonvisual_vision_profile() {
-    let root = root(
-        r#"
-[providers.deepseek]
-api_key = "test-key"
-base_url = "https://api.deepseek.com"
-model = "deepseek-chat"
-
-[default]
-provider = "deepseek"
-
-[execution_profiles]
-vision = "deepseek"
-"#,
-    );
-
-    let error = resolve_execution_bindings(&root, &Arc::new(Client::new()), None)
-        .err()
-        .expect("nonvisual vision profile must fail startup");
-
-    assert!(matches!(
-        error,
-        BootstrapError::VisionExecutionProfileRequiresImages { provider }
-            if provider == "deepseek"
-    ));
+    assert!(bindings.contains_key(&ExecutionProfileId::new("coder")));
 }
 
 #[test]
@@ -77,7 +49,7 @@ model = "deepseek-chat"
 provider = "deepseek"
 
 [execution_profiles]
-vision = "missing"
+coder = "missing"
 "#,
     );
 

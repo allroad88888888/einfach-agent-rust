@@ -5,9 +5,7 @@ use std::sync::Arc;
 use agent_core::ToolCallRequest;
 use serde_json::{Value, json};
 
-pub(crate) const SOURCE_PULL: &str = "web:source/pull";
-pub(crate) const SOURCE_SEARCH: &str = "web:source/search";
-pub(crate) const SOURCE_READ: &str = "web:source/read";
+const SOURCE_TOOL_PREFIX: &str = "web:source/";
 
 pub(crate) const SAFE_RESULT: &str = "[transient_source_result_redacted]";
 pub(crate) const SAFE_ERROR: &str = "[transient_source_error_redacted]";
@@ -15,7 +13,9 @@ pub(crate) const SAFE_CANDIDATE: &str = "[transient_source_candidate_redacted]";
 pub(crate) const SAFE_INGRESS_ERROR: &str = "invalid transient source tool batch";
 
 pub(crate) fn is_transient_source(name: &str) -> bool {
-    matches!(name, SOURCE_PULL | SOURCE_SEARCH | SOURCE_READ)
+    name
+        .strip_prefix(SOURCE_TOOL_PREFIX)
+        .is_some_and(|operation| !operation.is_empty())
 }
 
 pub(crate) fn placeholder_input() -> Arc<Value> {

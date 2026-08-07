@@ -72,9 +72,6 @@ mod deadline;
 mod dispatch;
 mod execution_binding;
 mod guard;
-mod image_materialization;
-mod image_preparation_failure;
-mod image_resolver;
 mod io_thread;
 mod mcp_call;
 mod orphan;
@@ -111,8 +108,6 @@ mod transient_source_recovery;
 #[cfg(test)]
 mod transient_source_tests;
 mod transient_source_vault;
-mod vision_child_outcome;
-mod vision_tool;
 
 pub mod ctx;
 pub mod event;
@@ -129,7 +124,6 @@ pub use ctx_remote_tools::RemoteToolWaiting;
 pub use deadline::sweep_remote_tool_deadlines;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
-pub use image_resolver::{ImageResolveError, ImageResolver, ResolvedImageLease};
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
@@ -147,7 +141,7 @@ pub use remote_tool_protocol::{
 };
 pub use remote_tool_receipt::REMOTE_TOOL_RECEIPT_CAP;
 pub use remote_tool_submission::submit_remote_tool_result;
-pub use runner::{run_turn, run_turn_with_images};
+pub use runner::run_turn;
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};

@@ -127,7 +127,6 @@ provider = "deepseek"
         let _ = session.step(Event::UserInput {
             agent: AgentId::root(),
             text: "之前问过的问题".into(),
-            images: Vec::new(),
         });
         let _ = session.step(Event::ProviderDone {
             agent: AgentId::root(),

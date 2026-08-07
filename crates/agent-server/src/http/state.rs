@@ -16,11 +16,11 @@ use axum::http::HeaderMap;
 use agent_core::ExecutionProfileId;
 use agent_runtime::ExecutionBinding;
 
-use crate::attachments::{AttachmentVault, AttachmentVaultConfig, ImageHandle};
 use crate::http::config::{ServerConfig, SessionTemplate};
 use crate::http::error::ApiError;
 use crate::http::hub::SseHub;
 use crate::http::private_capability;
+use crate::http::uploads::UploadStore;
 use crate::registry::{CloseError, SessionId, SessionQuery, SessionRegistry};
 use crate::{Command, SessionHandle};
 
@@ -29,7 +29,6 @@ pub(crate) struct AppState(Arc<Inner>);
 
 struct Inner {
     registry: SessionRegistry,
-    attachments: AttachmentVault,
     template: SessionTemplate,
     hubs: Arc<Mutex<HashMap<SessionId, Arc<SseHub>>>>,
     ring_capacity: usize,
@@ -37,6 +36,9 @@ struct Inner {
     sse_keep_alive: Duration,
     private_capability: Option<Arc<str>>,
     execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    /// s5 上传端点（`/uploads`）的临时存储；`None` = 部署没配 `upload_dir`，
+    /// 上传端点不挂载（`routes::router` 的条件分支）。
+    uploads: Option<Arc<UploadStore>>,
     /// session id 生成器：`sess-<进程 pid>-<单调计数器>`。够用（M3 单副本、
     /// 进程内单调），不为此拉一个 uuid 依赖——见 `crate::http::state` 模块
     /// 文档「三件事」第一件。
@@ -45,9 +47,11 @@ struct Inner {
 
 impl AppState {
     pub(crate) fn new(config: ServerConfig) -> Self {
+        // upload_dir 先 clone 出来再整体 move template：`Inner` 要持有模板，
+        // 上传存储又是从模板字段现造的（`routes::router` 条件挂载的依据）。
+        let upload_dir = config.template.upload_dir.clone();
         AppState(Arc::new(Inner {
             registry: SessionRegistry::new(),
-            attachments: AttachmentVault::new(AttachmentVaultConfig::default()),
             template: config.template,
             hubs: Arc::new(Mutex::new(HashMap::new())),
             ring_capacity: config.ring_capacity,
@@ -55,6 +59,7 @@ impl AppState {
             sse_keep_alive: config.sse_keep_alive,
             private_capability: config.private_capability,
             execution_bindings: config.execution_bindings,
+            uploads: upload_dir.map(UploadStore::new).map(Arc::new),
             next_id: AtomicU64::new(0),
         }))
     }
@@ -72,29 +77,25 @@ impl AppState {
         &self.0.registry
     }
 
-    pub(crate) fn attachments(&self) -> &AttachmentVault {
-        &self.0.attachments
-    }
-
     /// 每个 actor 获得自己的 map 副本；其中 client/provider 都是 `Arc`，密钥仅
     /// 在这条 server→runtime 链路上短暂复制，绝不放进 `OpenSpec` 或 session。
     pub(crate) fn execution_bindings(&self) -> BTreeMap<ExecutionProfileId, ExecutionBinding> {
         self.0.execution_bindings.clone()
     }
 
-    pub(crate) fn begin_session(&self, id: &SessionId, recovered_handles: Vec<ImageHandle>) {
-        self.0.attachments.begin_session(id);
-        self.0.attachments.seed_unavailable(id, recovered_handles);
+    /// s5 上传存储句柄。`None` = 没配 `upload_dir`，上传端点不挂载。
+    pub(crate) fn uploads(&self) -> Option<Arc<UploadStore>> {
+        self.0.uploads.clone()
     }
 
-    /// 摘掉会话后同步撤销它的全部附件读取权。即使 actor 已死，registry 仍会把
-    /// session 从表中移除，所以 `WasDead` 也必须触发回收。
+    pub(crate) fn uploads_enabled(&self) -> bool {
+        self.0.uploads.is_some()
+    }
+
+    /// 摘掉会话后同步从表中移除。即使 actor 已死，registry 仍会把 session 从表中
+    /// 移除，所以 `WasDead` 也必须触发回收。
     pub(crate) fn close_session(&self, id: &SessionId) -> Result<(), CloseError> {
-        let outcome = self.0.registry.close(id);
-        if !matches!(outcome, Err(CloseError::NotFound)) {
-            self.0.attachments.close_session(id);
-        }
-        outcome
+        self.0.registry.close(id)
     }
 
     pub(crate) fn sse_keep_alive(&self) -> Duration {
@@ -182,7 +183,6 @@ mod tests {
     fn template() -> SessionTemplate {
         SessionTemplate {
             provider: Arc::new(DeepSeek),
-            upload_base_url: "http://127.0.0.1:1".to_string(),
             endpoint: "http://127.0.0.1:1/unused".to_string(),
             api_key: "fake-key".to_string(),
             model: Arc::from("deepseek-v4-pro"),
@@ -196,6 +196,8 @@ mod tests {
             provider_timeout: None,
             remote_tool_timeout: None,
             default_sessions_dir: None,
+            upload_dir: None,
+            vision: None,
         }
     }
 
@@ -209,14 +211,14 @@ mod tests {
     /// route state；它不是 durable `OpenSpec` 的一部分。
     #[test]
     fn app_state_retains_named_execution_binding_for_session_opening() {
-        let profile = ExecutionProfileId::new("vision");
+        let profile = ExecutionProfileId::new("coder");
         let binding = ExecutionBinding::new(
             Arc::new(Kimi),
             Arc::new(Client::new()),
             "https://api.moonshot.cn/v1/chat/completions".to_string(),
-            "vision-key".to_string(),
+            "coder-key".to_string(),
             SessionConfig {
-                model: Arc::from("kimi-vision"),
+                model: Arc::from("kimi-k2.5"),
                 temperature: None,
                 max_tokens: None,
                 context_window: None,

@@ -134,9 +134,9 @@ mod tests {
 
     #[test]
     fn execution_profile_id_roundtrip() {
-        let id = ExecutionProfileId::new("vision");
+        let id = ExecutionProfileId::new("worker");
         let s = serde_json::to_string(&id).unwrap();
         assert_eq!(serde_json::from_str::<ExecutionProfileId>(&s).unwrap(), id);
-        assert_eq!(id.as_str(), "vision");
+        assert_eq!(id.as_str(), "worker");
     }
 }

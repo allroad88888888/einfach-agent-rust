@@ -25,6 +25,7 @@ use std::time::Duration;
 use agent_core::{ExecutionProfileId, HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
 use agent_runtime::ExecutionBinding;
+use agent_tools::VisionRuntime;
 use agent_transport::Client;
 
 use crate::registry::{OpenSpec, SessionId, ToolTableSpec};
@@ -39,11 +40,6 @@ pub const DEFAULT_SSE_KEEP_ALIVE: Duration = Duration::from_secs(15);
 #[derive(Clone)]
 pub struct SessionTemplate {
     pub provider: Arc<dyn Provider>,
-    /// 上传 API 的基址；transport 在其后精确追加 `/files`。
-    ///
-    /// 这不是由 [`Self::endpoint`] 反推：聊天路径和文件路径是 provider 配置的
-    /// 两个独立消费者，见 088。
-    pub upload_base_url: String,
     pub endpoint: String,
     pub api_key: String,
     pub model: Arc<str>,
@@ -69,6 +65,16 @@ pub struct SessionTemplate {
     /// 文件时静默吞错误，session 表面上还是 open 成功了，只是悄悄变成没人发现
     /// 的「其实没落盘」，这正是本模块「035」一节要堵的坑）。
     pub default_sessions_dir: Option<PathBuf>,
+    /// s5 上传端点（`POST /uploads` / `GET /uploads/{id}`）的临时目录。`Some`
+    /// → 上传端点挂载，图片字节写这里（进程退出即丢，OS 回收）；`None` →
+    /// 不上传端点。跟 [`vision`](Self::vision) 的
+    /// `VisionLinkSource::UploadDir` 指向**同一个目录**——`POST /uploads`
+    /// 写的字节，`srv:vision/inspect` 执行时按链接读回。
+    pub upload_dir: Option<PathBuf>,
+    /// s5 `srv:vision/inspect` 的运行时（写死 Kimi 3）。`Some` → actor 现造
+    /// `ToolExecutor` 时注入、并把工具追加进工具表；`None` → 工具不声明。
+    /// API key 只在这条 server→runtime 链路上短暂存在，绝不落盘。
+    pub vision: Option<VisionRuntime>,
 }
 
 impl SessionTemplate {
@@ -146,6 +152,7 @@ impl SessionTemplate {
             host_tools,
             host_skills,
             disable_builtin,
+            vision: self.vision.clone(),
         })
     }
 }

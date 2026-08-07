@@ -160,6 +160,46 @@ impl Client {
         upload::send(&self.agent, base_url, api_key, image)
     }
 
+    /// 非流式 JSON POST（s5 识图工具用：Kimi chat completions 是一次性 JSON
+    /// 响应，不是 SSE）。**这是第二类请求形状，语义不跟 `post_stream` 混**——
+    /// `lib.rs` 顶部「只支持流式请求」的宣告随之修订为「流式 + 一次非流式
+    /// JSON POST」。失败分类复用 [`TransportError`] 的两个变体：连接期失败
+    /// `Connect`、非 2xx 状态码 `Http`；2xx 时返回 `(状态码, 响应体)`，JSON
+    /// 解析交给调用方（s5 的 `vision_inspect` 只认 `choices[0].message.content`）。
+    pub fn post_json(
+        &self,
+        url: &str,
+        api_key: &str,
+        body: &[u8],
+    ) -> Result<(u16, String), TransportError> {
+        match self
+            .agent
+            .post(url)
+            .set("Authorization", &format!("Bearer {api_key}"))
+            .set("Content-Type", "application/json")
+            .set("Accept", "application/json")
+            .send_bytes(body)
+        {
+            Ok(resp) => {
+                let status = resp.status();
+                let text = read_body_limited(resp, MAX_JSON_BODY);
+                if (200..300).contains(&status) {
+                    Ok((status, text))
+                } else {
+                    Err(TransportError::Http { status, body: text })
+                }
+            }
+            Err(ureq::Error::Status(status, resp)) => Err(TransportError::Http {
+                status,
+                body: read_bounded(resp),
+            }),
+            Err(ureq::Error::Transport(t)) => Err(TransportError::Connect {
+                attempts: 1,
+                message: t.to_string(),
+            }),
+        }
+    }
+
     fn try_connect(
         &self,
         url: &str,
@@ -216,11 +256,16 @@ enum ConnectAttemptError {
     ResponseWaitBroken(String),
 }
 
+/// 成功响应也限长读入（1 MiB 对一次 chat completions JSON 绰绰有余），不给
+/// 畸形/恶意上游把整个响应吃进内存的机会。
+const MAX_JSON_BODY: u64 = 1024 * 1024;
+
 fn read_bounded(resp: ureq::Response) -> String {
+    read_body_limited(resp, MAX_ERROR_BODY)
+}
+
+fn read_body_limited(resp: ureq::Response, limit: u64) -> String {
     let mut buf = Vec::new();
-    let _ = resp
-        .into_reader()
-        .take(MAX_ERROR_BODY)
-        .read_to_end(&mut buf);
+    let _ = resp.into_reader().take(limit).read_to_end(&mut buf);
     String::from_utf8_lossy(&buf).into_owned()
 }

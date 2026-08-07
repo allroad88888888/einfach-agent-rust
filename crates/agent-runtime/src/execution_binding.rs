@@ -25,7 +25,6 @@ pub struct ExecutionBinding {
     pub(crate) provider: Arc<dyn Provider>,
     pub(crate) client: Arc<Client>,
     pub(crate) endpoint: String,
-    pub(crate) image_upload_base_url: String,
     pub(crate) api_key: String,
     pub(crate) session_config: SessionConfig,
     pub(crate) timeout: Duration,
@@ -59,12 +58,10 @@ impl ExecutionBinding {
         api_key: String,
         session_config: SessionConfig,
     ) -> Self {
-        let image_upload_base_url = upload_base_url(&endpoint);
         Self {
             provider,
             client,
             endpoint,
-            image_upload_base_url,
             api_key,
             session_config,
             timeout: DEFAULT_PROVIDER_TIMEOUT,
@@ -74,12 +71,6 @@ impl ExecutionBinding {
     /// 为这条 binding 设置单次 provider 调用的总超时。
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    /// Override the API base used only for request-time image uploads.
-    pub fn with_image_upload_base_url(mut self, base_url: String) -> Self {
-        self.image_upload_base_url = base_url;
         self
     }
 }
@@ -145,11 +136,6 @@ impl RunnerCtx {
         self
     }
 
-    pub fn with_image_upload_base_url(mut self, base_url: String) -> Self {
-        self.default_binding.image_upload_base_url = base_url;
-        self
-    }
-
     /// 运行时切 provider（014 `/model <name>`）。只替换默认 binding，并为新
     /// binding 分配新 guard scope；旧请求仍可安全地写回自己起飞时的 scope。具名
     /// profile 的已授权绑定和它们独立的 guard 窗口均保留。
@@ -161,21 +147,12 @@ impl RunnerCtx {
         model: Arc<str>,
     ) {
         self.default_binding.provider = provider;
-        self.default_binding.image_upload_base_url = upload_base_url(&endpoint);
         self.default_binding.endpoint = endpoint;
         self.default_binding.api_key = api_key;
         self.default_binding.session_config.model = model;
         self.default_guard_scope = GuardScope(self.next_guard_scope);
         self.next_guard_scope += 1;
     }
-}
-
-fn upload_base_url(endpoint: &str) -> String {
-    endpoint
-        .trim_end_matches('/')
-        .strip_suffix("/chat/completions")
-        .unwrap_or_else(|| endpoint.trim_end_matches('/'))
-        .to_owned()
 }
 
 #[cfg(test)]

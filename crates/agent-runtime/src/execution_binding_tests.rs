@@ -47,26 +47,26 @@ fn kimi_binding(model: &str, key: &str) -> ExecutionBinding {
 
 #[test]
 fn selects_named_binding_only_for_matching_profile() {
-    let vision = ExecutionProfileId::new("vision");
+    let worker = ExecutionProfileId::new("worker");
     let ctx = build().with_execution_bindings(BTreeMap::from([(
-        vision.clone(),
-        kimi_binding("kimi-vision", "vision-key"),
+        worker.clone(),
+        kimi_binding("kimi-worker", "worker-key"),
     )]));
 
-    let named = ctx.execution_binding_for(Some(&vision)).unwrap().binding;
+    let named = ctx.execution_binding_for(Some(&worker)).unwrap().binding;
     let default = ctx.execution_binding_for(None).unwrap().binding;
 
-    assert_eq!(&*named.session_config.model, "kimi-vision");
-    assert_eq!(named.api_key, "vision-key");
+    assert_eq!(&*named.session_config.model, "kimi-worker");
+    assert_eq!(named.api_key, "worker-key");
     assert_eq!(&*default.session_config.model, "deepseek-v4-pro");
 }
 
 #[test]
 fn named_binding_survives_default_switch() {
-    let vision = ExecutionProfileId::new("vision");
+    let worker = ExecutionProfileId::new("worker");
     let mut ctx = build().with_execution_bindings(BTreeMap::from([(
-        vision.clone(),
-        kimi_binding("kimi-vision", "vision-key"),
+        worker.clone(),
+        kimi_binding("kimi-worker", "worker-key"),
     )]));
 
     ctx.switch_provider(
@@ -76,26 +76,26 @@ fn named_binding_survives_default_switch() {
         Arc::from("kimi-default"),
     );
 
-    let named = ctx.execution_binding_for(Some(&vision)).unwrap().binding;
-    assert_eq!(&*named.session_config.model, "kimi-vision");
-    assert_eq!(named.api_key, "vision-key");
+    let named = ctx.execution_binding_for(Some(&worker)).unwrap().binding;
+    assert_eq!(&*named.session_config.model, "kimi-worker");
+    assert_eq!(named.api_key, "worker-key");
 }
 
 #[test]
 fn guard_histories_are_isolated_by_binding_scope() {
-    let vision = ExecutionProfileId::new("vision");
+    let worker = ExecutionProfileId::new("worker");
     let hit = TurnHit::from_usage(&TokenUsage {
         prompt: 100,
         completion: 10,
         cached: Some(64),
     });
     let mut ctx = build().with_execution_bindings(BTreeMap::from([(
-        vision.clone(),
-        kimi_binding("kimi-vision", "vision-key"),
+        worker.clone(),
+        kimi_binding("kimi-worker", "worker-key"),
     )]));
     let default_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
     let named_scope = ctx
-        .execution_binding_for(Some(&vision))
+        .execution_binding_for(Some(&worker))
         .unwrap()
         .guard_scope;
 

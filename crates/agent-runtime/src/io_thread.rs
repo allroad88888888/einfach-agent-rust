@@ -35,7 +35,6 @@ use agent_providers::StreamEvent;
 
 use crate::event::RunnerEvent;
 use crate::execution_binding::ExecutionBinding;
-use crate::image_materialization::ProviderRequest;
 use crate::provider_attempt::ProviderAttemptId;
 use crate::provider_message::ProviderMessage;
 
@@ -67,7 +66,7 @@ pub(crate) fn spawn(
     agent: AgentId,
     attempt: ProviderAttemptId,
     binding: ExecutionBinding,
-    request: ProviderRequest,
+    body: Vec<u8>,
     cancel_token: Arc<AtomicBool>,
 ) {
     thread::spawn(move || {
@@ -81,22 +80,11 @@ pub(crate) fn spawn(
             settled: false,
         };
 
-        let prepared = match request.prepare(&binding, &cancel_token) {
-            Ok(prepared) => prepared,
-            Err(failure) => {
-                debt.settle(ProviderMessage::preparation_failed(
-                    agent.clone(),
-                    attempt,
-                    failure,
-                ));
-                return;
-            }
-        };
         let mut acc = binding.provider.accumulator();
         let result = binding.client.post_stream(
             &binding.endpoint,
             &binding.api_key,
-            prepared.body(),
+            &body,
             &cancel_token,
             |line| {
                 for ev in acc.push_line(line) {

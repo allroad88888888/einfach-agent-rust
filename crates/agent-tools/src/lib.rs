@@ -34,6 +34,7 @@ mod interaction_specs;
 mod search_specs;
 mod shell;
 mod specs;
+mod vision_inspect;
 mod workspace;
 mod workspace_specs;
 mod workspace_standard_specs;
@@ -103,6 +104,16 @@ pub fn interaction_specs() -> Vec<ToolSpec> {
     interaction_specs::interaction_specs()
 }
 
+pub use vision_inspect::{VisionLinkSource, VisionRuntime};
+
+/// `srv:vision/inspect` 的声明（s5）：写死 Kimi 3 的识图工具，只接受本地
+/// 图片链接，图片字节不进任何模型上下文。声明独立存在，宿主配了
+/// [`VisionRuntime`] 才把它加进工具表（`agent_runtime::ToolTable::
+/// with_vision_inspect`）——不配置就不声明，模型根本不知道有这工具。
+pub fn vision_inspect_spec() -> ToolSpec {
+    vision_inspect::vision_inspect_spec()
+}
+
 /// `srv:fs/inspect` 的声明。先读取它返回的 revision，才可以调用可撤回写入工具。
 pub fn inspect_spec() -> ToolSpec {
     workspace_specs::inspect_spec()
@@ -138,6 +149,9 @@ pub fn standard_workspace_file_specs() -> Vec<ToolSpec> {
 pub struct ToolExecutor {
     root: PathBuf,
     workspace: workspace::transaction::WorkspaceTransactionCoordinator,
+    /// `srv:vision/inspect`（s5）的运行时。`None` = 工具未配置，调用时返回
+    /// `not_configured`。
+    vision: Option<VisionRuntime>,
 }
 
 impl ToolExecutor {
@@ -145,7 +159,19 @@ impl ToolExecutor {
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, ToolError> {
         let root = exec::new_executor(root.into())?;
         let workspace = workspace::transaction::WorkspaceTransactionCoordinator::new(root.clone())?;
-        Ok(Self { root, workspace })
+        Ok(Self {
+            root,
+            workspace,
+            vision: None,
+        })
+    }
+
+    /// 注入 `srv:vision/inspect` 的运行时（Kimi 连接 + 链接→字节来源）。
+    /// 未注入时该工具报 `not_configured`。s5：server/CLI 构造 executor 后
+    /// 按需调用；`VisionRuntime` 是纯数据，可进 `OpenSpec` 配置链。
+    pub fn with_vision(mut self, vision: VisionRuntime) -> Self {
+        self.vision = Some(vision);
+        self
     }
 
     /// 按带命名空间的全名执行（`srv:fs/read`、`srv:fs/list`、搜索、shell，或
@@ -184,6 +210,7 @@ impl ToolExecutor {
             "revert_workspace_change" => {
                 workspace::tool_adapter::revert_change(&self.workspace, input)
             }
+            "srv:vision/inspect" => vision_inspect::inspect(self.vision.as_ref(), input),
             _ => exec::execute(&self.root, tool, input),
         }
     }

@@ -33,7 +33,7 @@ use std::time::Instant;
 use agent_core::cache::{self, PrefixIntent};
 use agent_core::{
     Adjustment, AgentId, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage, RequestIntent,
-    Segment, Session,
+    Session,
 };
 use agent_providers::{Encoded, Ingredients};
 
@@ -45,9 +45,7 @@ use crate::provider_attempt::ProviderAttemptId;
 use crate::subagent;
 use crate::transient_source_failure::TransientSourceFailure;
 
-pub(crate) use crate::provider_call_finish::{
-    finish, preparation_failed, preparation_start_failed, thread_gone,
-};
+pub(crate) use crate::provider_call_finish::{finish, thread_gone};
 
 /// A provider launch either yields a regular session event or exposes a terminal transient-source
 /// failure to the embedding host.
@@ -76,13 +74,9 @@ pub(crate) struct ProviderCall {
     pub(crate) prefix: PrefixImage,
     /// This request consumed transient source material and must never be retried.
     pub(crate) one_shot: bool,
-    /// Calls with a distinct terminal delivery path suppress live deltas.
-    /// Direct visual output is replayed after completion; vision child output returns through
-    /// its parent Tool envelope.
+    /// Transient-source calls suppress live deltas; their content crosses public boundaries
+    /// only through the host-facing terminal/failure paths.
     pub(crate) hold_deltas: bool,
-    /// Direct visual calls replay terminal deltas after the request completes. Vision children
-    /// deliver their terminal result through their parent Tool envelope.
-    pub(crate) replay_terminal_deltas: bool,
     /// Per-attempt cancellation latch. Unlike the session flag, this is never reset by a later
     /// turn, so an abandoned upload cannot resume after the runner starts another turn.
     cancel_token: Arc<AtomicBool>,
@@ -103,9 +97,7 @@ pub(crate) fn start(
     agent: AgentId,
     epoch: Epoch,
 ) -> Result<ProviderCall, StartFailure> {
-    ctx.clear_image_preparation_failure(&agent);
     let profile = session.execution_profile_of(&agent);
-    let vision_child = profile.as_ref().is_some_and(crate::vision_tool::is_profile);
     let selection = match ctx.execution_binding_for(profile.as_ref()) {
         Ok(selection) => selection,
         Err(_) => {
@@ -186,35 +178,7 @@ pub(crate) fn start(
     // 兜底第 1 层：发前比对，花钱之前。M1 恒 `Reuse`——`agent_core::cache`
     // 模块文档：还没有任何一处会有意改前缀。
     let one_shot = prepared.one_shot;
-    let request = match crate::image_materialization::ProviderRequest::new(
-        &binding,
-        body,
-        crate::image_materialization::OwnedIngredients {
-            system,
-            messages: prepared.messages,
-            tools,
-            late_tools,
-            late_system,
-            prev_prefix,
-        },
-        ctx.image_resolver.as_ref().map(Arc::clone),
-    ) {
-        Ok(request) => request,
-        Err(failure) => {
-            return Err(StartFailure::Event(preparation_start_failed(
-                ctx, agent, epoch, one_shot, failure,
-            )));
-        }
-    };
-    let materializes_images = request.materializes_images();
-    let drift_verdict = if materializes_images {
-        predicted_cache = 0;
-        DriftVerdict::Expected {
-            segment: Segment::History,
-        }
-    } else {
-        cache::check_drift(drift, PrefixIntent::Reuse)
-    };
+    let drift_verdict = cache::check_drift(drift, PrefixIntent::Reuse);
     if matches!(drift_verdict, DriftVerdict::Unexpected { .. }) {
         // 照发不拦（M1 只告警不熔断），但必须立刻可见——这一轮接下来可能
         // 失败/超时/被取消，等不到成功收尾时的 `TurnGuard` 才补一句。
@@ -230,7 +194,7 @@ pub(crate) fn start(
         agent.clone(),
         attempt,
         binding.clone(),
-        request,
+        body,
         Arc::clone(&cancel_token),
     );
 
@@ -246,8 +210,7 @@ pub(crate) fn start(
         adjustments,
         prefix,
         one_shot,
-        hold_deltas: one_shot || materializes_images,
-        replay_terminal_deltas: materializes_images && !one_shot && !vision_child,
+        hold_deltas: one_shot,
         cancel_token,
     })
 }

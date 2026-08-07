@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use agent_core::ExecutionProfileId;
 use agent_runtime::ExecutionBinding;
 
-use crate::actor::{self, OpenError, SessionImageRuntime};
+use crate::actor::{self, OpenError};
 use crate::handle::SessionHandle;
 
 use super::{Entry, OpenOrGet, OpenOrGetError, OpenSpec, SessionId, SessionRegistry, Slot};
@@ -35,7 +35,7 @@ impl SessionRegistry {
             }
             sessions.insert(id.clone(), Slot::Opening);
         }
-        self.finish_open(id, spec, BTreeMap::new(), None)
+        self.finish_open(id, spec, BTreeMap::new())
     }
 
     /// 幂等打开：先原子占住 id，再延迟构造 spec；等待者不会误读赢家刚写的历史文件。
@@ -43,7 +43,6 @@ impl SessionRegistry {
         &self,
         id: SessionId,
         execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
-        image_runtime: Option<SessionImageRuntime>,
         build: impl FnOnce() -> Result<(OpenSpec, T), E>,
     ) -> Result<OpenOrGet<T>, OpenOrGetError<E>> {
         let mut build = Some(build);
@@ -68,7 +67,7 @@ impl SessionRegistry {
                         }
                     };
                     return self
-                        .finish_open(id, spec, execution_bindings, image_runtime)
+                        .finish_open(id, spec, execution_bindings)
                         .map(|_| OpenOrGet::Opened(opened_value))
                         .map_err(OpenOrGetError::Open);
                 }
@@ -86,9 +85,8 @@ impl SessionRegistry {
         id: super::SessionId,
         spec: OpenSpec,
         execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
-        image_runtime: Option<SessionImageRuntime>,
     ) -> Result<SessionHandle, OpenError> {
-        let spawn_result = actor::spawn(spec, execution_bindings, image_runtime);
+        let spawn_result = actor::spawn(spec, execution_bindings);
         let mut sessions = self.sessions.lock().unwrap();
         let result = match spawn_result {
             Ok(spawned) => {

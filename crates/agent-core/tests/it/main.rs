@@ -19,7 +19,6 @@ mod guard_indep_report;
 mod guard_indep_window;
 mod host_skills_indep_restore;
 mod host_tools_indep_restore;
-mod image_user_input;
 mod no_clock_meta_test;
 mod observe_046;
 mod serde_roundtrip;

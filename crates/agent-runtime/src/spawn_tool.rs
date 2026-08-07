@@ -182,7 +182,6 @@ pub(crate) fn intercept(
     Dispatched::Event(Event::UserInput {
         agent: child,
         text: parsed.task,
-        images: Vec::new(),
     })
 }
 
@@ -232,7 +231,6 @@ fn detach(
         Event::UserInput {
             agent: child,
             text: task,
-            images: Vec::new(),
         },
     ])
 }

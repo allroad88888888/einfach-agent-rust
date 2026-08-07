@@ -24,13 +24,11 @@ async fn two_inputs_sent_back_to_back_both_run_and_in_submission_order() {
     handle
         .send(agent_server::Command::Input {
             text: "first".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
     handle
         .send(agent_server::Command::Input {
             text: "second".to_string(),
-            images: Vec::new(),
         })
         .unwrap(); // 不等第一条的结果
 

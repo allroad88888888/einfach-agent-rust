@@ -51,7 +51,7 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus, UserImage};
+use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
 
 use crate::ctx::RunnerCtx;
 use crate::deadline;
@@ -90,20 +90,6 @@ pub fn run_turn(
     ctx: &mut RunnerCtx,
     user_input: &str,
 ) -> Result<TurnStatus, TransientSourceFailure> {
-    run_turn_with_images(session, ctx, user_input, Vec::new())
-}
-
-/// 跑一整轮，连同已经由宿主准备好的用户图片一起喂入。
-///
-/// 图片引用进入这里时只是宿主登记好的不可变 attachment handle；真正的
-/// 租约解析与上传由 runtime IO 线程在 provider 请求准备阶段经既有同步上传 API 完成，
-/// 不阻塞事件泵。它和 [`run_turn`] 共用相同的终态与错误返回约定。
-pub fn run_turn_with_images(
-    session: &mut Session,
-    ctx: &mut RunnerCtx,
-    user_input: &str,
-    images: Vec<UserImage>,
-) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
     resume(
@@ -112,7 +98,6 @@ pub fn run_turn_with_images(
         Event::UserInput {
             agent: root,
             text: Arc::from(user_input),
-            images,
         },
     )
 }
@@ -219,9 +204,6 @@ pub(crate) fn resume_after_first_commit(
                 ctx.transient_sources.purge_all();
                 persist::maybe_snapshot(ctx, session);
             }
-            // Preparation failures are request-local routing metadata. Vision child slots have
-            // already consumed theirs; root and generic failures must not cross a run boundary.
-            ctx.clear_image_preparation_failures();
             return Ok(status);
         }
 
@@ -232,7 +214,7 @@ pub(crate) fn resume_after_first_commit(
         // MCP 调用没有泵级截止线——`tools/call` 自带客户端侧超时（`ctx.mcp_timeout`
         // 传给背景线程），线程必在超时内报回一条 `McpDone`（成功/错误/超时都算），
         // 所以 MCP 凭据一定会被 D 排空，不需要在这里扫。
-        if let Some(failure) = deadline::sweep(ctx, &mut calls, &mut subtree, &mut pending) {
+        if let Some(failure) = deadline::sweep(ctx, &mut calls, &mut pending) {
             return Err(abort_after_transient_source_failure(ctx, &calls, failure));
         }
         speak_for_root_on_cancel(session, ctx, &root, &calls, &mut pending, &mut cancel_seen);
@@ -258,7 +240,6 @@ fn abort_after_transient_source_failure(
         call.cancel();
     }
     ctx.transient_sources.purge_all();
-    ctx.clear_image_preparation_failures();
     failure
 }
 
