@@ -13,7 +13,9 @@
 use std::sync::Arc;
 
 use agent_core::cache::{DriftVerdict, GuardReport};
-use agent_core::{Adjustment, AgentId, Notice, TokenUsage, ToolCallId, ToolCallRequest};
+use agent_core::{
+    Adjustment, AgentId, Notice, SummaryId, TokenUsage, ToolCallId, ToolCallRequest,
+};
 
 /// 一件 runner 想让宿主看见的事，**加上「谁说的」**（029）。
 ///
@@ -108,6 +110,28 @@ pub enum RunnerEvent {
     /// 一份，跟 `AgentActivity` 在 `agent-cli::print::agent_tree` 与
     /// `packages/web/src/render/agent_tree.ts` 各有一份呈现是同一条规矩。
     OrphanedChild { child: AgentId, fate: OrphanFate },
+
+    /// 109：一份摘要被写进状态了（[`agent_core::Session::apply_summary`] 成功）
+    /// ——压缩点在时间线上可见的信号。判据同本文件顶部：`upto` **只有 runner
+    /// 自己知道**（105 定死 `Event::CompactDone` 不带它，`crate::compact_slot::
+    /// CompactSlots` 才是唯一记着它的地方，见 `crate::compact_writeback` 模块
+    /// 文档）。`turn_id` 是发生这次回写时的 [`agent_core::Session::turn_id`]
+    /// ——UI 拿它跟 `undo`/`redo` 帧的 `turn_id` 对，一次 turn 粒度的撤销/重做
+    /// 就能精确决定要不要连带撤回/恢复这条压缩标记，不必假设「一次 undo 正好
+    /// 对应最近一条标记」（那个假设在压缩是异步产出、可能跨轮落地时不成立）。
+    CompactionApplied {
+        turn_id: u64,
+        upto: usize,
+        summary_id: SummaryId,
+    },
+
+    /// 109：一批工具调用结果被清除了（[`agent_core::Session::clear_tool_results`]
+    /// 新清了至少一个，不是全部幂等命中）——被清的调用要能在时间线上标出来，
+    /// 而不是凭空消失。`turn_id` 同 [`RunnerEvent::CompactionApplied`] 的理由。
+    ToolResultsCleared {
+        turn_id: u64,
+        call_ids: Vec<ToolCallId>,
+    },
 }
 
 /// 一个没人领的后台子 agent 在轮末是怎么收场的——[`crate::orphan::reap`] 的三条

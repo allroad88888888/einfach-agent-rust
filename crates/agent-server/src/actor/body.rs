@@ -178,7 +178,9 @@ pub(super) fn run(
             model: Arc::clone(&spec.model),
             temperature: None,
             max_tokens: None,
-            context_window: None,
+            // 110 前置：从这份 `OpenSpec`（`SessionTemplate::open_spec` 转发
+            // 的 `context_window`）取，不是硬编码 `None`。
+            context_window: spec.context_window,
         },
         store,
         // `new` 收的这条不带归属的回调不用——034 换 `with_agent_events`（下面），

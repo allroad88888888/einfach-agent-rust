@@ -46,7 +46,13 @@ impl ToolCallId {
 /// 包一层 `u64` 而不是让调用方直接传裸整数：**这个 issue 只定类型**。确定性铸造
 /// ——从哪个数开始、undo/redo 时号码怎么处理——是历史 append（009）和快照恢复
 /// （010）要解决的问题，过早把铸造规则焊在这里，等那两个 issue 落地大概率要推翻。
+///
+/// 109：现在**有**这个 derive 了——`Message` 进了 `GET /sessions/{id}/
+/// compaction_record` 的响应体（压缩可见性：展开原文要能拿到完整记录，见
+/// `crate::command::compaction_record` 模块文档），载荷可达性排查第一次真的照到
+/// 这个类型。加法照这里原来的注释办：直接加 derive，不需要额外设计。
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct MessageId(pub u64);
 
 /// 一个 skill 的标识（039）。skill 的**内容**（正文 + 携带的工具）活在 store 外的
@@ -66,6 +72,37 @@ impl SkillId {
     /// 从一个字符串造 id。**落盘/传输的反序列化入口**——活名单里的 id 都是这么
     /// 回来的（存成 JSON 字符串数组）。不校验形状：skill 存不存在是 registry 的事
     /// （在 core 之外，红线 7），core 只管这个 id 在不在活名单里。
+    pub fn new(id: impl Into<Arc<str>>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// 一份压缩摘要**正文**的标识（099）。正文不在这里，也不在
+/// [`SendPlan`](crate::value::send_plan::SendPlan) 里。
+///
+/// 摘要正文是大值（红线 5），所以 `SendPlan` 只带这个 id：于是压缩状态的序列化
+/// 大小**不随摘要长度增长**，压缩 entry 的 `prev` 就只是「边界两个数 + 引用」
+/// （095 §4），cap 100 条的 undo log 随便吃。投影要正文时由调用方从别处取好再传
+/// 进去——跟图片 `ms://` 存引用不存字节是同一个招（docs/IMAGES.md §四）。
+///
+/// `Arc<str>` 包一层而不是 `String`：同一个 id 会在 `SendPlan`、undo entry 的
+/// `prev`、摘要库的键上各存一份，克隆压到指针拷贝。字段私有（同
+/// [`ExecutionProfileId`]）——core 不解释这个字符串的形状，只当它是不透明句柄，
+/// 摘要存不存在是 core 之外的事（红线 7）。
+///
+/// 109：`ts` feature 门后面导出——`SessionEvent::CompactionApplied` 与
+/// `GET /sessions/{id}/compaction_record` 的响应体都带它。单字段元组结构体，
+/// ts-rs 落成裸的 `type SummaryId = string`（跟 `ToolCallId` 同一个映射），
+/// **不透明这条不变量没变**：TS 那边照样只把它当句柄传回来，不解析形状。
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct SummaryId(Arc<str>);
+
+impl SummaryId {
     pub fn new(id: impl Into<Arc<str>>) -> Self {
         Self(id.into())
     }
@@ -130,6 +167,14 @@ mod tests {
         let s = serde_json::to_string(&id).unwrap();
         assert_eq!(serde_json::from_str::<SkillId>(&s).unwrap(), id);
         assert_eq!(id.as_str(), "pirate-speak");
+    }
+
+    #[test]
+    fn summary_id_roundtrip() {
+        let id = SummaryId::new("sum_1");
+        let s = serde_json::to_string(&id).unwrap();
+        assert_eq!(serde_json::from_str::<SummaryId>(&s).unwrap(), id);
+        assert_eq!(id.as_str(), "sum_1");
     }
 
     #[test]

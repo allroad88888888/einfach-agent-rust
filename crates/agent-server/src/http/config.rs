@@ -43,6 +43,12 @@ pub struct SessionTemplate {
     pub endpoint: String,
     pub api_key: String,
     pub model: Arc<str>,
+    /// 上下文窗口大小，单位 token。原样转发进每个会话的
+    /// `SessionConfig::context_window`（[`Self::open_spec`] → `OpenSpec` →
+    /// `crate::actor::body`）——压缩触发（096/108）拿它做纯算术，`None` 就是
+    /// 不触发。110 前置：`crate::bootstrap::bootstrap` 从 `ProviderConfig`
+    /// 里取这个值填这里，不是宿主自己拍一个数。
+    pub context_window: Option<u32>,
     pub tools: ToolTableSpec,
     /// 内置工具路径监狱的**根目录**——每个 session 实际锁在
     /// `tools_root/<session-id>/` 之内（[`Self::open_spec`] 现造，且现造前先
@@ -141,6 +147,7 @@ impl SessionTemplate {
             endpoint: self.endpoint.clone(),
             api_key: self.api_key.clone(),
             model: Arc::clone(&self.model),
+            context_window: self.context_window,
             tools: self.tools,
             tools_root,
             system: self.system.clone(),

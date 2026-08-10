@@ -52,6 +52,9 @@ pub fn switch(name: &str, ctx: &mut RunnerCtx, session: &mut Session, config: &R
         provider_cfg.endpoint(),
         api_key,
         Arc::from(provider_cfg.model.as_str()),
+        // 110 前置：新家自己的窗口，不是旧家残留的（`switch_provider` 文档
+        // 那句「旧家的窗口绝不能沿用到新家头上」）。
+        provider_cfg.context_window,
     );
     // 跨家前缀镜像无意义：不清的话 024 第 1 层会拿新家这次请求的裸字节去比对
     // 旧家上一轮的 PrefixImage，两家的料单形状本来就不同，比出来的「漂移」

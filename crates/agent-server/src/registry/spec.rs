@@ -33,6 +33,10 @@ pub struct OpenSpec {
     pub endpoint: String,
     pub api_key: String,
     pub model: Arc<str>,
+    /// 上下文窗口大小，单位 token——原样来自 [`crate::http::config::
+    /// SessionTemplate::context_window`]。`crate::actor::body` 拿它建这个会话的
+    /// `SessionConfig::context_window`，压缩触发（096/108）在那之后拿它做纯算术。
+    pub context_window: Option<u32>,
     pub tools: ToolTableSpec,
     /// 内置工具的路径监狱根——跟 `agent-cli` 一样锁在这棵目录树之内
     /// （`ToolExecutor::new` 的既有语义，这里不改）。

@@ -143,6 +143,7 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
             endpoint: provider_cfg.endpoint(),
             api_key,
             model: Arc::from(provider_cfg.model.as_str()),
+            context_window: provider_cfg.context_window,
             tools: options.tools,
             tools_root: options.tools_root,
             default_sessions_dir: options.default_sessions_dir,
@@ -214,7 +215,8 @@ fn resolve_execution_bindings(
                 model: Arc::from(provider_config.model.as_str()),
                 temperature: None,
                 max_tokens: None,
-                context_window: None,
+                // 110 前置：这个具名 profile 自己的窗口，不是默认 provider 的。
+                context_window: provider_config.context_window,
             },
         );
         let binding = match provider_timeout {

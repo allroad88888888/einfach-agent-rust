@@ -31,6 +31,8 @@ use crate::ids::{AgentId, MessageId, ToolCallId};
 use crate::seam::PrefixImage;
 use crate::value::atom_value::AgentValue;
 use crate::value::message::{ContentBlock, Message, Role};
+use crate::value::send_plan::SendPlan;
+use crate::value::send_plan_codec;
 
 use super::meta::AgentChange;
 
@@ -191,6 +193,18 @@ impl Txn {
     /// 镜像，把正常的家族切换误报成漂移。
     pub(crate) fn clear_prev_prefix(&mut self) {
         self.set(Slot::PrevPrefix, AgentValue::Null);
+    }
+
+    /// 把**这次**用掉的 `SendPlan` 记成 `PrevSendPlan`（103）：跟
+    /// [`set_prev_prefix`](Txn::set_prev_prefix) 同一时刻调用——两者是「上一次
+    /// 发出去的长什么样」这件事的两半。直接读**当前** `Slot::SendPlan`，不靠外面
+    /// 传一份快照：这次转移执行的这一刻，`SendPlan` 还没被下一次压缩动过——压缩
+    /// 是独立的 `Session` 命令（101/102 的 `clear_tool_results` 等），只可能在这次
+    /// `step()` 返回之后、下一次 `CallProvider` 起飞之前跑，所以此刻的 `SendPlan`
+    /// 正是这次请求实际用的那份。
+    pub(crate) fn record_prev_send_plan(&mut self) {
+        let plan: SendPlan = send_plan_codec::from_value(&self.get(Slot::SendPlan));
+        self.set(Slot::PrevSendPlan, send_plan_codec::to_value(&plan));
     }
 
     fn count(&self, slot: Slot) -> u32 {

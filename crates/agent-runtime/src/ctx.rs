@@ -61,6 +61,12 @@ pub const DEFAULT_REMOTE_TOOL_TIMEOUT: Duration = Duration::from_secs(600);
 pub struct RunnerCtx {
     pub(crate) default_binding: ExecutionBinding,
     pub(crate) execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
+    /// 106 契约 2：摘要子 agent 用哪个模型，由**这个字段**落进它的
+    /// `ChildConfig::execution_profile`——不是 core 里的一个 provider 分支
+    /// （红线 12）。`None`（默认，没配）就走默认 binding，跟别的没指定 profile
+    /// 的 agent 一样；宿主想用便宜模型摘要（096 决策记录的建议）就设一个已经在
+    /// `execution_bindings` 里授权过的具名 profile。
+    pub(crate) compaction_execution_profile: Option<ExecutionProfileId>,
     pub(crate) default_guard_scope: GuardScope,
     pub(crate) execution_guard_scopes: BTreeMap<ExecutionProfileId, GuardScope>,
     pub(crate) next_guard_scope: u64,
@@ -141,6 +147,7 @@ impl RunnerCtx {
                 session_config,
             ),
             execution_bindings: BTreeMap::new(),
+            compaction_execution_profile: None,
             default_guard_scope: GuardScope::INITIAL,
             execution_guard_scopes: BTreeMap::new(),
             next_guard_scope: GuardScope::FIRST_DYNAMIC,

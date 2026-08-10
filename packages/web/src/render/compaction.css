@@ -1,0 +1,39 @@
+/* 唯一职责：压缩标记卡片的样式（issue 109）——`.compaction-marker` 借用
+   `.tool-card` 同一套「卡片 + 强调色边框」视觉语言，配色变量取自 `../style.css`
+   的 `:root`（这里不重新定义变量，只消费）。 */
+.compaction-marker {
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+.compaction-marker-title {
+  color: var(--muted);
+}
+.compaction-toggle {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--accent);
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+.compaction-details {
+  margin-top: 0.4rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--fg);
+}
+.compaction-details h4 {
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.compaction-details ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  word-break: break-word;
+}

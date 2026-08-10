@@ -48,6 +48,7 @@ name = "agent-providers"
 version = "0.1.0"
 dependencies = [
  "agent-core",
+ "imbl",
  "serde",
  "serde_json",
 ]
@@ -64,6 +65,7 @@ dependencies = [
  "agent-transport",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]

@@ -12,6 +12,11 @@ export function renderNotice(payload: Notice, agent: AgentId): void {
 }
 
 function describeNotice(payload: Notice): string {
+  // 105 的两条压缩通报是**无字段变体**（闸放行没放行，只有 core 知道；正文多长
+  // 宿主自己知道，盖住了哪一段等 107 写进状态之后从状态读），所以它们在 TS 这边
+  // 是字符串成员而不是对象——先把它们摘出去，下面的 `in` 才有对象可查。
+  if (payload === "CompactionSummaryReceived") return "压缩：摘要已接受";
+  if (payload === "CompactionFailed") return "压缩：这一次没做成，历史边界不动";
   if ("TurnStatusChanged" in payload) {
     return `轮状态 → ${describeUnion(payload.TurnStatusChanged.status)}`;
   }

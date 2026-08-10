@@ -51,6 +51,7 @@ fn template(endpoint: String, tools_root: std::path::PathBuf) -> SessionTemplate
         endpoint,
         api_key: "fake-key".to_string(),
         model: Arc::from("deepseek-v4-pro"),
+        context_window: None,
         tools: ToolTableSpec::Builtin,
         tools_root,
         system: vec![SystemChunk {

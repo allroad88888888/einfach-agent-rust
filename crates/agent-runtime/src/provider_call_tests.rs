@@ -153,6 +153,7 @@ fn finish_uses_start_binding_after_default_switch() {
         "http://127.0.0.1:2/chat/completions".to_string(),
         "new-key".to_string(),
         Arc::from("new-model"),
+        None,
     );
 
     let event = finish(
@@ -214,6 +215,7 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
         "http://127.0.0.1:2/chat/completions".to_string(),
         "new-key".to_string(),
         Arc::from("new-model"),
+        None,
     );
     let new_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
 

@@ -89,6 +89,7 @@ pub fn session_template(endpoint: String) -> SessionTemplate {
         endpoint,
         api_key: "fake-key".to_string(),
         model: std::sync::Arc::from("deepseek-v4-pro"),
+        context_window: None,
         tools: agent_server::ToolTableSpec::Builtin,
         tools_root: super::temp_dir("http-tools-root"),
         system: vec![agent_core::SystemChunk {

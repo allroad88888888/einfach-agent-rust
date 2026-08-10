@@ -74,6 +74,7 @@ fn named_binding_survives_default_switch() {
         "https://api.moonshot.cn/v1/chat/completions".to_string(),
         "default-kimi-key".to_string(),
         Arc::from("kimi-default"),
+        None,
     );
 
     let named = ctx.execution_binding_for(Some(&worker)).unwrap().binding;

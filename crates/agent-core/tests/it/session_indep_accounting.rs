@@ -42,7 +42,13 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 076 新增：这个会话关掉了哪些内置工具（唯一一个减法槽位）。
             | Slot::DisabledBuiltins
             // 093 新增：runtime 已解析并授权的不透明执行 profile id。
-            | Slot::ExecutionProfile => {}
+            | Slot::ExecutionProfile
+            // 100 新增：这一轮实际要发给 provider 的历史坐标（`SendPlan`）。
+            | Slot::SendPlan
+            // 103 新增：上一次请求实际用的那份 `SendPlan`（`PrevSendPlan`）。
+            | Slot::PrevSendPlan
+            // 107 新增：历次压缩产出的摘要正文（引用在 `SendPlan` 里）。
+            | Slot::Summaries => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

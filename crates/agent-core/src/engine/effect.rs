@@ -11,16 +11,21 @@
 //!    `oneshot::Sender`。活对象放宿主的 runtime registry。
 //! 2. 每个在飞的 effect 都带 [`Epoch`]（红线 6），宿主原样带回结果事件里。
 //!
-//! ## M1 只定四个变体
+//! ## 变体一个一个加，不留空壳
 //!
-//! issue 001 列了七个，这里只有四个——`SpawnChild` / `Compact` / `Persist` **不定**，
+//! issue 001 列了七个，M1 只定四个——`SpawnChild` / `Compact` / `Persist` **不定**，
 //! 连空壳变体都不留。021 的教训：上一版把类型一次定全，结果一半在 M1 根本用不上，
 //! 而用得上的那半有几个形状是错的。空壳变体比不定更糟，它看起来像做完了。
 //!
-//! | 推迟的 | 等谁 | 为什么现在定不了 |
+//! [`Effect::Compact`] 是 105（M12）加上的第五个。M1 推迟它列了三个理由，**现在
+//! 一个都不成立**：没有 store（M2 建了）、压缩是状态变更要走 command 层进 undo log
+//! （026 把转移语义搬进原子图，104 的 `advance_boundary` 就是那条 command）、阈值
+//! 没定（096 拍板：85% 触发，第 2 档清光了还在 30% 以上才轮到第 3 档）。真要用了
+//! 才加——这跟当初不加是同一条规矩，不是它的例外。
+//!
+//! | 还推迟的 | 等谁 | 为什么现在定不了 |
 //! |---|---|---|
 //! | `SpawnChild` | issue 006（M3） | 子 agent 由模型主动 spawn 还是编排层按计划 spawn 都没拍板，两者是完全不同的产品形态，字段跟着不同 |
-//! | `Compact` | 决策 18（M2/M3） | 触发在 core、实现在 core、摆盘在 adapter，但**压缩是状态变更要走 command 层进 undo log**，而 M1 没有 store。阈值取多少也还是 ROADMAP §四的未决问题 |
 //! | `Persist` | issue 011（M2） | 落盘的单位是 `Entry`（009 定），M1 连 `Entry` 都还不存在。012 已经写明 M1 阶段丢弃 |
 
 use std::sync::Arc;
@@ -68,6 +73,27 @@ pub enum Effect {
         epoch: Epoch,
     },
 
+    /// 该去把 `[0, upto)` 这段历史摘要了。
+    ///
+    /// **不带历史正文**（决策 15 的精神，`CallProvider` 连 payload 都没有）：
+    /// 要摘要哪一段由 `upto` 表达，正文宿主自己从状态取。effect 变胖是接缝错位的
+    /// 第一个症状。
+    ///
+    /// `epoch` 是红线 6 的凭证，宿主原样带回结果事件
+    /// （[`super::Event::CompactDone`] / [`super::Event::CompactFailed`]）。摘要是
+    /// 一次真正的在飞异步：它跑的时候用户可能按了取消或 undo，回来时属于一个已经
+    /// 被回滚掉的世界——那样的回执由 `Session::step` 的闸一律丢弃。
+    ///
+    /// **消费者**：106（spawn 一个窄范围子 agent 去摘要，用哪个模型由它的
+    /// `ChildConfig` 说了算，core 里因此没有任何为摘要新增的 provider 分支）。
+    /// 发这条 effect 的时机是 108（自动阶梯）与 104 的用户主动摘要按钮。
+    Compact {
+        agent: AgentId,
+        /// 完整历史的前 `upto` 条要被这次摘要盖住。
+        upto: usize,
+        epoch: Epoch,
+    },
+
     /// 取消这个世代的所有在飞请求。
     ///
     /// 没有 `agent` 字段：epoch 是**会话级**的（STATE-MODEL：一个 root agent + 它的
@@ -97,7 +123,7 @@ mod tests {
     use super::*;
     use crate::engine::state::TurnStatus;
 
-    /// 四个变体全部 serde 往返。effect 要能跨线程、进日志、进快照——不可序列化的
+    /// 五个变体全部 serde 往返。effect 要能跨线程、进日志、进快照——不可序列化的
     /// 东西溜进来（红线 3），第一次真的从崩溃恢复时才会发现。
     #[test]
     fn roundtrip_all_variants() {
@@ -111,6 +137,11 @@ mod tests {
                 call_id: ToolCallId::new("call_1"),
                 tool: Arc::from("srv:fs/read"),
                 input: Arc::new(json!({"path": "/tmp/a"})),
+                epoch: Epoch(1),
+            },
+            Effect::Compact {
+                agent: AgentId::root(),
+                upto: 12,
                 epoch: Epoch(1),
             },
             Effect::CancelInFlight { epoch: Epoch(2) },
@@ -136,5 +167,26 @@ mod tests {
         let mut keys: Vec<&str> = fields.keys().map(String::as_str).collect();
         keys.sort_unstable();
         assert_eq!(keys, ["agent", "epoch"]);
+    }
+
+    /// `Compact` 同款白名单：路由用的 `agent`、范围用的 `upto`、校验用的 `epoch`，
+    /// **一条历史正文都没有**。
+    ///
+    /// 这个断言防的是一次很自然的「顺手」——摘要子 agent 反正要读那段历史，
+    /// 何不把它塞进 effect 里省一次取料？塞进去之后：每次压缩都在日志和快照里复制
+    /// 一整段历史，effect 不再能便宜地跨线程，而「哪一段」这件事就有了两个真值源
+    /// （`upto` 和正文），两者迟早对不上。effect 变胖是接缝错位的第一个症状。
+    #[test]
+    fn compact_carries_no_history() {
+        let json = serde_json::to_value(Effect::Compact {
+            agent: AgentId::root(),
+            upto: 42,
+            epoch: Epoch(3),
+        })
+        .unwrap();
+        let fields = json["Compact"].as_object().unwrap();
+        let mut keys: Vec<&str> = fields.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["agent", "epoch", "upto"]);
     }
 }

@@ -17,6 +17,7 @@ mod http_capabilities_skills;
 mod http_capabilities_skills_survive_restart;
 mod http_capabilities_survive_restart;
 mod http_chatid_sessions;
+mod http_compaction_record;
 mod http_concurrent_session_create;
 mod http_disconnecting_all_subscribers_cancels_after_grace;
 mod http_host_skill_tool_result_resumes_turn;

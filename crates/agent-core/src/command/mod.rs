@@ -31,6 +31,11 @@
 //! | [`host_tools`] | 073：`declare_host_tools` / `host_tools`——`HostTools` 槽位的 journaled 读写（宿主注入的声明是会话状态，恢复时原样复刻） |
 //! | [`host_skills`] | 064：`declare_host_skills` / `host_skills`——`HostSkills` 槽位的同款读写（skill 的索引行也进 prompt，同一条理由） |
 //! | [`disabled_builtins`] | 076：`disable_builtins` / `disabled_builtins`——`DisabledBuiltins` 槽位的同款读写，方向相反（**减法**：这个会话把部署方给的哪几件藏起来不给模型看） |
+//! | [`send_plan`] | 100：`send_plan_of` / `replace_send_plan`——`SendPlan` 槽位的读写口，M12 压缩主干「投影接进料单」的地基 |
+//! | [`advance_boundary`] | 104：`advance_boundary`——第 3、4 档共用的边界推进命令，底层复用 `replace_send_plan` |
+//! | [`clear_tool_results`] | 101：`clear_tool_results`——第 2 档的写路径，校验 + 幂等 + 记账，底层复用 `replace_send_plan` |
+//! | [`apply_summary`] | 107：`apply_summary` / `summary_text`——第 3 档的回写，**一条 entry 同时存正文、推边界、填引用**；epoch 闸在 `step`，契约见该模块文档 |
+//! | [`compaction_record`] | 109：`summary_library`——压缩可见性的读口，展开原文走这条链，不经 `SendPlan` |
 //! | [`cross_read`] | 028：跨 agent 读的两个口，没有第三个（红线 10） |
 //!
 //! ## 一个 `Session` = 整棵树
@@ -41,9 +46,13 @@
 //! 落进同一条日志、继承同一个 `turn_id`。「跨 agent 的 undo 天生一致」因此不是
 //! 一段代码，是没有代码。
 
+pub mod advance_boundary;
+pub mod apply_summary;
 pub mod barrier;
 pub mod child_config;
+pub mod clear_tool_results;
 pub mod commit;
+pub mod compaction_record;
 pub mod cross_read;
 pub mod despawn;
 pub mod disabled_builtins;
@@ -52,6 +61,7 @@ pub mod host_tools;
 pub mod meta;
 pub mod read;
 mod restore;
+pub mod send_plan;
 pub mod session;
 pub mod skill;
 pub mod spawn;
@@ -61,8 +71,10 @@ pub mod tree;
 pub mod txn;
 pub mod undo;
 
+pub use advance_boundary::BoundaryRejected;
 pub use barrier::BarrierInfo;
 pub use child_config::ChildConfig;
+pub use clear_tool_results::ClearOutcome;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, known_label};

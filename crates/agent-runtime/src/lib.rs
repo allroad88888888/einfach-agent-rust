@@ -26,15 +26,17 @@
 //! `agent-cli` 会让 M3 落地时把这坨编排逻辑从一个 bin crate 里整体搬出来，
 //! 现在直接独立成库不亏。
 //!
-//! # 四个 effect，零 `unimplemented!`
+//! # 五个 effect，零 `unimplemented!`
 //!
-//! [`agent_core::Effect`] 现在只有四个变体（`SpawnChild`/`Compact`/`Persist`
-//! 还没定），[`dispatch`] 的 `match` 穷举它们，四个全部真的执行：
+//! [`agent_core::Effect`] 现在有五个变体（`SpawnChild`/`Persist` 还没定；
+//! `Compact` 是 105 在 M12 加的第五个），[`dispatch`] 的 `match` 穷举它们，
+//! 五个全部真的执行：
 //!
 //! | effect | 谁执行 | 怎么执行 |
 //! |---|---|---|
 //! | `CallProvider` | [`provider_call::start`] | actor 线程取料 → `encode` → 发前 `check_drift` → 起 IO 线程跑 `post_stream`。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
 //! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
+//! | `Compact` | [`compact_spawn::intercept`] | 106：spawn 一个窄范围子 agent（`ChildConfig::execution_profile` 来自 [`ctx::RunnerCtx::with_compaction_execution_profile`]，`agent-core` 没有为摘要新增任何 provider 分支），把 `[0, upto)` 那段历史渲染成它的第一条 user 消息；子落终态由 [`compact_slot::CompactSlots`] 收割成 `Event::CompactDone`/`CompactFailed`。spawn 被拒或子agent失败都是**正常事件**（`CompactFailed`，原样带回同一个 `epoch`）——压缩这一次作废、边界不动、下一轮照常跑 |
 //! | `CancelInFlight` | [`dispatch`] | 置共享的取消标志 + 斩断队列里还没喂进去的待办 |
 //! | `Emit(Notice)` | [`dispatch`] | 带上「出自谁的 `step`」转给 [`RunnerCtx`] 的事件回调 |
 //!
@@ -63,10 +65,32 @@
 //! 紧跟 collect」在代码上是真的：两者共用 [`subtree`] 的同一张槽位表，
 //! 差别只在模型什么时候把那一笔记上。绑了 collect 的子**不是孤儿**，[`orphan`]
 //! 的轮末清算认这条。
+//!
+//! # 自动压缩的阶梯（108）
+//!
+//! `Effect::Compact` 的**产出方**在这个 crate，不在 core：[`compact_ladder`] 在
+//! 每一轮 root 落 `Done` 时问一次 `agent_core::compaction::next_action`（纯函数，
+//! 红线 1），第 2 档当场走 `Session::clear_tool_results` 命令，第 3 档产出一条
+//! `Effect::Compact` 并进这一步的 effect 批。**一轮只判一次**——「第 2 档清完还
+//! 不够」要靠下一轮实测，同一轮里再判一次就退化成推断（红线 12）。
+//!
+//! 摘要回来之后的回写是两步，中间隔着红线 6 的闸：`Event::CompactDone` 先过
+//! `Session::step`，**回执里出现 `Notice::CompactionSummaryReceived` 才**调
+//! `Session::apply_summary`（107 留下的硬契约，判据显式住在
+//! [`compact_writeback::passed_epoch_gate`]，`upto` 由 [`compact_slot`] 记着）。
+//! 摘要子 agent 收割完当场 `despawn_child`——它是一次性工人，不回收的话
+//! `max_children` 默认 8，长会话压 8 次之后自动压缩永久失效。
+//!
 
 mod child_outcome;
 mod child_slot;
 mod collect_tool;
+mod compact_ladder;
+mod compact_slot;
+mod compact_spawn;
+mod compact_writeback;
+#[cfg(test)]
+mod compaction_visibility_tests;
 mod ctx_remote_tools;
 mod deadline;
 mod dispatch;

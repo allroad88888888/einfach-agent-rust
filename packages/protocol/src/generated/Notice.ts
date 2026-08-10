@@ -28,4 +28,4 @@ original_bytes: number,
 /**
  * 实际进 prompt 的内容字节数（不含截断标记）。
  */
-kept_bytes: number, } } | { "ProtocolViolation": { state: TurnStatus, event: string, } } | { "Retrying": { attempt: number, max_retries: number, } };
+kept_bytes: number, } } | { "ProtocolViolation": { state: TurnStatus, event: string, } } | { "Retrying": { attempt: number, max_retries: number, } } | "CompactionSummaryReceived" | "CompactionFailed";

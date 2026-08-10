@@ -18,10 +18,14 @@ use crate::seam::Segment;
 /// `false` 是哪一边，而传反了的后果是「事故被当成预期」静默放过——那正是这一层
 /// 要拦的东西。
 ///
-/// M1 恒为 [`PrefixIntent::Reuse`]：还没有任何一处会有意改前缀。压缩重写历史、
-/// 换 skill 集、晚加的工具被并进顶层，都是后面才出现的 [`PrefixIntent::Intentional`]
-/// 来源。字段现在就留出来，是因为漏了它的那一天，表现是「压缩一次报一次假警报」，
-/// 然后人开始无视这一层的告警。
+/// M1–M11 恒为 [`PrefixIntent::Reuse`]：那时还没有任何一处会有意改前缀。103 起
+/// 接上了第一个真会改前缀的来源——`agent-runtime` 的 `provider_call::start`
+/// 拿这一轮的 `SendPlan` 跟 `PrevSendPlan`（同一时刻随 `PrevPrefix` 一起写）比：
+/// 不等就传 [`PrefixIntent::Intentional`]（压缩改过发送计划），相等原样传
+/// `Reuse`——非压缩轮必须落回 `Reuse`，这是反向锁，防止图省事的实现直接焊死
+/// `Intentional` 把这一层告警永久关掉。换 skill 集、晚加的工具被并进顶层还是
+/// 后面才出现的来源，字段当初留出来正是为了不让漏掉它的那一天变成「压缩一次
+/// 报一次假警报」而被人无视。
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub enum PrefixIntent {
     /// 沿用上一轮的前缀。**任何 drift 都是事故。**

@@ -50,6 +50,7 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
         endpoint,
         api_key: "fake-key".to_string(),
         model: Arc::from("deepseek-v4-pro"),
+        context_window: None,
         tools: ToolTableSpec::Builtin,
         tools_root: temp_dir(&format!("tools-{id}")),
         system: vec![SystemChunk {

@@ -15,7 +15,11 @@ use crate::ids::{MessageId, ToolCallId};
 /// `ContentBlock::ToolResult`——多数 provider 的线协议会把它编码成
 /// `role: "tool"` 或者 `role: "user"` 里的一个特殊块，但那是 adapter 层的编码
 /// 细节（见 docs/ADAPTER.md），core 只认「谁在说话」这一个维度。
+///
+/// 109：`ts` feature 门后面导出——展开压缩摘要盖住的原始轮次要能在网络协议上
+/// 认出说话人是谁（`GET /sessions/{id}/compaction_record`）。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Role {
     User,
     Assistant,
@@ -26,7 +30,10 @@ pub enum Role {
 ///
 /// 大字段一律 `Arc` 包住（红线 5）：`store.get()` 每次读都要 clone 整条历史，
 /// 文本 / JSON 越长这条越关键；`PartialEq` 因此也能走 `Arc` 的指针比较快路。
+///
+/// 109：`ts` feature 门后面导出——见 [`Role`] 同一条理由。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum ContentBlock {
     /// 可见文本。
     Text(Arc<str>),
@@ -56,7 +63,10 @@ pub enum ContentBlock {
 /// 的 block 列表，才铸成一个 `Message` 写进历史。这样保证两件事：一是历史里
 /// 任意一条拿出来都是自洽的、可以直接喂回 provider；二是 undo/redo 的粒度是
 /// 「一整条完成的消息」，不会停在半条消息上。
+///
+/// 109：`ts` feature 门后面导出——见 [`Role`] 同一条理由。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Message {
     pub id: MessageId,
     pub role: Role,

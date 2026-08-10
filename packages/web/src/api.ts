@@ -12,7 +12,14 @@
 // ts-rs 导出（`crates/agent-server/src/http/capabilities/`），所以它跟下行那些
 // 一样是生成物,不该在前端手写镜像（决策 2；`packages/protocol/src/index.ts`
 // 那段 061 的注释记的是同一件事）。
-import type { AgentTree, Capabilities, Granularity, PendingTool, PendingToolsResponse } from "@agent/protocol";
+import type {
+  AgentTree,
+  Capabilities,
+  CompactionRecordResponse,
+  Granularity,
+  PendingTool,
+  PendingToolsResponse,
+} from "@agent/protocol";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -68,6 +75,19 @@ export async function fetchAgentTree(id: string): Promise<AgentTree> {
   const res = await fetch(`/sessions/${encodeURIComponent(id)}/agents`);
   if (!res.ok) throw new Error(await describeError(res));
   return (await res.json()) as AgentTree;
+}
+
+/** `GET /sessions/:id/compaction_record`（109）：展开一条压缩标记要看的内容——
+ * **完整记录**（`messages`，未经 `SendPlan` 投影：压缩点覆盖的原始轮次、被清
+ * 工具调用的原始结果都从这里切/找）与**摘要库**（`summaries`，来自
+ * `Slot::Summaries`）。`agent` 省略时服务端按 root 处理（今天只有 root 会
+ * 触发压缩）。这是一次按需查询，不随连接自动预取——`render/compaction.ts`
+ * 只在用户点开某条标记时才调用，并把结果缓存住,同一条连接内只请求一次。 */
+export async function fetchCompactionRecord(id: string, agent?: string): Promise<CompactionRecordResponse> {
+  const query = agent === undefined ? "" : `?agent=${encodeURIComponent(agent)}`;
+  const res = await fetch(`/sessions/${encodeURIComponent(id)}/compaction_record${query}`);
+  if (!res.ok) throw new Error(await describeError(res));
+  return (await res.json()) as CompactionRecordResponse;
 }
 
 /** `GET /sessions/:id/pending_tools`（072）：此刻**还欠着**回传的远端工具调用。

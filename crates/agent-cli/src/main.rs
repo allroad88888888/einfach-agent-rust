@@ -90,11 +90,12 @@ fn main() {
     // 只打长度/状态，永远不打 key 本身；provider 打的是配置里的名字，不是
     // 写死的字符串——这正是 023 要修的那个接线 bug。
     eprintln!(
-        "provider={provider_name} model={} endpoint={} key=已配置（{} 字符） tools_root={}",
+        "provider={provider_name} model={} endpoint={} key=已配置（{} 字符） tools_root={} context_window={:?}",
         provider_cfg.model,
         provider_cfg.endpoint(),
         api_key.len(),
         tool_root.display(),
+        provider_cfg.context_window,
     );
     eprintln!(
         "vision={}",
@@ -210,7 +211,10 @@ fn main() {
             model: Arc::from(provider_cfg.model.as_str()),
             temperature: None,
             max_tokens: None,
-            context_window: None,
+            // 110 前置：从 `providers.toml` 里这家的配置取，不是硬编码
+            // `None`——没配就是 `None`（安全默认，不触发任何一档压缩），
+            // 配了就一路传到 `compact_ladder` 的触发判断。
+            context_window: provider_cfg.context_window,
         },
         store,
         // `new` 收的这条是 M1..M2 的不带归属回调，CLI 不用它——真正的打印走下面

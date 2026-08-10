@@ -2,9 +2,12 @@
 //! `docs/issues/031-http-sse.md` 的「做什么」小节；`GET /sessions/:id/agents`
 //! 是 048 补的第七个（整棵活 agent 树此刻的快照，见 `sessions::agents`），
 //! `GET /sessions/:id/pending_tools` 是 072 补的（还欠着的远端调用，见
-//! `pending_tools`）。每个端点的处理函数在自己的文件里，这里只做装配。
+//! `pending_tools`），`GET /sessions/:id/compaction_record` 是 109 补的（展开
+//! 压缩点/清除标记要看的完整记录 + 摘要库，见 `compaction::record`）。每个端点
+//! 的处理函数在自己的文件里，这里只做装配。
 
 mod cancel;
+mod compaction;
 mod input;
 mod pending_tools;
 mod poll;
@@ -34,6 +37,7 @@ pub(in crate::http) fn router(state: AppState) -> Router {
         .route("/sessions/{id}", get(sessions::status))
         .route("/sessions/{id}/agents", get(sessions::agents))
         .route("/sessions/{id}/pending_tools", get(pending_tools::list))
+        .route("/sessions/{id}/compaction_record", get(compaction::record))
         .route("/sessions/{id}/events", get(sse::events))
         .route("/sessions/{id}/events/poll", get(poll::events))
         .route(

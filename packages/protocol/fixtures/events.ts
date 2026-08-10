@@ -235,5 +235,29 @@ export const events = [
         }
       }
     }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "compaction_applied",
+      "data": {
+        "turn_id": 3,
+        "upto": 12,
+        "summary_id": "summary@12"
+      }
+    }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "tool_results_cleared",
+      "data": {
+        "turn_id": 3,
+        "call_ids": [
+          "call_1",
+          "call_2"
+        ]
+      }
+    }
   }
 ] as const;

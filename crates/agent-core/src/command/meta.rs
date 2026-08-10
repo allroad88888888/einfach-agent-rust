@@ -57,15 +57,30 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
     meta.barrier
 }
 
-/// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的七个 +
+/// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的九个 +
 /// `Session` 会话级命令的四个（`begin_turn` / `set_max_turns` / `set_max_retries` /
 /// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）+ 039
 /// 的两条 skill 命令（`activate_skill` / `deactivate_skill`）+ 073 的宿主注入声明
-/// （`declare_host_tools`）。
+/// （`declare_host_tools`）+ 064/076 的两条同款声明（`declare_host_skills` /
+/// `disable_builtins`）+ 100 的 `SendPlan` 整体替换（`replace_send_plan`——104 的
+/// `advance_boundary` 生效时也是调它，复用同一个标签，不另开一格）+ 107 的摘要回写
+/// （`apply_summary`）。
+///
+/// **107 为什么不复用 `replace_send_plan`**：104 复用它的理由是「这条命令在状态层
+/// 做的事就是整体换掉那一个槽位的值」；`apply_summary` 不是——它在一条 entry 里同时
+/// 写 `Slot::Summaries` 和 `Slot::SendPlan`，而 label 要回答的是「当时发生了什么」
+/// （[`EntryMeta::label`]）。挂着「换了个发送计划」的名字去审计一条同时存进一份
+/// 摘要正文的 entry，时间线上就少了一件真的发生过的事（109 要展示的正是它）。
 /// 这是一个**封闭的、有限的编译期常量集**（`EntryMeta.label` 的文档注释）。
 ///
 /// **加一条就是一次协议变更**：用新代码写出来的会话文件，旧二进制打开时会在这里
 /// 认不出这个标签，`recover` 硬失败而不是编一个假的凑合用（[`known_label`]）。
+///
+/// **不变量：`label_of` 的取值域必须是这张表的子集。** 105 的
+/// `compact_done` / `compact_failed` 因此现在就在这里，尽管那两格转移这一版
+/// 一个 primitive 都不写（写回是 107），落不出带这个标签的 entry——等到 107 真的
+/// 写状态时才补，中间就有一版「能产出、认不出」的代码，而它炸的地方是恢复，
+/// 离改动点最远。
 const KNOWN_LABELS: &[&str] = &[
     "user_input",
     "provider_done",
@@ -73,6 +88,8 @@ const KNOWN_LABELS: &[&str] = &[
     "tool_result",
     "tool_failed",
     "timeout",
+    "compact_done",
+    "compact_failed",
     "cancel",
     "begin_turn",
     "set_max_turns",
@@ -85,6 +102,8 @@ const KNOWN_LABELS: &[&str] = &[
     "declare_host_tools",
     "declare_host_skills",
     "disable_builtins",
+    "replace_send_plan",
+    "apply_summary",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

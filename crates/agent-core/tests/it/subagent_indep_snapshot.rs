@@ -44,8 +44,8 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     assert!(agents_present.contains(&a2));
     assert_eq!(
         snap.len(),
-        45,
-        "root + a1 + a2，每个 agent 十五个槽位（093 追加了 ExecutionProfile）"
+        54,
+        "root + a1 + a2，每个 agent 十八个槽位（103 追加了 PrevSendPlan，107 追加了 Summaries）"
     );
 }
 

@@ -14,6 +14,7 @@ fn minimal_template(tools_root: PathBuf, default_sessions_dir: Option<PathBuf>) 
         endpoint: "http://127.0.0.1:1/unused".to_string(),
         api_key: "fake-key".to_string(),
         model: Arc::from("deepseek-v4-pro"),
+        context_window: None,
         tools: ToolTableSpec::Builtin,
         tools_root,
         system: Vec::new(),
@@ -33,6 +34,43 @@ fn temp_dir(name: &str) -> PathBuf {
         "agent-server-open-spec-test-{name}-{}",
         std::process::id()
     ))
+}
+
+/// 110 前置：`SessionTemplate::context_window` 必须原样搭上 `open_spec` 这班车，
+/// 到 `OpenSpec::context_window`——`crate::actor::body` 建这个会话的
+/// `SessionConfig` 时只会问 `spec.context_window`，模板这边留了个洞，压缩就
+/// 全程哑火，而且不报错。
+#[test]
+fn open_spec_carries_the_templates_context_window() {
+    let mut template = minimal_template(temp_dir("tools-context-window"), None);
+    template.context_window = Some(128_000);
+    let spec = template
+        .open_spec(
+            SessionId::from("s-context-window"),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+    assert_eq!(spec.context_window, Some(128_000));
+}
+
+/// 反面：模板没配（`None`，`minimal_template` 的默认值）就原样是 `None`——
+/// 不是某个隐藏默认窗口，也不会因为字段新加了就悄悄变成 `Some`。
+#[test]
+fn open_spec_keeps_none_when_the_template_has_no_context_window() {
+    let template = minimal_template(temp_dir("tools-context-window-none"), None);
+    let spec = template
+        .open_spec(
+            SessionId::from("s-context-window-none"),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+        .unwrap();
+    assert_eq!(spec.context_window, None);
 }
 
 #[test]

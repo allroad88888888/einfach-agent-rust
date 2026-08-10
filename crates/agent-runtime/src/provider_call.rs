@@ -31,6 +31,7 @@ use std::sync::mpsc::SyncSender;
 use std::time::Instant;
 
 use agent_core::cache::{self, PrefixIntent};
+use agent_core::value::send_plan::project;
 use agent_core::{
     Adjustment, AgentId, DriftVerdict, Epoch, ErrorClass, Event, PrefixImage, RequestIntent,
     Session,
@@ -114,8 +115,25 @@ pub(crate) fn start(
     // 一版）：`imbl::Vector` 不是连续切片，Ingredients 要的是 `&[Message]`，
     // 这里物化一份——克隆的是 `Message`（里面全是 `Arc`），代价是指针拷贝乘
     // 消息数，不是深拷内容（红线 5）。
+    //
+    // 100：完整历史先过一遍 099 的投影纯函数，才进后面的 transient-source
+    // overlay 和 `Ingredients`——「取料处只有一个」的另一半兑现在这里。
+    // 摘要正文要跟着计划一起取出来喂给投影。**漏了这一步的症状极其隐蔽**：
+    // 099 的 `project` 规定「有摘要引用但拿不到正文 → 边界作废、整份历史照发」
+    // （宁可多发，不可发一段引用不到正文的空洞）。于是第 3 档会变成完全哑火——
+    // `apply_summary` 照常写、`SendPlan` 状态全对、undo/恢复都正常，**只有实际
+    // 发出去的请求体里一个字都没压**。不报错、测不到状态异常，只在账单上浮出来。
+    //
+    // 这一行在 100 落地时确实是 `None`（那会儿摘要还不存在），107 把 `summary_text`
+    // 做出来之后就该跟上，但 100/107/108 三条各自的范围都没盖住这根线，
+    // 由 108 的独测在真实请求体上抓到。见 108 实做记录。
+    let history = session.messages_of(&agent);
+    let plan = session.send_plan_of(&agent);
+    let summary_text = plan
+        .summary()
+        .and_then(|id| session.summary_text(&agent, id));
     let durable_messages: Vec<agent_core::Message> =
-        session.messages_of(&agent).iter().cloned().collect();
+        project(&history, &plan, summary_text.as_ref());
     let prepared = match crate::transient_source_prompt::prepare(
         &durable_messages,
         &mut ctx.transient_sources,
@@ -175,10 +193,19 @@ pub(crate) fn start(
         adjustments = safe.adjustments;
     }
 
-    // 兜底第 1 层：发前比对，花钱之前。M1 恒 `Reuse`——`agent_core::cache`
-    // 模块文档：还没有任何一处会有意改前缀。
+    // 兜底第 1 层：发前比对，花钱之前。103：意图不再恒 `Reuse`——拿这一轮实际
+    // 要用的 `SendPlan`（`plan`，已经在上面读过）跟上一次请求用的那份比：一样就
+    // 是沿用上一轮的前缀，任何漂移都是事故；不一样说明中间压缩改过发送计划，
+    // 漂移是预期内的（全价重编码，但不是 bug）。这条比较本身就是「反向锁」的
+    // 落点——没有压缩开火的轮次，两份计划天然相等，意图自动落回 `Reuse`。
     let one_shot = prepared.one_shot;
-    let drift_verdict = cache::check_drift(drift, PrefixIntent::Reuse);
+    let prev_plan = session.prev_send_plan_of(&agent);
+    let intent = if plan == prev_plan {
+        PrefixIntent::Reuse
+    } else {
+        PrefixIntent::Intentional
+    };
+    let drift_verdict = cache::check_drift(drift, intent);
     if matches!(drift_verdict, DriftVerdict::Unexpected { .. }) {
         // 照发不拦（M1 只告警不熔断），但必须立刻可见——这一轮接下来可能
         // 失败/超时/被取消，等不到成功收尾时的 `TurnGuard` 才补一句。

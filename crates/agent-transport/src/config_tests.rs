@@ -128,6 +128,41 @@ fn default_provider_errors_on_unknown_name() {
     );
 }
 
+/// 110 前置：旧 `providers.toml`（没有 `context_window` 这个键）必须照常加载，
+/// 缺省值是 `None`——不是加载失败，也不是某个隐藏默认窗口。
+#[test]
+fn context_window_defaults_to_none_when_the_key_is_absent() {
+    let root: RootConfig = toml::from_str(&sample_toml()).unwrap();
+    assert_eq!(root.providers["deepseek"].context_window, None);
+    assert_eq!(root.providers["kimi"].context_window, None);
+}
+
+/// 配了就原样解出来——`u32`，跟 `SessionConfig::context_window` 同一个类型，
+/// 不用调用方再转换。键必须落在对应 provider 的表内（TOML 没有「文件级追加」
+/// 这回事，接在 `sample_toml()` 尾巴上会被解析成 `[default]` 表的字段）。
+#[test]
+fn context_window_parses_when_configured() {
+    let toml = r#"
+[providers.deepseek]
+api_key = "sk-test"
+base_url = "https://api.deepseek.com"
+model = "deepseek-v4-pro"
+context_window = 128000
+
+[providers.kimi]
+api_key_env = "MOONSHOT_API_KEY"
+base_url = "https://api.moonshot.cn/v1"
+model = "kimi-k3"
+
+[default]
+provider = "deepseek"
+"#;
+    let root: RootConfig = toml::from_str(toml).unwrap();
+    assert_eq!(root.providers["deepseek"].context_window, Some(128_000));
+    // 没配的那家不受影响。
+    assert_eq!(root.providers["kimi"].context_window, None);
+}
+
 #[test]
 fn endpoint_appends_chat_completions_and_trims_trailing_slash() {
     let root: RootConfig = toml::from_str(&sample_toml()).unwrap();

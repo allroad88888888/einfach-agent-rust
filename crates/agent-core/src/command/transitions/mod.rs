@@ -16,6 +16,18 @@
 //! `History::append` 拒绝空步——「状态不变」在日志这一侧同样是结构事实：
 //! 一次协议违规不会在 undo 栈里留下一个按下去没反应的幽灵步。
 //!
+//! ## 那张表没有因为压缩变宽
+//!
+//! 105 给 `Event` 加了 `CompactDone` / `CompactFailed`，**它们不进这 35 格**：
+//! 压缩跟轮状态正交（096 第六问定的判读时机是「turn 结束拿到 usage 时」，
+//! 生效在下一轮出料单时），把它们摊进 5 态 × N 的网格只会得到五行同样的答案。
+//!
+//! 它们各自的一格：**过了 epoch 闸就发一条通报**
+//! （`Notice::CompactionSummaryReceived` / `CompactionFailed`），**状态一个字节不写**
+//! ——回写是 107。通报这一半是 105 就有的，它是红线 6 那道闸的可观测性：
+//! 过期的回执静默丢弃、当代的回执说一声，两种结果因此分得出来。理由写在
+//! [`transition`] 里那一格。
+//!
 //! ## 为什么这一份和 `engine/transitions/` 并存
 //!
 //! 027 把 runner / CLI 换接到 `Session` 之后，`engine::step` 那一路退役
@@ -64,6 +76,31 @@ pub(super) fn transition(txn: &mut Txn, event: Event) -> Vec<Effect> {
             tool_outcome::on_tool_outcome(txn, call_id, error, true, &event_desc)
         }
         Event::Timeout { call_id, .. } => timeout::on_timeout(txn, call_id, &event_desc),
+        // 摘要回执（105）。到这里的都已经过了 `Session::step` 的 epoch 闸，属于
+        // 当前世代——**这一版就发一条通报，一个 primitive 都不写**。
+        //
+        // 发通报是 105 的一部分，不是 109 的预支：epoch 闸是个过滤器，而过滤器只有
+        // **两种结果都可观测**才测得出来。过期的回执被静默丢弃（`step` 那边定的：
+        // 取消/undo 之后一定有一批回执陆续到达，每条都喊一声只会刷屏），所以
+        // 「接受」这一侧必须说话；两侧都不说话的话，一个「Compact 的回执一律丢弃」
+        // 的实现跟正确实现在外面一模一样——正是红线 6 要防的那种静默。
+        //
+        // 不写状态是划给 107 的：
+        //
+        // - `CompactFailed` 这就是终局语义（106）：压缩这一次作废，边界不动，
+        //   下一轮照常跑。它永远不写状态，不是等谁来填。
+        // - `CompactDone` 的回写落在 107 的 `Session::apply_summary`（存正文 + 推
+        //   边界 + 填引用，三件事一条 entry）。**107 落地之后这一格仍然不写状态**：
+        //   回写要知道这次摘要盖住的 `upto`，而 105 定死了事件里不带它（effect 不带
+        //   历史正文，事件也没有理由胖）。所以调用点在持有 `upto` 的那一方——它必须
+        //   先把这条事件喂给 `step` 过闸、看到下面这条 `Notice` 之后才调
+        //   `apply_summary`（契约与「绕开会怎样」写在 `command/apply_summary.rs`
+        //   的模块文档里）。
+        //
+        // 不写 primitive ⇒ `Txn` 收上来的 `changes` 是空的 ⇒ `History::append`
+        // 拒绝空步 ⇒ 不留 entry。跟非法格是同一条结构事实（通报本身不是状态）。
+        Event::CompactDone { .. } => vec![Effect::Emit(Notice::CompactionSummaryReceived)],
+        Event::CompactFailed { .. } => vec![Effect::Emit(Notice::CompactionFailed)],
         Event::Cancel { .. } => cancel::on_cancel(txn, &event_desc),
     }
 }
@@ -79,6 +116,8 @@ pub(super) fn label_of(event: &Event) -> &'static str {
         Event::ToolResult { .. } => "tool_result",
         Event::ToolFailed { .. } => "tool_failed",
         Event::Timeout { .. } => "timeout",
+        Event::CompactDone { .. } => "compact_done",
+        Event::CompactFailed { .. } => "compact_failed",
         Event::Cancel { .. } => "cancel",
     }
 }

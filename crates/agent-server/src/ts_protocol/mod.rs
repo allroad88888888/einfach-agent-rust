@@ -21,6 +21,7 @@
 
 mod export;
 mod fixtures;
+mod fixtures_cast;
 
 #[cfg(test)]
 mod consistency;

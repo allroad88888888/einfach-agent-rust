@@ -186,6 +186,7 @@ mod tests {
             endpoint: "http://127.0.0.1:1/unused".to_string(),
             api_key: "fake-key".to_string(),
             model: Arc::from("deepseek-v4-pro"),
+            context_window: None,
             tools: ToolTableSpec::Builtin,
             tools_root: std::env::temp_dir()
                 .join(format!("agent-server-hub-reclaim-{}", std::process::id())),
