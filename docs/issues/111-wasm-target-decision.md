@@ -61,7 +61,11 @@ crate 里（那里有全仓唯一允许依赖 ureq 的镜像约束）。
 
 1. **`RunnerCtx.fs: ToolExecutor` 是 concrete struct**（`agent-tools/src/lib.rs:149`），
    `new()` 里要 canonicalize 一个真实目录、不存在就报错。浏览器没有文件系统，必须开注入
-   接缝。**这是本里程碑唯一的结构性改动**，见 112。
+   接缝，见 112。
+   > ⚠️ 本条原写「**这是本里程碑唯一的结构性改动**」，**已被 113 证伪**：wasm 上没有线程，
+   > 而 `io_thread` 同时扛着 029 的并行、`sync_channel(0)` 的会合背压和「放弃不 join」，
+   > 是第二处结构性改动，见 [115](115-wasm-io-without-threads.md)。写本条时低估了，
+   > 记在这里免得后来人以为只有一处。
    > 顺带一笔文档欠账：[ARCHITECTURE](../ARCHITECTURE.md) §各包边界写着「mock 一个 tool
    > executor」——按当前结构那个接缝**其实不存在**，mock 只能靠给临时目录。112 一并开出来。
 2. **`Instant` / `SystemTime`**：`PendingRemoteTool` 的 `deadline` 用的是绝对时刻，wasm 上

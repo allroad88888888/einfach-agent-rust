@@ -400,18 +400,24 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 因此自动不存在」都在那里，别在实现 issue 里重新讨论。
 
 ```
-111(决策) ─┬→ 112(ToolExecutor 注入接缝) ─┐
-           └→ 113(fetch transport) ───────┴→ 114(wasm 宿主，M13 终点)
+111(决策) ─┬→ 112(ToolExecutor 注入接缝) ✅ ─┐
+           └→ 113(fetch transport) ✅ ──────┴→ 115(决策：没有线程怎么办) → 114(wasm 宿主，M13 终点)
 ```
 
-112 与 113 从 111 之后**完全并行**，不碰对方的文件。
+112 与 113 从 111 之后**完全并行**，不碰对方的文件，均已完成。
+
+**115 是 113 实做时撞出来的，111 没预料到**：`post_stream` 的同步签名在 wasm 上
+没有线程就没法阻塞等 `fetch`（`thread::spawn` 能编译、运行时 trap，113 实测）。
+而 `io_thread` 同时扛着 029 的并行、`sync_channel(0)` 的会合背压和「放弃不 join」
+三件事，不是换个 async 就完。**115 不定，114 做不下去。**
 
 | # | 任务 | 依赖 | 模型 | 独测 |
 |---|---|---|---|---|
 | [111](111-wasm-target-decision.md) | **决策**：恢复 wasm 目标，取代决策 10；浏览器形态的裁剪清单与代价 | — | **opus** | 决策类 |
-| [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝——**本里程碑唯一的结构性改动**，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的 | 111 | sonnet | ✅ |
+| [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的（原写「本里程碑唯一的结构性改动」，**已被 113 证伪**，见 115） | 111 | sonnet | ✅ |
 | [113](113-fetch-transport.md) | `agent-transport` 的 fetch 实现，native 那条一行不动 | 111 | sonnet | ✅ |
-| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 112+113 | sonnet | — |
+| [115](115-wasm-io-without-threads.md) | **决策**：wasm 上没有线程，provider IO 路径怎么办 —— 泵怎么等 / `sync_channel(0)` 换成什么 / 029 并行怎么保 / 决策 16 的理由是否还成立 | 113 | **opus** | 决策类 |
+| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 115 | sonnet | — |
 
 **M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
 只有前端拿得到的 `web:` 工具并用结果回答；刷新后同会话 id 从 IndexedDB journal 回放，
