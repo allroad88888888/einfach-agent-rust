@@ -133,22 +133,22 @@ fn fixtures_json_matches_committed_snapshot() {
 /// 穷举覆盖的直接实检（issue 032 验收原文「`SessionEvent` 全部变体在 fixtures
 /// 里各至少一个样本」）。`cast_sample` 的穷举 match 保证「变体存在就必须处理」，
 /// 但保证不了「骨架数组本身没有手抖漏一个、错重一个」——这条测试补的正是这个
-/// 缺口：17 个变体、17 个样本、互不相同（048 加了 `AgentTree`，054 加了
-/// `OrphanedChild`）。变体数变了，先确认 `fixtures::cast_sample` 也跟着改了，
-/// 再改这里的 `17`。
+/// 缺口：19 个变体、19 个样本、互不相同（048 加了 `AgentTree`，054 加了
+/// `OrphanedChild`，109 加了 `CompactionApplied`/`ToolResultsCleared`）。变体数
+/// 变了，先确认 `fixtures::cast_sample` 也跟着改了，再改这里的 `19`。
 #[test]
 fn sample_events_cover_every_variant_at_least_once() {
     let samples = sample_session_events();
     assert_eq!(
         samples.len(),
-        17,
-        "SessionEvent 目前有 17 个变体，样本数应该跟它一一对应"
+        19,
+        "SessionEvent 目前有 19 个变体，样本数应该跟它一一对应"
     );
 
     let kinds: BTreeSet<&'static str> = samples.iter().map(session_event_kind).collect();
     assert_eq!(
         kinds.len(),
-        17,
+        19,
         "样本里有重复变体，说明漏了另一个——样本种类：{kinds:?}"
     );
 }
@@ -176,5 +176,7 @@ fn session_event_kind(ev: &crate::SessionEvent) -> &'static str {
         AgentTree(_) => "AgentTree",
         OrphanedChild { .. } => "OrphanedChild",
         TransientSourceFailure(_) => "TransientSourceFailure",
+        CompactionApplied { .. } => "CompactionApplied",
+        ToolResultsCleared { .. } => "ToolResultsCleared",
     }
 }

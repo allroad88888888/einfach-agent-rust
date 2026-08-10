@@ -9,7 +9,8 @@
 //! 说明事件契约漏了一种事件」。所以只有 core 自己知道的事实要在这里出现。
 //!
 //! M1 三条，各自的消费者写在变体注释里；第三条（`ProtocolViolation`）是 002 加的，
-//! 见它自己的文档注释。
+//! 见它自己的文档注释。105 加的两条压缩通报也过了同一道判据，理由写在变体上：
+//! **闸放行没放行，只有 core 知道**。
 
 use std::sync::Arc;
 
@@ -88,6 +89,35 @@ pub enum Notice {
     ///
     /// **消费者**：014 打「重试中」提示。
     Retrying { attempt: u32, max_retries: u32 },
+
+    /// 一份摘要**被这一代接受了**（105）。
+    ///
+    /// 判据仍然是那一条「宿主自己看不见的才在这里」：宿主当然知道它送回了一份摘要，
+    /// 它不知道的是**core 收没收**——`Effect::Compact` 在飞期间用户可能取消或 undo
+    /// 过，那样的回执会被 `Session::step` 的闸静默丢弃（丢弃**不**通报，理由见
+    /// `command/step.rs`：过期回执是正常现象，每条都喊一声只会刷屏）。于是「接受」
+    /// 这一侧必须说话，否则红线 6 那道闸的两种结果在外面完全一样，
+    /// 一个「不管 epoch 一律丢弃」的实现跟正确实现分不出来。
+    ///
+    /// 没有字段：这条通报的全部内容就是「闸放行了」。摘要多少字节宿主自己知道，
+    /// 盖住了哪一段要等 107 真的写状态之后才有答案（那时它是**状态**不是通报——
+    /// 事后任何时候问都该答得出，`TurnStatus` 的类型文档定过同一条判据）。
+    /// 也没有 `agent`：整个 [`Notice`] 都没有，归属由 `Frame.agent` 那一层带
+    /// （见本类型的文档注释）。
+    ///
+    /// **消费者**：109（时间线上标出压缩点）；CLI 打一行小字。
+    CompactionSummaryReceived,
+
+    /// 这一次压缩没做成（105）。
+    ///
+    /// **正常事件不是异常路径**（106 验收）：压缩这一次作废，边界不动，下一轮照常跑
+    /// ——所以它是一条通报，不是 `Failure`、也不进 `TurnStatus`。人该看得见
+    /// 「刚才那次压缩没成」，否则下一轮又全价重编码一遍时没人知道为什么。
+    ///
+    /// 跟 [`Notice::CompactionSummaryReceived`] 分两个变体而不是共用一个
+    /// `{ ok: bool }`：`ToolResult`/`ToolFailed` 分家时定过这条规矩，
+    /// 一个布尔标志会逼每个消费者现场把它翻译回两句话。
+    CompactionFailed,
 }
 
 // 想过但**没有**定的通报，以及为什么：
@@ -126,6 +156,8 @@ mod tests {
                 attempt: 1,
                 max_retries: 2,
             },
+            Notice::CompactionSummaryReceived,
+            Notice::CompactionFailed,
         ];
         let s = serde_json::to_string(&notices).unwrap();
         assert_eq!(serde_json::from_str::<Vec<Notice>>(&s).unwrap(), notices);

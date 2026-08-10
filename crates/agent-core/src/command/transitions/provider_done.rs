@@ -51,6 +51,10 @@ pub(super) fn on_provider_done(
     // `prompt_tokens` 用这次的真实 usage 回填——纯赋值不是判断（红线 12）。
     prefix.prompt_tokens = Some(usage.prompt);
     txn.set_prev_prefix(prefix);
+    // 103：跟 `PrevPrefix` 同一时刻记下这次用的 `SendPlan`——两者是「上一次发
+    // 出去的长什么样」这件事的两半。下一轮起飞前拿它跟*那时*的 `SendPlan` 比，
+    // 不等就是「压缩在中间开过火」，兜底第 1 层据此把这轮的漂移判成预期内。
+    txn.record_prev_send_plan();
 
     match stop {
         StopReason::EndTurn => done(txn, false),

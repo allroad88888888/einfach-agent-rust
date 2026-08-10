@@ -27,13 +27,11 @@ async fn two_sessions_run_concurrently_without_crossing_events() {
     handle_a
         .send(agent_server::Command::Input {
             text: "hi from a".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
     handle_b
         .send(agent_server::Command::Input {
             text: "hi from b".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
 

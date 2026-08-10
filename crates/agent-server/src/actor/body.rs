@@ -20,7 +20,7 @@ use crate::event::{Frame, SessionEvent};
 use crate::registry::OpenSpec;
 
 use super::message::ActorMessage;
-use super::{SessionImageRuntime, capabilities, commands, inbox};
+use super::{capabilities, commands, inbox};
 
 /// 握手消息：`Ok(cancel)` = 起好了，`cancel` 是 [`RunnerCtx::cancel_flag`]
 /// （[`crate::handle::SessionHandle::cancel`] 直接旁路写的那个原子标志）；
@@ -40,7 +40,6 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
 pub(super) fn run(
     spec: OpenSpec,
     execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
-    image_runtime: Option<SessionImageRuntime>,
     rx: mpsc::Receiver<ActorMessage>,
     events_tx: broadcast::Sender<Frame>,
     ready_tx: mpsc::Sender<ReadyMsg>,
@@ -148,6 +147,17 @@ pub(super) fn run(
             return;
         }
     };
+    // s5：配了 vision 就把 `srv:vision/inspect` 的运行时注入 executor，并把工具
+    // 追加进工具表。两者必须一起给——只注 executor 不声明工具，模型不知道有它；
+    // 只声明不注入，调用会落在 `not_configured`。
+    let fs = match &spec.vision {
+        Some(vision) => fs.with_vision(vision.clone()),
+        None => fs,
+    };
+    let mut tools = assembled.tools;
+    if spec.vision.is_some() {
+        tools = tools.with_vision_inspect();
+    }
 
     let events_for_callback = events_tx.clone();
     let events_for_tree = events_tx.clone();
@@ -162,13 +172,15 @@ pub(super) fn run(
         // 部署期的 system 段 + 常驻 skill 索引。两段都 per-session：跟着这个 actor
         // 线程生灭，别的 chatid 看不见（docs/HOST-CAPABILITIES.md §二）。什么都没
         // 声明时两者都是空操作，跟 062/064 之前逐字节相同。
-        assembled.tools,
+        tools,
         assembled.system,
         SessionConfig {
             model: Arc::clone(&spec.model),
             temperature: None,
             max_tokens: None,
-            context_window: None,
+            // 110 前置：从这份 `OpenSpec`（`SessionTemplate::open_spec` 转发
+            // 的 `context_window`）取，不是硬编码 `None`。
+            context_window: spec.context_window,
         },
         store,
         // `new` 收的这条不带归属的回调不用——034 换 `with_agent_events`（下面），
@@ -176,9 +188,6 @@ pub(super) fn run(
         // **替换**整条事件出口，见 `RunnerCtx::with_agent_events` 文档）。
         Box::new(|_| {}),
     );
-    if let Some(image_runtime) = image_runtime {
-        ctx = image_runtime.inject(ctx);
-    }
     ctx = ctx
         .with_execution_bindings(execution_bindings)
         .with_agent_events(Box::new(move |ev: AgentEvent| {

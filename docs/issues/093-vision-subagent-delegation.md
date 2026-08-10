@@ -1,5 +1,9 @@
 # 093 — Vision Delegation for Non-Visual Agents
 
+> ⚠️ **Superseded by s5**: the vision sub-agent delegation pipeline described here was
+> removed by the s5 refactor. The current implementation is the `srv:vision/inspect` built-in
+> tool fed by the `POST /uploads` endpoint. Kept as a historical record only.
+
 > Canonical English issue. A short Chinese companion is available in
 > [093-vision-subagent-delegation.zh-CN.md](./093-vision-subagent-delegation.zh-CN.md).
 

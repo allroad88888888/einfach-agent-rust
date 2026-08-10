@@ -104,33 +104,6 @@ impl Subtree {
         self.slots.record(child, parent, call_id, epoch, tool);
     }
 
-    /// 专用视觉子占住的槽。它仍走同一棵子树的生命周期，只在最终正文翻译上使用
-    /// `agent_core::vision` 的稳定信封。
-    pub(crate) fn record_vision(
-        &mut self,
-        child: AgentId,
-        parent: AgentId,
-        call_id: ToolCallId,
-        epoch: Epoch,
-        images_inspected: usize,
-    ) {
-        self.slots
-            .record_vision(child, parent, call_id, epoch, images_inspected);
-    }
-
-    /// provider 截止线真实触发时留下运行时标记。core 的最终状态会把 timeout 与
-    /// 其它可重试 provider 失败都归一成 `Retryable`；这一个 bit 保留稳定
-    /// `vision_timeout` 所需的来源，而不把 endpoint/provider 细节写进 durable 状态。
-    pub(crate) fn record_provider_timeout(&mut self, child: &AgentId) {
-        self.slots.record_provider_timeout(child);
-    }
-
-    /// A retry starts a new provider attempt. The timeout bit describes the terminal attempt,
-    /// rather than any earlier attempt that core legitimately retried.
-    pub(crate) fn record_provider_start(&mut self, child: &AgentId) {
-        self.slots.record_provider_start(child);
-    }
-
     /// 053：这个后台子还在 detached 名单上吗（= 还在跑、还没进 stash）。
     pub(crate) fn is_detached(&self, child: &AgentId) -> bool {
         self.detached.iter().any(|entry| &entry.child == child)
@@ -214,9 +187,6 @@ impl Subtree {
     pub(crate) fn harvest(&mut self, session: &Session, ctx: &mut RunnerCtx) -> Vec<Event> {
         let writebacks = self.slots.harvest(session, ctx);
         for writeback in &writebacks {
-            // Vision slots consume their typed preparation failure while rendering the stable
-            // envelope. Generic slots have no such envelope, so discard any entry here.
-            ctx.clear_image_preparation_failure(&writeback.child);
             // A collect-bound child also remains in detached while it runs. Once its result has
             // gone straight back to the waiting slot, it must not be stashed a second time.
             self.detached.retain(|entry| entry.child != writeback.child);

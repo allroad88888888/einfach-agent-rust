@@ -44,19 +44,6 @@ use crate::value::session::{StopReason, TokenUsage};
 
 use super::epoch::Epoch;
 
-/// 宿主已准备好的用户图片。
-///
-/// `reference` 对 core 完全不透明：这里只传进历史，之后原样交给 adapter；不解析、
-/// 不按前缀分支。视觉 provider 的引用由 HTTP 路由上传取得；非视觉 provider 可以
-/// 放不可用标记，adapter 会改写成可见的降级文本（`docs/IMAGES.md` §七、§八）。
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct UserImage {
-    pub reference: Arc<str>,
-    pub mime: Arc<str>,
-    pub name: Option<Arc<str>>,
-}
-
 /// 外面发生的一件事。
 ///
 /// 带 `epoch` 的是**在飞 effect 的回执**，要过闸（红线 6）；不带的是用户意图，
@@ -71,13 +58,9 @@ pub enum Event {
     /// （见 `MessageId` 的注释）。
     ///
     /// 不带 epoch：用户意图针对的永远是当前世界。
-    ///
-    /// `images` 为空就是没有图片；图片顺序由宿主给定，转移时保持不变。
     UserInput {
         agent: AgentId,
         text: Arc<str>,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        images: Vec<UserImage>,
     },
 
     /// provider 这一轮回完了（宿主已经把流收完、accumulator 已经 `finish`）。
@@ -146,6 +129,33 @@ pub enum Event {
         call_id: Option<ToolCallId>,
     },
 
+    /// 摘要回来了。[`crate::Effect::Compact`] 的回执之一（105 定形状，106 让它真的
+    /// 由一个窄范围子 agent 生成）。
+    ///
+    /// `summary` 是**摘要正文本身**，这是刻意的：它是一条**进来的事件**，不是
+    /// primitive——红线 3 要求可序列化（`Arc<str>` 是），但「正文最终往哪存、
+    /// `SendPlan` 里放引用还是放正文」是 107 的判断，不该由事件形状提前替它决定。
+    /// `Arc` 而不是 `String` 是红线 5：摘要是大值，这条事件在泵里要被搬好几次。
+    ///
+    /// 带 `epoch`，要过闸（红线 6）：摘要那次调用在飞时用户可能 undo 或取消了，
+    /// 回来的正文盖住的范围会跟实际历史对不上——那是典型的静默错值，下一轮 prompt
+    /// 少一段或多一段，模型照答不误。
+    CompactDone {
+        agent: AgentId,
+        summary: Arc<str>,
+        epoch: Epoch,
+    },
+
+    /// 摘要没做成。
+    ///
+    /// **这是正常事件不是异常路径**（106 验收）：压缩这一次作废，边界不动，
+    /// 下一轮照常跑。父不卡死，也不该看到一个错误。
+    ///
+    /// 没有 `class` / `message`：`ProviderFailed` 带 `ErrorClass` 是因为 016 要按它
+    /// 分流（重试还是放弃），而压缩失败**一律作废、不重试**——没有分流可做的判据
+    /// 就不该进事件形状。要给人看的失败原因由宿主自己打，它本来就在手里。
+    CompactFailed { agent: AgentId, epoch: Epoch },
+
     /// 用户要取消当前这一轮。
     ///
     /// 不带 epoch，**因为它是 bump epoch 的那一方**：用户按 Ctrl-C 针对的是「现在
@@ -175,6 +185,8 @@ impl Event {
             | Event::ToolResult { agent, .. }
             | Event::ToolFailed { agent, .. }
             | Event::Timeout { agent, .. }
+            | Event::CompactDone { agent, .. }
+            | Event::CompactFailed { agent, .. }
             | Event::Cancel { agent } => agent,
         }
     }
@@ -191,7 +203,9 @@ impl Event {
             | Event::ProviderFailed { epoch, .. }
             | Event::ToolResult { epoch, .. }
             | Event::ToolFailed { epoch, .. }
-            | Event::Timeout { epoch, .. } => Some(*epoch),
+            | Event::Timeout { epoch, .. }
+            | Event::CompactDone { epoch, .. }
+            | Event::CompactFailed { epoch, .. } => Some(*epoch),
         }
     }
 }

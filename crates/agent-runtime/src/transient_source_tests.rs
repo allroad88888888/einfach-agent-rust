@@ -5,11 +5,14 @@ use serde_json::json;
 
 use crate::remote_tool_protocol::{RemoteToolFailure, RemoteToolSubmitOutcome};
 use crate::transient_source_policy::{
-    SAFE_ERROR, SAFE_RESULT, SOURCE_PULL, SOURCE_READ, SOURCE_SEARCH, is_placeholder_input,
-    is_transient_source, placeholder_input,
+    SAFE_ERROR, SAFE_RESULT, is_placeholder_input, is_transient_source, placeholder_input,
 };
 use crate::transient_source_prompt::prepare;
 use crate::transient_source_vault::{CapturedSource, TransientSourceVault};
+
+const SOURCE_PULL: &str = "web:source/pull";
+const SOURCE_SEARCH: &str = "web:source/search";
+const SOURCE_READ: &str = "web:source/read";
 
 fn captured(id: &str, tool: &str, secret: serde_json::Value) -> CapturedSource {
     captured_with_reasoning(id, tool, secret, None)
@@ -48,13 +51,21 @@ fn tool_result(id: &str, content: &str, is_error: bool) -> ContentBlock {
 }
 
 #[test]
-fn reserved_source_names_match_exactly() {
-    for name in [SOURCE_PULL, SOURCE_SEARCH, SOURCE_READ] {
+fn source_tool_namespace_is_transient() {
+    for name in [
+        SOURCE_PULL,
+        SOURCE_SEARCH,
+        SOURCE_READ,
+        "web:source/log",
+        "web:source/tags",
+        "web:source/diff",
+        "web:source/future-operation",
+    ] {
         assert!(is_transient_source(name));
     }
     for name in [
         "web:source",
-        "web:source/read/extra",
+        "web:source/",
         "web_source_read",
         "WEB:SOURCE/READ",
         "web:diagnostic/read",

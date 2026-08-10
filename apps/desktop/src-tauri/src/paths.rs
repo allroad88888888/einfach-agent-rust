@@ -37,3 +37,10 @@ pub fn sessions_dir(app: &AppHandle) -> tauri::Result<PathBuf> {
 pub fn tools_root(app: &AppHandle) -> tauri::Result<PathBuf> {
     Ok(app.path().app_data_dir()?.join("tools"))
 }
+
+/// s5 上传端点（`POST /uploads` / `GET /uploads/{id}`）的临时目录——跟会话/
+/// 工具同一个 app data 根下分开一个子目录。进程退出即丢由 OS 回收（M3 单副本，
+/// 不需要清理任务）。
+pub fn uploads_dir(app: &AppHandle) -> tauri::Result<PathBuf> {
+    Ok(app.path().app_data_dir()?.join("uploads"))
+}

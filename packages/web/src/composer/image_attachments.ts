@@ -1,6 +1,6 @@
 // 唯一职责：管理 composer 里本地图片草稿的入口、校验、缩略图与 object URL 生命周期。
-// 发往 HTTP 的编码由 `api.ts` 完成，已经发出的图片由 `render/user_input.ts` 负责画到
-// 时间线；本模块只保有「尚未发送」的 File。
+// 上传拿链接与链接拼装由 `api.ts` 完成（字节不进 agent 协议 body），已经发送的图片
+// 由 `render/user_input.ts` 负责画到时间线；本模块只保有「尚未发送」的 File。
 const MAX_IMAGE_BYTES = 100 * 1024 * 1024;
 const RECOMMENDED_WIDTH = 4096;
 const RECOMMENDED_HEIGHT = 2160;

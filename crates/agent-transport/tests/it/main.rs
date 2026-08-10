@@ -6,3 +6,4 @@
 mod fake_sse;
 mod file_upload_failures;
 mod file_upload_success;
+mod post_json;

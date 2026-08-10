@@ -12,6 +12,11 @@
 # 表里的能力事实（缓存折扣、工具上限、消息级 tools）是 2026-07 查官方文档得到的，
 # 写在注释里是为了让下面的配置项有据可依；代码里的默认值与这里一致。
 # 价格会变，覆盖用各 provider 段里的 cache_hit_discount。
+#
+# context_window（2026-08-10 补，issue 110 前置）：压缩触发（096/108）拿它跟
+# 上一轮实测的 prompt tokens 比，纯算术，不涉及任何厂商分支（红线 12）。
+# 三家的窗口大小与查证日期见各段「窗口」条目。缺省（不写这个键）= None =
+# 不触发任何一档压缩——旧的 providers.toml 不会因为没有这个键而加载失败。
 
 # ─────────────────────────────────────────────────────────────
 # DeepSeek —— 缓存折扣最狠，但工具表最僵
@@ -20,6 +25,9 @@
 #   折扣    v4-flash  $0.0028 / $0.14     ≈ 50x
 #           v4-pro    $0.003625 / $0.435  ≈ 120x
 #   TTL     几小时到几天，自动清理（未公布精确值）
+#   窗口    1,000,000 tokens（v4-pro / v4-flash 均是；输出上限 384K，与输入
+#           共享同一个 1M 窗口，大量思考/输出会挤占能发的 prompt 空间）——
+#           查于 2026-08-10，api-docs.deepseek.com
 #   工具    仅顶层 tools，上限 128，仅 function 类型
 #           ⚠ 没有消息级 tools。已实测：顶层 tools 在前缀最前面，改动后
 #             那一轮整段对话全价重编码一次（≈120 轮命中的花费）。
@@ -38,6 +46,7 @@ base_url = "https://api.deepseek.com"
 # prefix 续写要用这个 base_url，adapter 内部按需切换
 beta_base_url = "https://api.deepseek.com/beta"
 model = "deepseek-v4-pro"
+context_window = 1000000
 # 覆盖内置默认。留空则用代码里按 model 匹配的值。
 # cache_hit_discount = 120.0
 
@@ -46,6 +55,8 @@ model = "deepseek-v4-pro"
 #
 #   缓存    全自动，"无需管理 TTL"
 #   折扣    k3  ¥2 / ¥20  = 10x
+#   窗口    1,048,576 tokens（"1M-token context window"）—— 查于 2026-08-10，
+#           platform.kimi.ai
 #   门槛    prompt > 256 tokens 才可能命中，短请求直接丢弃不缓存
 #   工具    顶层 tools + 消息级 tools
 #           ✓ KimiK3DynamicToolMessage：role=system + tools，无 content 字段
@@ -68,6 +79,7 @@ api_key = ""
 # api_key_env = "MOONSHOT_API_KEY"
 base_url = "https://api.moonshot.cn/v1"
 model = "kimi-k3"
+context_window = 1048576
 # cache_hit_discount = 10.0
 
 # ─────────────────────────────────────────────────────────────
@@ -76,6 +88,8 @@ model = "kimi-k3"
 #   缓存    隐式自动，"无需手动配置"
 #   折扣    约 2x（文档举例 0.01 → 0.005，非承诺价目表）
 #   TTL     "合理时效性"，未公布
+#   窗口    1,000,000 tokens 输入 / 128,000 输出（glm-5.2，"truly usable
+#           1M-token context"）—— 查于 2026-08-10，docs.z.ai
 #   门槛    未公布
 #   工具    仅顶层 tools，128 functions
 #           ⚠ 没有消息级 tools，中途改工具表要全价重编码一轮（但只贵 2x，可接受）
@@ -96,6 +110,7 @@ api_key = ""
 # api_key_env = "ZHIPU_API_KEY"
 base_url = "https://open.bigmodel.cn/api/paas/v4"
 model = "glm-5.2"
+context_window = 1000000
 # cache_hit_discount = 2.0
 # 会话级锁定，中途不可变。改它等于作废整个前缀。
 clear_thinking = false

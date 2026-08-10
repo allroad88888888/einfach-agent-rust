@@ -60,6 +60,16 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub beta_base_url: Option<String>,
     pub model: String,
+    /// 上下文窗口大小，单位 token。三家各自的实测值与查证日期见
+    /// `providers.example.toml` 对应段落的「窗口」条目。这个值原样喂给
+    /// `agent_core::SessionConfig::context_window`——压缩触发在 core 端只拿它
+    /// 做纯算术比较（红线 12：这里是参数不是分支）。
+    ///
+    /// `#[serde(default)]` → 缺省 `None`：没写这个键的旧 `providers.toml`
+    /// 照常加载，`None` 一路走到触发逻辑就是「不触发」（`value/session.rs`
+    /// 该字段的文档），不是加载失败，也不是某个隐藏默认窗口。
+    #[serde(default)]
+    pub context_window: Option<u32>,
 }
 
 impl ProviderConfig {
@@ -100,6 +110,7 @@ impl fmt::Debug for ProviderConfig {
             .field("base_url", &self.base_url)
             .field("beta_base_url", &self.beta_base_url)
             .field("model", &self.model)
+            .field("context_window", &self.context_window)
             .field("api_key_env", &self.api_key_env)
             .field("api_key_len", &self.api_key.len())
             .finish()

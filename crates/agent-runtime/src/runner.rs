@@ -51,8 +51,11 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus, UserImage};
+use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
 
+use crate::compact_ladder::Ladder;
+use crate::compact_slot::CompactSlots;
+use crate::compact_writeback;
 use crate::ctx::RunnerCtx;
 use crate::deadline;
 use crate::dispatch::{self, Dispatched};
@@ -90,20 +93,6 @@ pub fn run_turn(
     ctx: &mut RunnerCtx,
     user_input: &str,
 ) -> Result<TurnStatus, TransientSourceFailure> {
-    run_turn_with_images(session, ctx, user_input, Vec::new())
-}
-
-/// 跑一整轮，连同已经由宿主准备好的用户图片一起喂入。
-///
-/// 图片引用进入这里时只是宿主登记好的不可变 attachment handle；真正的
-/// 租约解析与上传由 runtime IO 线程在 provider 请求准备阶段经既有同步上传 API 完成，
-/// 不阻塞事件泵。它和 [`run_turn`] 共用相同的终态与错误返回约定。
-pub fn run_turn_with_images(
-    session: &mut Session,
-    ctx: &mut RunnerCtx,
-    user_input: &str,
-    images: Vec<UserImage>,
-) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
     resume(
@@ -112,7 +101,6 @@ pub fn run_turn_with_images(
         Event::UserInput {
             agent: root,
             text: Arc::from(user_input),
-            images,
         },
     )
 }
@@ -149,7 +137,13 @@ pub(crate) fn resume_after_first_commit(
     // 被正当丢弃（红线 6），而不是在泵这层无声抹掉。
     let mut mcp_calls: Vec<McpCall> = Vec::new();
     let mut subtree = Subtree::default();
+    // 106：摘要子 agent 的等待登记，跟 `subtree` 同款「turn 内生死、`resume` 每次
+    // 重建」，只是收割的是另外两个事件（`Event::CompactDone`/`CompactFailed`）。
+    let mut compactions = CompactSlots::default();
     let root = session.agent().clone();
+    // 108：自动阶梯的一轮一次闩。判读时机是「turn 结束拿到 usage 时」，生效在下一
+    // 轮出料单时——见 `crate::compact_ladder` 模块文档「跨轮在这里的形状」。
+    let mut ladder = Ladder::new(root.clone());
     let mut cancel_seen = false;
     // 048：树快照变化检测的起点——`ctx.tree_events_enabled()` 是 `false`（CLI）
     // 时留 `None`，一次 `agent_tree()` 都不多算；是 `true`（server）时用**这一轮
@@ -167,14 +161,30 @@ pub(crate) fn resume_after_first_commit(
         while let Some(event) = pending.pop_front() {
             let event = crate::transient_source_ingress::prepare(session, ctx, event);
             let source = event.agent().clone();
-            let effects = session.step(event);
+            ladder.note(&event);
+            let mut effects = session.step(event);
             persist::sync(ctx, session);
+            // 107 → 108 的硬契约：过了 epoch 闸（回执里有那条通报）才回写摘要。
+            // 判据显式住在 `compact_writeback::passed_epoch_gate`，不是这里的
+            // 「effects 是不是空的」。
+            compact_writeback::after_step(session, ctx, &mut compactions, &source, &effects);
+            // 108：这一步要是让 root 落了终态，阶梯就在这里判一次；它的第 3 档产出
+            // 一条 `Effect::Compact`，跟 core 自己产出的 effect 并进同一批派发。
+            effects.extend(ladder.fire_once(session, ctx));
             if let Some(after_commit) = after_commit.take() {
                 after_commit(ctx);
             }
             maybe_emit_tree(ctx, session, &mut last_tree);
             for effect in effects {
-                match dispatch::run_effect(session, ctx, &mut subtree, &tx, &source, effect) {
+                match dispatch::run_effect(
+                    session,
+                    ctx,
+                    &mut subtree,
+                    &mut compactions,
+                    &tx,
+                    &source,
+                    effect,
+                ) {
                     Dispatched::Nothing => {}
                     Dispatched::Event(next) => pending.push_back(next),
                     // 后台 spawn（052）：父的槽收敛 + 子开工，两件事按 dispatch
@@ -198,8 +208,9 @@ pub(crate) fn resume_after_first_commit(
             }
             // 子 agent 可能就在刚才那一步里落了终态（它自己的 `ProviderDone`）。
             // 收割紧跟在 `step` 之后而不是攒到批末：父那个槽早一步收敛，父就早
-            // 一步能接着干活。
+            // 一步能接着干活。摘要子 agent（106）同款收割，紧跟在后面。
             pending.extend(subtree.harvest(session, ctx));
+            pending.extend(compactions.harvest(session));
         }
 
         // B0. 轮末清算（052）：root 已经答完，而后台子还没人领 —— 活的定点拆掉
@@ -219,9 +230,6 @@ pub(crate) fn resume_after_first_commit(
                 ctx.transient_sources.purge_all();
                 persist::maybe_snapshot(ctx, session);
             }
-            // Preparation failures are request-local routing metadata. Vision child slots have
-            // already consumed theirs; root and generic failures must not cross a run boundary.
-            ctx.clear_image_preparation_failures();
             return Ok(status);
         }
 
@@ -232,7 +240,7 @@ pub(crate) fn resume_after_first_commit(
         // MCP 调用没有泵级截止线——`tools/call` 自带客户端侧超时（`ctx.mcp_timeout`
         // 传给背景线程），线程必在超时内报回一条 `McpDone`（成功/错误/超时都算），
         // 所以 MCP 凭据一定会被 D 排空，不需要在这里扫。
-        if let Some(failure) = deadline::sweep(ctx, &mut calls, &mut subtree, &mut pending) {
+        if let Some(failure) = deadline::sweep(ctx, &mut calls, &mut pending) {
             return Err(abort_after_transient_source_failure(ctx, &calls, failure));
         }
         speak_for_root_on_cancel(session, ctx, &root, &calls, &mut pending, &mut cancel_seen);
@@ -258,7 +266,6 @@ fn abort_after_transient_source_failure(
         call.cancel();
     }
     ctx.transient_sources.purge_all();
-    ctx.clear_image_preparation_failures();
     failure
 }
 

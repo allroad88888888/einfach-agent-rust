@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use agent_core::{AgentLimits, HostSkill, Reversibility, SystemChunk, ToolSpec};
 use agent_providers::Provider;
+use agent_tools::VisionRuntime;
 use agent_transport::Client;
 
 use super::SessionId;
@@ -32,6 +33,10 @@ pub struct OpenSpec {
     pub endpoint: String,
     pub api_key: String,
     pub model: Arc<str>,
+    /// 上下文窗口大小，单位 token——原样来自 [`crate::http::config::
+    /// SessionTemplate::context_window`]。`crate::actor::body` 拿它建这个会话的
+    /// `SessionConfig::context_window`，压缩触发（096/108）在那之后拿它做纯算术。
+    pub context_window: Option<u32>,
     pub tools: ToolTableSpec,
     /// 内置工具的路径监狱根——跟 `agent-cli` 一样锁在这棵目录树之内
     /// （`ToolExecutor::new` 的既有语义，这里不改）。
@@ -94,6 +99,11 @@ pub struct OpenSpec {
     ///
     /// 空 = 这次什么都没关，工具表跟 076 之前逐字节相同。
     pub disable_builtin: Vec<Arc<str>>,
+    /// s5 `srv:vision/inspect` 的运行时。`Some` → actor 线程现造 `ToolExecutor`
+    /// 时注入（`ToolExecutor::with_vision`），并把工具追加进工具表
+    /// （`ToolTable::with_vision_inspect`）；`None` → 工具不声明。API key 只随
+    /// 这份 per-session 配置在 actor 线程内部短暂存在，绝不落盘。
+    pub vision: Option<VisionRuntime>,
 }
 
 /// 工具表的五档，跟 `agent_runtime::ToolTable::builtin`/`standard_local`/`standard`/

@@ -60,6 +60,12 @@ pub async fn run(cli: Cli) {
         provider_timeout: None,
         remote_tool_timeout: remote_tool_timeout::from_environment()
             .unwrap_or_else(|_| fail("remote_tool_timeout_config", "agent-server startup failed")),
+        // s5：上传端点 + `srv:vision/inspect` 的临时目录——进程临时目录，进程
+        // 退出即丢由 OS 回收（M3 单副本，不需要清理任务）。带 pid 防止多实例
+        // 共用同一个目录互相覆盖。
+        upload_dir: Some(
+            std::env::temp_dir().join(format!("agent-uploads-{}", std::process::id())),
+        ),
     })
     .unwrap_or_else(|error| {
         fail(
@@ -224,7 +230,6 @@ fn bootstrap_failure_class(error: &BootstrapError) -> &'static str {
             "provider_authentication"
         }
         BootstrapError::UnknownExecutionProfileProvider { .. } => "execution_profile",
-        BootstrapError::VisionExecutionProfileRequiresImages { .. } => "vision_profile",
     }
 }
 

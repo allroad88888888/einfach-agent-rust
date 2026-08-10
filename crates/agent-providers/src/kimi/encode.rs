@@ -14,14 +14,12 @@ use agent_core::{Adjustment, RequestIntent};
 use serde_json::{Map, Value, json};
 
 use super::CACHE_BLOCK;
-use super::{image_cache, late_tools};
+use super::late_tools;
 use crate::wire::{canonical, messages, numeric, prefix, tools};
 use crate::{Encoded, Ingredients};
 
 /// 上限「未公布」（PROVIDERS.md）：不编一个没测过的数字，两条通道都不截断。
 const MAX_TOOLS: usize = usize::MAX;
-/// M11 实测 Kimi 接受 `image_url`，并且模型能读取图片内容。
-const SUPPORTS_IMAGES: bool = true;
 
 pub(super) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let mut adjustments = Vec::new();
@@ -33,7 +31,7 @@ pub(super) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let temperature = clamp_temperature(ing.config.temperature, &mut adjustments);
 
     let system = messages::system_text(ing.system);
-    let mut history = messages::history_with_image_support(ing.messages, SUPPORTS_IMAGES).messages;
+    let mut history = messages::history(ing.messages).messages;
     // 中途激活的 skill 正文走消息级：一条独立的 `role:system` 消息追加到 history
     // 末尾（038：~100% 保前缀、免费）。放在 late_tools 消息之前，顺序固定即可
     // （红线 11）。不报 Adjustment——这不是妥协，就是把 skill 正文挂在末尾。
@@ -53,8 +51,7 @@ pub(super) fn encode(ing: &Ingredients<'_>) -> Encoded {
         history: prefix::concat(&history),
     };
     let (drift, block_prediction) = prefix::compare(&seg, ing.prev_prefix, CACHE_BLOCK, 0);
-    let predicted_cache =
-        image_cache::prediction(&history, ing.prev_prefix, drift).unwrap_or(block_prediction);
+    let predicted_cache = block_prediction;
 
     Encoded {
         body: canonical(&body(

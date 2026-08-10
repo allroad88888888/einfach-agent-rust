@@ -31,7 +31,6 @@ async fn a_session_closed_and_reopened_recovers_its_history() {
     handle
         .send(Command::Input {
             text: "remember this".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
     support::collect_until_terminal(&mut sub, Duration::from_secs(5)).await;

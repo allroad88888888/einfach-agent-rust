@@ -49,16 +49,18 @@
 //! （discriminated union）两种标签风格都能落地，邻接标签更省心。
 //! [`UndoOutcome`] 用的是同一套约定。
 //!
-//! # 四个子模块，各管一件事
+//! # 五个子模块，各管一件事
 //!
 //! | 模块 | 职责 |
 //! |------|------|
-//! | 本文件 | `SessionEvent` 本体 + `From<RunnerEvent>` 翻译线 |
+//! | 本文件 | `SessionEvent` 本体 |
+//! | [`from_runner`] | `From<RunnerEvent> for SessionEvent`——那条翻译线本身 + 逐变体的映射断言（109 拆出，`mod.rs` 顶着行数天花板） |
 //! | [`undo_outcome`] | `UndoOutcome`：undo/redo 结果的可序列化姊妹类型，034 起带 `Blocked` 富化 |
 //! | [`orphan_fate`] | 054：`OrphanFate`——轮末孤儿收场的可序列化姊妹类型（`agent_runtime::OrphanFate`） |
 //! | [`frame`] | 034：`Frame { agent, event }`——SSE 帧 data 的信封 |
 
 mod frame;
+mod from_runner;
 mod orphan_fate;
 mod transient_source_failure;
 mod undo_outcome;
@@ -73,10 +75,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use agent_core::{
-    Adjustment, AgentId, AgentTree, DriftVerdict, GuardReport, Notice, TokenUsage, ToolCallId,
-    ToolCallRequest,
+    Adjustment, AgentId, AgentTree, DriftVerdict, GuardReport, Notice, SummaryId, TokenUsage,
+    ToolCallId, ToolCallRequest,
 };
-use agent_runtime::RunnerEvent;
 
 /// 一个 session 广播的一件事。`Clone + Send + 'static`（`broadcast` 的硬要求）
 /// 且全部可序列化（032 的前提）——本文件模块文档记了为什么不是直接用
@@ -163,98 +164,30 @@ pub enum SessionEvent {
     /// A terminal provider failure from a request that consumed transient source material.
     /// The payload carries the raw runtime fact; presentation belongs to the embedding host.
     TransientSourceFailure(TransientSourceFailureEvent),
-}
-
-impl From<RunnerEvent> for SessionEvent {
-    fn from(ev: RunnerEvent) -> Self {
-        match ev {
-            RunnerEvent::TextDelta(text) => SessionEvent::TextDelta(text),
-            RunnerEvent::ThinkingDelta(text) => SessionEvent::ThinkingDelta(text),
-            RunnerEvent::ToolCallStarted { name } => SessionEvent::ToolCallStarted { name },
-            RunnerEvent::PreflightDriftAlert(v) => SessionEvent::PreflightDriftAlert(v),
-            RunnerEvent::TransportTrouble(text) => SessionEvent::TransportTrouble(text),
-            RunnerEvent::ToolExecuting { call_id, request } => {
-                SessionEvent::ToolExecuting { call_id, request }
-            }
-            RunnerEvent::ToolExecuted {
-                call_id,
-                tool,
-                output_len,
-                is_error,
-            } => SessionEvent::ToolExecuted {
-                call_id,
-                tool,
-                output_len,
-                is_error,
-            },
-            RunnerEvent::TurnGuard {
-                usage,
-                report,
-                adjustments,
-            } => SessionEvent::TurnGuard {
-                usage,
-                report,
-                adjustments,
-            },
-            RunnerEvent::Notice(notice) => SessionEvent::Notice(notice),
-            RunnerEvent::OrphanedChild { child, fate } => SessionEvent::OrphanedChild {
-                child,
-                fate: fate.into(),
-            },
-        }
-    }
+    /// 109：一份摘要被写进状态了——压缩点在时间线上可见的信号。
+    /// [`agent_runtime::RunnerEvent::CompactionApplied`] 的原样翻译，见该变体
+    /// 文档。`turn_id` 让前端能把这条标记跟对应的 `undo`/`redo` 帧对上号，
+    /// 精确地随那一次撤销/重做一起隐藏/恢复（090 的教训：只推事件不够，还要
+    /// 能在 undo 之后正确地退回去）。展开这条标记看到的**原文**不从这里取
+    /// ——这里只报「发生了」，正文走 `GET /sessions/{id}/compaction_record`
+    /// （109 接线约束 1/5）。
+    CompactionApplied {
+        turn_id: u64,
+        upto: usize,
+        summary_id: SummaryId,
+    },
+    /// 109：一批工具调用结果被清除了——同上一条同一条理由，翻译自
+    /// [`agent_runtime::RunnerEvent::ToolResultsCleared`]。原文同样不在这里，
+    /// 走 `GET /sessions/{id}/compaction_record`。
+    ToolResultsCleared {
+        turn_id: u64,
+        call_ids: Vec<ToolCallId>,
+    },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// `RunnerEvent` 的十个变体逐一对应，穷举 `match` 已经在编译期保证不漏——
-    /// 这里额外钉一个运行期样本，防止哪天有人把某个变体的字段悄悄改错映射。
-    #[test]
-    fn from_runner_event_maps_text_delta() {
-        let ev = RunnerEvent::TextDelta(Arc::from("hi"));
-        assert_eq!(
-            SessionEvent::from(ev),
-            SessionEvent::TextDelta(Arc::from("hi"))
-        );
-    }
-
-    #[test]
-    fn from_runner_event_maps_notice() {
-        let ev = RunnerEvent::Notice(Notice::TurnStatusChanged {
-            status: agent_core::TurnStatus::Idle,
-        });
-        assert_eq!(
-            SessionEvent::from(ev),
-            SessionEvent::Notice(Notice::TurnStatusChanged {
-                status: agent_core::TurnStatus::Idle
-            })
-        );
-    }
-
-    /// 054：孤儿告警是唯一一条**载荷本身还要再翻一层**的翻译线
-    /// （`agent_runtime::OrphanFate` → [`OrphanFate`]），`child` 顺带原样过来。
-    #[test]
-    fn from_runner_event_maps_orphaned_child_and_its_fate() {
-        let ev = RunnerEvent::OrphanedChild {
-            child: AgentId::new("root/a1"),
-            fate: agent_runtime::OrphanFate::Discarded {
-                bytes: 15,
-                is_error: false,
-            },
-        };
-        assert_eq!(
-            SessionEvent::from(ev),
-            SessionEvent::OrphanedChild {
-                child: AgentId::new("root/a1"),
-                fate: OrphanFate::Discarded {
-                    bytes: 15,
-                    is_error: false
-                },
-            }
-        );
-    }
 
     /// 红线 3 精神的直接实检：真的过一遍 serde，不是只看 derive 存在。
     #[test]

@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 use ts_rs::TS;
 
 use crate::http::{
-    Capabilities, PendingToolsResponse, PollResponse, ToolClaimRequest, ToolClaimResponse,
-    ToolResultResponse, ToolResultV2Request, ToolStatusResponse,
+    Capabilities, CompactionRecordResponse, PendingToolsResponse, PollResponse, ToolClaimRequest,
+    ToolClaimResponse, ToolResultResponse, ToolResultV2Request, ToolStatusResponse,
 };
 use crate::{Command, Frame};
 
@@ -51,6 +51,9 @@ pub fn export_protocol_types(dir: &Path) -> Result<(), ts_rs::ExportError> {
     // 072：待办投影的响应体。`Frame`/`SessionEvent` 一个字节没动，这是新增的
     // **第三条下行**（推：SSE 帧；拉：poll；求证：这一份）。
     PendingToolsResponse::export_all(&cfg)?;
+    // 109：压缩记录响应体——`Message`/`ContentBlock`/`Role`/`SummaryId` 作为它
+    // 递归的依赖类型，第一次真的被 ts-rs 的可达性排查照到，一并导出。
+    CompactionRecordResponse::export_all(&cfg)?;
     ToolClaimRequest::export_all(&cfg)?;
     ToolClaimResponse::export_all(&cfg)?;
     ToolResultV2Request::export_all(&cfg)?;

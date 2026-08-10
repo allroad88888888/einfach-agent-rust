@@ -143,8 +143,9 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
     // 槽位数 = `Slot::ALL.len()`（每个 agent 一份，`build_agent` 不给 root 开小灶）：
     // 028 是 10、039 加 `SkillsActive` 是 11、073 加 `HostTools` 是 12、
     // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14、
-    // 093 加 `ExecutionProfile` 是 15。
-    assert_eq!(child_key_count(&session, &child), 15);
+    // 093 加 `ExecutionProfile` 是 15、100 加 `SendPlan` 是 16、
+    // 103 加 `PrevSendPlan` 是 17、107 加 `Summaries` 是 18。
+    assert_eq!(child_key_count(&session, &child), 18);
 
     let report = session
         .despawn_child(&child)
@@ -152,13 +153,13 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
 
     assert_eq!(report.agents, vec![child.clone()]);
     assert_eq!(
-        report.atoms_evicted, 14,
-        "十五个槽位里只留 ToolsAllowed 一个墓碑"
+        report.atoms_evicted, 17,
+        "十八个槽位里只留 ToolsAllowed 一个墓碑"
     );
     assert_eq!(
         child_key_count(&session, &child),
         1,
-        "其余十四个 atom 该被物理逐出"
+        "其余十七个 atom 该被物理逐出"
     );
     assert!(!session.is_live(&child));
     assert_eq!(
@@ -193,8 +194,8 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     assert_eq!(session.children_of(&root), vec![child.clone()]);
     assert_eq!(
         child_key_count(&session, &child),
-        15,
-        "全部十五个槽位都该被按需重建"
+        18,
+        "全部十八个槽位都该被按需重建"
     );
     assert_eq!(
         value_of(&session, &child, Slot::Status),

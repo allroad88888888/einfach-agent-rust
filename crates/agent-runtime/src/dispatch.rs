@@ -1,6 +1,6 @@
-//! 一个 effect 怎么变成真实世界里的一件事。**四个变体全部处理，`match` 不加
-//! `_`**（012 原文）：`Effect` 加新变体时编译器会在这里逼一个决定，不会静默落进
-//! 一个「什么都不做」的兜底分支。
+//! 一个 effect 怎么变成真实世界里的一件事。**五个变体全部处理，`match` 不加
+//! `_`**（012 原文，105 加 `Compact` 时这条规矩当场兑现了一次）：`Effect` 加新变体
+//! 时编译器会在这里逼一个决定，不会静默落进一个「什么都不做」的兜底分支。
 //!
 //! # 会话状态类工具的截获点就在这里，**但实现不在**
 //!
@@ -19,6 +19,11 @@
 //! 截获**以工具表里有没有这个声明为准**：宿主没把 spawn 放进表，模型就看不见
 //! 这个名字，万一它凭空猜出来一个，那就该跟别的不存在的工具一样落
 //! `unknown_tool`——而不是在一个没打算开子 agent 的宿主上凭空长出一棵树。
+//!
+//! `Effect::Compact` 不是一次工具调用（模型看不见它、也点不到它），但「怎么执行
+//! 跟着自己那个模块走」的规矩一样适用：这里只把它路由给
+//! [`compact_spawn::intercept`]（106），真正的摘要子 agent 怎么 spawn、任务文本
+//! 怎么拼、失败路径怎么走，都在那个文件的模块文档里。
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -29,6 +34,8 @@ use agent_core::{
 };
 
 use crate::collect_tool::{self, COLLECT_TOOL};
+use crate::compact_slot::CompactSlots;
+use crate::compact_spawn;
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::io_thread::IoMsg;
@@ -39,7 +46,6 @@ use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::status_tool::{self, STATUS_TOOL};
 use crate::subtree::Subtree;
 use crate::tool_exec;
-use crate::vision_tool;
 
 /// 一个 effect 执行完之后泵要接着做什么。
 ///
@@ -80,15 +86,13 @@ pub(crate) fn run_effect(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     subtree: &mut Subtree,
+    compactions: &mut CompactSlots,
     tx: &SyncSender<IoMsg>,
     source: &AgentId,
     effect: Effect,
 ) -> Dispatched {
     match effect {
         Effect::CallProvider { agent, epoch } => {
-            // A retry starts a fresh attempt. Clear a previous vision timeout marker before
-            // starting it so only the terminal attempt determines `vision_timeout`.
-            subtree.record_provider_start(&agent);
             match provider_call::start(session, ctx, tx.clone(), agent, epoch) {
                 Ok(call) => Dispatched::Call(call),
                 Err(provider_call::StartFailure::Event(event)) => Dispatched::Event(event),
@@ -104,18 +108,6 @@ pub(crate) fn run_effect(
             input,
             epoch,
         } => {
-            if &*tool == vision_tool::VISION_INSPECT_TOOL {
-                return if vision_tool::is_root(session, &agent) {
-                    // 根即使在恢复/热更新后已经失去 `vision` binding，也要由专用
-                    // 门面收口成稳定的 `vision_profile_unavailable`，不能掉进普通
-                    // unknown-tool 路径。
-                    vision_tool::intercept(session, ctx, subtree, &agent, call_id, &input, epoch)
-                } else {
-                    // reserved facade 永不下放；即使宿主表里伪造了同名声明，child
-                    // 也不能借它进入本地、MCP 或远端执行链。
-                    vision_tool::refuse_non_root(ctx, &agent, call_id, epoch)
-                };
-            }
             if &*tool == SPAWN_TOOL && ctx.tools.declares(SPAWN_TOOL) {
                 return spawn_tool::intercept(
                     session, ctx, subtree, &agent, call_id, &input, epoch,
@@ -210,6 +202,12 @@ pub(crate) fn run_effect(
                 return Dispatched::Nothing;
             }
             Dispatched::Event(tool_exec::execute(ctx, agent, call_id, request, epoch))
+        }
+        // 106：spawn 一个窄范围子 agent，用它自己 `ChildConfig` 里的模型把
+        // `[0, upto)` 那段历史读成一份摘要。真正的实现在 `compact_spawn::intercept`
+        // ——这里只负责路由，跟上面几路工具截获同一个分工（模块文档已经说明）。
+        Effect::Compact { agent, upto, epoch } => {
+            compact_spawn::intercept(session, ctx, compactions, agent, upto, epoch)
         }
         Effect::CancelInFlight { epoch: _ } => {
             ctx.cancel.store(true, Ordering::Relaxed);

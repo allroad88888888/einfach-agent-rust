@@ -10,17 +10,47 @@ import { defineConfig } from "vite";
  * 的例子对应，图省事可以两边都不设环境变量、都用这个默认端口。*/
 const target = process.env.AGENT_SERVER ?? "http://127.0.0.1:4000";
 
+/** 私有 session API 的进程级 capability（`private_capability::matches` 在未配置
+ * 时 fail-closed，全部 401）。真实部署由企业网关在转发时注入
+ * `x-agent-server-capability` 头（issue 033「网关同源」）；本地 dev 用 vite 代理
+ * 模拟同一种形状——`AGENT_CAPABILITY` 环境变量喂给代理，代理在转发时把该头拼
+ * 到每个 `/sessions`、`/uploads` 请求上（浏览器侧不持有这个 secret，跟网关模型
+ * 一致）。不设这个变量时行为一字不变（不注入任何头）。*/
+const capability = process.env.AGENT_CAPABILITY;
+
+function withCapabilityInjection() {
+  if (!capability) {
+    return {};
+  }
+  return {
+    configure(proxy: { on: (event: string, handler: (req: any) => void) => void }) {
+      proxy.on("proxyReq", (proxyReq: { setHeader: (name: string, value: string) => void }) => {
+        proxyReq.setHeader("x-agent-server-capability", capability);
+      });
+    },
+  };
+}
+
 export default defineConfig({
   server: {
     proxy: {
       // 六个端点 + 会话创建/查询全部挂在 `/sessions` 前缀下（031 的路由表），
-      // 一条代理规则够用，不用逐个端点列。
+      // 一条代理规则够用，不用逐个端点列。`GET /sessions/:id/events` 是长连接
+      // SSE，不是 WebSocket——`ws` 保持默认 false；http-proxy 对 chunked 响应
+      // 本来就是逐块透传，不需要额外关缓冲开关。
       "/sessions": {
         target,
         changeOrigin: true,
-        // `GET /sessions/:id/events` 是长连接 SSE，不是 WebSocket——`ws` 保持
-        // 默认 false；http-proxy 对 chunked 响应本来就是逐块透传，不需要额外
-        // 关缓冲开关。
+        ...withCapabilityInjection(),
+      },
+      // s5：传图链路的前一半 `POST /uploads` 也在 agent-server 上（multipart
+      // 图片 → 临时目录 → `{"url":"/uploads/<id>"}`）。不代理的话 dev 模式下
+      // 前端 `fetch("/uploads")` 会打在 vite 自己身上 404，传图直接断——生产
+      // 同源托管（`AGENT_STATIC_DIR`）不受影响，这里是 dev 缺口的补齐。
+      "/uploads": {
+        target,
+        changeOrigin: true,
+        ...withCapabilityInjection(),
       },
     },
   },

@@ -6,7 +6,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
 use super::http_chunked::ChunkDecoder;
-use super::http_response::HttpResponse;
+use super::http_response::{HttpResponse, HttpResponseBytes};
 
 pub fn request(addr: SocketAddr, method: &str, path: &str, body: Option<&str>) -> HttpResponse {
     request_with_headers(addr, method, path, &[], body)
@@ -42,6 +42,29 @@ pub fn request_exact_headers(
     }
 }
 
+/// 字节级 HTTP 往返：发任意原始 body（multipart 二进制），返回原始字节响应。
+/// 自动追加测试 capability（同 [`request_with_headers`]）；Content-Type 必须由
+/// 调用方在 `headers` 里给出——multipart 的 boundary 就在 Content-Type 里。
+/// `/uploads` 集成测试用这个：图片字节含 `\x89PNG` 这类非 UTF-8 魔数，`&str`
+/// 表达不了，必须走字节路径。
+pub fn request_bytes_with_headers(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: &[u8],
+) -> HttpResponseBytes {
+    let headers = with_private_capability(headers);
+    let mut reader = connect_and_send_bytes(addr, method, path, &headers, Some(body));
+    let (status, headers) = read_head(&mut reader);
+    let body = read_full_body_bytes(&mut reader, &headers);
+    HttpResponseBytes {
+        status,
+        headers,
+        body,
+    }
+}
+
 pub(crate) fn with_private_capability<'a>(
     headers: &[(&'a str, &'a str)],
 ) -> Vec<(&'a str, &'a str)> {
@@ -67,6 +90,36 @@ pub(crate) fn connect_and_send(
     extra_headers: &[(&str, &str)],
     body: Option<&str>,
 ) -> BufReader<TcpStream> {
+    send_raw(
+        addr,
+        method,
+        path,
+        extra_headers,
+        Some("application/json"),
+        body.map(str::as_bytes),
+    )
+}
+
+/// 字节级版本：body 是任意原始字节（multipart 二进制），Content-Type 由调用方在
+/// `extra_headers` 里给出（`send_raw` 不自动补）。
+pub(crate) fn connect_and_send_bytes(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    extra_headers: &[(&str, &str)],
+    body: Option<&[u8]>,
+) -> BufReader<TcpStream> {
+    send_raw(addr, method, path, extra_headers, None, body)
+}
+
+fn send_raw(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    extra_headers: &[(&str, &str)],
+    content_type: Option<&str>,
+    body: Option<&[u8]>,
+) -> BufReader<TcpStream> {
     let stream = TcpStream::connect(addr).expect("连接假浏览器目标地址");
     stream
         .set_read_timeout(Some(Duration::from_millis(50)))
@@ -77,14 +130,16 @@ pub(crate) fn connect_and_send(
     for (k, v) in extra_headers {
         head.push_str(&format!("{k}: {v}\r\n"));
     }
+    if let Some(ct) = content_type {
+        head.push_str(&format!("Content-Type: {ct}\r\n"));
+    }
     if let Some(b) = body {
-        head.push_str("Content-Type: application/json\r\n");
         head.push_str(&format!("Content-Length: {}\r\n", b.len()));
     }
     head.push_str("\r\n");
     stream.write_all(head.as_bytes()).expect("写请求头");
     if let Some(b) = body {
-        stream.write_all(b.as_bytes()).expect("写请求体");
+        stream.write_all(b).expect("写请求体");
     }
     stream.flush().expect("flush 请求");
     BufReader::new(stream)
@@ -139,12 +194,21 @@ fn read_line_retrying(reader: &mut BufReader<TcpStream>) -> String {
 }
 
 fn read_full_body(reader: &mut BufReader<TcpStream>, headers: &[(String, String)]) -> String {
+    String::from_utf8_lossy(&read_full_body_bytes(reader, headers)).into_owned()
+}
+
+/// 字节级读完整响应体，保留原始字节（不做 UTF-8 lossy 解码）——`GET /uploads/
+/// {id}` 取回的是图片字节，lossy 解码会破坏二进制内容。
+fn read_full_body_bytes(
+    reader: &mut BufReader<TcpStream>,
+    headers: &[(String, String)],
+) -> Vec<u8> {
     if let Some(length) =
         header(headers, "content-length").and_then(|value| value.parse::<usize>().ok())
     {
         let mut buffer = vec![0u8; length];
         reader.read_exact(&mut buffer).unwrap_or(());
-        return String::from_utf8_lossy(&buffer).into_owned();
+        return buffer;
     }
     if header(headers, "transfer-encoding")
         .map(|value| value.eq_ignore_ascii_case("chunked"))
@@ -167,9 +231,9 @@ fn read_full_body(reader: &mut BufReader<TcpStream>, headers: &[(String, String)
                 Err(_) => break,
             }
         }
-        return String::from_utf8_lossy(&decoder.decoded).into_owned();
+        return decoder.decoded;
     }
     let mut buffer = Vec::new();
     let _ = reader.read_to_end(&mut buffer);
-    String::from_utf8_lossy(&buffer).into_owned()
+    buffer
 }

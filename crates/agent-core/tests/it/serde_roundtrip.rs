@@ -87,7 +87,6 @@ fn event_user_input_roundtrip() {
     roundtrip(&Event::UserInput {
         agent: support::agent(),
         text: Arc::from("hello"),
-        images: Vec::new(),
     });
 }
 

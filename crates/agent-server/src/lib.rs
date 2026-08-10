@@ -46,12 +46,12 @@
 //! 会话，落盘快照完整之后进程再退出。
 
 mod actor;
-pub mod attachments;
 mod bind;
 mod bootstrap;
 mod command;
 mod event;
 mod handle;
+mod handle_compaction;
 mod handle_remote_tools;
 mod http;
 mod provider_dispatch;

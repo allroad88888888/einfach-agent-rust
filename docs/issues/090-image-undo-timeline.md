@@ -1,5 +1,10 @@
 # 090 图片卡片未随 undo / redo 回放
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 补充 · **依赖** [081](081-image-user-input.md) + [086](086-image-frontend.md) + [087](087-image-dogfood.md) · **模型** sonnet · **独测** 浏览器 · **状态** 完成
 
 由 087 真机续跑发现：server history 的 undo/redo 已能让 Kimi 再次读出图片，但浏览器的用户图片卡片

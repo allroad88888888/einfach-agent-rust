@@ -80,6 +80,17 @@ impl ApiError {
         }
     }
 
+    /// 服务端内部错误——**不是调用方的过错**（磁盘 IO 失败、配置路径失效等），
+    /// 用 5xx 让客户端知道重试/改参数都没用，得运维介入。跟 `bad_request` 的
+    /// 400 划清界限：客户端能通过修正请求避免的才是 4xx。
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        ApiError {
+            status: StatusCode::INTERNAL_SERVER_ERROR,
+            code: "internal_error",
+            message: message.into(),
+        }
+    }
+
     /// 073：这个 chatid 已经有历史了，还带着 `capabilities` 来建会话——**拒绝**。
     /// 能力属于历史，历史不接受改写（`docs/HOST-CAPABILITIES.md` §三）。
     ///

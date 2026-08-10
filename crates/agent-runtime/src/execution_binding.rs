@@ -25,7 +25,6 @@ pub struct ExecutionBinding {
     pub(crate) provider: Arc<dyn Provider>,
     pub(crate) client: Arc<Client>,
     pub(crate) endpoint: String,
-    pub(crate) image_upload_base_url: String,
     pub(crate) api_key: String,
     pub(crate) session_config: SessionConfig,
     pub(crate) timeout: Duration,
@@ -59,12 +58,10 @@ impl ExecutionBinding {
         api_key: String,
         session_config: SessionConfig,
     ) -> Self {
-        let image_upload_base_url = upload_base_url(&endpoint);
         Self {
             provider,
             client,
             endpoint,
-            image_upload_base_url,
             api_key,
             session_config,
             timeout: DEFAULT_PROVIDER_TIMEOUT,
@@ -74,12 +71,6 @@ impl ExecutionBinding {
     /// 为这条 binding 设置单次 provider 调用的总超时。
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
-        self
-    }
-
-    /// Override the API base used only for request-time image uploads.
-    pub fn with_image_upload_base_url(mut self, base_url: String) -> Self {
-        self.image_upload_base_url = base_url;
         self
     }
 }
@@ -109,6 +100,17 @@ impl RunnerCtx {
         self.execution_bindings = bindings;
         self.execution_guard_scopes = execution_guard_scopes;
         self.next_guard_scope = next_guard_scope;
+        self
+    }
+
+    /// 106 契约 2：摘要子 agent 该用哪个 execution profile。**这是一个数字参数，
+    /// 不是分支**（红线 12）——`profile` 必须已经在 `with_execution_bindings`
+    /// 授权过（缺项时 `crate::compact_spawn::intercept` 起飞会撞
+    /// `MissingExecutionBinding`，回一条 `Event::CompactFailed`，跟别的执行绑定
+    /// 缺失时一样处理，不是摘要专属的失败路径）。不设（默认）就走默认 binding，
+    /// 跟没指定 profile 的普通子 agent 待遇相同。
+    pub fn with_compaction_execution_profile(mut self, profile: ExecutionProfileId) -> Self {
+        self.compaction_execution_profile = Some(profile);
         self
     }
 
@@ -145,37 +147,30 @@ impl RunnerCtx {
         self
     }
 
-    pub fn with_image_upload_base_url(mut self, base_url: String) -> Self {
-        self.default_binding.image_upload_base_url = base_url;
-        self
-    }
-
     /// 运行时切 provider（014 `/model <name>`）。只替换默认 binding，并为新
     /// binding 分配新 guard scope；旧请求仍可安全地写回自己起飞时的 scope。具名
     /// profile 的已授权绑定和它们独立的 guard 窗口均保留。
+    ///
+    /// `context_window` 是 110 前置补的一个参数：切家等于换了一整套「多大算
+    /// 满」，旧家的窗口（或者压根没配）绝不能沿用到新家头上——调用方（`agent_
+    /// cli::model_switch::switch`）传的是新 provider 段自己的 `context_window`，
+    /// 不是分支判断（红线 12：这里只是把一个数字搬过来）。
     pub fn switch_provider(
         &mut self,
         provider: Arc<dyn Provider>,
         endpoint: String,
         api_key: String,
         model: Arc<str>,
+        context_window: Option<u32>,
     ) {
         self.default_binding.provider = provider;
-        self.default_binding.image_upload_base_url = upload_base_url(&endpoint);
         self.default_binding.endpoint = endpoint;
         self.default_binding.api_key = api_key;
         self.default_binding.session_config.model = model;
+        self.default_binding.session_config.context_window = context_window;
         self.default_guard_scope = GuardScope(self.next_guard_scope);
         self.next_guard_scope += 1;
     }
-}
-
-fn upload_base_url(endpoint: &str) -> String {
-    endpoint
-        .trim_end_matches('/')
-        .strip_suffix("/chat/completions")
-        .unwrap_or_else(|| endpoint.trim_end_matches('/'))
-        .to_owned()
 }
 
 #[cfg(test)]

@@ -22,7 +22,6 @@ async fn two_subscribers_of_the_same_session_get_identical_event_sequences() {
     handle
         .send(agent_server::Command::Input {
             text: "hi".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
 

@@ -156,6 +156,31 @@ fn a_table_without_collect_does_not_declare_it() {
     assert!(ToolTable::builtin().with_collect().declares(COLLECT_TOOL));
 }
 
+/// s5 开闸：`with_vision_inspect` 同样只追加在末尾（红线 11：既有前缀是
+/// 契约），且它落 `Irreversible`（调第三方 API 计费，走保守默认分支）。
+#[test]
+fn with_vision_inspect_appends_the_tool_and_it_is_irreversible() {
+    let table = ToolTable::builtin().with_vision_inspect();
+    let names: Vec<&str> = table.specs().iter().map(|s| &*s.name).collect();
+    assert_eq!(
+        names,
+        vec!["srv:fs/read", "srv:fs/list", "srv:vision/inspect"]
+    );
+
+    let snap = table.snapshot("srv:vision/inspect", Arc::new(Value::Null));
+    assert_eq!(snap.location, Location::Server);
+    assert_eq!(snap.reversibility, Reversibility::Irreversible);
+}
+
+/// 没开就不声明：`srv:vision/inspect` 跟别的不存在的工具走同一条路。
+#[test]
+fn a_table_without_vision_inspect_does_not_declare_it() {
+    assert!(!ToolTable::builtin().declares("srv:vision/inspect"));
+    assert!(ToolTable::builtin()
+        .with_vision_inspect()
+        .declares("srv:vision/inspect"));
+}
+
 /// 上限进描述是给模型看的（029：「描述写给模型看」），换一组数就该换一份
 /// 描述——不然模型读到的上限跟真正拦它的那两道闸对不上。
 #[test]

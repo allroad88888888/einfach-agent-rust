@@ -69,3 +69,16 @@ export type { ToolStatusResponse } from "./generated/ToolStatusResponse";
 export type { ToolCallState } from "./generated/ToolCallState";
 export type { ToolTerminalStatus } from "./generated/ToolTerminalStatus";
 export type { ToolTerminalOrigin } from "./generated/ToolTerminalOrigin";
+
+// 109：压缩可见性（`render/compaction.ts`）直接点名了这几个类型——
+// `SessionEvent::compaction_applied`/`tool_results_cleared` 帧的 `summary_id`
+// 字段类型，以及 `GET /sessions/{id}/compaction_record` 的响应体一整套（完整
+// 记录 `Message`/`ContentBlock`/`Role`，展开原文走的是这条链，不经 `SendPlan`；
+// 摘要库 `SummaryEntry`，正文来自 `Slot::Summaries`）。同上面几条注释的道理，
+// 收拢到这个入口，不绕去 `generated/` 内部找。
+export type { SummaryId } from "./generated/SummaryId";
+export type { Message } from "./generated/Message";
+export type { ContentBlock } from "./generated/ContentBlock";
+export type { Role } from "./generated/Role";
+export type { CompactionRecordResponse } from "./generated/CompactionRecordResponse";
+export type { SummaryEntry } from "./generated/SummaryEntry";

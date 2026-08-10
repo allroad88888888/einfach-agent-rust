@@ -82,6 +82,17 @@ async function drive(sessionId: string, pending: PendingTool, attempt: Execution
       attempt.closed = true;
       return;
     }
+    // 协议语义：claimed/already_claimed_by_you 一定带 request（Rust 侧
+    // `ToolClaimResponse.request` 是 Option，claimed 时必填）。TS 生成类型里
+    // `request` 是可选字段、判别联合又收窄不了，这里显式守卫——响应形状异常
+    // 时放弃本端执行（不重试：服务端一直缺 request 的话重试也白搭）。
+    if (grant.request === undefined) {
+      attempt.closed = true;
+      console.error(
+        `[web-tool] ${pending.request.tool}（${pending.call_id}）认领成功但响应缺 request，本端不执行`,
+      );
+      return;
+    }
 
     // 使用 claim 响应里的 request，而不是 SSE/待办中的副本；这份是 CAS 同一事务给出的 grant。
     attempt.submission = createRemoteToolSubmission(await produceOutcome(grant.request));

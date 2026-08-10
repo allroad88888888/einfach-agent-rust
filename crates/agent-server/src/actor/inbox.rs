@@ -32,6 +32,14 @@ pub(super) fn dispatch(
             remote_tools::submit(session, ctx, events, request, reply);
             LoopControl::Continue
         }
+        ActorMessage::ReadCompactionRecord { agent, reply } => {
+            let record = super::message::CompactionRecord {
+                messages: session.messages_of(&agent).into_iter().collect(),
+                summaries: session.summary_library(&agent),
+            };
+            let _ = reply.send(record);
+            LoopControl::Continue
+        }
     }
 }
 
@@ -42,8 +50,8 @@ fn dispatch_command(
     events: &broadcast::Sender<Frame>,
 ) -> LoopControl {
     match command {
-        Command::Input { text, images } => {
-            commands::handle_input(session, ctx, events, &text, images)
+        Command::Input { text } => {
+            commands::handle_input(session, ctx, events, &text)
         }
         Command::Undo { granularity, force } => {
             commands::handle_undo(session, ctx, events, granularity, force)

@@ -22,6 +22,7 @@
 
 pub mod cache;
 pub mod command;
+pub mod compaction;
 pub mod engine;
 pub mod graph;
 pub mod ids;
@@ -29,7 +30,6 @@ pub mod limits;
 pub mod observe;
 pub mod seam;
 pub mod value;
-pub mod vision;
 
 // 缓存兜底：**类型**提到根上，三个判读函数不提——`cache::reconcile(...)` 说得出
 // 是在对什么账，裸的 `reconcile(...)` 说不出。
@@ -37,18 +37,27 @@ pub use cache::{
     DriftVerdict, GuardAlert, GuardLayer, GuardReport, PrefixIntent, ReconcileParams,
     ReconcileVerdict, TurnHit, WindowParams, WindowVerdict,
 };
+// 压缩的策略层（102 的第 2 档、108 的阶梯）：**类型和常量**提到根上，判读函数
+// 不提——`compaction::tool_results_to_clear(...)` / `compaction::next_action(...)`
+// 说得出是在清什么、在判哪一档，裸的名字说不出（同 `cache::reconcile` 的取舍）。
+pub use compaction::{
+    ClearParams, DEFAULT_PROTECT_RECENT_TURNS, DEFAULT_TRIGGER_PERCENT, LadderAction,
+};
 // 会话形态：类型提到根上，模块保留（`command::Session` 与 `agent_core::Session`
 // 都通），跟 `engine` 一侧的惯例一致。
 pub use command::{
-    AgentEntry, AgentLimits, BarrierInfo, ChildConfig, DEFAULT_HISTORY_CAP,
-    DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused, DespawnReport, EntryMeta,
-    ReadDenied, Session, SkillError, SpawnRefused, UndoReport, known_label,
+    AgentEntry, AgentLimits, BarrierInfo, BoundaryRejected, ChildConfig, ClearOutcome,
+    DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused,
+    DespawnReport, EntryMeta, ReadDenied, Session, SkillError, SpawnRefused, UndoReport,
+    known_label,
 };
 pub use engine::{
-    Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus, UserImage,
+    Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus,
 };
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
-pub use ids::{AGENT_PATH_SEP, AgentId, ExecutionProfileId, MessageId, SkillId, ToolCallId};
+pub use ids::{
+    AGENT_PATH_SEP, AgentId, ExecutionProfileId, MessageId, SkillId, SummaryId, ToolCallId,
+};
 pub use limits::{DEFAULT_TOOL_OUTPUT_BYTES, truncate_tool_output, truncated_content_bytes};
 pub use observe::{AgentActivity, AgentNode, AgentTree};
 pub use seam::{
@@ -57,10 +66,9 @@ pub use seam::{
 pub use value::atom_value::AgentValue;
 pub use value::host_skills::HostSkill;
 pub use value::message::{ContentBlock, Message, Role};
+// 压缩的发送侧坐标（099）：**类型和常量**提到根上，投影函数不提——
+// `send_plan::project(...)` 说得出是在投什么，裸的 `project(...)` 说不出
+// （同 `cache::reconcile` 的取舍）。
+pub use value::send_plan::{BoundaryNotAdvancing, CLEARED_TOOL_RESULT, SendPlan};
 pub use value::session::{SessionConfig, StopReason, TokenUsage};
 pub use value::tool::{Location, Reversibility, ToolCallRequest, ToolSpec};
-pub use vision::{
-    MAX_VISION_IMAGES, MAX_VISION_QUESTION_CHARS, VISION_INSPECT_TOOL, VisionChildTerminal,
-    VisionFailure, VisionFailureCode, VisionImageHandle, VisionInspectRequest, VisionToolOutcome,
-    parse_vision_inspect_request, vision_child_outcome, vision_inspect_spec,
-};

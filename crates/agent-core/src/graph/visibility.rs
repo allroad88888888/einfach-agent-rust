@@ -102,7 +102,17 @@ impl Slot {
             // 工具槽是本 agent 这一轮的在飞现场，父 agent 要的是结论（`Status`）
             // 不是现场；四个预算计数与消息号计数器是 per-agent 的账，跨 agent 读
             // 它们只会长出「把别人的预算算进自己的」这类账目错误；前缀镜像是
-            // adapter 的比对材料，连本 agent 都只是原样存取。
+            // adapter 的比对材料，连本 agent 都只是原样存取。`SendPlan`（100）
+            // 跟 `PrevPrefix` 同一类：它描述的是「这个 agent 这一轮发送侧的账本」，
+            // 不是子 agent 干活要继承的上下文，也不是父 agent 要等的结论。压缩状态
+            // 若真要跨 agent 共享，那是需要新理由的新决策（模块文档：开放一个方向
+            // 要有理由，封闭不需要），不是这里的默认开放。`PrevSendPlan`（103）跟
+            // `PrevPrefix` 是同一件事的两半，站队理由跟 `PrevPrefix` 完全相同。
+            // `Summaries`（107）跟 `SendPlan` **必须站同一边**：摘要正文是边界那一
+            // 侧的账（`SendPlan` 里的引用指向它），两者分开站队就会造出「子 agent
+            // 读得到父的摘要引用、却查不到正文」，投影那边只能把边界作废——一个
+            // 只在跨 agent 取料时才浮出来的静默降级。子 agent 要继承父的上下文走的
+            // 是 `Messages` 那条上读边（完整历史，没被压过），不该经由压缩状态。
             Slot::ToolSlots
             | Slot::PrevPrefix
             | Slot::NextMessageId
@@ -110,7 +120,10 @@ impl Slot {
             | Slot::MaxTurns
             | Slot::RetriesUsed
             | Slot::MaxRetries
-            | Slot::ExecutionProfile => Visibility::Private,
+            | Slot::ExecutionProfile
+            | Slot::SendPlan
+            | Slot::PrevSendPlan
+            | Slot::Summaries => Visibility::Private,
         }
     }
 }

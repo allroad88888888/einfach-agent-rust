@@ -1,5 +1,10 @@
 # 082 wire 的数组编码：有图才用数组
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 · **依赖** [079](079-image-content-block.md) · **模型** sonnet · **独测** ✅（红线 11：前缀字节） · **状态** 完成
 
 **先读 [docs/IMAGES.md](../IMAGES.md) §五**（为什么是「有图才用数组」而不是恒定数组——

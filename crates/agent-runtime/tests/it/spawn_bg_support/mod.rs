@@ -50,7 +50,6 @@ pub fn any_message_mentions(session: &Session, agents: &[AgentId], needle: &str)
                 ContentBlock::Thinking(t) => t.contains(needle),
                 ContentBlock::ToolResult { content, .. } => content.contains(needle),
                 ContentBlock::ToolUse { input, .. } => input.to_string().contains(needle),
-                ContentBlock::Image { .. } => false,
             })
         })
     })

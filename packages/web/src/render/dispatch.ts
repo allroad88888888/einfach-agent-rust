@@ -18,6 +18,11 @@
 // （会话级快照,不是某个具体 agent 的活动,`event/frame.rs` 的既有约定），
 // `event.data`（`AgentTree`）整个甩给 `renderAgentTree`（`./agent_tree`）
 // 重画独立的树面板,不经 `frame.agent`/`appendToTimeline` 那条路。
+//
+// 109：`compaction_applied`/`tool_results_cleared` 进时间线（跟 `notice` 同款
+// ——它们标在真实归属的 agent 上）；`undo`/`redo` 帧的 `turn_id`（`applied`
+// 分支才有）转给 `compactionTimeline.undo`/`.redo`，精确隐藏/恢复那一轮产生的
+// 标记——跟 `userInputs.undo()`/`.redo()` 同一处调用点，同一条「090 的教训」。
 import type { Frame } from "@agent/protocol";
 
 import { StreamCursor } from "./stream";
@@ -27,8 +32,13 @@ import { renderUndoOutcome } from "./undo";
 import { turnGuard } from "./guard";
 import { renderAgentTree } from "./agent_tree";
 import type { UserInputTimeline } from "./user_input";
+import type { CompactionTimeline } from "./compaction";
 
-export function createRenderer(sessionId: string, userInputs: UserInputTimeline): (frame: Frame) => void {
+export function createRenderer(
+  sessionId: string,
+  userInputs: UserInputTimeline,
+  compactionTimeline: CompactionTimeline,
+): (frame: Frame) => void {
   const stream = new StreamCursor();
 
   return function dispatch(frame: Frame): void {
@@ -71,12 +81,18 @@ export function createRenderer(sessionId: string, userInputs: UserInputTimeline)
         return;
       case "undo":
         stream.interrupt();
-        if (event.data.type === "applied") userInputs.undo();
+        if (event.data.type === "applied") {
+          userInputs.undo();
+          compactionTimeline.undo(event.data.data.turn_id);
+        }
         renderUndoOutcome("undo", event.data, sessionId, agent);
         return;
       case "redo":
         stream.interrupt();
-        if (event.data.type === "applied") userInputs.redo();
+        if (event.data.type === "applied") {
+          userInputs.redo();
+          compactionTimeline.redo(event.data.data.turn_id);
+        }
         renderUndoOutcome("redo", event.data, sessionId, agent);
         return;
       case "lagged":
@@ -105,6 +121,14 @@ export function createRenderer(sessionId: string, userInputs: UserInputTimeline)
         // 两件事,互不打断彼此的连续性。哑渲染：拿到快照就整棵重画
         // （`renderAgentTree`），不在这一层做任何增量判断。
         renderAgentTree(event.data);
+        return;
+      case "compaction_applied":
+        stream.interrupt();
+        compactionTimeline.applied(event.data.turn_id, event.data.upto, event.data.summary_id, agent);
+        return;
+      case "tool_results_cleared":
+        stream.interrupt();
+        compactionTimeline.cleared(event.data.turn_id, event.data.call_ids, agent);
         return;
     }
   };

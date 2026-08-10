@@ -47,6 +47,7 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
         endpoint: "http://127.0.0.1:1/unused".to_string(), // 永远不会真的连——`encode` 先 panic。
         api_key: "fake-key".to_string(),
         model: Arc::from("deepseek-v4-pro"),
+        context_window: None,
         tools: agent_server::ToolTableSpec::Builtin,
         tools_root: support::temp_dir("panic-tools"),
         system: Vec::new(),
@@ -55,6 +56,7 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
         snapshot_every: Some(0),
         provider_timeout: Some(Duration::from_secs(5)),
         remote_tool_timeout: None,
+        vision: None,
         host_tools: Vec::new(),
         host_skills: Vec::new(),
         disable_builtin: Vec::new(),
@@ -69,7 +71,6 @@ async fn a_panicking_provider_kills_only_the_actor_thread_and_registry_reports_i
     handle
         .send(Command::Input {
             text: "trigger the panic".to_string(),
-            images: Vec::new(),
         })
         .unwrap();
 

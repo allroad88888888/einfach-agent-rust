@@ -115,7 +115,6 @@ fn call_cancel_latch_survives_a_later_session_flag_reset() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_terminal_deltas: false,
         cancel_token: Arc::clone(&call_cancel),
     };
 
@@ -147,7 +146,6 @@ fn finish_uses_start_binding_after_default_switch() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     };
     ctx.switch_provider(
@@ -155,6 +153,7 @@ fn finish_uses_start_binding_after_default_switch() {
         "http://127.0.0.1:2/chat/completions".to_string(),
         "new-key".to_string(),
         Arc::from("new-model"),
+        None,
     );
 
     let event = finish(
@@ -208,7 +207,6 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     };
 
@@ -217,6 +215,7 @@ fn old_default_finish_does_not_contaminate_new_default_guard_scope() {
         "http://127.0.0.1:2/chat/completions".to_string(),
         "new-key".to_string(),
         Arc::from("new-model"),
+        None,
     );
     let new_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
 

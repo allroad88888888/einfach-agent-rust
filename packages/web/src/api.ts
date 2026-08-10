@@ -12,7 +12,14 @@
 // ts-rs 导出（`crates/agent-server/src/http/capabilities/`），所以它跟下行那些
 // 一样是生成物,不该在前端手写镜像（决策 2；`packages/protocol/src/index.ts`
 // 那段 061 的注释记的是同一件事）。
-import type { AgentTree, Capabilities, Granularity, PendingTool, PendingToolsResponse } from "@agent/protocol";
+import type {
+  AgentTree,
+  Capabilities,
+  CompactionRecordResponse,
+  Granularity,
+  PendingTool,
+  PendingToolsResponse,
+} from "@agent/protocol";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -70,6 +77,19 @@ export async function fetchAgentTree(id: string): Promise<AgentTree> {
   return (await res.json()) as AgentTree;
 }
 
+/** `GET /sessions/:id/compaction_record`（109）：展开一条压缩标记要看的内容——
+ * **完整记录**（`messages`，未经 `SendPlan` 投影：压缩点覆盖的原始轮次、被清
+ * 工具调用的原始结果都从这里切/找）与**摘要库**（`summaries`，来自
+ * `Slot::Summaries`）。`agent` 省略时服务端按 root 处理（今天只有 root 会
+ * 触发压缩）。这是一次按需查询，不随连接自动预取——`render/compaction.ts`
+ * 只在用户点开某条标记时才调用，并把结果缓存住,同一条连接内只请求一次。 */
+export async function fetchCompactionRecord(id: string, agent?: string): Promise<CompactionRecordResponse> {
+  const query = agent === undefined ? "" : `?agent=${encodeURIComponent(agent)}`;
+  const res = await fetch(`/sessions/${encodeURIComponent(id)}/compaction_record${query}`);
+  if (!res.ok) throw new Error(await describeError(res));
+  return (await res.json()) as CompactionRecordResponse;
+}
+
 /** `GET /sessions/:id/pending_tools`（072）：此刻**还欠着**回传的远端工具调用。
  *
  * 这是「这次调用要不要执行」的唯一权威判据。收到一帧 `tool_executing` 判不出来
@@ -86,17 +106,30 @@ export async function fetchPendingTools(id: string): Promise<PendingTool[]> {
 }
 
 export async function sendInput(id: string, text: string, images: readonly File[] = []): Promise<void> {
-  // 不选图必须停在原来的对象字面量：JSON.stringify 后仍逐字节是
-  // `{"text":"..."}`，不能为了统一形状平白加一个 `images: []`。
-  const body = images.length === 0 ? { text } : { text, images: await Promise.all(images.map(encodeImage)) };
-  return postJson(`/sessions/${encodeURIComponent(id)}/input`, body);
+  // s5/s6：图片字节绝不进 agent 协议 body——有图时先 POST /uploads 拿链接，
+  // 再把链接拼进 text 当纯文本发（无图时仍是逐字节 `{"text":"..."}`，
+  // 不为统一形状平白加空字段）。模型看到的是链接字符串，识图走
+  // `srv:vision/inspect` 工具（server 配了 kimi 段才可用）。
+  let message = text;
+  if (images.length > 0) {
+    const links = await Promise.all(images.map(uploadImage));
+    const block = links.map((link) => `[图片：${link}]`).join("\n");
+    message = message ? `${message}\n\n${block}` : block;
+  }
+  return postJson(`/sessions/${encodeURIComponent(id)}/input`, { text: message });
 }
 
-/** HTTP 的上行图片形状（085 的 `InputImage`），只在这里把浏览器 `File` 的
- * 二进制搬成 JSON 数组；下行协议类型仍只从 `@agent/protocol` 导入。 */
-async function encodeImage(file: File): Promise<{ name?: string; mime: string; bytes: number[] }> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return { name: file.name || undefined, mime: file.type, bytes: Array.from(bytes) };
+/** s5 极简上传端点（`POST /uploads`）：multipart 字段 `file`，服务端白名单
+ * 校验（png/jpeg/webp/gif、≤100MiB）后落临时目录，返回 `{"url":
+ * "/uploads/<id>"}`。拿到的链接只是纯文本——图片字节在浏览器与上传端点
+ * 之间走完，不进 `Command::Input`、不进任何模型上下文。 */
+async function uploadImage(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/uploads", { method: "POST", body: form });
+  if (!res.ok) throw new Error(await describeError(res));
+  const body = (await res.json()) as { url: string };
+  return body.url;
 }
 
 export function sendUndo(id: string, granularity: Granularity, force: boolean): Promise<void> {

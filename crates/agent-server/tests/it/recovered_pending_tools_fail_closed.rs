@@ -30,7 +30,6 @@ async fn restart_terminally_cancels_recovered_pending_tools_without_a_new_comman
     handle
         .send(Command::Input {
             text: "调用浏览器".to_owned(),
-            images: Vec::new(),
         })
         .unwrap();
 

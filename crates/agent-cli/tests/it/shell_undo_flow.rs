@@ -43,7 +43,8 @@ fn undo_then_undo_force_through_the_real_cli_functions() {
     let mut ctx = support::build_ctx_with_shell(port, &dir);
     let mut session = Session::new(AgentId::root());
 
-    let status = agent_runtime::run_turn(&mut session, &mut ctx, "跑个 shell 命令");
+    let status = agent_runtime::run_turn(&mut session, &mut ctx, "跑个 shell 命令")
+        .expect("脚本化假服务器不该触发瞬态源失败");
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert!(marker.exists());
 

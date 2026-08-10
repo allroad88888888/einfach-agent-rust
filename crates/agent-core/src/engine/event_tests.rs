@@ -12,7 +12,6 @@ fn all_variants() -> Vec<Event> {
         Event::UserInput {
             agent: AgentId::root(),
             text: Arc::from("读一下 /tmp/a"),
-            images: Vec::new(),
         },
         Event::ProviderDone {
             agent: AgentId::root(),
@@ -58,6 +57,15 @@ fn all_variants() -> Vec<Event> {
             epoch: Epoch(1),
             call_id: None,
         },
+        Event::CompactDone {
+            agent: AgentId::root(),
+            summary: Arc::from("前 12 条：用户要读一个文件，读到了。"),
+            epoch: Epoch(1),
+        },
+        Event::CompactFailed {
+            agent: AgentId::root(),
+            epoch: Epoch(1),
+        },
         Event::Cancel {
             agent: AgentId::root(),
         },
@@ -94,6 +102,26 @@ fn epoch_extractor_is_exhaustive() {
         };
         assert_eq!(event.epoch(), expected, "{event:?}");
     }
+}
+
+/// 摘要回执**必须**过闸（红线 6）。上面那个穷举测试用的是 `_` 兜底，加变体时不会
+/// 逼任何人回答；这一条把 105 的两个回执单独钉住：它们是
+/// [`agent_core::Effect::Compact`] 的结果，摘要在飞期间用户 undo / 取消过，回来的
+/// 正文盖住的范围就跟实际历史对不上。少了这个 `Some`，闸放行，107 的回写照写不误，
+/// 而错的只是下一轮 prompt 里多一段少一段——不报错，人发现不了。
+#[test]
+fn compaction_results_are_epoch_gated() {
+    let done = Event::CompactDone {
+        agent: AgentId::root(),
+        summary: Arc::from("摘要"),
+        epoch: Epoch(7),
+    };
+    let failed = Event::CompactFailed {
+        agent: AgentId::root(),
+        epoch: Epoch(7),
+    };
+    assert_eq!(done.epoch(), Some(Epoch(7)));
+    assert_eq!(failed.epoch(), Some(Epoch(7)));
 }
 
 /// provider 超时和工具超时必须分得出——两者的转移不同。

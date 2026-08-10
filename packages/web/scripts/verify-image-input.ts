@@ -1,5 +1,7 @@
-// 唯一职责：086 的 HTTP 图片请求形状验收。对真的 `sendInput` 截获 fetch，断言
-// 无图时请求体逐字节仍是旧的 `{\"text\":\"...\"}`，有图时才附带图片字节。
+// 唯一职责：s5/s6 的 HTTP 请求形状验收——图片字节不进 agent 协议。对真的
+// `sendInput` 截获 fetch，断言：无图时请求体逐字节仍是旧的 `{"text":"..."}`；
+// 有图时先 POST /uploads 拿链接，链接作为纯文本拼进 text 再发 `/input`，body
+// 里没有 images 字段、没有图片字节。
 //
 //   pnpm --filter web verify:images
 //
@@ -25,6 +27,9 @@ async function main(): Promise<void> {
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     requests.push({ path: String(input), body: typeof init?.body === "string" ? init.body : undefined });
+    if (String(input) === "/uploads") {
+      return new Response(JSON.stringify({ url: "/uploads/up-1" }), { status: 200 });
+    }
     return new Response(null, { status: 202 });
   }) as typeof fetch;
 
@@ -37,10 +42,15 @@ async function main(): Promise<void> {
 
     const image = new File([new Uint8Array([137, 80, 78, 71])], "nonce.png", { type: "image/png" });
     await sendInput("image", "读数字", [image]);
-    equal("有图才发送 name/mime/原始字节", requests[1], {
-      path: "/sessions/image/input",
-      body: '{"text":"读数字","images":[{"name":"nonce.png","mime":"image/png","bytes":[137,80,78,71]}]}',
+    equal("有图时先打上传端点拿链接", requests[1], {
+      path: "/uploads",
+      body: undefined,
     });
+    equal("链接拼进 text 再发 /input，body 无 images 字段", requests[2], {
+      path: "/sessions/image/input",
+      body: '{"text":"读数字\\n\\n[图片：/uploads/up-1]"}',
+    });
+    equal("协议 body 不含图片字节（PNG 魔数 137,80,78,71）", !JSON.stringify(requests[2]).includes("137"), true);
   } finally {
     globalThis.fetch = realFetch;
   }

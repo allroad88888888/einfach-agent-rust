@@ -31,6 +31,8 @@ use crate::ids::{AgentId, ExecutionProfileId, MessageId};
 use crate::seam::PrefixImage;
 use crate::value::atom_value::AgentValue;
 use crate::value::message::Message;
+use crate::value::send_plan::SendPlan;
+use crate::value::send_plan_codec;
 
 use super::meta::{AgentEntry, AgentHistory};
 use super::session::Session;
@@ -109,6 +111,15 @@ impl Session {
     /// 请求流，拿别人的镜像去比对自己的字节只会把正常的差异误报成漂移。
     pub fn prev_prefix_of(&self, agent: &AgentId) -> Option<PrefixImage> {
         self.slot_of(agent, Slot::PrevPrefix).as_prefix().cloned()
+    }
+
+    /// 上一次 `CallProvider` 实际用的那份 `SendPlan`（103）。从没发过请求 →
+    /// pristine（[`SendPlan::new()`]）。跟 [`Session::prev_prefix_of`] 是同一件事
+    /// 的两半——`provider_done` 同一时刻把两者一起写。取起飞前的 `PrefixIntent`
+    /// 时拿它跟*当前* `send_plan_of` 比：不等 ⇒ 中间压缩改过发送计划 ⇒ 这轮的
+    /// 漂移是预期内的，不是事故（`agent_core::cache::PrefixIntent`）。
+    pub fn prev_send_plan_of(&self, agent: &AgentId) -> SendPlan {
+        send_plan_codec::from_value(&self.slot_of(agent, Slot::PrevSendPlan))
     }
 
     /// spawn 当时快照的工具子集（`Slot::ToolsAllowed`）。

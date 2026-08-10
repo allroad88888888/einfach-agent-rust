@@ -26,7 +26,6 @@ fn session_with_a_finished_child() -> (Session, AgentId, Epoch) {
     let _ = session.step(Event::UserInput {
         agent: root.clone(),
         text: Arc::from("拆一个给后台"),
-        images: Vec::new(),
     });
 
     let spawned_at = session.epoch();
@@ -34,7 +33,6 @@ fn session_with_a_finished_child() -> (Session, AgentId, Epoch) {
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
-        images: Vec::new(),
     });
     let _ = session.step(Event::ProviderDone {
         agent: child.clone(),
@@ -134,7 +132,6 @@ fn a_running_background_child_is_the_orphan_candidate() {
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
-        images: Vec::new(),
     });
 
     let mut subtree = Subtree::default();
@@ -161,7 +158,6 @@ fn a_child_bound_to_a_slot_is_not_an_orphan() {
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
-        images: Vec::new(),
     });
 
     let mut subtree = Subtree::default();

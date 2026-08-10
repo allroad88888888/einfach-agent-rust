@@ -32,7 +32,6 @@ use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::provider_call::ProviderCall;
 use crate::runner;
-use crate::subtree::Subtree;
 use crate::transient_source_failure::TransientSourceFailure;
 
 /// 泵里的一次截止线扫描：到点的 provider 调用和到点的远端等待都翻成待办事件。
@@ -43,7 +42,6 @@ use crate::transient_source_failure::TransientSourceFailure;
 pub(crate) fn sweep(
     ctx: &mut RunnerCtx,
     calls: &mut Vec<ProviderCall>,
-    subtree: &mut Subtree,
     pending: &mut std::collections::VecDeque<Event>,
 ) -> Option<TransientSourceFailure> {
     let now = Instant::now();
@@ -57,7 +55,6 @@ pub(crate) fn sweep(
         // Removing the credential abandons the result; latch cancellation as well so request
         // preparation releases its leases and cannot continue to another upload or chat call.
         call.cancel();
-        subtree.record_provider_timeout(&call.agent);
         if call.one_shot {
             ctx.transient_sources
                 .purge_agent_epoch(&call.agent, call.epoch);

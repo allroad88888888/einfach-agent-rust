@@ -2,7 +2,8 @@
 //!
 //! | 文件 | 职责 |
 //! |------|------|
-//! | [`slot`] | 地址空间：`AtomKey` / `Slot` / `ToolCallSlot` / `DerivedKey` 与每个槽位的默认值 |
+//! | [`slot`] | 地址空间：`AtomKey` / `Slot` / `ToolCallSlot` / `DerivedKey`，以及「有哪些槽位」（`Slot::ALL`） |
+//! | [`slot_default`] | 每个槽位「没有值的时候是什么」——`default_value` 的唯一一处 |
 //! | [`visibility`] | 每个槽位跨 agent 时朝哪个方向可读（红线 10 的结构面） |
 //! | [`build`] | 构图函数：`source_atom` / `derived_atom` / `build_agent`，建 atom 的唯一入口 |
 //!
@@ -12,6 +13,7 @@
 
 pub mod build;
 pub mod slot;
+pub mod slot_default;
 pub mod visibility;
 
 pub use build::{AgentStore, DerivedFamily, SourceFamily, build_agent, derived_atom, source_atom};

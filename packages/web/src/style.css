@@ -10,6 +10,7 @@
 @import "./tree-panel.css";
 @import "./composer/image_attachments.css";
 @import "./render/user_input.css";
+@import "./render/compaction.css";
 
 :root {
   color-scheme: light dark;

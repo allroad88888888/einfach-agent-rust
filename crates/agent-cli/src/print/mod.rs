@@ -7,6 +7,7 @@
 //! | 文件 | 管什么 |
 //! |---|---|
 //! | [`events`] | **事件流**：`agent_runtime::AgentEvent` → 终端。有状态（流式增量的颜色/换行/归属换人），一个会话一份 |
+//! | [`event_text`] | 109 拆出：`events` 里两个不持状态的纯格式化函数（`OrphanFate`/`TurnGuard` → 人话），跟 `events` 同一条「有没有状态」分界线，只是拆分动机是行数天花板不是新职责 |
 //! | [`receipts`] | **命令回执**：`/model` `/undo` `/redo`、启动恢复、一轮收尾。全是无状态的一次性文案 |
 //! | [`agent_tree`] | **`/agents`**（047）：`agent_core::AgentTree` → 缩进文本。跟前两个一样是纯函数，跟 `receipts` 的区别只是入参不是标量而是一整棵树 |
 //! | [`mcp`] | **`/mcp`**（045）：`crate::mcp::McpStatus` → 缩进文本（server 可用性 + 工具名）。纯函数，跟 `agent_tree` 同类，入参是装载期状态快照 |
@@ -16,6 +17,7 @@
 //! 恰好还没顶破行数上限，加上多 agent 归属之后顶破了——按职责拆，不是按行数拆。
 
 mod agent_tree;
+mod event_text;
 mod events;
 mod mcp;
 mod receipts;

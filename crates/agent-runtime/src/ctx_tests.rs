@@ -47,6 +47,7 @@ fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window()
         "https://api.moonshot.cn/v1/chat/completions".to_string(),
         "kimi-key".to_string(),
         Arc::from("kimi-k3"),
+        Some(128_000),
     );
 
     assert_eq!(
@@ -55,6 +56,12 @@ fn switch_provider_replaces_adapter_endpoint_key_model_and_clears_guard_window()
     );
     assert_eq!(ctx.default_binding.api_key, "kimi-key");
     assert_eq!(&*ctx.default_binding.session_config.model, "kimi-k3");
+    // 110 前置：新家自己的窗口要跟着换，不是继续用切换前那家（`build`
+    // 焊死的是 `None`）——漏了这行等于每次切家都把压缩焊死成不触发。
+    assert_eq!(
+        ctx.default_binding.session_config.context_window,
+        Some(128_000)
+    );
     let new_scope = ctx.execution_binding_for(None).unwrap().guard_scope;
     assert_ne!(new_scope, old_scope);
     assert!(
@@ -78,6 +85,7 @@ fn switch_provider_encode_reflects_the_new_family_not_the_old() {
         "https://api.moonshot.cn/v1/chat/completions".to_string(),
         "kimi-key".to_string(),
         Arc::from("kimi-k3"),
+        None,
     );
 
     let encoded = ctx

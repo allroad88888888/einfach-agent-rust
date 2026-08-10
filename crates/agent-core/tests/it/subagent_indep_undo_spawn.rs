@@ -67,7 +67,7 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
         session.history_len() > before_write,
         "子的 UserInput 该留一条 entry"
     );
-    assert_eq!(child_slot_count(&session, &child), 15);
+    assert_eq!(child_slot_count(&session, &child), 18);
 
     let report = session.undo_turn();
     assert!(
@@ -79,10 +79,10 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     assert_eq!(session.live_agents(), vec![root.clone()]);
     assert!(session.children_of(&root).is_empty());
 
-    // 裁决的核心：atom 还在（十五个槽位一个不少），只是值回默认。
+    // 裁决的核心：atom 还在（十八个槽位一个不少），只是值回默认。
     assert_eq!(
         child_slot_count(&session, &child),
-        15,
+        18,
         "undo 不逐出 atom，只回滚值——这是跟 despawn 墓碑语义的关键区别"
     );
     assert_eq!(tools_allowed_of(&session, &child), AgentValue::Null);

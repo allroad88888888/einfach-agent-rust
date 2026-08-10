@@ -12,12 +12,43 @@ use agent_core::{
     ContentBlock, Message, MessageId, PrefixImage, Role, SessionConfig, SystemChunk, ToolSpec,
 };
 use agent_providers::Ingredients;
+use agent_providers::Provider;
 use agent_providers::deepseek::DeepSeek;
+use agent_providers::glm::Glm;
+use agent_providers::kimi::Kimi;
 use serde_json::Value;
 
 /// `DeepSeek` 是无状态的（issue 025：adapter 全部方法是纯函数），每个测试独立构造一份。
 pub fn provider() -> DeepSeek {
     DeepSeek
+}
+
+/// 三家横向测试的共用清单（100：`send_plan` 投影要在三家上分别验证「生效」，
+/// 同 `agent-runtime` 的 `host_tools_bytes_support::providers()` 同一个手法）。
+pub fn providers() -> Vec<(&'static str, Box<dyn Provider>)> {
+    vec![
+        ("deepseek", Box::new(DeepSeek)),
+        ("glm", Box::new(Glm)),
+        ("kimi", Box::new(Kimi)),
+    ]
+}
+
+/// 按 family 名给一份能过各自 `encode` 校验的 `SessionConfig`（跟
+/// `three_providers.rs` 里那份私有 `config_for`同形，这里提出来给 100 的新
+/// 测试复用，不用每个文件各写一份模型名映射）。
+pub fn config_for_family(family: &str) -> SessionConfig {
+    let model = match family {
+        "deepseek" => "deepseek-v4-pro",
+        "kimi" => "kimi-k3",
+        "glm" => "glm-5.2",
+        other => panic!("未知 provider family: {other}"),
+    };
+    SessionConfig {
+        model: Arc::from(model),
+        temperature: Some(0.7),
+        max_tokens: Some(4096),
+        context_window: Some(128_000),
+    }
 }
 
 pub fn sys_chunk(label: &str, text: &str) -> SystemChunk {

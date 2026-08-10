@@ -1,8 +1,9 @@
-//! 原子图的**地址空间**：[`AtomKey`]（落盘的逻辑键，红线 4）、它的两级槽位枚举，
-//! 以及每个槽位的默认值。
+//! 原子图的**地址空间**：[`AtomKey`]（落盘的逻辑键，红线 4）与它的两级槽位枚举。
 //!
-//! 这个文件只回答两个问题：**「一个槽位怎么称呼」**和**「它没有值的时候是什么」**。
-//! 「谁来建它」在同目录的 [`build`](super::build)，「谁来写它」在 `command/`。
+//! 这个文件只回答一个问题：**「一个槽位怎么称呼」**。「它没有值的时候是什么」在
+//! 同目录的 [`slot_default`](super::slot_default)（107 加 `Slot::Summaries` 时拆出去
+//! 的——本文件原本同时答两个问题，那就是两件事），「谁来建它」在
+//! [`build`](super::build)，「谁来写它」在 `command/`。
 //!
 //! ## 为什么键是逻辑键
 //!
@@ -32,9 +33,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::ids::{AgentId, ToolCallId};
-use crate::value::atom_value::AgentValue;
 
 /// 一个 agent 的槽位。**只有 source（primitive）槽位**——derived 不进日志、不进
 /// 快照，它们的键是 [`DerivedKey`]，两套键分开正是为了让「快照只存 primitive」
@@ -133,6 +132,42 @@ pub enum Slot {
     /// 里是哪家 provider、哪个模型或哪份凭证。`Null` 是 root、既有默认 spawn 与
     /// 缺少本槽位的旧 snapshot 的兼容值。
     ExecutionProfile,
+    /// **这一轮实际要发给 provider 的历史坐标**（099/100，M12 压缩主干）。
+    ///
+    /// 值是 [`AgentValue::Json`] 里 [`SendPlan`] 自身的序列化（`send_plan_codec`）
+    /// ——跟这张表里最近几个槽位一样，是复用既有变体而不是新开一个：`AgentValue`
+    /// 的变体集合在 026 定死之后只增 `Slot`、不增变体（`atom_value.rs` 模块注释）。
+    ///
+    /// 默认值是 [`SendPlan::new()`] 的编码——**恒等元**，[`send_plan::project`]
+    /// 投影它等于完整历史（099 验收）。这正是「不用这个功能就逐字节不变」在这个
+    /// 槽位上的落点：没写过 `SendPlan` 的 agent，`send_plan_of` 永远读到这份编码，
+    /// `encode` 的入参因此跟 100 落地之前逐字节相同。
+    ///
+    /// [`send_plan::project`]: crate::value::send_plan::project
+    SendPlan,
+    /// **上一次 `CallProvider` 实际用的那份 [`SendPlan`]**（103：兜底第 1 层
+    /// `PrefixIntent` 的判定材料，同 `Slot::PrevPrefix`「上一次发出去的长什么样」
+    /// 的另一半，同一时刻在 `provider_done` 一起写）。跟当前 `SendPlan` 不等 ⇒
+    /// 中间压缩改过计划 ⇒ 漂移是预期内的，不是事故。默认值同 `Slot::SendPlan`
+    /// （pristine 编码）。
+    PrevSendPlan,
+    /// **这个 agent 历次压缩产出的摘要正文**（107，M12 压缩第 3 档的落点）。
+    ///
+    /// 值是 [`AgentValue::Json`] 里一个 `[[id, 正文], …]` 数组（`value::summaries`
+    /// 那一处编解码），`Json([])` = 从没压过（默认值）。[`Slot::SendPlan`] 里只有
+    /// 引用（`SummaryId`），正文住这里——**大值不进 `SendPlan`**（红线 5：
+    /// `SendPlan` 每轮都要被读出来投影一次，它的序列化大小不该随摘要长度增长）。
+    ///
+    /// 为什么容器是 `Vec` 而不是 map（红线 11）、为什么正文是 `Arc`（红线 5）、
+    /// 为什么**只增不删**（回收了 redo 就取不回正文，投影会把边界作废），三条
+    /// 理由写在 [`value::summaries`](crate::value::summaries) 的模块文档里，
+    /// 不在这里重复一遍。
+    ///
+    /// 跟 `Slot::SendPlan` 分成两个槽位而不是把正文塞进那一个：一次压缩要同时改
+    /// 两个槽位，而它们由**同一条 command**（`Session::apply_summary`）在同一个
+    /// batch 里写完，落成一条 `Entry`——所以「两个槽位」不会长出「边界推了但摘要
+    /// 还没进库」的中间态，换来的是「推边界」那条 entry 的 `prev` 不必抄一份正文。
+    Summaries,
 }
 
 /// 一次工具调用自己的槽位。
@@ -158,19 +193,6 @@ pub enum AtomKey {
 }
 
 impl AtomKey {
-    /// 这个槽位「没有值」的时候是什么。
-    ///
-    /// **唯一的一处**：构图函数建 atom 用它，019 的按需重建走的是同一个构图函数、
-    /// 因此也是同一份默认值。分成两份的那一刻，undo 路径重建出来的 atom 就会和
-    /// 正常创建出来的不一样——而那条路径只有「长会话 + 逐出 + undo」三件事同时
-    /// 发生才走得到，通常是在线上。
-    pub fn default_value(&self) -> AgentValue {
-        match self {
-            AtomKey::Agent(_, slot) => slot.default_value(),
-            AtomKey::ToolCall(_, _, ToolCallSlot::Result) => AgentValue::Pending,
-        }
-    }
-
     /// 这个键属于哪个 agent。`undo` 不看它（一条扁平日志按时间排序），
     /// 逐出与 UI 时间线看它。
     pub fn agent(&self) -> &AgentId {
@@ -181,55 +203,6 @@ impl AtomKey {
 }
 
 impl Slot {
-    /// 见 [`AtomKey::default_value`]。上限两项取的是 `engine::state` 的同一对常量
-    /// ——M1 引擎与 `Session` 的默认预算必须是同一个数，否则「行为一条不许变」
-    /// 就退化成一句要靠人核对的话。
-    pub fn default_value(self) -> AgentValue {
-        match self {
-            Slot::Messages => AgentValue::Messages(imbl::Vector::new()),
-            Slot::Status => AgentValue::Status(TurnStatus::Idle),
-            Slot::ToolSlots => AgentValue::Slots(std::sync::Arc::new(Vec::new())),
-            Slot::PrevPrefix => AgentValue::Null,
-            Slot::NextMessageId => AgentValue::U64(1),
-            Slot::TurnsUsed => AgentValue::U64(0),
-            Slot::MaxTurns => AgentValue::U64(DEFAULT_MAX_TURNS as u64),
-            Slot::RetriesUsed => AgentValue::U64(0),
-            Slot::MaxRetries => AgentValue::U64(DEFAULT_MAX_RETRIES as u64),
-            // `Null` = 不在活名单上。**默认值必须是「不活着」**：019 的按需重建
-            // 拿的就是这个默认值，若默认成「活着」，undo 路径上凭空重建出来的
-            // atom 会让一个早就 despawn 的子 agent 复活——链通、值错、不报错。
-            Slot::ToolsAllowed => AgentValue::Null,
-            // 「没有激活任何 skill」= 一个**空的有序数组**，不是 `Null`：SkillsActive
-            // 永远持一个数组（跟 ToolSlots 永远持 Slots 同一个道理），读取点因此不必
-            // 区分「空」和「类型错」。空数组序列化成 `[]`，逐字节确定（红线 11）。
-            Slot::SkillsActive => {
-                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
-            }
-            // 「这个会话没有任何注入」= 空数组，同 `SkillsActive` 那条理由：槽位
-            // 永远持一个数组，读取点不必区分「空」和「类型错」。**默认值必须是空**
-            // ——019 的按需重建拿的就是它，若默认成别的，undo 路径上凭空重建出来的
-            // atom 会给一个从没声明过的会话平添几个工具，而工具表在 prompt 最前面。
-            Slot::HostTools => {
-                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
-            }
-            // 同 `HostTools`：空数组而不是 `Null`。默认值必须是空——019 的按需重建
-            // 拿的就是它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没
-            // 声明过的会话平添几行常驻索引，而索引跟工具表一样在 prompt 最前面。
-            Slot::HostSkills => {
-                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
-            }
-            // 「一个内置工具都没关」= 空数组，同上两条理由。这一条的默认值格外要紧：
-            // 它是**减法**，默认成非空就等于给一个从没提过要求的会话偷偷少几个工具，
-            // 而少掉的那些模型压根不知道存在过——查起来没有任何线索。
-            Slot::DisabledBuiltins => {
-                AgentValue::Json(std::sync::Arc::new(serde_json::Value::Array(Vec::new())))
-            }
-            // 旧快照没有这个键时必须保持可恢复。Null 不代表选择了默认 provider；
-            // 如何解释 legacy/default 由 runtime 决定，core 不做能力或路由判断。
-            Slot::ExecutionProfile => AgentValue::Null,
-        }
-    }
-
     /// 一个 agent 的全部 source 槽位。`Session::new` 建图、`Session::primitives`
     /// 出快照都用它——**新增槽位只要加进这个数组，两条路径自动跟上**，
     /// 忘了改其中一条正是「快照缺一块」的来源。
@@ -237,7 +210,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 15] = [
+    pub const ALL: [Slot; 18] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -253,6 +226,9 @@ impl Slot {
         Slot::HostSkills,
         Slot::DisabledBuiltins,
         Slot::ExecutionProfile,
+        Slot::SendPlan,
+        Slot::PrevSendPlan,
+        Slot::Summaries,
     ];
 }
 

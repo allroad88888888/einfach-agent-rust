@@ -236,14 +236,12 @@ mod tests {
         handle
             .send(Command::Input {
                 text: "a".to_string(),
-                images: Vec::new(),
             })
             .unwrap();
         handle.send(Command::Redo).unwrap();
         assert!(matches!(
             rx.try_recv().unwrap(),
-            ActorMessage::Command(Command::Input { text, images })
-                if text == "a" && images.is_empty()
+            ActorMessage::Command(Command::Input { text }) if text == "a"
         ));
         assert!(matches!(
             rx.try_recv().unwrap(),

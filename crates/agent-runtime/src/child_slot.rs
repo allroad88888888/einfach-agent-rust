@@ -18,15 +18,6 @@ struct ChildSlot {
     /// 发起 tool call 时的世代；迟到结果必须继续经过 core 的 epoch 闸。
     epoch: Epoch,
     tool: &'static str,
-    outcome: ChildSlotOutcome,
-}
-
-enum ChildSlotOutcome {
-    Generic,
-    Vision {
-        images_inspected: usize,
-        timed_out: bool,
-    },
 }
 
 pub(crate) struct SlotWriteback {
@@ -54,49 +45,7 @@ impl ChildSlots {
             call_id,
             epoch,
             tool,
-            outcome: ChildSlotOutcome::Generic,
         });
-    }
-
-    pub(crate) fn record_vision(
-        &mut self,
-        child: AgentId,
-        parent: AgentId,
-        call_id: ToolCallId,
-        epoch: Epoch,
-        images_inspected: usize,
-    ) {
-        self.slots.push(ChildSlot {
-            child,
-            parent,
-            call_id,
-            epoch,
-            tool: crate::vision_tool::VISION_INSPECT_TOOL,
-            outcome: ChildSlotOutcome::Vision {
-                images_inspected,
-                timed_out: false,
-            },
-        });
-    }
-
-    /// Core 会把 timeout 和其它 retryable provider 失败归为同一类；这里只保留
-    /// runtime deadline 的来源位，用于生成稳定 `vision_timeout` 信封。
-    pub(crate) fn record_provider_timeout(&mut self, child: &AgentId) {
-        let Some(slot) = self.slots.iter_mut().find(|slot| &slot.child == child) else {
-            return;
-        };
-        if let ChildSlotOutcome::Vision { timed_out, .. } = &mut slot.outcome {
-            *timed_out = true;
-        }
-    }
-
-    pub(crate) fn record_provider_start(&mut self, child: &AgentId) {
-        let Some(slot) = self.slots.iter_mut().find(|slot| &slot.child == child) else {
-            return;
-        };
-        if let ChildSlotOutcome::Vision { timed_out, .. } = &mut slot.outcome {
-            *timed_out = false;
-        }
     }
 
     pub(crate) fn contains(&self, child: &AgentId) -> bool {
@@ -114,23 +63,7 @@ impl ChildSlots {
                 continue;
             }
             let slot = self.slots.remove(i);
-            let (content, is_error) = match slot.outcome {
-                ChildSlotOutcome::Generic => child_outcome::outcome(session, &slot.child, &status),
-                ChildSlotOutcome::Vision {
-                    images_inspected,
-                    timed_out,
-                } => {
-                    let preparation_failure = ctx.take_image_preparation_failure(&slot.child);
-                    crate::vision_child_outcome::outcome(
-                        session,
-                        &slot.child,
-                        &status,
-                        images_inspected,
-                        timed_out,
-                        preparation_failure,
-                    )
-                }
-            };
+            let (content, is_error) = child_outcome::outcome(session, &slot.child, &status);
             ctx.emit(
                 &slot.parent,
                 RunnerEvent::ToolExecuted {

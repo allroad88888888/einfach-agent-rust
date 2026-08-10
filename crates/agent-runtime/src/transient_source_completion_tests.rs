@@ -17,9 +17,10 @@ use crate::event::RunnerEvent;
 use crate::execution_binding::GuardScope;
 use crate::tool_table::ToolTable;
 use crate::transient_source_completion::{Metadata, finish};
-use crate::transient_source_policy::{SAFE_CANDIDATE, SOURCE_READ};
+use crate::transient_source_policy::SAFE_CANDIDATE;
 use crate::transient_source_vault::CapturedSource;
 
+const SOURCE_READ: &str = "web:source/read";
 const PRIVATE_INPUT: &str = "private-input-7b7d";
 const PRIVATE_CANDIDATE: &str =
     "核心逻辑位于 src/private/auth.rs:42\nfn secret_impl() {}\nprivate-candidate-9f3a";

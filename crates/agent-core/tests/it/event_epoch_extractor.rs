@@ -69,7 +69,6 @@ fn user_input_and_cancel_return_none() {
         Event::UserInput {
             agent: agent.clone(),
             text: Arc::from("hi"),
-            images: Vec::new(),
         }
         .epoch(),
         None,

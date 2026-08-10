@@ -12,7 +12,6 @@ use agent_transport::{Client, StreamOutcome};
 
 use super::*;
 use crate::event::RunnerEvent;
-use crate::image_preparation_failure::ImagePreparationFailure;
 use crate::provider_attempt::ProviderAttemptId;
 use crate::provider_message::{self, ProviderMessage};
 use crate::tool_table::ToolTable;
@@ -62,7 +61,6 @@ fn call(ctx: &RunnerCtx, attempt: ProviderAttemptId) -> ProviderCall {
         },
         one_shot: false,
         hold_deltas: false,
-        replay_terminal_deltas: false,
         cancel_token: Arc::new(AtomicBool::new(false)),
     }
 }
@@ -94,11 +92,6 @@ fn stale_messages_cannot_touch_same_agent_retry_in_same_epoch() {
                 cached: None,
             },
         ),
-        ProviderMessage::preparation_failed(
-            agent.clone(),
-            stale,
-            ImagePreparationFailure::Cancelled,
-        ),
         ProviderMessage::gone(agent, stale),
     ];
 
@@ -109,8 +102,4 @@ fn stale_messages_cannot_touch_same_agent_retry_in_same_epoch() {
         assert!(pending.is_empty());
         assert!(events.borrow().is_empty());
     }
-    assert!(
-        ctx.take_image_preparation_failure(&AgentId::root())
-            .is_none()
-    );
 }

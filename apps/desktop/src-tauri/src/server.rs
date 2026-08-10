@@ -100,6 +100,9 @@ pub async fn start(app: &AppHandle) -> Result<Started, StartError> {
         snapshot_every: None,
         provider_timeout: None,
         remote_tool_timeout: None,
+        // s5：上传端点 + `srv:vision/inspect` 的临时目录（app data 根下，进程
+        // 退出即丢由 OS 回收）。
+        upload_dir: Some(paths::uploads_dir(app).map_err(StartError::Path)?),
     })
     .map_err(StartError::Bootstrap)?;
 

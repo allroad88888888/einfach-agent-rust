@@ -14,15 +14,11 @@
 
 pub mod decode;
 pub mod errors;
-mod image_placeholder;
 pub mod messages;
 pub mod names;
 pub mod numeric;
 pub mod prefix;
 pub mod tools;
-
-#[cfg(test)]
-mod image_encoding_tests;
 
 use serde_json::Value;
 

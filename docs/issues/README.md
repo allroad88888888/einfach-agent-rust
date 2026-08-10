@@ -2,7 +2,8 @@
 
 一个文件一个任务，每个都能被单独拿起来做。已拍板的决策在 [../ROADMAP.md](../ROADMAP.md)。
 
-仓库还没有 remote，所以 issue 就是这些文件。做完把状态改成「完成」并补上实际结论
+issue 就是这些文件（M12 期间仓库已有 remote：`github.com/allroad88888888/einfach-agent-rust`，
+但任务仍然只活在这些文件里，没有用 GitHub issue）。做完把状态改成「完成」并补上实际结论
 （**决策类**尤其：理由比结论有用）。
 
 ## 排序原则：每个里程碑都以「能用」结束
@@ -378,10 +379,71 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 | [090](090-image-undo-timeline.md) ✅ | **图片卡片未随 undo/redo 还原**：server history 已恢复，浏览器时间线却在 undo 后仍留图 | 087 真机发现 | sonnet | ✅ |
 | [091](091-nonvisual-image-ingress.md) ✅ | **非视觉 provider 在 adapter 降级前被 HTTP 上传短路**：必须使 `ImagesDropped` 能实际抵达用户 | 087 真机发现 | **opus** | ✅ |
 | [092](092-remote-tool-result-protocol.md) | **远端工具认领、终态回执与结果协议**：claim 后执行，稳定 submission 幂等重投，区分未认领超时与结果未知 | 用户提出 | **gpt-5.6-sol / xhigh** | 协议/Java 透传/100 轮压测 ✅；双端真机待验 |
+| [093](093-vision-subagent-delegation.md) ⚠️ | **非视觉 agent 委派视觉子 agent**：DeepSeek root → 窄范围 Kimi 子 agent 检查用户图片（旧 vision 委托管线） | — | **gpt-5.6-sol** | ⚠️ 已被 s5 取代 |
+| [094](094-structured-operational-logging.md) ✅ | **结构化操作日志**：一条 tracing 管线贯穿 server/bin/desktop，请求级 span + 安全生命周期事件，`RUST_LOG` 控制过滤，JSON 可切 | — | **gpt-5.6-sol** | ✅ complete |
+
+> ⚠️ **079–091、093 的 images/vision 管线已被 s5 重构取代**：`ContentBlock::Image` / `POST /files` /
+> `upload_base_url` / `ImagesDropped` / 前端选图 / 视觉子 agent 委托这条管线已整体移除，现以 `POST /uploads`
+> 上传端点 + `srv:vision/inspect` 工具取代。上述 14 条仅作历史决策档案保留，不再反映当前实现。
 
 另有一份 [DOC-AUDIT.md](../DOC-AUDIT.md)（文档↔实现一致性审计：危险 10 / 过时 40 /
 小瑕疵 19 / 疑似代码问题 4）。TOOLS/STATE-MODEL/ARCHITECTURE/CLAUDE.md 的修正已落地，
 报告保留作为对照底本。
+
+## M12 · 上下文压缩（五档分级，发送侧裁剪）
+
+**核心判断：完整对话记录一律入库、永不压缩，压缩只改「这一轮发什么」。**
+这一条拆掉了决策 18 底下那个没写出来的假设（压缩会替换历史），于是 ROADMAP §四
+那条「压缩与 undo 的窗口对立（P3）」不是被折中，是**不成立了**——压缩 entry 的
+`prev` 只有边界值与引用，cap 100 条随便吃。决策 18 的三分原样保留。
+
+五档按「丢失的不可逆程度」排：**1 进门截断**（已有）、**2 清工具返回**、**3 摘要**、
+**4 清窗口**、**5 子 agent**（已有）。只有 3 需要模型调用、不可重算，所以它最后开火。
+
+**动手前必读 [095](095-compaction-tiers.md) 与 [096](096-compaction-trigger.md)**
+——形状与时机都在那里定死，别在实现 issue 里重新讨论。
+
+```
+两个决策根（都要在主干之前）
+095(形状) → 096(时机)
+
+可并行的独立根
+097(核查取料)   098(单轮超窗兜底,决策)
+
+主干（等 095+096）
+099 → 100 ─┬─ B 支：101 → 102 → 103 ─┐
+           └─ C 支：104 → 105 → 106 → 107 ─┴→ 108 → 109 → 110（M12 终点）
+```
+
+B 支与 C 支从 100 之后**完全并行**，两个 agent 互不碰对方的文件。
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [095](095-compaction-tiers.md) ✅ | **决策**：五档分级 + 存/发分界 + `SendPlan` 形状 + undo 语义 —— **压缩不设 undo 屏障**（完整记录没被动过） | — | **opus** | 决策类 |
+| [096](096-compaction-trigger.md) ✅ | **决策**：触发策略 —— **85% 触发、压到 30%**、最近 3 轮不动、第 3 档看状态条件不看阈值 | 095 | **opus** | 决策类 |
+| [097](097-subagent-ingredient-audit.md) ✅ | **核查**：父 agent 取料取的是子结论还是子 history —— **现状正确**（子的产出只以一条 `tool_result` 进父历史，O(1) 于子的轮数），5 条锁死测试已过变异检验 | — | sonnet | ✅ |
+| [098](098-single-turn-overflow.md) ✅ | **决策**：单轮超窗 —— **用户输入限死 1 万字符（拒绝不截断）**；工具返回沿用 32 KiB 单条截断，**不加轮级上限** | — | **opus** | 决策类 |
+| [099](099-send-plan.md) ✅ | `SendPlan`（已清列表 + 边界 + 摘要引用）与**投影纯函数**；清工具结果=**换占位保 `ToolUse`**（对 095 的修正） | 095+096 | **opus** | ✅ |
+| [100](100-projection-into-ingredients.md) ✅ | 投影接进料单与 `encode`；新增 `Slot::SendPlan`（`Private`，走 `AgentValue::Json` codec，`Slot::ALL` 15→16） | [099](099-send-plan.md) | sonnet | ✅ |
+| [101](101-clear-tool-results-command.md) ✅ | **第 2 档**：清工具返回的 command（进 undo log）；`ClearOutcome` 三桶记账，unknown id 不静默吞 | [100](100-projection-into-ingredients.md) | sonnet | ✅ |
+| [102](102-clear-tool-results-policy.md) ✅ | 第 2 档触发与选择：85% 触发、保护区之外**一次全清**、最近 3 轮不动；反向锁钉死「不是常开」 | [101](101-clear-tool-results-command.md) | sonnet | ✅ |
+| [103](103-prefix-intent-wiring.md) ✅ | `PrefixIntent` 接线：新增 `Slot::PrevSendPlan`（16→17）比较判定；反向锁 + 「压缩轮照样进第 3 层窗口」双向锁 | [102](102-clear-tool-results-policy.md) | sonnet | ✅ |
+| [104](104-boundary-command.md) ✅ | **第 4 档**：边界推进 command（清窗口 = 边界推到底）；顺带修掉 100 遗留的 `KNOWN_LABELS` 恢复 bug | [100](100-projection-into-ingredients.md) | sonnet | ✅ |
+| [105](105-effect-compact.md) ✅ | **第 3 档**：`Effect::Compact` + 两个 `Event` + epoch 闸；匹配 epoch 发 `Notice` 让「接受」可观测（中途改的接口） | [104](104-boundary-command.md) | **opus** | ✅ |
+| [106](106-summary-via-subagent.md) ✅ | 摘要生成走子 agent；**行为验收因 `Effect::Compact` 当时对外不可达而移交 108** | [105](105-effect-compact.md) | sonnet | ✅ |
+| [107](107-summary-writeback.md) ✅ | 摘要回写与 epoch 校验：`apply_summary` **三件事一条 entry**；新增 `Slot::Summaries`（17→18），`SummaryId` 由 `upto` 派生；新 label `apply_summary` + 重启回归（100 的坑） | [106](106-summary-via-subagent.md) | **opus** | ✅ |
+| [108](108-tier-ladder.md) ✅ | 阶梯编排（跨轮：本轮清、下轮再测）+ `passed_epoch_gate` 显式握手 + 摘要子回收；**独测在真实请求体上抓到「第 3 档哑火」** | 103+107 | **opus** | ✅ |
+| [109](109-compaction-visibility.md) ✅ | 被摘要盖住的段在时间线上可见：两个离散 SSE 事件带 `turn_id`（不做快照重播）+ `GET /sessions/{id}/compaction_record` | [107](107-summary-writeback.md) | sonnet | — |
+| [110](110-compaction-dogfood.md) ✅ | **真机 dogfood** ← M12 终点；前置补了 `context_window` 接通（五个宿主全是 `None`，压缩在真产品里本来是哑的） | 108+109 | 真机 | ✅ |
+
+**M12 验收 ✅ 兑现**（真机，2026-08-10，[110 真机记录](110-compaction-dogfood.md)）：三家各撑爆一次窗口，
+会话不中断，压缩轮**全部判「预期内」零误报**；第 2 档降幅与被清工具结果大小逐 token 对上
+（DeepSeek −7756 / Kimi −7241 / GLM −7605），恢复轮命中率 97.9–99.9%；第 3 档由真子 agent
+生成摘要（`summary@2/4/6`）；压缩后 `/undo` 正常、杀进程能恢复、**完整记录 1.6 MB 一字未动**。
+
+> ⚠️ **一个跟设计直觉相反的实测**：固定前缀占比高时，压缩轮的缓存命中率仍有 **90%**
+> ——[PROVIDERS.md](../../probes/PROVIDERS.md) 那个「一次压缩 ≈120 轮」隐含假设是「历史是大头」。
+> 引用那个数字时要一起读。
 
 ---
 

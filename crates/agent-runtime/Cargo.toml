@@ -19,3 +19,9 @@ agent-tools = { path = "../agent-tools" }
 agent-transport = { path = "../agent-transport" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+
+# 集成测试要解析一份 `providers.toml` 形状的字符串（`tests/it/ladder_context_
+# window_from_provider_config.rs`：证明配置里的 context_window 真的能传到
+# 触发判断），版本跟 agent-transport/agent-server 已经在用的那份保持一致。
+[dev-dependencies]
+toml = "0.8"

@@ -189,6 +189,21 @@ impl ToolTable {
         self
     }
 
+    /// s5 开闸：追加 `srv:vision/inspect`（写死 Kimi 3 的识图工具）。它调
+    /// 第三方 API（计费、网络 IO），不在已知 pure 名单里，按名字规则保守落
+    /// `Reversibility::Irreversible`——undo 不重放。
+    ///
+    /// **只有配了 vision 的宿主才调它**：`ToolExecutor` 注入了
+    /// `VisionRuntime`（server：kimi 段 + 上传目录；CLI：kimi 段 + 本地 root）
+    /// 才声明这个工具，不配置就不声明，模型根本不知道有它，也就不会把调用
+    /// 发到没有实现的分发分支上。
+    ///
+    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。
+    pub fn with_vision_inspect(mut self) -> Self {
+        self.push_spec(agent_tools::vision_inspect_spec());
+        self
+    }
+
     /// 043 装载：把一批 MCP 工具（041 翻译产出的 `(ToolSpec, Reversibility)`，042
     /// 握手时 `McpClient::list_tools` 拿到）追加进表，并把每个工具的可逆性记进
     /// `mcp:` 映射。`snapshot("mcp:...")` 从此查这份映射（见 `snapshot`）。

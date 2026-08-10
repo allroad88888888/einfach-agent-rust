@@ -9,6 +9,7 @@ import { createImageAttachments } from "./composer/image_attachments";
 import { connect, type ConnectionState } from "./connection";
 import { createRenderer } from "./render/dispatch";
 import { createUserInputTimeline } from "./render/user_input";
+import { createCompactionTimeline } from "./render/compaction";
 import { createToolExecutor } from "./tool-exec";
 import { renderAgentTree } from "./render/agent_tree";
 import { connectMcpServers, describeStatus, registerMcpTools } from "./mcp";
@@ -47,7 +48,8 @@ async function main(): Promise<void> {
   // 唯一职责是「一帧 → 该调渲染层哪个函数」,执行工具不是渲染。
   // 顺序：先渲染再执行,让卡片在工具真跑起来之前就出现在时间线上。
   const userInputs = createUserInputTimeline();
-  const render = createRenderer(sessionId, userInputs);
+  const compactionTimeline = createCompactionTimeline(sessionId);
+  const render = createRenderer(sessionId, userInputs, compactionTimeline);
   const executeTools = createToolExecutor(sessionId);
   connect(sessionId, (frame) => {
     render(frame);

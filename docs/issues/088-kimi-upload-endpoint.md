@@ -1,5 +1,10 @@
 # 088 Kimi 真机图片上传端点
 
+> ⚠️ **已废弃（superseded by s5）**：本文描述的 images 管线（`ContentBlock::Image` /
+> `POST /files` / `upload_base_url` / `ImagesDropped` / 前端选图 / vision 子 agent 委托）
+> 已被 s5 重构整体移除，现以 `POST /uploads` 上传端点 + `srv:vision/inspect` 工具取代。
+> 正文仅作历史决策档案保留，不再反映当前实现。
+
 **里程碑** M11 补充 · **依赖** [084](084-transport-files-upload.md) + [085](085-http-image-ingress.md) · **模型** 主会话真机 · **独测** 真 Kimi · **状态** 完成
 
 由 [087](087-image-dogfood.md) 发现；这是上传配置/端点的独立问题，不在 dogfood 中硬修。

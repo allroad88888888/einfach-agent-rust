@@ -57,11 +57,6 @@ pub(crate) fn final_text(session: &Session, child: &AgentId) -> String {
     visible_text(session, child).unwrap_or_else(|| "（子 agent 没有产出任何文本）".to_string())
 }
 
-/// 视觉门面只把真正存在的非空正文视为成功，不能把通用占位文案伪装成识图结论。
-pub(crate) fn final_text_if_present(session: &Session, child: &AgentId) -> Option<String> {
-    visible_text(session, child).filter(|text| !text.trim().is_empty())
-}
-
 fn visible_text(session: &Session, child: &AgentId) -> Option<String> {
     let messages = session.messages_of(child);
     let last = messages
@@ -86,4 +81,128 @@ fn has_text(message: &Message) -> bool {
         .blocks
         .iter()
         .any(|b| matches!(b, ContentBlock::Text(_)))
+}
+
+/// 097 验收第 3 条：单元级钉住 [`final_text`] 的块过滤——它必须只捞 `Text`，
+/// 不管一条消息里还塞了多少 `ToolUse`/`ToolResult`，也不管子跑了多少轮。
+///
+/// **不起网络**：直接驱动 `Session::step`，比 `tests/it` 里那两份真起假 SSE
+/// 服务器的集成测试（`blocking_spawn_omits_child_turns.rs` /
+/// `collect_omits_child_turns.rs`）快得多——那两份测的是「这条性质在真实请求
+/// 体上成立」，这份测的是「性质住的那个函数本身没写错」。
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use agent_core::{ChildConfig, Event, PrefixImage, StopReason, TokenUsage, ToolCallId};
+    use serde_json::json;
+
+    use super::*;
+
+    /// 造一个子 agent，逼它连续做 `rounds` 轮「Text + ToolUse + ToolResult」——
+    /// **同一条消息里三种块都塞**，不是真实流水线会长出的形状（真实的 ToolResult
+    /// 落在收敛时另起的一条消息里，见 `crate::subtree` 与
+    /// `agent_core::command::transitions::tool_outcome`）。刻意塞成这样是为了把
+    /// `final_text` 的块过滤逼到极限：给它一条**同时含三种块**的消息，看它是不是
+    /// 真的只捞 `Text`，而不是恰好因为「ToolResult 从不跟 Text 同框」才蒙对。
+    ///
+    /// 每轮之间补一次 `Event::ToolResult` 把子带回 `Thinking`——`ToolsPending`
+    /// 状态下再来一条 `ProviderDone` 会被判 `ProtocolViolation`，不会真的落地成
+    /// 消息（这份测试要的是「20 条 assistant 消息都在」，不能让转移表拒收）。
+    fn child_after_n_rounds(rounds: u32) -> (Session, AgentId) {
+        let mut session = Session::new(AgentId::root());
+        let root = AgentId::root();
+        session.step(Event::UserInput {
+            agent: root.clone(),
+            text: Arc::from("派一个子去跑几轮"),
+        });
+        let child = session
+            .spawn_child(&root, ChildConfig::default())
+            .expect("root 是活的，深度/子数都在默认上限内");
+        session.step(Event::UserInput {
+            agent: child.clone(),
+            text: Arc::from("开工"),
+        });
+
+        for i in 0..rounds {
+            let marker = format!("CHILD_STEP_{i:02}");
+            let call_id = ToolCallId::new(format!("call_{i}"));
+            session.step(Event::ProviderDone {
+                agent: child.clone(),
+                epoch: session.epoch(),
+                blocks: vec![
+                    ContentBlock::Text(Arc::from(format!("{marker} 中间说明"))),
+                    ContentBlock::ToolUse {
+                        id: call_id.clone(),
+                        name: Arc::from("srv:fs/read"),
+                        input: Arc::new(json!({"path": "step.txt"})),
+                    },
+                    ContentBlock::ToolResult {
+                        id: call_id.clone(),
+                        content: Arc::from(format!("{marker} 工具原始产物")),
+                        is_error: false,
+                    },
+                ],
+                stop: StopReason::ToolUse,
+                usage: TokenUsage {
+                    prompt: 1,
+                    completion: 1,
+                    cached: None,
+                },
+                prefix: PrefixImage {
+                    segments: Vec::new(),
+                    prompt_tokens: None,
+                },
+                adjustments: Vec::new(),
+            });
+            session.step(Event::ToolResult {
+                agent: child.clone(),
+                epoch: session.epoch(),
+                call_id,
+                content: Arc::from("resolved"),
+            });
+        }
+
+        (session, child)
+    }
+
+    #[test]
+    fn final_text_is_only_the_last_assistant_texts_not_any_tool_use_or_tool_result() {
+        let (session, child) = child_after_n_rounds(20);
+
+        let text = final_text(&session, &child);
+
+        assert_eq!(
+            text, "CHILD_STEP_19 中间说明",
+            "该等于最后一条 assistant 消息里 Text 块的拼接，一个字不多"
+        );
+        for i in 0..19 {
+            let marker = format!("CHILD_STEP_{i:02}");
+            assert!(
+                !text.contains(&marker),
+                "前面 19 轮的中间说明不该在场：{text}"
+            );
+        }
+        assert!(
+            !text.contains("工具原始产物"),
+            "ToolResult 块的内容不该在场：{text}"
+        );
+        assert!(!text.contains("srv:fs/read"), "ToolUse 块不该在场：{text}");
+    }
+
+    #[test]
+    fn final_text_length_does_not_grow_with_the_number_of_rounds() {
+        let (session_5, child_5) = child_after_n_rounds(5);
+        let (session_20, child_20) = child_after_n_rounds(20);
+
+        let text_5 = final_text(&session_5, &child_5);
+        let text_20 = final_text(&session_20, &child_20);
+
+        assert_eq!(
+            text_5.len(),
+            text_20.len(),
+            "终答只取决于最后一轮说了什么，不取决于跑了几轮：\
+             text_5={text_5:?} text_20={text_20:?}"
+        );
+    }
 }

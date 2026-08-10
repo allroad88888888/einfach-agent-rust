@@ -15,7 +15,11 @@ use crate::ids::{MessageId, ToolCallId};
 /// `ContentBlock::ToolResult`——多数 provider 的线协议会把它编码成
 /// `role: "tool"` 或者 `role: "user"` 里的一个特殊块，但那是 adapter 层的编码
 /// 细节（见 docs/ADAPTER.md），core 只认「谁在说话」这一个维度。
+///
+/// 109：`ts` feature 门后面导出——展开压缩摘要盖住的原始轮次要能在网络协议上
+/// 认出说话人是谁（`GET /sessions/{id}/compaction_record`）。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Role {
     User,
     Assistant,
@@ -26,7 +30,10 @@ pub enum Role {
 ///
 /// 大字段一律 `Arc` 包住（红线 5）：`store.get()` 每次读都要 clone 整条历史，
 /// 文本 / JSON 越长这条越关键；`PartialEq` 因此也能走 `Arc` 的指针比较快路。
+///
+/// 109：`ts` feature 门后面导出——见 [`Role`] 同一条理由。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum ContentBlock {
     /// 可见文本。
     Text(Arc<str>),
@@ -47,16 +54,6 @@ pub enum ContentBlock {
         content: Arc<str>,
         is_error: bool,
     },
-    /// 一张图。`reference` 对 core 完全不透明：只存、只原样传给 adapter，不
-    /// match、不解析、不按前缀分支。它跟 `ToolCallId` 同一类，都是 provider 铸的
-    /// 字符串；理由与反例见 `docs/IMAGES.md` §七。
-    Image {
-        reference: Arc<str>,
-        /// MIME，如 `image/png`。给 adapter 编码用，也给降级占位文本用。
-        mime: Arc<str>,
-        /// 原始文件名，给人看。没有就是 `None`。
-        name: Option<Arc<str>>,
-    },
 }
 
 /// 历史里的一条消息。
@@ -66,7 +63,10 @@ pub enum ContentBlock {
 /// 的 block 列表，才铸成一个 `Message` 写进历史。这样保证两件事：一是历史里
 /// 任意一条拿出来都是自洽的、可以直接喂回 provider；二是 undo/redo 的粒度是
 /// 「一整条完成的消息」，不会停在半条消息上。
+///
+/// 109：`ts` feature 门后面导出——见 [`Role`] 同一条理由。
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Message {
     pub id: MessageId,
     pub role: Role,
@@ -98,45 +98,11 @@ mod tests {
                     content: Arc::from("file contents"),
                     is_error: false,
                 },
-                ContentBlock::Image {
-                    reference: Arc::from("opaque-reference"),
-                    mime: Arc::from("image/png"),
-                    name: Some(Arc::from("original.png")),
-                },
-                ContentBlock::Image {
-                    reference: Arc::from("another-opaque-reference"),
-                    mime: Arc::from("image/jpeg"),
-                    name: None,
-                },
             ],
         };
         let s = serde_json::to_string(&msg).unwrap();
         let back: Message = serde_json::from_str(&s).unwrap();
         assert_eq!(back, msg);
-    }
-
-    #[test]
-    fn image_name_none_and_empty_roundtrip_differently() {
-        let without_name = ContentBlock::Image {
-            reference: Arc::from("opaque-reference"),
-            mime: Arc::from("image/png"),
-            name: None,
-        };
-        let with_empty_name = ContentBlock::Image {
-            reference: Arc::from("opaque-reference"),
-            mime: Arc::from("image/png"),
-            name: Some(Arc::from("")),
-        };
-
-        let without_name_json = serde_json::to_string(&without_name).unwrap();
-        let with_empty_name_json = serde_json::to_string(&with_empty_name).unwrap();
-        let without_name_back: ContentBlock = serde_json::from_str(&without_name_json).unwrap();
-        let with_empty_name_back: ContentBlock =
-            serde_json::from_str(&with_empty_name_json).unwrap();
-
-        assert_eq!(without_name_back, without_name);
-        assert_eq!(with_empty_name_back, with_empty_name);
-        assert_ne!(without_name_back, with_empty_name_back);
     }
 
     #[test]

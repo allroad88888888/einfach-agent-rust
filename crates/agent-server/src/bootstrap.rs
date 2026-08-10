@@ -13,8 +13,7 @@
 //! # 这个函数管什么，不管什么
 //!
 //! **管**：读配置文件、选 provider、查 key、拼 [`SessionTemplate`] 里「必须
-//! 读配置文件才知道」的五个字段（`provider`/`endpoint`/`upload_base_url`/
-//! `api_key`/`model`）。
+//! 读配置文件才知道」的四个字段（`provider`/`endpoint`/`api_key`/`model`）。
 //!
 //! **不管**：`--sessions-dir`/`--config`/`--port` 这类命令行参数怎么解析——
 //! 各宿主的参数形状不同（CLI flag、环境变量、桌面壳的配置文件/平台标准目录），
@@ -29,12 +28,13 @@
 //! `examples/serve.rs` 都这么用。
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use agent_core::{ExecutionProfileId, SessionConfig, SystemChunk};
 use agent_runtime::ExecutionBinding;
+use agent_tools::{VisionLinkSource, VisionRuntime};
 use agent_transport::{Client, config};
 
 use crate::SessionTemplate;
@@ -43,7 +43,7 @@ use crate::registry::ToolTableSpec;
 
 /// [`bootstrap`] 的输入：跟 provider 无关、调用方必须自己决定的那部分
 /// `SessionTemplate` 字段——字段形状直接照抄 `SessionTemplate` 减去
-/// `provider`/`endpoint`/`upload_base_url`/`api_key`/`model` 那五个（那五个只能从配置文件解出，
+/// `provider`/`endpoint`/`api_key`/`model` 那四个（那四个只能从配置文件解出，
 /// 不该由调用方伪造）。
 pub struct BootstrapOptions {
     /// 内置工具路径监狱的根目录——`SessionTemplate::tools_root` 原样转发。
@@ -60,6 +60,11 @@ pub struct BootstrapOptions {
     pub provider_timeout: Option<Duration>,
     /// 前端/桌面端远程工具被领取后的结果等待上限；`None` 使用运行时默认值。
     pub remote_tool_timeout: Option<Duration>,
+    /// s5 上传端点（`POST /uploads`）的临时目录。`Some` → 上传端点挂载、且
+    /// `[providers.kimi]` 段有 key 时把 `srv:vision/inspect` 的运行时拼出来
+    /// （`VisionLinkSource::UploadDir` 指向同一个目录）；`None` → 不拼 vision、
+    /// 不上传端点（CLI 形态用 `LocalRoot`，不走这个字段）。
+    pub upload_dir: Option<PathBuf>,
 }
 
 /// 装配失败的三类原因，判据顺序跟 `agent-cli`/`examples/serve.rs` 原来各自
@@ -79,8 +84,6 @@ pub enum BootstrapError {
     /// execution profile 的 provider 没有可用 key；启动时拒绝，不留到子 agent
     /// 真正请求 provider 时才变成含糊的失败。
     MissingExecutionProfileApiKey(String),
-    /// 固定的视觉 profile 必须绑定到明确支持图片的 adapter。
-    VisionExecutionProfileRequiresImages { provider: String },
 }
 
 impl std::fmt::Display for BootstrapError {
@@ -101,10 +104,6 @@ impl std::fmt::Display for BootstrapError {
             BootstrapError::MissingExecutionProfileApiKey(profile) => write!(
                 f,
                 "execution profile \"{profile}\" 的 provider 没配 key：检查 providers.toml 里的 api_key，或对应的 api_key_env 指向的环境变量"
-            ),
-            BootstrapError::VisionExecutionProfileRequiresImages { provider } => write!(
-                f,
-                "execution profile \"vision\" 的 provider \"{provider}\" 不支持图片输入"
             ),
         }
     }
@@ -136,14 +135,15 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
         .ok_or(BootstrapError::MissingApiKey)?;
     let execution_bindings =
         resolve_execution_bindings(&root, &options.client, options.provider_timeout)?;
+    let vision = resolve_vision(&root, &options.client, options.upload_dir.as_deref());
 
     Ok(Bootstrapped {
         template: SessionTemplate {
             provider,
-            upload_base_url: provider_cfg.base_url.clone(),
             endpoint: provider_cfg.endpoint(),
             api_key,
             model: Arc::from(provider_cfg.model.as_str()),
+            context_window: provider_cfg.context_window,
             tools: options.tools,
             tools_root: options.tools_root,
             default_sessions_dir: options.default_sessions_dir,
@@ -153,10 +153,34 @@ pub fn bootstrap(options: BootstrapOptions) -> Result<Bootstrapped, BootstrapErr
             snapshot_every: options.snapshot_every,
             provider_timeout: options.provider_timeout,
             remote_tool_timeout: options.remote_tool_timeout,
+            upload_dir: options.upload_dir,
+            vision,
         },
         provider_name,
         execution_bindings,
     })
+}
+
+/// 从 `[providers.kimi]` 段解出 `srv:vision/inspect` 的运行时（写死 Kimi 3）。
+///
+/// kimi 段缺失、没配可用 key、或没给上传目录 → `None`（工具不配置、不声明，
+/// 模型根本不知道有它）。**不配 kimi 段不是配置错误**——vision 是可选能力，
+/// 缺了只是没有识图工具，其余照常。
+fn resolve_vision(
+    root: &config::RootConfig,
+    client: &Arc<Client>,
+    upload_dir: Option<&Path>,
+) -> Option<VisionRuntime> {
+    let kimi = root.providers.get("kimi")?;
+    let api_key = kimi.resolve_key()?;
+    let dir = upload_dir?.to_path_buf();
+    Some(VisionRuntime::new(
+        Arc::clone(client),
+        kimi.base_url.clone(),
+        api_key,
+        Arc::from(kimi.model.as_str()),
+        VisionLinkSource::UploadDir(dir),
+    ))
 }
 
 /// 仅在启动时把配置中的 durable id 解析成活 provider 资源。映射一旦写了错
@@ -179,11 +203,6 @@ fn resolve_execution_bindings(
                 message,
             }
         })?;
-        if profile_name == "vision" && !provider.supports_images() {
-            return Err(BootstrapError::VisionExecutionProfileRequiresImages {
-                provider: provider_name.to_owned(),
-            });
-        }
         let api_key = provider_config
             .resolve_key()
             .ok_or_else(|| BootstrapError::MissingExecutionProfileApiKey(profile_name.clone()))?;
@@ -196,10 +215,10 @@ fn resolve_execution_bindings(
                 model: Arc::from(provider_config.model.as_str()),
                 temperature: None,
                 max_tokens: None,
-                context_window: None,
+                // 110 前置：这个具名 profile 自己的窗口，不是默认 provider 的。
+                context_window: provider_config.context_window,
             },
-        )
-        .with_image_upload_base_url(provider_config.base_url.clone());
+        );
         let binding = match provider_timeout {
             Some(timeout) => binding.with_timeout(timeout),
             None => binding,

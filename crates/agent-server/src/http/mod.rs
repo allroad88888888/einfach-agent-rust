@@ -10,6 +10,7 @@
 //! |---|---|
 //! | [`config`] | `ServerConfig`/`SessionTemplate`：`AgentServer::new` 的输入 |
 //! | [`capabilities`] | issue 061：`POST /sessions` 里宿主声明的 tool/skill——协议形状 + 名字校验（纯数据，零 IO） |
+//! | [`compaction`] | issue 109：`GET /sessions/:id/compaction_record` 的响应体——展开压缩点/清除标记要看的完整记录 + 摘要库 |
 //! | [`state`] | `AppState`：路由共享的东西，`AGENT_BIND` 无关，纯请求处理状态 |
 //! | [`hub`] | SSE 环形缓冲 + 断开取消的引用计数与宽限计时 |
 //! | [`routes`] | 六个端点 + 会话创建/查询的处理函数 |
@@ -23,8 +24,8 @@
 //! `TcpListener::bind`，默认值从哪来是调用方的选择（生产代码该用
 //! `agent_server::default_bind_addr`，`crate::bind` 模块文档有理由）。
 
-mod attachment_recovery;
 mod capabilities;
+mod compaction;
 mod config;
 mod error;
 mod hub;
@@ -40,6 +41,7 @@ mod sessions_handle;
 mod state;
 mod static_files;
 mod tool_protocol;
+mod uploads;
 
 pub use config::{ServerConfig, SessionTemplate};
 pub use sessions_handle::SessionsHandle;
@@ -60,6 +62,10 @@ pub(crate) use capabilities::Capabilities;
 /// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
 #[cfg(feature = "ts")]
 pub(crate) use pending::PendingToolsResponse;
+/// 109：`GET /sessions/{id}/compaction_record` 的响应体——展开压缩点/清除标记
+/// 要看的完整记录 + 摘要库。跟 `Frame`/`PollResponse` 一起导出给前端。
+#[cfg(feature = "ts")]
+pub(crate) use compaction::CompactionRecordResponse;
 #[cfg(feature = "ts")]
 pub(crate) use poll_protocol::PollResponse;
 #[cfg(feature = "ts")]

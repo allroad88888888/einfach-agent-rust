@@ -12,8 +12,6 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 
-use crate::actor::{SessionImageRuntime, session_image_resolver};
-use crate::http::attachment_recovery;
 use crate::http::capabilities::{self, Capabilities};
 use crate::http::error::ApiError;
 use crate::http::json::ApiJson;
@@ -186,10 +184,6 @@ pub(in crate::http) async fn create(
         .open_or_get_with(
             id.clone(),
             state.execution_bindings(),
-            Some(SessionImageRuntime::new(
-                session_image_resolver(state.attachments().clone(), id.clone()),
-                state.template().upload_base_url.clone(),
-            )),
             || {
             // 只有原子占住 chatid 的赢家检查历史。并发输家等赢家启动完直接复用，
             // 不能把赢家刚创建的 jsonl 误判成一次“带声明恢复历史”的新请求。
@@ -214,10 +208,6 @@ pub(in crate::http) async fn create(
             let host_tools = capabilities::host_tools(capabilities.as_ref());
             let host_skills = capabilities::host_skills(capabilities.as_ref());
             let disable_builtin = capabilities::disabled_builtins(capabilities.as_ref());
-            let recovered_handles = has_persisted_history
-                .then(|| attachment_recovery::recovered_handles(store_path.as_deref()))
-                .unwrap_or_default();
-            state.begin_session(&id, recovered_handles);
             let spec = state
                 .template()
                 .open_spec(
