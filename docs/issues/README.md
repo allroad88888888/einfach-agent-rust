@@ -385,6 +385,45 @@ per-session registry，registry 非空才接 `.with_skills(..)`；**server 不�
 
 ---
 
+## M13 · 浏览器内核（wasm）
+
+**核心判断：wasm 是第三种宿主形态，不替代任何一种。** 独立跑 / 宿主子进程 / 浏览器内
+三者并存，决策 12「`agent-server` 是库」一行不动。
+
+这条**推翻了 ROADMAP 决策 10「砍掉 wasm 目标」**。决策 10 的两条理由都不成立了：
+`agent-providers` 里根本没有 HTTP 客户端（要维护两套的是 `agent-transport` 一个已隔离的
+crate），而浏览器侧的 transport **比 ureq 那套薄**（`read_loop.rs` 那 165 行是为绕开
+ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测：DeepSeek / Kimi / GLM
+三家预检全部回显任意 origin 且放行 `authorization`。
+
+**动手前必读 [111](111-wasm-target-decision.md)**——四条证据、四项代价、以及「哪两件事
+因此自动不存在」都在那里，别在实现 issue 里重新讨论。
+
+```
+111(决策) ─┬→ 112(ToolExecutor 注入接缝) ─┐
+           └→ 113(fetch transport) ───────┴→ 114(wasm 宿主，M13 终点)
+```
+
+112 与 113 从 111 之后**完全并行**，不碰对方的文件。
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [111](111-wasm-target-decision.md) | **决策**：恢复 wasm 目标，取代决策 10；浏览器形态的裁剪清单与代价 | — | **opus** | 决策类 |
+| [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝——**本里程碑唯一的结构性改动**，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的 | 111 | sonnet | ✅ |
+| [113](113-fetch-transport.md) | `agent-transport` 的 fetch 实现，native 那条一行不动 | 111 | sonnet | ✅ |
+| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 112+113 | sonnet | — |
+
+**M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
+只有前端拿得到的 `web:` 工具并用结果回答；刷新后同会话 id 从 IndexedDB journal 回放，
+**第一轮工具表与关闭前逐字节相同**；取消能真的中断请求；`srv:` 的 shell/fs **不出现在
+工具表里**。
+
+ ---
+ 
+ ## 怎么做
+
+---
+
 ## 怎么做
 
 粒度标准、每个 issue 用什么模型、测试由谁写，见 **[../WORKFLOW.md](../WORKFLOW.md)**。

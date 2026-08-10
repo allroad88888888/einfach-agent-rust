@@ -20,7 +20,7 @@
 | 7 | **工具按执行位置三分**：Server / Web / Desktop | `reversibility`（Pure/Reversible/Irreversible）是**正交**维度，不合并；不叫 `Effect`，那个词留给 loop |
 | 8 | **agent 之间只允许上下读，禁止横读** | 依赖图恒为树，两个方向可读的 slot 集合不相交，环在结构上不可能 |
 | 9 | **传输：SSE 下行 + 普通 POST 上行** | 不要 WebSocket。服务端「反向调用客户端」只是在流上推事件 |
-| 10 | **砍掉 wasm 目标，Tauri 内嵌 server** | 少一个 crate、少一个编译目标、provider 不用维护两套 |
+| 10 | ~~**砍掉 wasm 目标，Tauri 内嵌 server**~~ **被 26 取代** | 见 26。「provider 不用维护两套」与代码不符——`agent-providers` 里没有 HTTP 客户端 |
 | 11 | **server 不做鉴权 / 日志规范 / 集群** | 企业边缘层，每家规范不同。只读 identity header 不验证，只遵守 W3C `traceparent` |
 | 12 | **`agent-server` 是库不是二进制** | 桌面版内嵌它，企业内部服务也内嵌它。只给二进制的话他们只能在外面套代理 |
 | 13 | **Java 网关只是参考实现**，不发 Maven、不跟版 | 避免 Spring Boot 2/3 双分支与 JDK 矩阵的长期维护税 |
@@ -36,6 +36,8 @@
 | 23 | **子 agent 可观测 = 派生读，不新增状态**：`Session::agent_tree()` 是对现有 atom 的一次纯派生读（往下读，红线 10 方向）；**不为「当前动作」加 primitive**（那是第二真值源，undo 破）；树由 core 权威算、UI 哑渲染（不让 UI 从事件流重建状态机）；M7 范围 = **活树**（当前快照 + 变化推 SSE），可回放时间线（任意 epoch 快照）延后 | 子 agent 的状态早就是 atom（整棵树共用一个 store），"看它在干啥"是把已有状态摆出来，不是造监控。派生读 → undo/恢复/回放一致性白拿（第五个投影）。UI 重建状态机脆且 reconnect 断，快照做真值最省。接缝完整定义见 [OBSERVABILITY.md](OBSERVABILITY.md) |
 | 25 | **企业集成三条**（M9）：①**拉取式是 ring 的第二个投影**——`GET /events/poll` 复用 `RingState::replay` 与 **`Last-Event-ID` 同一个游标 header**（仓库 axum 没开 `query` feature，且「没有查询参数协议」是既有约定），SSE 端点保留不动；②**会话身份 = 业务侧 chatid**，`POST /sessions` 幂等三态（活着接上 / 磁盘有则恢复 / 都没有才建），id 走白名单**拒绝不 sanitize**；③**生命周期归 Java**——`ProcessBuilder` 起子进程（`--port 0` + `--ready-file` 原子握手 + SIGTERM 优雅落盘）；Rust 提供最小启动协议而不进入 JVM | SSE 的复杂度只该出现在「**产生** SSE」那一跳（Spring 标准做法），不该出现在「**代理** SSE」那一跳（四个坑全在这里 + 强制 WebFlux，而企业存量多是 MVC）。拉取式的断开检测**整套复用 `SubscriberGuard`**（每次 poll 期间持有 → 计数/宽限/取消路一行新逻辑都不用写），比自造 last-poll 时间戳少一个真值源。JNI/FFI 真嵌入**否决**：流式跨 FFI 难做好、Rust panic 会杀 JVM、进程隔离全丢。接缝完整定义见 [INTEGRATION.md](INTEGRATION.md) |
 | 24 | **模型侧异步编排 = turn 内**（M8）：给模型三个工具（`spawn` 加 `background`、`status` 非阻塞下读子树、`collect` 领后台子结果），让它**中途观测子 agent 并改变编排**（不是加并行——并行 spawn 早有）；但**子 agent 仍不跨 turn**——后台子在父这一次 `run_turn` 内必须 collect 完或被孤儿取消。前台 spawn（决策 20）≡ `spawn(bg)+collect` 融进一槽，一行不改 | 决策 20 的干净全靠「子在父同一 turn 内生死」（`turn_id` 继承、undo 连带子树、`Subtree` 局部绑定、pump 静止条件 `calls.is_empty()` 把「root 终态+子树跑」列为无定义）。跨 turn 后台子要 store 落地的跨-`run_turn` 映射 + 重写 undo 语义 + per-child 取消——收益未证，延后。turn 内已给全「观测+反应」能力且红线全不破。接缝完整定义见 [ORCHESTRATION.md](ORCHESTRATION.md) |
+
+| 26 | **恢复 wasm 目标**（2026-08-10，取代决策 10）：核心编进浏览器直接跑，**wasm 是第三种宿主形态**——独立跑 / 宿主子进程 / 浏览器内三者并存，决策 12「`agent-server` 是库」不动。浏览器形态下不编 `agent-mcp`（stdio 不存在；浏览器够得着的 MCP 由前端自己连，HOST-CAPABILITIES §七 早定的方向），不声明 `agent-tools` 的 `srv:` shell/fs specs（纯数据，不声明即可），`agent-transport` 换 fetch 实现 | 决策 10 的两条理由都不成立了。①**「provider 不用维护两套」与代码不符**：`agent-providers` 依赖只有 `agent-core`+serde，**没有任何 HTTP 客户端**，IO 全在 `agent-transport` 一个已隔离的 crate（红线镜像约束「唯一允许依赖 ureq」）；②**浏览器侧 transport 更薄不更厚**：`read_loop.rs` 那 165 行读线程 + `mpsc::sync_channel` + 双超时旋钮，存在的唯一理由是 ureq 阻塞 read 没有外部中断句柄（自称「不优雅但可测」），`fetch` + `AbortController` 原生就是那个句柄；③**前提已实测**：DeepSeek / Kimi / GLM 三家预检全部回显任意 origin 且放行 `authorization`，浏览器直连可行——这是决策 10 当时没验的前提；④决策 16 的 `Rc<RefCell>` 不 `Send` 在原生是让步，单线程 wasm 里变成 fit。**代价照实记**：`RunnerCtx.fs: ToolExecutor` 是 concrete struct（`new()` 要 canonicalize 真实目录），必须开注入接缝——本次移植唯一的结构性改动；`Instant`/`SystemTime` 要垫 `web-time`；多一个编译目标要长期维护；key 落在浏览器，定为每人一把自己的。逐条证据与验收见 [issues/111](issues/111-wasm-target-decision.md) |
 
 ## 二、现状
 
