@@ -19,7 +19,7 @@ use std::time::Duration;
 use agent_core::{AgentId, AgentTree, ExecutionProfileId, Session, SessionConfig, SystemChunk};
 use agent_mcp::McpRegistry;
 use agent_providers::Provider;
-use agent_tools::ToolExecutor;
+use agent_tools::ToolExecution;
 use agent_transport::Client;
 
 use crate::event::{AgentEvent, RunnerEvent};
@@ -64,7 +64,13 @@ pub struct RunnerCtx {
     pub(crate) default_guard_scope: GuardScope,
     pub(crate) execution_guard_scopes: BTreeMap<ExecutionProfileId, GuardScope>,
     pub(crate) next_guard_scope: u64,
-    pub(crate) fs: ToolExecutor,
+    /// 谁来执行本地工具调用（112：注入接缝，`agent_tools::ToolExecution`）。
+    /// native 装配路径给的仍是今天那个具体的 `ToolExecutor`（[`RunnerCtx::new`]
+    /// 收 `impl ToolExecution + 'static` 再在这里装箱，调用点因此一个字不用
+    /// 改）；没有文件系统的宿主可以换成 `agent_tools::NullToolExecutor` 或自己
+    /// 的实现。字段本身仍是 `Box` 不是 `Arc`——每个会话独占一个 executor，不
+    /// 存在跨会话共享的场景。
+    pub(crate) fs: Box<dyn ToolExecution>,
     pub(crate) tools: ToolTable,
     /// MCP server 的活句柄表（store 外的进程内 registry，红线 3）。dispatch 的第四路
     /// 只拿它 + server id 去查 client 起一次异步 `tools/call`（`crate::mcp_call`），
@@ -126,7 +132,7 @@ impl RunnerCtx {
         client: Arc<Client>,
         endpoint: String,
         api_key: String,
-        fs: ToolExecutor,
+        fs: impl ToolExecution + 'static,
         tools: ToolTable,
         system: Vec<SystemChunk>,
         session_config: SessionConfig,
@@ -147,7 +153,7 @@ impl RunnerCtx {
             default_guard_scope: GuardScope::INITIAL,
             execution_guard_scopes: BTreeMap::new(),
             next_guard_scope: GuardScope::FIRST_DYNAMIC,
-            fs,
+            fs: Box::new(fs),
             tools,
             mcp: Arc::new(McpRegistry::new()),
             system,

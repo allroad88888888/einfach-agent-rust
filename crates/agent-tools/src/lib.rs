@@ -125,6 +125,46 @@ pub fn standard_workspace_file_specs() -> Vec<ToolSpec> {
     workspace_standard_specs::standard_workspace_file_specs()
 }
 
+/// 谁来执行工具调用的接缝（issue 112）。`RunnerCtx.fs` 持有
+/// `Box<dyn ToolExecution>`，不再是具体的 [`ToolExecutor`]——native 装配路径注入
+/// 后者（不变），没有文件系统的宿主（wasm/浏览器，111 决策表第三行）注入
+/// [`NullToolExecutor`] 或自己的实现。
+///
+/// 方法签名与错误类型跟 [`ToolExecutor::execute`] 逐字节相同：这一层只多一次
+/// 虚派发，唯一的生产读点 `ctx.fs.execute(...)`
+/// （`agent-runtime/src/tool_exec.rs`）不用跟着改。
+pub trait ToolExecution {
+    /// 见 [`ToolExecutor::execute`] 的文档——两者是同一份契约。
+    fn execute(&self, tool: &str, input: &Value) -> Result<String, ToolError>;
+}
+
+impl ToolExecution for ToolExecutor {
+    fn execute(&self, tool: &str, input: &Value) -> Result<String, ToolError> {
+        ToolExecutor::execute(self, tool, input)
+    }
+}
+
+/// 不碰文件系统的 executor：任何调用都返回 `code = "no_tool_executor"` 的
+/// 错误，不 panic、不摸磁盘。
+///
+/// 两个用途：(1) 没有文件系统的宿主（wasm，111）在真的接上宿主自己的执行
+/// 通道之前，先用它占住 `RunnerCtx.fs` 这个位置；(2) 不依赖临时目录的单元
+/// 测试用它证明「mock 一个 tool executor 就能离线跑完整轮 loop」
+/// （`docs/ARCHITECTURE.md` 的既有承诺，112 之前这个接缝并不存在）。
+///
+/// 跟 013/020 其余错误码一样：`code` 是机读的英文 snake_case，`message` 是
+/// 给模型看的中文——模型看到这条要能读懂「这里没有本地工具可用」，不是猜谜。
+pub struct NullToolExecutor;
+
+impl ToolExecution for NullToolExecutor {
+    fn execute(&self, tool: &str, _input: &Value) -> Result<String, ToolError> {
+        Err(ToolError {
+            code: Arc::from("no_tool_executor"),
+            message: Arc::from(format!("本宿主没有本地工具 executor，无法执行 `{tool}`")),
+        })
+    }
+}
+
 /// 本地文件系统 + shell executor。**路径监狱覆盖文件与工作区工具**：读取、
 /// 列表、搜索、inspect、标准 read_file 与写入都锁在 `root` 之内，越界（`..`、绝对路径逃逸、
 /// symlink 穿透）一律拒绝；`shell/exec`（issue 020）没有这层监狱可言，只是

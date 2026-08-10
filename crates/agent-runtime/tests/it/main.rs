@@ -60,6 +60,7 @@ mod subagent_ingredients;
 mod subagent_parallel;
 mod support;
 mod timeout;
+mod tool_executor_seam_needs_no_filesystem;
 mod tool_table_names_are_unique;
 mod transient_source_chain;
 mod transient_source_chain_rejections;
