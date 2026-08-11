@@ -401,7 +401,7 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 
 ```
 111(决策) ─┬→ 112(ToolExecutor 注入接缝) ✅ ─┐
-           └→ 113(fetch transport) ✅ ──────┴→ 115(决策：没有线程怎么办) → 114(wasm 宿主，M13 终点)
+           └→ 113(fetch transport) ✅ ──────┴→ 115(决策) ✅ → 116(泵 async 化) → 117(IO 换载体) → 114(wasm 宿主，M13 终点)
 ```
 
 112 与 113 从 111 之后**完全并行**，不碰对方的文件，均已完成。
@@ -417,7 +417,9 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 | [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的（原写「本里程碑唯一的结构性改动」，**已被 113 证伪**，见 115） | 111 | sonnet | ✅ |
 | [113](113-fetch-transport.md) | `agent-transport` 的 fetch 实现，native 那条一行不动 | 111 | sonnet | ✅ |
 | [115](115-wasm-io-without-threads.md) | **决策**：wasm 上没有线程，provider IO 路径怎么办 —— 泵怎么等 / `sync_channel(0)` 换成什么 / 029 并行怎么保 / 决策 16 的理由是否还成立 | 113 | **opus** | 决策类 |
-| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 115 | sonnet | — |
+| [116](116-async-pump.md) | 引 `futures` 最小子集、泵与 `run_turn` async 化 —— **纯 native，不碰 wasm** | 115 | sonnet | ✅ |
+| [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ |
+| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 117 | sonnet | — |
 
 **M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
 只有前端拿得到的 `web:` 工具并用结果回答；刷新后同会话 id 从 IndexedDB journal 回放，
