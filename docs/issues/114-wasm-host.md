@@ -44,3 +44,30 @@
 - 本 issue 不做 Tauri 侧的任何变更；决策 12「`agent-server` 是库」与既有两种形态一行不动。
 - 三种形态并存之后，**CI 要能同时构建 native 与 wasm**，否则 wasm 目标会在几周内悄悄烂掉
   ——这正是决策 10 当初想避免的成本，既然选择付，就要付在能发现的地方。
+
+---
+
+## 拆法（2026-08-11 加）：四块，其中一块现在就能并行
+
+114 原本是一个大 issue，串在 117 后面。但它五件事里**只有一部分真的依赖 117**
+（117 换的是 IO 载体，动的是 `runner.rs` / `io_task.rs` / `ctx.rs`）。
+按「跟 117 抢不抢文件」重排如下：
+
+| | 内容 | 能不能现在开工 |
+|---|---|---|
+| **114a** | **IndexedDB 的 `SessionStore` 实现** —— 落在 `agent-runtime/src/persist/`（红线 7：只有运行时层能做 IO），复用 `agent-store` 的 `SessionLog`，不碰 `agent-store` | **能**。只新增 `persist/` 下的文件 + 一行 `mod`，跟 117 零重叠 |
+| 114b | `Instant`/`SystemTime` 垫 `web-time` | 不能。`deadline.rs` / `ctx_remote_tools.rs` 在 117 手里 |
+| 114c | wasm 编译目标 + wasm-bindgen 宿主入口，裁掉 `agent-mcp` 与 `srv:` specs | 不能。要等 117 换完载体才可能真的编过 |
+| 114d | provider 配置与 key 从宿主页面注入 | 不能。碰 `ctx.rs` |
+
+**114a 的关键设计（决定了它能不能现在验）**：`SessionStore` 是**同步、fire-and-forget**
+的端口（见 `agent-store/src/persist/mod.rs` 的模块文档），所以 `append` 天然适配
+——把写扔给 IndexedDB 就返回，不等。真正有风险的是**回放**：红线 11 要求
+「重开会话后第一轮的工具表与关闭前最后一轮逐字节相同」。
+
+所以 114a 要**把回放语义与 IndexedDB 绑定分开**：
+- 回放/游标/压实那套逻辑复用 `SessionLog`，**在 native 上用假的 KV 后端就能测**，
+  不需要浏览器；
+- `web_sys::IdbDatabase` 那层做薄，薄到「看一眼就知道对不对」。
+
+这样 114a 里唯一必须等浏览器才能验的东西，就只剩那层薄绑定。
