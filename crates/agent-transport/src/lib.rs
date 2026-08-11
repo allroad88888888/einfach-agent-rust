@@ -54,14 +54,22 @@
 //!   同一份字节比对逐行输出——这就是「wasm 分帧与 native 分帧逐字节相同」
 //!   的证明方式，细节见 `framing_parity_tests.rs` 顶部注释。
 //!
-//! `config.rs`（`providers.toml` 解析）**不移植**——浏览器里没有这个文件，
-//! 配置来源见 issue 114；`wasm32` 目标不导出 `config` 模块。
+//! `config.rs`（`providers.toml` 的文件查找 + 读取）**不移植**——浏览器里
+//! 没有这个文件；`wasm32` 目标不导出 `config` 模块，`load()`/`ConfigError::
+//! NotFound`/`Io`/`Parse` 那一套 native 专属。但 `config.rs` 解析出来的
+//! **类型**（`RootConfig`/`ProviderConfig`）搬进了平台无关的 `provider_config`
+//! 模块，两个目标都编——wasm 宿主的配置来源（issue 114d）就是对着同一个类型
+//! 调 `ProviderConfig::from_host`/`RootConfig::from_host`，不是另起一套结构。
 //!
 //! **上层零改动**：`agent-providers`/`agent-runtime` 看到的 `Client` 方法表
 //! （`new`/`with_config`/`post_stream`/`upload_image`）在两个目标上完全相同，
 //! 靠 `#[cfg(target_arch = "wasm32")]` 二选一 `pub use`，不是两份并存的类型。
 
 mod backoff;
+// 「已经解析好的配置」中间形态（114d）：`RootConfig`/`ProviderConfig` 等，
+// toml 解析（native）与宿主注入（wasm）两条来源都用这一份类型定义，见模块
+// 文档。跟 `upload` 同款理由，模块声明不能整体 cfg 到 native。
+mod provider_config;
 // `upload` 的类型（`ImageUpload`/`UploadError`/`MAX_IMAGE_BYTES`）与 multipart
 // 编码是平台无关的纯逻辑，两边共用；只有本机 `send()`（吃 `ureq::Agent`）
 // 在文件内部用 `#[cfg(not(target_arch = "wasm32"))]` 单独包住，wasm 侧的
@@ -101,12 +109,18 @@ mod stream_drive;
 mod framing_parity_tests;
 
 pub use backoff::Backoff;
+// 两个目标都导出：native 侧 toml 解析、wasm 宿主注入产出的都是这几个类型
+// （114d）。文件加载本身（`load`/`ConfigError::NotFound` 的实际触发点）仍
+// native 专属，见下面 `#[cfg(not(wasm32))] pub use config::load`。
+pub use provider_config::{
+    ConfigError, DefaultConfig, ProviderConfig, RootConfig, default_provider,
+};
 pub use upload::{ImageUpload, MAX_IMAGE_BYTES, UploadError};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use client::Client;
 #[cfg(not(target_arch = "wasm32"))]
-pub use config::{ConfigError, DefaultConfig, ProviderConfig, RootConfig, default_provider, load};
+pub use config::load;
 
 #[cfg(target_arch = "wasm32")]
 pub use fetch_client::Client;
