@@ -498,7 +498,7 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 | [116](116-async-pump.md) | 引 `futures` 最小子集、泵与 `run_turn` async 化 —— **纯 native，不碰 wasm** | 115 | sonnet | ✅ |
 | [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ 已完成 |
 | [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← **M13 终点，已完成** | 117 | a=sonnet b=sonnet c=opus d=sonnet | ✅ |
-| [118](118-living-docs-io-carrier-drift.md) | 活文档里「IO 线程池」的措辞已对不上形状（结论没错，形状错了） | 114 | sonnet | 进行中 |
+| [118](118-living-docs-io-carrier-drift.md) | 活文档里「IO 线程池」的措辞已对不上形状（结论没错，形状错了） | 114 | sonnet | ✅ |
 | [119](119-mcp-as-a-feature.md) | `agent-mcp` 做成 feature —— 把「不可达」从每次都要论证的性质变成编译期事实 | 114 | sonnet | — |
 
 **M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
