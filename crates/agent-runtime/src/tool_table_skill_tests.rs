@@ -10,8 +10,6 @@ use std::sync::Arc;
 use agent_core::{AgentId, HostSkill, Location, Reversibility, Session, SkillId};
 use serde_json::json;
 
-use crate::skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE};
-
 use super::*;
 
 const BODY: &str = "这是 crm-flow 的正文，激活后整段进 late_system。";
@@ -345,53 +343,6 @@ fn a_disk_skill_cannot_forge_a_remote_host_tool() {
     );
 }
 
-// ── 075：push_spec 判重也管 with_skills ──────────────────────────────────
-
-/// `with_skills` 固定追加 `srv:skill/activate`/`srv:skill/deactivate`，两次调用
-/// （比如宿主装配代码手滑调重了）会撞在这两个固定名字上——跟 `with_mcp`/
-/// `with_host_tools` 走的是同一个 `push_spec`，同一套「整条丢弃 + debug_assert」。
-#[test]
-fn with_skills_called_twice_does_not_duplicate_the_activate_and_deactivate_tools() {
-    let build = || {
-        ToolTable::builtin()
-            .with_skills(SkillRegistry::empty())
-            .with_skills(SkillRegistry::empty())
-    };
-    let result = std::panic::catch_unwind(build);
-    if cfg!(debug_assertions) {
-        assert!(
-            result.is_err(),
-            "debug 构建下二次调用 with_skills 应该 debug_assert 炸掉"
-        );
-    } else {
-        let table = result.expect("release 构建下不该 panic");
-        assert_eq!(
-            table
-                .specs()
-                .iter()
-                .filter(|s| &*s.name == SKILL_ACTIVATE)
-                .count(),
-            1,
-            "activate 不该被重复调用多留一条"
-        );
-        assert_eq!(
-            table
-                .specs()
-                .iter()
-                .filter(|s| &*s.name == SKILL_DEACTIVATE)
-                .count(),
-            1,
-            "deactivate 同理"
-        );
-    }
-}
-
-/// `debug_assert!` 点得出名字：二次调用 `with_skills` 撞在 `srv:skill/activate`
-/// 上（先加进去的那个），debug 构建下的 panic 消息里含它。
-#[test]
-#[should_panic(expected = "srv:skill/activate")]
-fn with_skills_names_the_offender_in_a_debug_build() {
-    let _ = ToolTable::builtin()
-        .with_skills(SkillRegistry::empty())
-        .with_skills(SkillRegistry::empty());
-}
+// 075：push_spec 判重也管 with_skills、139 装配形状本身（新会话 specs/timed 的
+// 断言、老会话兼容）搬去了 `tool_table_skill_assembly_tests.rs`——那是另一件事
+// （「新装配长什么样」），不是这个文件的主题（「跨路径撞名」）。

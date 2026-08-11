@@ -4,6 +4,7 @@
 //! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
 
 mod blocking_spawn_omits_child_turns;
+mod call_timing_indep;
 mod cancel;
 mod collect_child_failure;
 mod collect_matches_blocking_spawn;
@@ -49,6 +50,8 @@ mod remote_tool_receipt_retention_092;
 mod remote_undeclared_tool_is_not_a_hang;
 mod send_plan_wiring_clears_tool_results;
 mod send_plan_wiring_undo_restores_bytes;
+mod session_start_indep;
+mod session_start_prompt_indep;
 mod session_store_backend_choice;
 mod session_store_jsonl_cap_crosses_snapshot;
 mod session_store_jsonl_corrupt_files;
@@ -58,7 +61,10 @@ mod session_store_jsonl_roundtrip;
 mod session_store_support;
 mod shell_exec_undo_barrier;
 mod skill_indep_registry_and_activation_e2e;
+mod skill_index_indep;
 mod skill_late_tools_never_shadow_the_table;
+mod skill_switch_indep;
+mod skill_switch_wire_indep;
 mod spawn_bg_epoch_writeback;
 mod spawn_bg_orphan_reaped;
 mod spawn_bg_support;
@@ -92,5 +98,6 @@ mod transient_source_delta_stream;
 mod transient_source_output_gate;
 mod tree_snapshot_background_children;
 mod tree_snapshot_emits_on_change;
+mod turn_end_indep;
 mod undo_after_turns;
 mod wasm_clock_source;

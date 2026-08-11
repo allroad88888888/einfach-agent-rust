@@ -13,8 +13,12 @@ use crate::support::server::FakeServer;
 
 const CHAT_ID: &str = "capabilities-chat";
 
-/// 一份「像真的」的声明：两个顶层工具（一个标了 `pure`、一个没标）+ 一个自带工具
-/// 的 skill。061 到此为止——工具表这一刻还没变，那是 062。
+/// 一份「像真的」的声明：两个顶层工具（一个标了 `pure`、一个没标）+ 一个 skill。
+/// 061 到此为止——工具表这一刻还没变，那是 062。
+///
+/// 140 之前这个 skill 还带过一个自带工具（`web:crm/close-ticket`）——决策 27 之后
+/// v1 不支持 skill 携带工具，那样的声明会 400，所以从这份「合法声明」的样本里
+/// 删掉了；工具想给这个 skill 用，走顶层 `tools`（正是上面那两个）。
 fn valid_capabilities() -> Value {
     json!({
         "tools": [
@@ -27,8 +31,7 @@ fn valid_capabilities() -> Value {
         "skills": [
             { "id": "crm-flow",
               "description": "处理客户工单的标准流程",
-              "body": "第一步：查档案。第二步：……",
-              "tools": [ { "name": "web:crm/close-ticket", "reversibility": "irreversible" } ] }
+              "body": "第一步：查档案。第二步：……" }
         ]
     })
 }
@@ -96,17 +99,26 @@ async fn rejected_declarations_never_create_a_session() {
             "前缀之后有空格",
             json!({ "tools": [ { "name": "web:crm lookup" } ] }),
         ),
-        // 最容易漏的一条：skill 自带的工具走同一条校验。
+        // 140：v1 不支持 skill 携带工具（决策 27）——形状不合法的工具挂在 skill 上，
+        // 报的已经不是「前缀不对」，是「skill 根本不该带 tools」；这条判定排在
+        // 前缀/形状检查之前，所以这里不管工具名本身合不合法都是同一条 400。
         (
-            "skill 自带 srv: 工具",
+            "skill 自带 srv: 工具（形状也不合法）",
             json!({ "skills": [ { "id": "crm-flow", "tools": [ { "name": "srv:crm/lookup" } ] } ] }),
+        ),
+        (
+            "skill 自带工具（形状合法也不行——v1 不支持）",
+            json!({ "skills": [ { "id": "crm-flow", "tools": [ { "name": "web:crm/close" } ] } ] }),
         ),
         (
             "顶层工具撞名",
             json!({ "tools": [ { "name": "web:a/b" }, { "name": "web:a/b" } ] }),
         ),
         (
-            "skill 工具与顶层撞名",
+            // 140 之前这条测的是「跨顶层与 skill 边界的重名」（DuplicateTool）；
+            // 现在 skill 一旦带 tools 就先撞 SkillCarriesTools，撞不撞名已经无关
+            // 紧要——这条案例保留是为了钉住「先撞哪一条」这件事本身。
+            "skill 工具与顶层撞名（现在先撞的是「skill 不许带工具」）",
             json!({ "tools": [ { "name": "web:a/b" } ], "skills": [ { "id": "s1", "tools": [ { "name": "web:a/b" } ] } ] }),
         ),
         (
@@ -169,13 +181,26 @@ async fn the_rejection_message_says_which_item_and_why() {
         response.body
     );
 
+    // 140：这份声明触发的已经不是「工具形状」，是「skill 根本不该带 tools」——
+    // 消息要点名是哪个 skill、指向裁剪依据（决策 27）、说清正确的声明位置。
     let response = create(
         addr,
         json!({ "capabilities": { "skills": [ { "id": "s1", "tools": [ { "name": "srv:x/y" } ] } ] } }),
     );
+    assert_eq!(response.status, 400, "{}", response.body);
     assert!(
         response.body.contains("skill \\\"s1\\\""),
         "该指出是哪个 skill 带的：{}",
+        response.body
+    );
+    assert!(
+        response.body.contains("决策 27"),
+        "该指向裁剪依据：{}",
+        response.body
+    );
+    assert!(
+        response.body.contains("capabilities.tools"),
+        "该说清工具该往哪儿声明：{}",
         response.body
     );
     assert!(sessions.ids().is_empty());

@@ -5,7 +5,7 @@
 //!
 //! ```text
 //! ① 声明从哪来   restored ? 从回放出来的会话状态取 : 这次请求带的
-//! ② 变成料       → 这个会话的 ToolTable（先减后加）+ SkillRegistry（索引进 system 段）
+//! ② 变成料       → 这个会话的 ToolTable（先减后加，含 skill 的 read/index，139）
 //! ③ 写进历史     新建会话才写，journaled，自成一轮
 //! ```
 //!
@@ -39,8 +39,10 @@
 //!   这个开关影响（那是它自己报进来的，不想给就别报）。
 //! - **工具**：部署期五档先建（所有会话逐字节相同的那一段），宿主声明的追加在最后
 //!   （连 MCP 之后，红线 11 / HOST-CAPABILITIES §六）。
-//! - **skill**：registry 非空才接 `.with_skills(..)`（那会加两个工具，是所有会话共有
-//!   那一段的字节），常驻索引作为一段 `SystemChunk` 追加在部署期那几段之后。
+//! - **skill**：registry 非空才接 `.with_skills(..)`（139 起那会加一个 `srv:skill/read`
+//!   工具 + 一条 `SessionStart` 时机的 `srv:skill/index`，是所有会话共有那一段的
+//!   字节）。常驻索引不再是这里手拼的 `SystemChunk`——它经 `body.rs` 里
+//!   `session_start::maybe_run` 落进 `Session::prefix_chunks()`。
 //!
 //! **registry 只从声明现造，不合流磁盘 `./skills/`**——069 §拍板「顺带定死 064
 //! 第 3 条」，完整理由见 `agent_runtime::SkillRegistry::from_host_skills`。
@@ -103,18 +105,17 @@ pub(super) fn assemble(
     let (host_tools, host_skills, disable_builtin) = declaration(spec, session, restored);
     let skills = SkillRegistry::from_host_skills(host_skills);
 
-    // 常驻索引是 **system 段**的一部分（不是工具）：跟工具表一样随时都在，模型第一
-    // 轮、激活之前就能发现有哪些 skill。空 registry → 空文本，
-    // `agent_providers` 的 `messages::system_text` 把空段滤掉，于是没声明 skill 的
-    // 会话的 system 前缀跟 064 之前**逐字节一致**。追加在部署期那几段之后（红线 11：
-    // 既有顺序是契约，只加不改）。
-    let mut system = spec.system.clone();
-    system.push(skills.skill_index_chunk());
+    // 139 起常驻索引不再是这里手拼的一段 system chunk——`with_skills`（下面）把
+    // `srv:skill/index` 挂进 `SessionStart` 时机区，`body.rs` 里紧跟在 `assemble`
+    // 之后的 `session_start::maybe_run` 跑完它，产出落进 `Session::prefix_chunks()`，
+    // `subagent::system_for` 会把它接在这个 `system` 之后。这里只装部署期那几段
+    // （红线 11：既有顺序是契约，只加不改）。
+    let system = spec.system.clone();
 
     // **空 registry 时不接 `.with_skills(..)`**：接了就等于给一个没有任何 skill 的
-    // 会话平白加两个永远没用的工具（`srv:skill/activate` / `deactivate`），而那一段
-    // 字节是所有会话共有的。这也正是 064 §验收「作用域」那条要的——另起一个不带声明
-    // 的会话，`srv:skill/activate` **不在表里**。
+    // 会话平白加一个永远没用的工具（`srv:skill/read`）和一条永远回空文本的开局工具，
+    // 而那一段字节是所有会话共有的。这也正是 064 §验收「作用域」那条要的——另起一个
+    // 不带声明的会话，`srv:skill/read` **不在表里**。
     //
     // 链式顺序即表的顺序：五档 → **减掉这个会话关掉的那些**（076）→ skill 两件 →
     // 宿主注入（红线 11，§六 第 1 条；跟 `agent-cli` 的 `with_skills` 在

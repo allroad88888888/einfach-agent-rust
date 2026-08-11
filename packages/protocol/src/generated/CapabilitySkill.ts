@@ -4,13 +4,14 @@
 import type { CapabilityTool } from "./CapabilityTool";
 
 /**
- * 一个宿主侧的 skill：`description` 进常驻索引（每个 skill 一行），`body` 与
- * `tools` 等模型 `srv:skill/activate` 之后才注入（skill 的既有形状，
- * HOST-CAPABILITIES.md §一）。
+ * 一个宿主侧的 skill：`description` 进常驻索引（每个 skill 一行），`body` 经
+ * `srv:skill/read` 按需取（139 起的形状；`tools` 见下——140 起**非空即拒**）。
  */
 export type CapabilitySkill = { id: string, description: string, body: string, 
 /**
- * 自带的工具——**跟顶层 `tools` 过同一条校验**（[`validate`]）：激活之后它们
- * 进的是同一张工具表，放宽这里等于给 `srv:` 开了个后门。
+ * 自带的工具——**字段仍然解析**（兼容老客户端的请求形状），但 140 起
+ * [`validate`] 会拒绝任何非空值：**v1 不支持 skill 携带工具**（决策 27——
+ * skill 不再有「激活后进表」这个口子，携带的工具在结构上已经无处可去）。
+ * 想给这个 skill 配工具，走顶层 `capabilities.tools` 声明。
  */
 tools?: Array<CapabilityTool>, };

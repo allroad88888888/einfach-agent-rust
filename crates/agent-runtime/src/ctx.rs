@@ -252,6 +252,15 @@ impl RunnerCtx {
         self.tools.skill_registry().listing()
     }
 
+    /// 这张表本身的只读借用。`tools` 字段是 `pub(crate)`，宿主够不着——139 修的
+    /// 那个真 bug 需要在 `ctx` 造好**之后**才跑 `SessionStart` 驱动（见
+    /// `session_start::maybe_run` 调用点：必须排在 `persist::seed_after_recover`
+    /// 之后，否则新会话开局工具刚写的 entry 会被误判成「已经在盘上」），这是
+    /// 宿主唯一能重新拿到 `&ToolTable` 的缺口。
+    pub fn tools(&self) -> &ToolTable {
+        &self.tools
+    }
+
     /// 装上宿主持有的 [`McpRegistry`]（store 外的活句柄表，红线 3）。默认是空表——
     /// 没配 MCP server 的宿主（CLI 尚未接 044/045、浏览器 host 只有 http）dispatch
     /// 查不到任何 server，`mcp:` 工具压根不会进工具表，这个空表也就永远不被查到。

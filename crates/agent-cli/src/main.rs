@@ -35,7 +35,7 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agent_cli::{mcp, print, provider, repl, session_path};
+use agent_cli::{mcp, print, provider, repl, session_path, session_start};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
 use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
 use agent_tools::{ToolExecutor, VisionLinkSource, VisionRuntime};
@@ -116,13 +116,15 @@ fn main() {
         );
     }
     // 039：从项目 `./skills/`（相对启动目录）装载 skill。装载失败不致命——退回
-    // 空 registry，CLI 照跑，只是没有 skill 可激活。索引常驻进 system 前缀（跟
-    // 工具表一样随时都在），激活集在会话状态里。
+    // 空 registry，CLI 照跑，只是没有 skill 可激活。139 起索引不再是这里手拼的
+    // system chunk——`with_skills` 把 `srv:skill/index` 挂进 `SessionStart` 时机
+    // 区，下面 135 的 `session_start::maybe_run` 跑完之后它自己落进
+    // `Session::prefix_chunks()`，跟工具表一样随时都在；这里只装载 registry，
+    // 激活集在会话状态里。
     let skills = SkillRegistry::load(&[tool_root.join("skills")]).unwrap_or_else(|e| {
         eprintln!("[skills] 装载失败，按无 skill 继续: {e}");
         SkillRegistry::empty()
     });
-    let skill_index = skills.skill_index_chunk();
     eprintln!(
         "skills={}",
         if skills.is_empty() {
@@ -145,6 +147,8 @@ fn main() {
 
     let store = agent_runtime::open_backend(session_file, |e| eprintln!("[会话文件] {e}"));
 
+    // 135：新建会话才跑开局工具——记下这一支，装完工具表后据此决定要不要调。
+    let mut is_new_session = false;
     let mut session = match agent_runtime::recover(
         store.as_ref(),
         AgentId::root(),
@@ -160,7 +164,10 @@ fn main() {
             }
             session
         }
-        Ok(None) => Session::new(AgentId::root()),
+        Ok(None) => {
+            is_new_session = true;
+            Session::new(AgentId::root())
+        }
         Err(e) => fail(&format!("{e}")),
     };
     let recovered_source_needs_fail_close =
@@ -198,15 +205,13 @@ fn main() {
         api_key,
         fs,
         tool_table,
-        vec![
-            SystemChunk {
-                label: Arc::from("base"),
-                text: Arc::from("你是一个简洁、诚实的助手。"),
-            },
-            // 常驻 skill 索引（039）：跟工具表一样是稳定前缀的一部分，模型第一轮、
-            // 激活之前就能发现有哪些 skill。空 registry → 空文本，被 system_text 滤掉。
-            skill_index,
-        ],
+        // skill 索引不在这里了（139）：它经 `session_start::maybe_run` 落进
+        // `Session::prefix_chunks()`，`subagent::system_for` 会把这段基础 system
+        // 之后、前缀块之前的顺序原样接上——这个 `Vec` 只留跟会话形态无关的那一段。
+        vec![SystemChunk {
+            label: Arc::from("base"),
+            text: Arc::from("你是一个简洁、诚实的助手。"),
+        }],
         SessionConfig {
             model: Arc::from(provider_cfg.model.as_str()),
             temperature: None,
@@ -233,6 +238,15 @@ fn main() {
     // `agent_runtime::persist::seed_after_recover` 文档「真 bug」一节）。对全新
     // 会话是无害的空操作，不需要在这里分支判断「是不是恢复出来的」。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
+    // 135：工具表装完之后跑一次开局工具，只在新建会话那一支。**必须排在
+    // `seed_after_recover` 之后**（139 修的真 bug）：`maybe_run` 会给新会话追加
+    // 一条 journaled 的 `prefix_init` entry；排在 `seed_after_recover` 之前，
+    // 这条刚写的 entry 会被误判成「已经在盘上」，从此永远不被 `persist::sync`
+    // 真正落盘，重启即丢——跟上面这条真 bug 1 是同一个类别、这次是新写入把
+    // `seed_after_recover` 的假设悄悄破坏。
+    if let Err(msg) = session_start::maybe_run(is_new_session, &mut session, ctx.tools()) {
+        fail(&msg);
+    }
     if recovered_source_needs_fail_close {
         if let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx) {
             eprintln!("{failure:?}");

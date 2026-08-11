@@ -48,7 +48,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 103 新增：上一次请求实际用的那份 `SendPlan`（`PrevSendPlan`）。
             | Slot::PrevSendPlan
             // 107 新增：历次压缩产出的摘要正文（引用在 `SendPlan` 里）。
-            | Slot::Summaries => {}
+            | Slot::Summaries
+            // 134 新增：会话创建期定下的一列 system 前缀块（顺序即信息，不排序）。
+            | Slot::PrefixChunks => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

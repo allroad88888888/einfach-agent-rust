@@ -25,6 +25,7 @@ mod commands;
 mod inbox;
 pub(crate) mod message;
 mod remote_tools;
+mod session_start;
 
 use std::collections::BTreeMap;
 use std::panic::AssertUnwindSafe;

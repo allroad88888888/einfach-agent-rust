@@ -16,11 +16,16 @@
 //! 自己的范围只管那个纯值，AgentValue 编码是另一件事。
 //! [`summaries`] 是 `SendPlan` 那条线的另一半（107）：引用住 `SendPlan`，
 //! **正文住 `Slot::Summaries`**（红线 5），这个文件是那个槽位的一处编解码。
+//! [`prefix_chunks`] 是第二类里的一个（134）：`Slot::PrefixChunks` 的编解码。
+//! 它跟 [`host_skills`] 摆在一起看正好——同样是「会进 prompt 最前面的一列东西」，
+//! 但**它不排序**：那边输入顺序不可靠（客户端给的数组），这边顺序本身是信息。
+//! 红线 11 要的是「确定」，排序只是让不确定的输入变确定的一种手段，不是目的。
 
 pub mod atom_value;
 pub mod host_skills;
 pub mod host_tools;
 pub mod message;
+pub mod prefix_chunks;
 pub mod send_plan;
 pub mod send_plan_codec;
 pub mod session;

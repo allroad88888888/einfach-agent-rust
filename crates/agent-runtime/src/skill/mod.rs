@@ -11,14 +11,17 @@
 //! 一个 skill），激活集里那个 id 要么取到新正文、要么取不到（[`injection`] 当它
 //! 没激活）。这个漂移是刻意的取舍，理由见 `agent-core` 的 `command/skill.rs`。
 //!
-//! # 三个子模块
+//! # 子模块
 //!
 //! - [`yaml`]：SKILL.md frontmatter 的缩进式 YAML 子集解析（无外部依赖）。
 //! - [`load`]：目录遍历 + frontmatter/正文切分 + 建 [`Skill`]。
 //! - [`tool`]：`srv:skill/activate` / `srv:skill/deactivate` 的声明、入参解析、
 //!   以及 dispatch 截获点。
+//! - [`read`]（137）/ [`index`]（138）：正文按需读 + 索引文本，只实现不装配。
 
+mod index;
 mod load;
+mod read;
 mod tool;
 mod yaml;
 
@@ -29,9 +32,13 @@ use std::sync::Arc;
 use agent_core::{Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
+pub use index::index_spec;
 pub use load::SkillLoadError;
+pub(crate) use read::intercept as read_intercept;
+pub use read::{SKILL_READ, read_spec};
 pub(crate) use tool::intercept;
-pub use tool::{SKILL_ACTIVATE, SKILL_DEACTIVATE, activate_spec, deactivate_spec};
+// 139：`with_skills` 换成 read/index 之后不再引用 `activate_spec`/`deactivate_spec`，见 `tool.rs` 上的 `#[allow(dead_code)]`。
+pub use tool::{SKILL_ACTIVATE, SKILL_DEACTIVATE};
 
 /// 常驻索引那段 system 的标签（进日志，不进 prompt——见 `SystemChunk`）。
 const INDEX_LABEL: &str = "skill-index";
@@ -44,6 +51,9 @@ struct Skill {
     body: Arc<str>,
     tools: Vec<ToolSpec>,
     source: SkillSource,
+    /// frontmatter 可选的 `hidden`（142）：`true` 不进索引，但 `body_of`/
+    /// `srv:skill/read` 照常可读——只挡「发现」，不挡「读」。
+    hidden: bool,
 }
 
 /// skill 的来源同时也是执行授权边界：磁盘 skill 只能注入说明/schema，永远不能
@@ -124,6 +134,8 @@ impl SkillRegistry {
                 body: declared.body,
                 tools: declared.tools,
                 source,
+                // 宿主声明没有 frontmatter，142 的 hidden 概念不适用（见字段文档）。
+                hidden: false,
             };
             let key = Arc::clone(&skill.id.0);
             if registry.contains_key(&key) {
@@ -182,6 +194,12 @@ impl SkillRegistry {
     /// 「你有哪些 skill」的一行（激活一个不存在的 id 时回给模型，让它自己收敛）。
     pub(crate) fn known_ids(&self) -> Vec<&str> {
         self.skills.keys().map(|k| &**k).collect()
+    }
+
+    /// 按 id 精确查正文（137，`srv:skill/read` 用它）。**不滤 hidden**（142）：
+    /// hidden 只挡索引，不挡读——已装载的 id 永远能读到正文。
+    pub fn body_of(&self, id: &str) -> Option<Arc<str>> {
+        self.skills.get(id).map(|skill| Arc::clone(&skill.body))
     }
 
     /// 把一组激活的 skill id 展开成本轮的注入料：正文进 `late_system`（一个 skill

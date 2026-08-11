@@ -26,6 +26,7 @@ pub const SKILL_ACTIVATE: &str = "srv:skill/activate";
 pub const SKILL_DEACTIVATE: &str = "srv:skill/deactivate";
 
 /// 激活工具的声明。
+#[allow(dead_code, reason = "139 起 with_skills 换成 read/index，不再装配它，删除是 141 的事")]
 pub fn activate_spec() -> ToolSpec {
     ToolSpec {
         name: Arc::from(SKILL_ACTIVATE),
@@ -45,6 +46,7 @@ pub fn activate_spec() -> ToolSpec {
 }
 
 /// 停用工具的声明。
+#[allow(dead_code, reason = "139 起 with_skills 换成 read/index，不再装配它，删除是 141 的事")]
 pub fn deactivate_spec() -> ToolSpec {
     ToolSpec {
         name: Arc::from(SKILL_DEACTIVATE),

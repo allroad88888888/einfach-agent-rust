@@ -19,7 +19,8 @@ use agent_core::{AgentValue, AtomKey};
 /// 093 追加 `Slot::ExecutionProfile`（子 agent 的 durable 执行身份）→ 15；
 /// 100 追加 `Slot::SendPlan`（这一轮实际要发给 provider 的历史坐标）→ 16；
 /// 103 追加 `Slot::PrevSendPlan`（上一次请求实际用的那份 `SendPlan`）→ 17；
-/// 107 追加 `Slot::Summaries`（历次压缩产出的摘要正文）→ 18。
+/// 107 追加 `Slot::Summaries`（历次压缩产出的摘要正文）→ 18；
+/// 134 追加 `Slot::PrefixChunks`（会话创建期定下的 system 前缀块）→ 19。
 /// 改这个数之前先问：新槽位是不是真的**必须**进快照。
 ///
 /// `HostTools` 的答案是必须：不进快照 = 一次落快照之后声明就丢了，恢复出来的
@@ -31,8 +32,11 @@ use agent_core::{AgentValue, AtomKey};
 /// = 崩溃恢复之后压缩状态丢了，恢复出来的会话把已经清掉的工具结果又当作没清过、
 /// 边界也退回 0——那正是「压缩与完整历史各自独立恢复」（095 §2）说好的对半落空。
 /// `PrevSendPlan` 同理：不进快照 = 崩溃恢复后第一轮的 `PrefixIntent` 判定丢了
-/// 参照物，把刚恢复出来的正常状态误判成漂移事故。
-const EXPECTED_SLOT_COUNT: usize = 18;
+/// 参照物，把刚恢复出来的正常状态误判成漂移事故。`PrefixChunks`（134）同样必须：
+/// 不进快照 = 恢复出来的会话要么少一整段 system 前缀、要么得重跑那些算出前缀的
+/// 东西（而它们读的是外部世界，这一次的结果不保证跟当初一样）——前缀在 prompt
+/// 最前面，两种结局都是缓存全断 + 上下文跟历史对不上，且都不报错。
+const EXPECTED_SLOT_COUNT: usize = 19;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

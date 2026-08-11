@@ -36,6 +36,7 @@
 //! | [`clear_tool_results`] | 101：`clear_tool_results`——第 2 档的写路径，校验 + 幂等 + 记账，底层复用 `replace_send_plan` |
 //! | [`apply_summary`] | 107：`apply_summary` / `summary_text`——第 3 档的回写，**一条 entry 同时存正文、推边界、填引用**；epoch 闸在 `step`，契约见该模块文档 |
 //! | [`compaction_record`] | 109：`summary_library`——压缩可见性的读口，展开原文走这条链，不经 `SendPlan` |
+//! | [`prefix`] | 134：`set_prefix_chunks` / `prefix_chunks`——`PrefixChunks` 槽位的 journaled 读写（会话创建期定下的 system 前缀，恢复时原样回来、**不重算**） |
 //! | [`cross_read`] | 028：跨 agent 读的两个口，没有第三个（红线 10） |
 //!
 //! ## 一个 `Session` = 整棵树
@@ -59,6 +60,7 @@ pub mod disabled_builtins;
 pub mod host_skills;
 pub mod host_tools;
 pub mod meta;
+pub mod prefix;
 pub mod read;
 mod restore;
 pub mod send_plan;

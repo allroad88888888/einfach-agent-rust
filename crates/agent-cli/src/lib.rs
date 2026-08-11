@@ -19,4 +19,5 @@ pub mod print;
 pub mod provider;
 pub mod repl;
 pub mod session_path;
+pub mod session_start;
 pub mod undo;

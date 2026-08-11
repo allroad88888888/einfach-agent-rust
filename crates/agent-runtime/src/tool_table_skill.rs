@@ -1,4 +1,4 @@
-//! skill 跟工具表的关系（039 开的口，064 补上撞名过滤）。
+//! skill 跟工具表的关系（039 开的口，064 补上撞名过滤，139 切装配到 read/index）。
 //!
 //! 从 `tool_table.rs` 分出来的一件事：registry 为什么归表拥有、每一轮怎么把激活集
 //! 展开成注入料、以及**表里已经有的名字**怎么从 `late_tools` 里滤掉。工具表的五档
@@ -6,10 +6,27 @@
 //!
 //! # registry 为什么归表拥有
 //!
-//! [`ToolTable::with_skills`] 一次把「声明两个 skill 工具」和「拥有 registry 供
-//! dispatch 随时查」绑在一起——两件事本来就是一件（开了 skill 才有那两个工具，也才
-//! 需要 registry）。分成 `RunnerCtx` 上的两个字段就会长出「表里有 activate、
-//! registry 却是空的」这种半开状态。
+//! [`ToolTable::with_skills`] 一次把「声明 skill 相关工具」和「拥有 registry 供
+//! dispatch/驱动随时查」绑在一起——两件事本来就是一件（开了 skill 才有这些工具，也才
+//! 需要 registry）。分成 `RunnerCtx` 上的两个字段就会长出「表里有 read、registry
+//! 却是空的」这种半开状态。
+//!
+//! # 139：装配切到 read（specs）+ index（timed），不再是 activate/deactivate
+//!
+//! `with_skills` 曾经追加 `srv:skill/activate` + `srv:skill/deactivate`（039）、
+//! 由宿主另外把 `registry.skill_index_chunk()` 塞进 `Ingredients::system`。139
+//! 把这条装配换成：`srv:skill/read` 进 specs（模型面按 id 现取正文）、
+//! `srv:skill/index`（138）挂进 `SessionStart` 时机区（133），135 的开局驱动在
+//! 新建会话那一刻跑它一次，结果落进 `Session` 的前缀块——常驻这件事没变，只是
+//! 从「宿主手动拼一段 system」换成「跟工具表一样是装配的一部分」。
+//!
+//! **只切装配，不删机制**：`Slot::SkillsActive`、`skill::intercept`（激活/停用的
+//! dispatch 截获）、[`ToolTable::skill_injection`] 一个字节不动——`with_skills`
+//! 不再注册 `srv:skill/activate`/`srv:skill/deactivate` 这两个名字，`dispatch.rs`
+//! 里那两条截获路由因此对**新会话**恒为死代码（`declares()` 假），但代码本身留着：
+//! 老会话（journal 里已经有激活记录）恢复后 `skill_injection` 照样按
+//! `Slot::SkillsActive` 展开注入，不因为新会话不再产生新的激活而失效。删掉这套
+//! 机制是 141（`docs/issues/141-remove-activation-subsystem.md`）的事。
 //!
 //! # 跨路径撞名：**表赢，多余那份在这里滤掉**（069 §拍板 第 2 问，064 §范围 第 5 条）
 //!
@@ -45,33 +62,55 @@ use std::sync::Arc;
 use agent_core::{SkillId, SystemChunk, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
-use crate::skill::{SkillRegistry, activate_spec, deactivate_spec};
+use crate::skill::{SkillRegistry, index_spec, read_spec};
 
-use super::ToolTable;
+use super::{CallTiming, ToolTable};
 
 impl ToolTable {
-    /// 039 开闸：追加 `srv:skill/activate` + `srv:skill/deactivate`，并把宿主装载的
-    /// `registry` 交给这张表拥有（供 dispatch 截获时查正文/工具、供 `provider_call`
-    /// 组每一轮的 `late_system`/`late_tools`）。
+    /// 139 开闸：追加 `srv:skill/read`（模型面 specs，按 id 现取正文）+
+    /// `srv:skill/index`（138，挂进 `SessionStart` 时机区，133），并把宿主装载的
+    /// `registry` 交给这张表拥有——供 dispatch 截获 read 时查正文（`skill/read.rs`）、
+    /// 供 index 的执行体读 `index_text()`、供 `provider_call` 组每一轮的
+    /// `late_system`/`late_tools`。
+    ///
+    /// index 的执行体只拿 `&ToolTable` 本身（`with_timed` 的签名，见
+    /// `tool_table_timed.rs` 模块文档「执行体拿 `&ToolTable` 自身」）——它不捕获
+    /// `registry`，而是在真正跑的那一刻经 [`ToolTable::skill_registry`] 现查，
+    /// 这样 135 的开局驱动跑它时读到的永远是**这张表**最终装配完的那份 registry，
+    /// 不会因为闭包提前捕获了一份浅拷贝而跟 `read`/`skill_injection` 看到两份。
     ///
     /// 追加在末尾而不是插进 `builtin()` 内部：`builtin_specs()` 的顺序是 013 钉死的
     /// 既有契约，工具表在 prompt 最前面（红线 11），只加不改。
     ///
-    /// **常驻索引不在这里**——它是 system 段的一部分（不是工具），由宿主调
-    /// `registry.skill_index_chunk()` 放进 `Ingredients::system`（`agent-cli` 的
-    /// `main.rs` 与 `agent-server` 的 `actor::body` 各有一处）。
+    /// **常驻索引不再是这里手写的 system chunk**——135 的开局驱动在新建会话那一刻
+    /// 跑一次 `SessionStart` 时机区，把 index 的产出落进 `Session` 的前缀块
+    /// （`session.prefix_chunks()`），跟工具表一样是稳定前缀的一部分，只是不需要
+    /// 宿主（`agent-cli`/`agent-server`）再手动拼一段 `Ingredients::system` 了。
     ///
-    /// **空 registry 时不要调它**（064）：调了就等于给一个没有任何 skill 的会话平白
-    /// 加两个永远没用的工具，而工具表在 prompt 最前面——那是所有会话共有的那一段
-    /// 字节，只该在宿主真的开了 skill 时才变。
+    /// **空 registry → 什么都不接**（064 的判据，139 起由这个函数自己守住，不再
+    /// 只靠调用方自觉）：接了就等于给一个没有任何 skill 的会话平白加一个永远没用
+    /// 的工具（`srv:skill/read`）和一条永远回空文本的开局工具——工具表在 prompt
+    /// 最前面，那是所有会话共有的那一段字节，只该在宿主真的开了 skill 时才变。
+    /// `self.registry` 仍然照收（哪怕是空的）：跟不收相比字节上无差别
+    /// （`skill_registry()`/`skill_injection()` 都不进 `specs()`），但省得调用方
+    /// 还要记着「registry 是空的时候这一步该跳过」——`agent-cli` 的装配链就是
+    /// 无条件调它，靠的正是这里兜底。
     pub fn with_skills(mut self, registry: SkillRegistry) -> Self {
-        self.push_spec(activate_spec());
-        self.push_spec(deactivate_spec());
+        if registry.is_empty() {
+            self.registry = registry;
+            return self;
+        }
+        self.push_spec(read_spec());
         self.registry = registry;
-        self
+        self.with_timed(
+            index_spec(),
+            CallTiming::SessionStart,
+            Box::new(|table, _input| Ok(table.skill_registry().index_text())),
+        )
     }
 
-    /// 这张表拥有的 skill registry（dispatch 截获激活时查它）。没开 skill 时是空的。
+    /// 这张表拥有的 skill registry（dispatch 截获 read 时查它，index 的 timed 执行体
+    /// 也查它）。没开 skill 时是空的。
     pub(crate) fn skill_registry(&self) -> &SkillRegistry {
         &self.registry
     }
@@ -105,3 +144,11 @@ impl ToolTable {
 #[cfg(test)]
 #[path = "tool_table_skill_tests.rs"]
 mod tests;
+
+/// 139：`with_skills` 新装配形状本身的单测（specs/timed 断言、二次调用判重、
+/// 老会话兼容）——跟上面 `tests`（跨路径撞名，069/064）是两个不同的主题，
+/// 分两个文件（`tool_table.rs` 的 `tool_table_tests.rs` + `standard_local_tests.rs`
+/// 已经是这个先例）。
+#[cfg(test)]
+#[path = "tool_table_skill_assembly_tests.rs"]
+mod assembly_tests;

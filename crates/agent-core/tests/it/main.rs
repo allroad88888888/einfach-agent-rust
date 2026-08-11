@@ -49,6 +49,7 @@ mod host_tools_indep_restore;
 mod ladder_core_order_and_replay;
 mod no_clock_meta_test;
 mod observe_046;
+mod prefix_chunks_indep;
 mod prefix_intent_prev_send_plan_default;
 mod serde_roundtrip;
 mod send_plan;

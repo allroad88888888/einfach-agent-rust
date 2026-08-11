@@ -16,6 +16,7 @@
 //! | [`host`]（`tool_table_host.rs`，062） | **宿主注入这件事**：那张可逆性映射怎么进表、为什么排序、为什么另挂一张表 |
 //! | [`skill_tools`]（`tool_table_skill.rs`，039/064） | **skill 这件事**：registry 归表拥有、每轮怎么展开成注入料、撞名怎么滤 |
 //! | [`disable`]（`tool_table_disable.rs`，076） | **关掉内置这件事**：会话建立时把部署方给的某几件整条剔掉（唯一往回减的一件） |
+//! | [`timed`]（`tool_table_timed.rs`，133） | **调用时机这件事**：timed 工具独立区，`specs`/`declares`/`snapshot` 一个字节看不见它 |
 //!
 //! 拆的判据是「说得清它是干嘛的、且不含『和』」（红线 9）：注入、skill、关掉内置、
 //! 名字规则各自都有一整套自己的理由要写，混在这里会让「工具表是什么」这句话说不完。
@@ -32,6 +33,7 @@ use crate::spawn_request::spawn_spec;
 use crate::status_tool::status_spec;
 
 use names::{location_of, reversibility_of};
+pub use timed::{CallTiming, TimedRun, TimedTool};
 
 /// 会话期间不变的工具表：喂模型的声明 + 判 `location`/`reversibility` 用的
 /// 名字规则 + （039）宿主装载的 skill registry。
@@ -51,6 +53,11 @@ pub struct ToolTable {
     /// 而不是给 `ToolSpec` 加字段」全在 [`host`]（`with_host_tools`）。空表 = 这个
     /// 会话没有注入。
     host_reversibility: BTreeMap<Arc<str>, Reversibility>,
+    /// timed 工具独立区（133）。**不进 `specs`，`declares()`/`snapshot()` 看不见
+    /// 它**——模型面的表只有一个答案，这是 076 disable 判据的延续；`with_timed`/
+    /// `timed` 全在 [`timed`] 模块。空 Vec = 这个会话没有 timed 工具（v1 全部会话
+    /// 都是，装驱动是 135/136 的事，本条只加维度）。
+    timed_tools: Vec<TimedTool>,
 }
 
 #[path = "tool_table_names.rs"]
@@ -65,6 +72,9 @@ mod skill_tools;
 #[path = "tool_table_disable.rs"]
 mod disable;
 
+#[path = "tool_table_timed.rs"]
+mod timed;
+
 impl ToolTable {
     /// 从一组 specs 造一张表：空 skill registry、空 MCP 映射、空注入映射。四个内置
     /// 构造器共用它，免得每加一个字段就四处补一遍。
@@ -74,6 +84,7 @@ impl ToolTable {
             registry: SkillRegistry::empty(),
             mcp_reversibility: BTreeMap::new(),
             host_reversibility: BTreeMap::new(),
+            timed_tools: Vec::new(),
         }
     }
 
@@ -95,10 +106,13 @@ impl ToolTable {
     /// 更该报错的裁判点（074 的 `list_tools` 去重 / 061 的 400）。`debug_assert!`
     /// 只在 debug 构建炸，点得出撞的是哪个名字；release 静默丢弃。
     fn push_spec(&mut self, spec: ToolSpec) -> bool {
-        if self.declares(&spec.name) {
+        // 133：也要查 timed 区——`with_timed` 可能在装配链的更早一步已经注册了
+        // 同名的时机工具，链式顺序不是这个函数能控制的，所以查重必须双向
+        // （见 [`timed`] 模块文档「撞名：双向查」）。
+        if self.declares(&spec.name) || self.declares_timed(&spec.name) {
             debug_assert!(
                 false,
-                "ToolTable 已经有工具 `{}` 了，同名的后来这一条整条丢弃（specs 不 push，可逆性也不 insert）",
+                "ToolTable 已经有工具 `{}` 了（specs 区或 timed 区），同名的后来这一条整条丢弃（specs 不 push，可逆性也不 insert）",
                 spec.name
             );
             return false;

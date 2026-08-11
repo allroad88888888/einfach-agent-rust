@@ -16,9 +16,20 @@
 //! |---|---|
 //! | 工具名前缀 | **必须** `web:` 或 `desk:`；`srv:`/`mcp:`/无前缀一律拒 |
 //! | 工具名前缀之后 | 非空、只许 `[A-Za-z0-9_/-]`、全名 ≤ 128 字节 |
-//! | skill 自带的工具 | 跟顶层工具**同一条规则**（激活后进的是同一张工具表） |
+//! | skill 自带的工具 | **v1 不支持**：`tools` 非空就整份 400（140，决策 27），不看形状 |
 //! | skill id | 非空、只许 `[A-Za-z0-9_-]`、≤ 128 字节 |
-//! | 重名 | 整份声明里工具名全局唯一、skill id 唯一，撞了就拒 |
+//! | 重名 | 整份声明里工具名（只可能来自顶层）全局唯一、skill id 唯一，撞了就拒 |
+//!
+//! # 140：skill 为什么不能带 `tools`
+//!
+//! 决策 27（M15）把 skill 的注入口从「激活 → `late_tools` 进表」整个砍掉，换成
+//! `srv:skill/read` 按需取正文（139）。旧口子一没，`skill.tools` 字段在结构上就
+//! 无处可去——没有任何时机会把它塞进模型看到的工具表。与其等宿主声明了、静默
+//! 丢在一边，不如在**它自己在场的这一次请求**里如实说清楚（069 判据「在最早能报
+//! 给作者的点上失败」）：工具想给这个 skill 用，走 `capabilities.tools` 顶层声明。
+//!
+//! 这条判定排在**逐条前缀/形状校验之前**——工具名再合法也没用，`tools` 一旦非空
+//! 就是整份声明的问题，不必先花一轮 I/O 去挑剔它的字符集。
 //!
 //! **前缀为什么只许 `web:`/`desk:`**：位置从前缀推是既有规则（`agent_runtime` 的
 //! `location_of`），而注入进来的工具本来就跑在宿主侧——用这两个既有前缀就等于直接
@@ -46,12 +57,16 @@ const MAX_SKILL_ID_LEN: usize = 128;
 const ECHO_LIMIT: usize = 64;
 
 /// 这个名字是在哪儿声明的——错误文案要能直接指到那一项。
+///
+/// 140 之前这里还有一个 `Skill(String)` 变体（`capabilities.skills[..].tools`
+/// 里）：skill 自带的工具那时跟顶层过同一条前缀/形状校验。决策 27 把这条路整个
+/// 砍掉之后，`check_tool` 只会被 `capabilities.tools` 这一处调用，`Skill` 变体
+/// 因此不再有构造点——**留着就是一处会一直编译通过、却再也不会被走到的分支**，
+/// 跟本仓最忌讳的「看似可达、实则死路」是同一种形状，删掉比留着诚实。
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(in crate::http) enum Origin {
-    /// `capabilities.tools` 里。
+    /// `capabilities.tools` 里——如今是唯一来源。
     TopLevel,
-    /// `capabilities.skills[..].tools` 里，带上那个 skill 的 id。
-    Skill(String),
 }
 
 /// 一份声明为什么被拒。**结构化**：调用方拿到的是「哪一项 + 为什么」，不是一句
@@ -63,13 +78,15 @@ pub(in crate::http) enum CapabilityRejection {
     DuplicateTool { origin: Origin, name: String },
     SkillIdShape { id: String },
     DuplicateSkill { id: String },
+    /// 140：这个 skill 的 `tools` 非空——v1 不支持，决策 27 把注入口砍了之后它
+    /// 已经无处可去。
+    SkillCarriesTools { id: String },
 }
 
 impl fmt::Display for Origin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Origin::TopLevel => write!(f, "capabilities.tools"),
-            Origin::Skill(id) => write!(f, "skill \"{}\" 自带的 tools", elide(id)),
         }
     }
 }
@@ -99,6 +116,10 @@ impl fmt::Display for CapabilityRejection {
                     "skill id \"{id}\" 被重复声明——重名一律拒绝，不做「后来居上」"
                 )
             }
+            CapabilityRejection::SkillCarriesTools { id } => write!(
+                f,
+                "skill \"{id}\" 带了 tools——v1 不支持 skill 携带工具（决策 27 裁剪），工具请经 capabilities.tools 声明"
+            ),
         }
     }
 }
@@ -124,9 +145,13 @@ pub(in crate::http) fn validate(capabilities: &Capabilities) -> Result<(), Capab
                 id: elide(&skill.id),
             });
         }
-        let origin = Origin::Skill(skill.id.clone());
-        for tool in &skill.tools {
-            check_tool(tool, &origin, &mut tool_names)?;
+        // 140：v1 不支持 skill 携带工具（决策 27）——撞在这里，赶在任何一条工具
+        // 形状/前缀检查之前。工具名再合法也没用，`tools` 一旦非空就是整份声明的
+        // 问题，没必要先花一轮校验去挑剔一个注定要被拒的字段。
+        if !skill.tools.is_empty() {
+            return Err(CapabilityRejection::SkillCarriesTools {
+                id: elide(&skill.id),
+            });
         }
     }
     Ok(())
@@ -190,187 +215,5 @@ pub(super) fn elide(text: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    fn caps(value: serde_json::Value) -> Capabilities {
-        serde_json::from_value(value).expect("该解析成功")
-    }
-
-    fn tools(names: &[&str]) -> Capabilities {
-        caps(json!({ "tools": names.iter().map(|n| json!({ "name": n })).collect::<Vec<_>>() }))
-    }
-
-    /// 合法的两种前缀 + 允许的字符集全过。
-    #[test]
-    fn host_side_prefixes_are_accepted() {
-        let ok = tools(&[
-            "web:crm/lookup",
-            "desk:clipboard/write",
-            "web:mcp-figma/get_file",
-            "web:a_b-c/d/e",
-            "desk:X9",
-        ]);
-        assert_eq!(validate(&ok), Ok(()));
-    }
-
-    /// 服务端前缀、无前缀、空名——一律拒，且拒的是「前缀」这一条。
-    #[test]
-    fn server_side_and_prefixless_names_are_rejected() {
-        for name in [
-            "srv:x/y",
-            "mcp:everything/echo",
-            "nopfx",
-            "",
-            "web/x",
-            "WEB:x",
-            " web:x",
-        ] {
-            assert_eq!(
-                validate(&tools(&[name])),
-                Err(CapabilityRejection::ToolPrefix {
-                    origin: Origin::TopLevel,
-                    name: name.to_string()
-                }),
-                "{name:?} 该因为前缀被拒"
-            );
-        }
-    }
-
-    /// 前缀对了，前缀之后的部分照样要过白名单：空、空格、冒号、点、非 ASCII、超长。
-    #[test]
-    fn the_part_after_the_prefix_is_whitelisted() {
-        let too_long = format!("web:{}", "a".repeat(MAX_TOOL_NAME_LEN));
-        for name in [
-            "web:",
-            "desk:",
-            "web:a b",
-            "web:a:b",
-            "web:a.b",
-            "web:客户",
-            "web:a\nb",
-            &too_long,
-        ] {
-            assert!(
-                matches!(
-                    validate(&tools(&[name])),
-                    Err(CapabilityRejection::ToolNameShape { .. })
-                ),
-                "{name:?} 该因为字符集/长度被拒"
-            );
-        }
-        // 边界：正好 128 字节合法。
-        let exactly_max = format!("web:{}", "a".repeat(MAX_TOOL_NAME_LEN - 4));
-        assert_eq!(validate(&tools(&[&exactly_max])), Ok(()));
-    }
-
-    /// **最容易漏的一条**：skill 自带的工具过同一条校验。
-    #[test]
-    fn tools_carried_by_a_skill_go_through_the_same_check() {
-        let declaration = caps(json!({
-            "skills": [ { "id": "crm-flow", "tools": [ { "name": "srv:crm/lookup" } ] } ]
-        }));
-        assert_eq!(
-            validate(&declaration),
-            Err(CapabilityRejection::ToolPrefix {
-                origin: Origin::Skill("crm-flow".to_string()),
-                name: "srv:crm/lookup".to_string(),
-            })
-        );
-        let shape =
-            caps(json!({ "skills": [ { "id": "crm-flow", "tools": [ { "name": "web:a b" } ] } ] }));
-        assert!(matches!(
-            validate(&shape),
-            Err(CapabilityRejection::ToolNameShape { .. })
-        ));
-    }
-
-    /// 重名：顶层内部、skill 之间、以及 skill 与顶层之间——工具名在整份声明里全局唯一。
-    #[test]
-    fn duplicate_tool_names_are_rejected_everywhere() {
-        assert_eq!(
-            validate(&tools(&["web:a/b", "web:a/b"])),
-            Err(CapabilityRejection::DuplicateTool {
-                origin: Origin::TopLevel,
-                name: "web:a/b".to_string()
-            })
-        );
-        let across = caps(json!({
-            "tools": [ { "name": "web:a/b" } ],
-            "skills": [ { "id": "s1", "tools": [ { "name": "web:a/b" } ] } ]
-        }));
-        assert_eq!(
-            validate(&across),
-            Err(CapabilityRejection::DuplicateTool {
-                origin: Origin::Skill("s1".to_string()),
-                name: "web:a/b".to_string()
-            })
-        );
-        let between_skills = caps(json!({
-            "skills": [
-                { "id": "s1", "tools": [ { "name": "web:a/b" } ] },
-                { "id": "s2", "tools": [ { "name": "web:a/b" } ] }
-            ]
-        }));
-        assert!(matches!(
-            validate(&between_skills),
-            Err(CapabilityRejection::DuplicateTool { .. })
-        ));
-    }
-
-    /// skill id 的字符集与重名。
-    #[test]
-    fn skill_ids_are_whitelisted_and_unique() {
-        for id in ["", "a/b", "a:b", "a.b", "客户", "a b"] {
-            assert_eq!(
-                validate(&caps(json!({ "skills": [ { "id": id } ] }))),
-                Err(CapabilityRejection::SkillIdShape { id: id.to_string() }),
-                "{id:?} 该被拒"
-            );
-        }
-        assert_eq!(
-            validate(&caps(json!({ "skills": [ { "id": "crm-flow_2" } ] }))),
-            Ok(())
-        );
-        assert_eq!(
-            validate(&caps(
-                json!({ "skills": [ { "id": "s1" }, { "id": "s1" } ] })
-            )),
-            Err(CapabilityRejection::DuplicateSkill {
-                id: "s1".to_string()
-            })
-        );
-    }
-
-    /// 空声明合法——不声明和声明空数组是一回事。
-    #[test]
-    fn an_empty_declaration_is_valid() {
-        assert_eq!(validate(&Capabilities::default()), Ok(()));
-        assert_eq!(
-            validate(&caps(json!({ "tools": [], "skills": [] }))),
-            Ok(())
-        );
-    }
-
-    /// 错误文案要说得清「哪一项、为什么」，且**不原样回显任意长的输入**。
-    #[test]
-    fn the_message_names_the_offending_item_and_stays_bounded() {
-        let message = validate(&tools(&["srv:crm/lookup"]))
-            .unwrap_err()
-            .to_string();
-        assert!(message.contains("capabilities.tools"), "{message}");
-        assert!(message.contains("srv:crm/lookup"), "{message}");
-        assert!(message.contains("web:"), "{message}");
-
-        let huge = format!("srv:{}", "x".repeat(10_000));
-        let message = validate(&tools(&[&huge])).unwrap_err().to_string();
-        assert!(
-            message.len() < 400,
-            "错误文案不该把请求体原样弹回去：{} 字节",
-            message.len()
-        );
-        assert!(message.contains('…'), "截断该留个记号：{message}");
-    }
-}
+#[path = "validate_tests.rs"]
+mod tests;

@@ -35,6 +35,21 @@ pub(crate) fn parse(text: &str) -> Value {
     parse_node(&lines)
 }
 
+/// 校验一个「只认 `true`/`false`」的可选布尔字段（142：frontmatter 的
+/// `hidden`）。缺失/`null` → `Ok(None)`（调用方决定缺省值）；`true`/`false`
+/// 之外的任何取值是错——原始文本原样带回去，拼进错误信息是调用方的事（这一层
+/// 不认识 `SkillLoadError`，那是 `load.rs` 的类型，`yaml.rs` 只管「是不是合法
+/// 布尔」）。这个解析器不产生真正的 `Value::Bool`（[`scalar`] 只认 `{}`/`[]`
+/// 两种容器），所以合法值也是从字符串比对来的。
+pub(crate) fn parse_optional_bool(value: Option<&Value>) -> Result<Option<bool>, String> {
+    match value {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s == "true" => Ok(Some(true)),
+        Some(Value::String(s)) if s == "false" => Ok(Some(false)),
+        Some(other) => Err(other.to_string()),
+    }
+}
+
 /// 收集有效行：去掉空行与整行注释，算出每行缩进。
 fn collect(text: &str) -> Vec<Line> {
     text.lines()
@@ -224,5 +239,18 @@ quoted: \"hi\"
         let v = parse("name: solo\ndescription: d\n");
         assert_eq!(v["name"], json!("solo"));
         assert!(v.get("tools").is_none());
+    }
+
+    /// 142：`hidden` 只认 `true`/`false`；缺失是 `None`（缺省交给调用方）；
+    /// 别的取值（`yes`/`1`/空对象……）一律 `Err`。
+    #[test]
+    fn parse_optional_bool_only_accepts_true_or_false() {
+        assert_eq!(parse_optional_bool(None), Ok(None));
+        assert_eq!(parse_optional_bool(Some(&Value::Null)), Ok(None));
+        assert_eq!(parse_optional_bool(Some(&json!("true"))), Ok(Some(true)));
+        assert_eq!(parse_optional_bool(Some(&json!("false"))), Ok(Some(false)));
+        assert!(parse_optional_bool(Some(&json!("yes"))).is_err());
+        assert!(parse_optional_bool(Some(&json!("1"))).is_err());
+        assert!(parse_optional_bool(Some(&json!({}))).is_err());
     }
 }

@@ -25,7 +25,7 @@
 use agent_core::{Location, Reversibility};
 
 use crate::collect_tool::COLLECT_TOOL;
-use crate::skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE};
+use crate::skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SKILL_READ};
 use crate::spawn_tool::SPAWN_TOOL;
 use crate::status_tool::STATUS_TOOL;
 
@@ -84,6 +84,20 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // 的定义。它们走 dispatch 截获、不进 `mark_irreversible`，所以不在日志上留
         // 屏障位：`/undo` 连激活一起退掉是白拿的。
         SKILL_ACTIVATE | SKILL_DEACTIVATE => Reversibility::Reversible,
+        // read 同理是**纯读**（137）：按 id 查内存里装载期就位的正文，不写任何
+        // primitive、不落 entry、没有需要补偿的动作——`Pure` 的定义本身。
+        SKILL_READ => Reversibility::Pure,
         _ => Reversibility::Irreversible,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 137：`srv:skill/read` 是纯读，`/undo` 路过它不该停下来问。
+    #[test]
+    fn skill_read_is_pure() {
+        assert_eq!(reversibility_of(SKILL_READ), Reversibility::Pure);
     }
 }

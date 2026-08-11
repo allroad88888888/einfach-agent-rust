@@ -152,61 +152,58 @@ fn the_resident_index_is_in_the_very_first_request_before_any_activation() {
     );
 }
 
+// 139 更新:这份独立测试写成时,`srv:skill/activate` 还在工具表里,模型能自己调
+// 它。139 把 `with_skills` 换成了 read/index 装配,新会话的表里不再有
+// `srv:skill/activate` 这个名字——`skill_indep_activation_journaled.rs`(agent-core
+// 层)已经独立钉过「激活走 command 层、journaled、undo 能退」这件事本身,不因为
+// 谁触发激活而不同,所以下面这条测试改成直接调
+// `Session::activate_skill`(跟同一份关切在 `agent-runtime` 层新开的
+// `tool_table_skill_assembly_tests.rs::a_restored_session_with_a_journaled_activation_still_gets_its_skill_injected`
+// 是同一处改法),只留它原本要证的那件事:**激活之后同一跳请求体带上正文和工具,
+// undo 连激活一起退掉**——不再要求"模型自己发起激活"。
 #[test]
 fn activating_mid_turn_injects_body_and_tool_into_the_next_hop_then_undo_removes_both() {
     let skills_root = support::temp_dir("skill-e2e-activate-skills");
     write_test_skill(&skills_root);
     let fs_root = support::temp_dir("skill-e2e-activate-fs");
 
-    let server = RoutedServer::start(vec![
-        // 第二跳(路由检查在前,更具体的 needle 先判):请求体里回显了第一跳
-        // 那个 tool_call 的 id "call_a",借它精确路由到"收尾"响应。
-        Route::sse(
-            "call_a",
-            vec![
-                r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"激活完毕"},"finish_reason":null}]}"#.to_string(),
-                USAGE_STOP.to_string(),
-                "data: [DONE]".to_string(),
-            ],
-        ),
-        // 第一跳(兜底:第一次请求还没有任何 tool_call 痕迹)——模型直接调用
-        // srv:skill/activate({"skill":"testskill"})。
-        Route::sse(
-            "",
-            vec![
-                r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"srv_3Askill_2Factivate","arguments":"{\"skill\": \"testskill\"}"}}]}}]}"#.to_string(),
-                r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":80,"completion_tokens":15,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":80}}"#.to_string(),
-                "data: [DONE]".to_string(),
-            ],
-        ),
-    ]);
+    let server = RoutedServer::start(vec![Route::sse(
+        "",
+        vec![
+            r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"好的"},"finish_reason":null}]}"#.to_string(),
+            USAGE_STOP.to_string(),
+            "data: [DONE]".to_string(),
+        ],
+    )]);
     let registry = load_registry(&skills_root);
     let mut ctx = build_ctx(server.port, &fs_root, registry);
-    let mut session = Session::new(AgentId::root());
+    let root = AgentId::root();
+    let mut session = Session::new(root.clone());
+    // 会话的第一轮是隐式 `Idle`,不用先 `begin_turn()`——激活和下面的对话因此
+    // 落在同一个 turn 里,`undo_turn()` 才能把两者一起退掉(见文件顶部这条测试
+    // 上面的 139 更新说明)。
+    session
+        .activate_skill(&root, SkillId::new("testskill"))
+        .expect("激活一个从没激活过的 skill 不该被拒");
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 testskill")
+        run_turn(&mut session, &mut ctx, "帮我处理 testskill 相关的事")
             .expect("skill activation should not be a source failure"),
         TurnStatus::Done { truncated: false }
     );
 
     let calls = server.calls();
-    assert_eq!(
-        calls.len(),
-        2,
-        "一次工具调用 + 一次收敛,该正好两跳请求,实际: {}",
-        calls.len()
-    );
-    let after_activation = &calls[1];
+    assert_eq!(calls.len(), 1, "已经激活好的会话只该有这一跳请求,实际: {}", calls.len());
+    let after_activation = &calls[0];
     assert!(
         after_activation.body.contains(SKILL_BODY_MARKER),
-        "激活之后的下一跳请求体该带上 skill 正文(late_system): {}",
+        "激活之后的请求体该带上 skill 正文(late_system): {}",
         after_activation.body
     );
     assert!(
         after_activation.body.contains("testskill_2Fping")
             || after_activation.body.contains("testskill/ping"),
-        "激活之后的下一跳请求体该带上 skill 声明的工具(late_tools): {}",
+        "激活之后的请求体该带上 skill 声明的工具(late_tools): {}",
         after_activation.body
     );
 

@@ -7,6 +7,7 @@ mod actor_panic_is_reported_dead;
 mod cancel_mid_turn_fails_the_turn;
 mod close_then_reopen_recovers;
 mod concurrent_open_of_the_same_id_only_one_wins;
+mod host_skill_reject_indep;
 mod http_agent_tree_get_matches_sse;
 mod http_bind_defaults_to_loopback;
 mod http_capabilities_declaration;

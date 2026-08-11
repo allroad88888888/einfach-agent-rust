@@ -87,6 +87,13 @@ impl Slot {
             // `spawn` 一行没改）。让它 `Private` 就等于说「这是某一个 agent 的内部
             // 账本」——而它决定的是整棵树看得见哪些内置工具，那是会话级的事实。
             Slot::DisabledBuiltins => Visibility::Upward,
+            // `PrefixChunks`（134）跟上面四条同一类，判据也是同一个：**它是会话级
+            // 的事实，不是某一个 agent 的内部账本**。它只写在 root 头上
+            // （`Session::set_prefix_chunks`），子 agent 要知道「这个会话开局定下了
+            // 哪些 system 前缀」就得往根的方向读。让它 `Private` 就等于说这是
+            // root 一个人的账——而它描述的是整个会话的开局条件。
+            // 站队按语义、不按当下有没有读者（模块文档：开放一个方向要有理由）。
+            Slot::PrefixChunks => Visibility::Upward,
 
             // —— 往下：父 agent 要知道子干完了没 ————————————————
             //
@@ -178,7 +185,8 @@ mod tests {
     fn the_current_assignment_is_pinned() {
         // 顺序 = `Slot::ALL` 里的相对次序（`slots_with` 保序过滤）：Messages 在最前，
         // 039 追加的 SkillsActive、073 追加的 HostTools、064 追加的 HostSkills、
-        // 076 追加的 DisabledBuiltins 在末尾。五者都是「子干活要的上下文」（往上读）。
+        // 076 追加的 DisabledBuiltins、134 追加的 PrefixChunks 在末尾。
+        // 六者都是「子干活要的会话级上下文」（往上读）。
         assert_eq!(
             slots_with(Visibility::Upward),
             vec![
@@ -187,6 +195,7 @@ mod tests {
                 Slot::HostTools,
                 Slot::HostSkills,
                 Slot::DisabledBuiltins,
+                Slot::PrefixChunks,
             ]
         );
         assert_eq!(

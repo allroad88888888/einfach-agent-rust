@@ -117,6 +117,7 @@ mod remote_tool_status;
 mod remote_tool_submission;
 mod reply;
 mod runner;
+mod session_start;
 mod skill;
 mod spawn_request;
 mod spawn_tool;
@@ -137,6 +138,7 @@ mod transient_source_recovery;
 #[cfg(test)]
 mod transient_source_tests;
 mod transient_source_vault;
+mod turn_end;
 
 pub mod ctx;
 pub mod event;
@@ -185,9 +187,10 @@ pub use remote_tool_submission::submit_remote_tool_result_async;
 #[cfg(not(target_arch = "wasm32"))]
 pub use runner::run_turn;
 pub use runner::run_turn_async;
+pub use session_start::{SessionStartError, run_session_start};
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
-pub use tool_table::ToolTable;
+pub use tool_table::{CallTiming, TimedRun, TimedTool, ToolTable};
 pub use transient_source_failure::TransientSourceFailure;
 pub use transient_source_recovery::recovered_transient_source_needs_fail_close;

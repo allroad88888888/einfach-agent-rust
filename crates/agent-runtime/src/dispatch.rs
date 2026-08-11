@@ -40,7 +40,7 @@ use crate::event::RunnerEvent;
 use crate::io_bus::IoBus;
 use crate::mcp_call::{self, McpCall};
 use crate::provider_call::{self, ProviderCall};
-use crate::skill::{self, SKILL_ACTIVATE, SKILL_DEACTIVATE};
+use crate::skill::{self, SKILL_ACTIVATE, SKILL_DEACTIVATE, SKILL_READ};
 use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::status_tool::{self, STATUS_TOOL};
 use crate::subtree::Subtree;
@@ -137,6 +137,14 @@ pub(crate) fn run_effect(
             if (&*tool == SKILL_ACTIVATE || &*tool == SKILL_DEACTIVATE) && ctx.tools.declares(&tool)
             {
                 return skill::intercept(session, ctx, &agent, call_id, &tool, &input, epoch);
+            }
+            // skill 正文按需读（137，只实现不装配）：跟 activate/deactivate 同款
+            // dispatch 截获，但它不碰 `Session`——纯读 registry，甚至不需要拿到
+            // session 这个参数。**只有 139 把 `srv:skill/read` 放进
+            // `ToolTable::with_skills` 之后 `declares` 才会为真**，这条路由今天
+            // 是死代码，行为零变化。
+            if &*tool == SKILL_READ && ctx.tools.declares(SKILL_READ) {
+                return skill::read_intercept(ctx, &agent, call_id, &input, epoch);
             }
             // 027：发起时快照在这里造一次，`Irreversible` 的立刻登记——记录点
             // 必须在**派发**这一刻，而不是等结果落地才回头看，否则进程在工具

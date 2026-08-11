@@ -101,9 +101,8 @@ pub(crate) struct CapabilityTool {
     pub(crate) reversibility: Option<CapabilityReversibility>,
 }
 
-/// 一个宿主侧的 skill：`description` 进常驻索引（每个 skill 一行），`body` 与
-/// `tools` 等模型 `srv:skill/activate` 之后才注入（skill 的既有形状，
-/// HOST-CAPABILITIES.md §一）。
+/// 一个宿主侧的 skill：`description` 进常驻索引（每个 skill 一行），`body` 经
+/// `srv:skill/read` 按需取（139 起的形状；`tools` 见下——140 起**非空即拒**）。
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub(crate) struct CapabilitySkill {
@@ -111,13 +110,16 @@ pub(crate) struct CapabilitySkill {
     pub(crate) id: String,
     // 061 在这两个字段上挂过 `#[allow(dead_code)]`（skill 的装配那时还没做）——
     // 064 把它们全接进 `assemble::host_skills` 了：`description` 进常驻索引那一行，
-    // `body` 等 `srv:skill/activate` 之后进 `late_system`。那两句记账连同理由一起删掉。
+    // `body` 经 `srv:skill/read` 按需取（139 起的新形状，替换了旧的
+    // `srv:skill/activate`）。那两句记账连同理由一起删掉。
     #[serde(default)]
     pub(crate) description: String,
     #[serde(default)]
     pub(crate) body: String,
-    /// 自带的工具——**跟顶层 `tools` 过同一条校验**（[`validate`]）：激活之后它们
-    /// 进的是同一张工具表，放宽这里等于给 `srv:` 开了个后门。
+    /// 自带的工具——**字段仍然解析**（兼容老客户端的请求形状），但 140 起
+    /// [`validate`] 会拒绝任何非空值：**v1 不支持 skill 携带工具**（决策 27——
+    /// skill 不再有「激活后进表」这个口子，携带的工具在结构上已经无处可去）。
+    /// 想给这个 skill 配工具，走顶层 `capabilities.tools` 声明。
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<CapabilityTool>>"))]
     pub(crate) tools: Vec<CapabilityTool>,
@@ -228,7 +230,9 @@ mod tests {
     }
 
     /// skill 自带的工具跟顶层工具是**同一个类型**——形状上就没有「宽松一档」的
-    /// 余地（校验也一样，见 [`validate`] 的测试）。
+    /// 余地。**这一层只管解析**：这份声明本身在 140 起会被 [`validate`] 拒绝
+    /// （非空 `tools` 整份 400），但形状层不该替校验层做判断，parse 该成功就
+    /// 成功——两层各管各的，见 [`validate`] 的测试。
     #[test]
     fn a_skill_carries_the_same_tool_shape() {
         let caps = parse(json!({

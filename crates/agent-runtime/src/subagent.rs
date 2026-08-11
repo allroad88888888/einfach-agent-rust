@@ -2,7 +2,10 @@
 //!
 //! 一个 agent 的消息历史和前缀镜像是它自己槽位里的东西（`Session` 的 per-agent
 //! 读口直接给），这个文件补的是另外两样——它们不在原子图里，来自宿主：
-//! system chunks 在 [`RunnerCtx`]，工具表也在 [`RunnerCtx`]。
+//! system chunks 在 [`RunnerCtx`]，工具表也在 [`RunnerCtx`]。135 起，
+//! `system_for` 还要在两者之间接一段——134/135 那份「开局工具跑出来的会话级
+//! 前缀」，值在 `Session`（`Session::prefix_chunks`），不在 `RunnerCtx`，见
+//! 下面这个函数的实现。
 //!
 //! # root 与子 agent 走同一个函数
 //!
@@ -28,6 +31,12 @@ const SUBAGENT_LABEL: &str = "subagent";
 /// 组这个 agent 的 system 分段。
 pub(crate) fn system_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> Vec<SystemChunk> {
     let mut chunks = ctx.system.clone();
+    // 135：开局工具跑出来的前缀块（134 的状态，创建期定下、之后不变）排在
+    // 基础 system 之后、子 agent 模板段之前。root 与子 agent 同路——前缀属于
+    // 这个会话，不属于树上某一个 agent（同 `Session::set_prefix_chunks` 的
+    // 落点），两者看到的必须是同一份，不因为「谁在问」而不同。空前缀（没开
+    // timed 工具的会话）→ `extend` 一个空 `Vec`，逐字节回到 135 之前。
+    chunks.extend(session.prefix_chunks());
     if session.tools_allowed_of(agent).is_some() {
         chunks.push(SystemChunk {
             label: Arc::from(SUBAGENT_LABEL),

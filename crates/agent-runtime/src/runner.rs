@@ -92,6 +92,7 @@ use crate::provider_call::ProviderCall;
 use crate::provider_message;
 use crate::subtree::Subtree;
 use crate::transient_source_failure::TransientSourceFailure;
+use crate::turn_end;
 
 /// 泵「什么都没发生也要醒一次」的节奏（117 之前是 `recv_timeout` 的参数，现在
 /// 是 `crate::heartbeat` 的心跳间隔，值和含义都没变）。不需要跟超时预算同量级，
@@ -282,6 +283,15 @@ pub(crate) async fn resume_after_first_commit(
             if status.is_terminal() {
                 ctx.transient_sources.purge_all();
                 persist::maybe_snapshot(ctx, session);
+                // 136：轮已经完全落定（快照之后）才收尾驱动 `TurnEnd`，且只在
+                // **正常完成**（`Done`）时触发——取消/失败/协议违规都不算「模型
+                // 交回控制权」。这个分支也是远端工具结果回传后 `resume_async`
+                // 续跑到底的出口（同一条 B），所以一轮被远端结果补完而落
+                // `Done` 时同样会触发，是刻意的，理由见 `crate::turn_end`
+                // 模块文档「挂点也是远端工具回传的续跑路」。
+                if matches!(status, TurnStatus::Done { .. }) {
+                    turn_end::fire(ctx);
+                }
             }
             return Ok(status);
         }

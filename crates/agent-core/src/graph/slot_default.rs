@@ -23,7 +23,7 @@
 
 use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::value::atom_value::AgentValue;
-use crate::value::{send_plan::SendPlan, send_plan_codec, summaries};
+use crate::value::{prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries};
 
 use super::slot::{AtomKey, Slot, ToolCallSlot};
 
@@ -95,6 +95,12 @@ impl Slot {
             // 它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没压过的
             // 会话平添一份摘要正文。同 `SendPlan`，空库也走同一条编解码路径。
             Slot::Summaries => summaries::to_value(&[]),
+            // 空列表的编码，不是 `Null`：**默认值必须是空**——019 的按需重建拿的
+            // 就是它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没
+            // 写过前缀的会话平添几段 system 文本，而那几段在 prompt 最前面
+            // （红线 11：整份缓存作废，还不报错）。空列表也走同一条编解码路径，
+            // 读取点因此不必区分「没写过」和「写了零块」——它们就是同一个值。
+            Slot::PrefixChunks => prefix_chunks::to_value(&[]),
         }
     }
 }

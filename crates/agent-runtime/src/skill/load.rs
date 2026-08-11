@@ -33,6 +33,9 @@ use super::{Skill, SkillSource, yaml};
 pub enum SkillLoadError {
     /// 读一个存在的路径失败（权限、坏链接……）。
     Io { path: String, message: String },
+    /// frontmatter 的 `hidden` 字段不是 `true`/`false`（142）。装载期就报给
+    /// 部署者——这是最早能报的点，晚了就是模型运行时才发现索引形状不对。
+    InvalidHidden { path: String, value: String },
 }
 
 impl std::fmt::Display for SkillLoadError {
@@ -41,6 +44,10 @@ impl std::fmt::Display for SkillLoadError {
             SkillLoadError::Io { path, message } => {
                 write!(f, "读 skill 目录 {path} 失败：{message}")
             }
+            SkillLoadError::InvalidHidden { path, value } => write!(
+                f,
+                "{path} 的 frontmatter 里 hidden 字段只认 true/false，收到「{value}」"
+            ),
         }
     }
 }
@@ -66,7 +73,7 @@ pub(super) fn load_dir(
         }
         let content = std::fs::read_to_string(&md).map_err(|e| io_err(&md, &e))?;
         let fallback = entry.file_name().to_string_lossy().into_owned();
-        let skill = build_skill(&fallback, &content);
+        let skill = build_skill(&fallback, &content, &md)?;
         out.insert(Arc::clone(&skill.id.0), skill);
     }
     Ok(())
@@ -79,8 +86,11 @@ fn io_err(path: &Path, e: &std::io::Error) -> SkillLoadError {
     }
 }
 
-/// 把一份 SKILL.md 文本建成 [`Skill`]。宽容：任何缺失都有兜底。
-fn build_skill(fallback_id: &str, content: &str) -> Skill {
+/// 把一份 SKILL.md 文本建成 [`Skill`]。宽容：大多数缺失都有兜底——**除了
+/// `hidden`**：那个字段写了就必须是合法布尔，写错是唯一会让装载失败的解析
+/// 错误（142，理由见 [`SkillLoadError::InvalidHidden`]）。`path` 只用来拼错误
+/// 信息里那句「哪个文件」。
+fn build_skill(fallback_id: &str, content: &str, path: &Path) -> Result<Skill, SkillLoadError> {
     let (front, body) = split_frontmatter(content);
     let meta = front.map(yaml::parse).unwrap_or(Value::Null);
 
@@ -96,14 +106,21 @@ fn build_skill(fallback_id: &str, content: &str) -> Skill {
         .get("tools")
         .and_then(Value::as_array)
         .map(|arr| arr.iter().filter_map(tool_spec).collect::<Vec<_>>());
+    let hidden = yaml::parse_optional_bool(meta.get("hidden"))
+        .map_err(|value| SkillLoadError::InvalidHidden {
+            path: path.display().to_string(),
+            value,
+        })?
+        .unwrap_or(false);
 
-    Skill {
+    Ok(Skill {
         id: SkillId::new(id),
         description: Arc::from(description),
         body: Arc::from(body.trim()),
         tools: tools.unwrap_or_default(),
         source: SkillSource::Disk,
-    }
+        hidden,
+    })
 }
 
 /// 一条 `tools` 项 → [`ToolSpec`]。缺 `name` 的项跳过（`None`）：一个没名字的
@@ -170,9 +187,15 @@ tools:
 这是正文 BODY。
 ";
 
+    /// 测试专用：不落磁盘时凑一个占位路径，只有 `InvalidHidden` 的错误信息
+    /// 会用到它。
+    fn fake_path() -> std::path::PathBuf {
+        std::path::PathBuf::from("test/SKILL.md")
+    }
+
     #[test]
     fn builds_a_skill_with_name_description_body_and_tool() {
-        let skill = build_skill("dirname", SKILL_MD);
+        let skill = build_skill("dirname", SKILL_MD, &fake_path()).unwrap();
         assert_eq!(skill.id.as_str(), "testskill");
         assert_eq!(&*skill.description, "一个技能, IDX。");
         assert_eq!(&*skill.body, "这是正文 BODY。");
@@ -182,15 +205,28 @@ tools:
             &*skill.tools[0].schema.to_string(),
             r#"{"properties":{},"type":"object"}"#
         );
+        assert!(!skill.hidden, "没写 hidden 时缺省 false");
     }
 
     /// 缺 frontmatter：目录名当 id，全文当正文，没有工具。
     #[test]
     fn a_bare_markdown_falls_back_to_the_dir_name() {
-        let skill = build_skill("myskill", "just some instructions\n");
+        let skill = build_skill("myskill", "just some instructions\n", &fake_path()).unwrap();
         assert_eq!(skill.id.as_str(), "myskill");
         assert_eq!(&*skill.body, "just some instructions");
         assert!(skill.tools.is_empty());
+    }
+
+    /// 142：`hidden: true` 被认出来；`hidden: yes` 是装载期错误。
+    #[test]
+    fn hidden_true_is_recognized_and_invalid_values_fail_to_load() {
+        let hidden_md = "---\nname: h\nhidden: true\n---\nbody\n";
+        let skill = build_skill("dirname", hidden_md, &fake_path()).unwrap();
+        assert!(skill.hidden);
+
+        let bad_md = "---\nname: h\nhidden: yes\n---\nbody\n";
+        let result = build_skill("dirname", bad_md, &fake_path());
+        assert!(matches!(result, Err(SkillLoadError::InvalidHidden { .. })));
     }
 
     /// 不存在的目录：装载跳过、不报错。

@@ -64,7 +64,11 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
 /// （`declare_host_tools`）+ 064/076 的两条同款声明（`declare_host_skills` /
 /// `disable_builtins`）+ 100 的 `SendPlan` 整体替换（`replace_send_plan`——104 的
 /// `advance_boundary` 生效时也是调它，复用同一个标签，不另开一格）+ 107 的摘要回写
-/// （`apply_summary`）。
+/// （`apply_summary`）+ 134 的会话开局前缀（`prefix_init`）。
+///
+/// **134 为什么不叫 `set_prefix_chunks`**：label 记的是「当时发生了什么」，而这一步
+/// 发生的事是「这个会话的开局前缀在这里定下来了」——它按设计只发生一次、在第一轮
+/// 之前。叫成命令名会让人以为它跟别的槽位写入一样可以反复出现在时间线上。
 ///
 /// **107 为什么不复用 `replace_send_plan`**：104 复用它的理由是「这条命令在状态层
 /// 做的事就是整体换掉那一个槽位的值」；`apply_summary` 不是——它在一条 entry 里同时
@@ -104,6 +108,7 @@ const KNOWN_LABELS: &[&str] = &[
     "disable_builtins",
     "replace_send_plan",
     "apply_summary",
+    "prefix_init",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

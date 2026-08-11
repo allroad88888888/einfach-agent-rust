@@ -505,6 +505,56 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 **第一轮工具表与关闭前逐字节相同**；取消能真的中断请求；`srv:` 的 shell/fs **不出现在
 工具表里**。
 
+## M15 · 调用时机与 skills 工具化
+
+决策 27（2026-08-11 拍板，取代决策 21 的注入形态，理由见 ROADMAP §一）。
+core/runtime 的概念收敛为「**一张工具表 + 三个调用时机**」：时机空 = 模型自主调；
+`SessionStart` = 会话创建时自动调、结果成为 system 前缀块；`TurnEnd` = 完成轮后
+自动调、纯副作用。skills 从此不是 core/runtime 概念——索引是一个开局工具、正文走
+普通 `srv:skill/read`（业内已收敛的「读取 → tool result」通道），树形靠正文引用
+递归展开。
+
+（M14 的 issue 段与本段并行推进，见各 issue 文件；本节表格里的依赖以 issue 文件为准。）
+
+```
+133 ─┬→ 135（另需 134）─┐
+134 ─┘                  ├→ 139 → 140 → 141 ─┐
+137 ────────────────────┤                    ├→ 143（M15 终点）
+138 ────────────────────┴→ 142 ─────────────┤
+133 ─→ 136 ─────────────────────────────────┘
+```
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [133](133-call-timing-field.md) | 工具表加「调用时机」维度（timed 区不进模型清单） | — | sonnet | ✅ |
+| [134](134-prefix-chunk-state.md) | 前缀块状态：开局结果落 store | — | **opus** | ✅ |
+| [135](135-session-start-driver.md) | 开局驱动：新建会话跑 `SessionStart` 工具 | 133+134 | sonnet | ✅ |
+| [136](136-turn-end-driver.md) | 收尾驱动：完成轮后跑 `TurnEnd`（纯副作用） | 133 | sonnet | ✅ |
+| [137](137-skill-read-tool.md) | `srv:skill/read`：正文按需读（实现不装配） | — | sonnet | — |
+| [138](138-skill-index-tool.md) | `srv:skill/index`：索引文本（实现不装配） | — | sonnet | ✅ |
+| [139](139-skill-assembly-switch.md) | CLI 装配切换：skills 新路上线（真机口令实验） | 133+135+137+138 | sonnet | ✅ |
+| [140](140-host-skills-into-registry.md) | 宿主声明 skills 收编（server 路 + 恢复） | 139 | sonnet | ✅ |
+| [141](141-remove-activation-subsystem.md) | 删除激活子系统与 `late_system` 全链路 | 140 | sonnet | ✅ |
+| [142](142-skill-hidden-frontmatter.md) | 树形：frontmatter `hidden` 不进索引 | 138 | haiku | — |
+| [143](143-m15-dogfood.md) | 真机 dogfood ← **M15 终点** | 136+141+142 | **opus** | 本条即验收 |
+
+**M15 验收**（可判定，[143](143-m15-dogfood.md) 逐条扛）：首轮 system 只有索引没有
+正文；模型两跳自主 read（router → hidden 子 skill）说出藏的口令；undo 撤 read 轮后
+正文字节从 body 消失；`kill -9` 恢复后前缀块逐字节原样、开局工具执行计数仍为 1；
+完成轮 hook 各触发一次、取消轮零次；**十轮第 2 轮起每轮 `cached/prompt ≥ 0.9`
+（含 read 发生的轮）**。
+
+**进展（2026-08-11）**：133–140、142 **九条全部完成**（分支 `worktree-m15`，
+多 agent 并行：每条红线 issue 实现与独立测试各一个 agent、互不看对方产物）。
+真机验收（DeepSeek 真 key）：模型第 1 轮仅凭索引描述自主调 `srv:skill/read` 说出
+藏在正文里的口令，十轮 `cached/prompt` 全部 ≥ 97.8%（含两次 read 轮）、零 drift
+告警。过程中独测抓出 1 个实现缺口（空 registry 非零变化）、顺带修出 1 个持久化
+时序 bug（`prefix_init` 永不落盘，重启静默丢索引）——两条都记在对应 issue 的
+实做记录里。工作区全量 1932 测试零失败、ts 一致性绿、`build-wasm` 绿。
+**剩 141（删激活子系统）与 143（dogfood 终点）**：141 与 M14 的 wasm 改动弱交集，
+排在 [132](132-m14-dogfood.md) 之后；139 之前老路完整可用这条回退保障已随切换完成
+退役——现在的回退单位是整个 `worktree-m15` 分支。
+
  ---
  
  ## 怎么做

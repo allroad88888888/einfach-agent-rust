@@ -168,6 +168,26 @@ pub enum Slot {
     /// batch 里写完，落成一条 `Entry`——所以「两个槽位」不会长出「边界推了但摘要
     /// 还没进库」的中间态，换来的是「推边界」那条 entry 的 `prev` 不必抄一份正文。
     Summaries,
+    /// **会话创建期定下的一列 system 前缀块**（134）。值是 [`AgentValue::Json`] 里
+    /// 一个 `[[label, text], …]` 数组（`value::prefix_chunks` 那一处编解码），
+    /// `Json([])` = 这个会话没有前缀块（默认值，也就是 134 之前的行为）。
+    ///
+    /// core 只知道「system 段前面挂着这么一列带 label 的文本，创建期定下、之后
+    /// 不变」，**不知道它是谁算出来的**（红线 12 的精神：core 里没有「时机」
+    /// 「skill」这些词）。写入点只有一个：`Session::set_prefix_chunks`，宿主建
+    /// 新会话时调一次。
+    ///
+    /// 为什么必须进 store 而不是每次恢复时重算：重算依赖外部世界，这一次给出的
+    /// 结果不保证跟当初一样——历史里的对话是在 A 前缀下产生的、恢复出来的会话
+    /// 挂着 B 前缀，而前缀在 prompt 最前面（红线 11），缓存当场全断、上下文跟
+    /// 历史对不上，两样都不报错。**恢复是忠实重放，不是拿今天的世界重建**
+    /// （跟 [`Slot::HostTools`] 同一条）。
+    ///
+    /// 为什么容器是 `Vec` 而且**不排序**（跟 [`Slot::HostSkills`] 刻意不同）：
+    /// 顺序本身是信息——它就是这些块在 system 段里该出现的先后。红线 11 要的是
+    /// 「确定」不是「排序」，而确定性这里由「一次写定、之后不改」的写入点保证。
+    /// 完整论证在 [`value::prefix_chunks`](crate::value::prefix_chunks) 的模块文档。
+    PrefixChunks,
 }
 
 /// 一次工具调用自己的槽位。
@@ -210,7 +230,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 18] = [
+    pub const ALL: [Slot; 19] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -229,6 +249,7 @@ impl Slot {
         Slot::SendPlan,
         Slot::PrevSendPlan,
         Slot::Summaries,
+        Slot::PrefixChunks,
     ];
 }
 

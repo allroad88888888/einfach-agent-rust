@@ -33,6 +33,15 @@ web-time = { workspace = true }
 futures-channel = { workspace = true }
 futures-util = { workspace = true }
 
+# 136：`turn_end` 的 `Err` 只记日志，不影响轮。`tracing` 不是这个 crate 的新
+# 依赖树——`agent-server`/`agent-server-bin` 已经用它（各自 `tracing = "0.1"`），
+# 已解析进 `Cargo.lock`（0.1.44），这里同一个版本号，不需要版本仲裁。核心宏
+# 不依赖 subscriber：没人装 subscriber 时调用点是零成本空操作（`agent-cli` 的
+# 场景），装了才可观测（`agent-server` 的场景）——取舍全文见 `src/turn_end.rs`
+# 模块文档「日志手段」。只用核心 crate，不带 `tracing-subscriber`：那是宿主的
+# 选择，也没有必要为 wasm32 目标验证一份 subscriber 能不能编译。
+tracing = "0.1"
+
 # 114a：`persist::idb::web_kv` 是 `KvStore` 的真浏览器实现（`web_sys::IdbDatabase`
 # 上薄薄一层），只在 wasm32 编译（该文件 `#[cfg(target_arch = "wasm32")]`）。放进
 # `[target.'cfg(...)'.dependencies]` 而不是 `[dependencies]`：native 构建

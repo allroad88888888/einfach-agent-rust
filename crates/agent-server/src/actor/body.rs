@@ -20,7 +20,7 @@ use crate::event::{Frame, SessionEvent};
 use crate::registry::OpenSpec;
 
 use super::message::ActorMessage;
-use super::{capabilities, commands, inbox};
+use super::{capabilities, commands, inbox, session_start};
 
 /// 握手消息：`Ok(cancel)` = 起好了，`cancel` 是 [`RunnerCtx::cancel_flag`]
 /// （[`crate::handle::SessionHandle::cancel`] 直接旁路写的那个原子标志）；
@@ -235,6 +235,17 @@ pub(super) fn run(
     // 条目当新条目重新 append 一遍（`agent_runtime::persist::seed_after_recover`
     // 文档「真 bug」一节）。对全新会话是无害的空操作，不需要在这里分支判断。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
+
+    // 135：工具表装完之后跑一次开局工具，只在「都没有才建」这一支（`restored`
+    // 是这三态判定的既有变量）。**必须排在 `seed_after_recover` 之后**（139 修的
+    // 真 bug）：`maybe_run` 会给新会话追加一条 journaled 的 `prefix_init` entry；
+    // 排在 `seed_after_recover` 之前，这条刚写的 entry 会被误判成「已经在盘上」，
+    // 从此永远不被 `persist::sync` 真正落盘，重启即丢。`Err` 并进上面几处一样的
+    // 「actor 启动阶段的失败」早退路径。
+    if let Err(reason) = session_start::maybe_run(restored, &mut session, ctx.tools()) {
+        let _ = ready_tx.send(Err(reason));
+        return;
+    }
 
     // 073/064：全新会话把这一次的声明**journaled 地写一次**（`Slot::HostTools` /
     // `Slot::HostSkills`），恢复时跟别的 primitive 一样自动回来。**必须排在

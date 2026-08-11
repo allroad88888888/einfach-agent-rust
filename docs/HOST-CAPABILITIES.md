@@ -280,6 +280,38 @@ server 形态下是完全休眠的。
 **`body` 今天没有长度上限**——见 §九「这一节还没定的」最后一条，属安全那一节，064 不做。
 一份很长的 `body` 会让**激活之后的每一轮**都变贵，这是确定的成本、不是不确定的风险。
 
+## 八之二、M15 更新：正文通道换成 `srv:skill/read`，skill 不再能带 `tools`
+
+决策 27（M15）把 skill 的注入口从「模型调 `srv:skill/activate` → 正文/自带工具进
+`late_system`/`late_tools`」整个换掉，理由与形状见
+[137](issues/137-skill-read-tool.md)/[138](issues/138-skill-index-tool.md)/
+[139](issues/139-skill-assembly-switch.md)：常驻索引挪进 `SessionStart` 时机区
+（一行「id — 描述」，跟本节上文的形状一致），正文改成一个普通工具
+`srv:skill/read`——模型按需拿 `{ "skill": "<id>" }` 去读，返回值逐字节是那个
+skill 的正文，**进这一跳的 tool_result**，不是常驻 system 段。旧的
+`srv:skill/activate`/`deactivate` 不再进新会话的工具表；本文档前面提到它们的地方
+（§一、§四示例、§十图）描述的是 139 之前的形状，激活子系统的正式删除在
+[141](issues/141-remove-activation-subsystem.md)。
+
+**§一「声明」这一节讲的宿主注入机制不变**：`capabilities.skills` 进这个会话的
+`SkillRegistry`、恢复时从 `Slot::HostSkills` 重建——[140](issues/140-host-skills-into-registry.md)
+核实过这两件事已经被 139 顺带做完，不是新代码。140 真正新增的只有一条**声明校验**：
+
+> **`capabilities.skills[..].tools` 非空 → 整份 400。**
+
+激活口子一没，skill 自带的 `tools` 字段在结构上就无处可去——没有任何时机会把它塞
+进模型看到的工具表。与其让宿主声明了、正文永远用不上（旧口子已经不存在，声明会
+被静默忽略），不如在**它自己在场的这一次请求**里如实说清楚（069 判据「在最早能
+报给作者的点上失败」）：错误文案点名是哪个 skill、指向决策 27、并说明工具该走
+`capabilities.tools` 顶层声明。落地在
+[`crate::http::capabilities::validate`](../crates/agent-server/src/http/capabilities/validate.rs)，
+判定排在这个 skill 的其余校验（id 形状、id 重名）之后、任何工具形状/前缀检查之前
+——`tools` 一旦非空就是整份声明的问题，不必再花一轮校验去挑剔一个注定要被拒的
+字段。`CapabilitySkill.tools`/`agent_core::HostSkill.tools` 两个字段**都没有删**：
+前者是老客户端请求形状的兼容（解析仍然成功，只是校验会拒），后者是老 journal
+（139 之前落盘的会话历史，其中的 activate entry 仍然带着自带工具）的恢复兼容——
+运行时容忍这条老数据的路径留到 141 才清。
+
 ## 九、安全：**暂缓讨论**（用户 2026-08-04：「安全讨论再说」）
 
 ### 点 1：工具描述与 skill 正文直接进 prompt

@@ -150,43 +150,35 @@ fn build_ctx(port: u16, fs_root: &std::path::Path) -> RunnerCtx {
 #[test]
 fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_intact() {
     let fs_root = support::temp_dir("skill-clash-fs");
-    let server = RoutedServer::start(vec![
-        // 第二跳：请求体里回显了第一跳那个 tool_call 的 id。
-        Route::sse(
-            "call_a",
-            vec![
-                r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"激活完毕"},"finish_reason":null}]}"#.to_string(),
-                USAGE_STOP.to_string(),
-                "data: [DONE]".to_string(),
-            ],
-        ),
-        // 第一跳：模型调 srv:skill/activate({"skill":"crm-flow"})。
-        Route::sse(
-            "",
-            vec![
-                r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"srv_3Askill_2Factivate","arguments":"{\"skill\": \"crm-flow\"}"}}]}}]}"#.to_string(),
-                r#"data: {"choices":[{"index":0,"delta":{"content":""},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":80,"completion_tokens":15,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":80}}"#.to_string(),
-                "data: [DONE]".to_string(),
-            ],
-        ),
-    ]);
+    // 139：`with_skills` 不再注册 `srv:skill/activate`，模型没有工具调用能激活
+    // 这个 skill 了——跟 `dispatch_uses_the_table_declaration_when_...` 那条测试
+    // 同一个改法，激活直接走 `Session::activate_skill` 这个命令（`skill_injection`
+    // 只认 `Slot::SkillsActive`，不管这个 skill 当初是怎么被激活的），所以只剩一跳
+    // 请求要断言。
+    let server = RoutedServer::start(vec![Route::sse(
+        "",
+        vec![
+            r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"好的"},"finish_reason":null}]}"#.to_string(),
+            USAGE_STOP.to_string(),
+            "data: [DONE]".to_string(),
+        ],
+    )]);
     let mut ctx = build_ctx(server.port, &fs_root);
-    let mut session = Session::new(AgentId::root());
+    let root = AgentId::root();
+    let mut session = Session::new(root.clone());
+    session
+        .activate_skill(&root, SkillId::new("crm-flow"))
+        .unwrap();
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 crm-flow")
+        run_turn(&mut session, &mut ctx, "帮我处理 crm-flow 工单")
             .expect("skill activation should not be a source failure"),
         TurnStatus::Done { truncated: false }
     );
 
     let calls = server.calls();
-    assert_eq!(
-        calls.len(),
-        2,
-        "一次工具调用 + 一次收敛，该正好两跳请求，实际 {}",
-        calls.len()
-    );
-    let after = &calls[1];
+    assert_eq!(calls.len(), 1, "已经激活好的会话只该有这一跳请求，实际 {}", calls.len());
+    let after = &calls[0];
     let tools = tools_of(&after.body);
 
     // ── 069 那条红线：一个名字在进 prompt 的那张表里只能出现一次。

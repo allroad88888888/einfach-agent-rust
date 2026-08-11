@@ -87,7 +87,8 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
             Slot::SkillsActive,
             Slot::HostTools,
             Slot::HostSkills,
-            Slot::DisabledBuiltins
+            Slot::DisabledBuiltins,
+            Slot::PrefixChunks
         ]
     );
     assert_eq!(downward, vec![Slot::Status, Slot::ToolsAllowed]);
