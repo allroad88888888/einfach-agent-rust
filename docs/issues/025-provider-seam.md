@@ -40,7 +40,7 @@ sonnet 级接线。混在一个 issue 里，就是拿 opus 的钱写 REPL。
 - **adapter 做了妥协必须报出来**（`Adjustment`）。静默妥协是本层头号大忌：
   功能正常，只在账单或「模型怎么没调那个工具」上浮出来。
 
-`ProviderRequest` 这类「组装完能带走」的中间产物归 adapter，理由是**线程边界**
+`Encoded`（原 `ProviderRequest`）这类「组装完能带走」的中间产物归 adapter，理由是**线程边界**
 （决策 16）不是组装：store 是 `Rc<RefCell>` 不 `Send`，HTTP 在别的线程。
 
 ### 一家的实现

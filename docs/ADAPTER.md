@@ -231,21 +231,29 @@ pub trait Provider: Send + Sync {
 
 ## 时序：encode 在哪个线程
 
+117 把 provider 调用的载体从 `std::thread` 换成了同一条线程上的并发 future
+（`agent-runtime/src/io_bus.rs` 的 `FuturesUnordered`），**没有「IO 线程」这一条
+泳道了**——下面这张时序图不再分两栏：
+
 ```
-actor 线程（持 store，!Send）                      IO 线程
-──────────────────────────────                    ────────
+泵所在的那一条线程（原「actor 线程」，持 store，!Send；117 之后 IO future 也在这条线程上被推进）
+────────────────────────────────────────────────────────────────────────
 core.step() → Effect::CallProvider { agent, epoch }
 宿主从 store 取料 → Ingredients（纯数据）
 adapter.encode(&ing) → Encoded { body, prefix }
 缓存兜底第 1 层：prefix vs 上一轮的 prefix ← 花钱之前
-                               Encoded 是 Send ──→ transport POST
-                                               ←── SSE 行
+io_task::task(..) 起飞，交给 io_bus 的 FuturesUnordered 推进
+  ├─ native：底下另有一条工作线程，只把阻塞 socket 的字节读成行喂回这条线程
+  │          （不做 encode / 累积 / epoch 判断，见 io_stream/native.rs）
+  └─ wasm：`fetch` 走 spawn_local，同一个事件循环，一条线程都不起
 adapter.accumulator() 喂行 → StreamEvent
 宿主校验 epoch（红线 6）→ Event → core.step()
 ```
 
-**`encode` 跑在 actor 线程**，不是 IO 线程。理由是第 1 层兜底要拿新前缀镜像跟上一轮
-的比，而上一轮的镜像是状态。放到 IO 线程就得把状态也传过去。
+**`encode` 跑在这条唯一的线程上**——117 之后已经没有第二条线程可以把它挪过去了
+（native 仅存的那条工作线程职责窄到只剩「把字节读成行」）。结论没变：第 1 层兜底
+要拿新前缀镜像跟上一轮的比，而上一轮的镜像是状态，挪到别的执行体就得把状态也传
+过去。
 
 `Effect::CallProvider` 里**没有 payload**（[001](issues/001-loop-contract.md)）：
 core 说「该调了」，不说「照这个调」。effect 变胖是接缝错位的另一个症状。

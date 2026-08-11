@@ -73,13 +73,13 @@ future 被 drop 时同样要还上这条终态消息，否则泵会为一个已�
 |---|---|---|
 | 「等一条消息」 | `futures` 的 `mpsc::channel(0)` | `io_bus.rs` |
 | 「等的时候顺便让别的 IO 有进展」（原先靠线程各跑各的） | `FuturesUnordered`，每次 poll 推一遍全部在飞 future | `io_bus.rs` |
-| 「最多等 20ms 就回去看时钟和取消标志」 | 显式的心跳 | `heartbeat.rs` |
+| 「最多等 20ms 就回去看时钟和取消标志」 | 显式的心跳 | `heartbeat.rs`（114c 之后拆成 `heartbeat/` 目录，见文末「遗留问题」） |
 
 ### 四件事各自的替代品
 
 | `io_thread::spawn` 扛的 | 现在归谁 |
 |---|---|
-| 发请求并回喂流 | `io_stream.rs`（平台接缝）。**native 底下仍有一条只读字节的工作线程**——ureq 是阻塞的，物理上必须有人扛这份阻塞；不扛在工作线程上就得扛在泵的线程上，那当场就是 029 并行的死亡。接缝切在「行」这一层：累积器、`(agent, attempt)` 信封、背压、欠债全部搬回泵所在的单线程。wasm 上只换这一个文件（`fetch` 的 `ReadableStream` 本身就是异步行源，不需要线程），上面的代码一字不动 |
+| 发请求并回喂流 | `io_stream.rs`（平台接缝；114c 之后拆成 `io_stream/` 目录，见文末「遗留问题」）。**native 底下仍有一条只读字节的工作线程**——ureq 是阻塞的，物理上必须有人扛这份阻塞；不扛在工作线程上就得扛在泵的线程上，那当场就是 029 并行的死亡。接缝切在「行」这一层：累积器、`(agent, attempt)` 信封、背压、欠债全部搬回泵所在的单线程。wasm 上只换这一个文件（`fetch` 的 `ReadableStream` 本身就是异步行源，不需要线程），上面的代码一字不动 |
 | 029 的并行载体 | `io_bus.rs` 的 `FuturesUnordered` |
 | `sync_channel(0)` 的会合背压 | `io_task.rs` 里 `delta_tx.send(..).await`，channel 是 `mpsc::channel(0)` |
 | 超时后放弃而不 join | future 直接丢掉；`io_task::DoneDebt` 的 `Drop` 还终态债 |
@@ -154,10 +154,17 @@ yes：正常一轮流式答完 → 流到一半发真 `SIGINT` 判成 `[本轮�
 - **native 上还剩两处线程**，都在平台接缝之下、都不是「IO 载体」本身：`io_stream` 的
   阻塞 socket 工作线程（ureq 的物理约束，wasm 上换成 `fetch` 就没有了）和 `heartbeat`
   的 20ms 心跳（native 的 async 世界没有现成定时器，本仓不引 tokio；wasm 上是
-  `setInterval`）。114 接 wasm 时这两个文件各换一份实现即可，泵与 `io_task` 不用动。
-- `runner.rs` 364 行，仍然超 300 的普通上限（本 issue 让它**少了 12 行**，没有变大）。
-  它是事件泵本体、单一状态机，够得上「复杂文件」候选（上限 500），但仍然没有正式走一遍
-  认定——跟 116 的遗留记录同一条，原样传给下一次触碰它的 issue。
+  `setInterval`）。**已做完**：114c 把这两个文件各拆成一个目录（`io_stream/`、
+  `heartbeat/`，各自 `mod.rs` 定契约 + `native.rs`/`web.rs` 两份实现），泵与
+  `io_task` 确实一行没动——`io_task.rs`/`io_bus.rs`/`runner.rs` 至今仍是单文件，
+  见 114-wasm-host.md 114c 实做记录。
+- `runner.rs` 完成本 issue 时是 364 行（本 issue 让它**少了 12 行**，没有变大），
+  仍然超 300 的普通上限。**现在是 431 行**——涨的部分与本 issue 或 114c 无关：
+  `feat/wasm-target-m13` 分支到 114c 收尾时 `runner.rs` 仍是 364 行（`899d7b4`
+  实测确认），mainline 上并行的 M12 上下文压缩分支（issue 095–110）把它独立涨到了
+  369 行（`c6b4361` 实测确认），`452fb02` 合并两支时两边都改过同一片区域，合并
+  结果是 431 行。它是事件泵本体、单一状态机，够得上「复杂文件」候选（上限 500），
+  但仍然没有正式走一遍认定——跟 116 的遗留记录同一条，原样传给下一次触碰它的 issue。
 - 本 issue 的 `io_thread.rs` 删除被并行进行的另一个 agent 的 docs 提交
   （`cc72bb2`）意外裹了进去，导致那一个提交单独 checkout 出来编不过（`lib.rs` 还声明着
   `mod io_thread;`）。本 issue 的提交把两边补齐，`feat/wasm-target-m13` 的 tip 是好的；

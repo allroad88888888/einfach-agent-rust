@@ -54,7 +54,7 @@ crate 里（那里有全仓唯一允许依赖 ureq 的镜像约束）。
 ### ④ 决策 16 的让步在这里变成 fit
 
 决策 16 记的是「store 是 `Rc<RefCell>` 不 `Send`，HTTP 在别的线程，所以必须有
-`ProviderRequest` 这份能带走的东西」。那是为原生多线程付的代价。
+`Encoded`（原 `ProviderRequest`）这份能带走的东西」。那是为原生多线程付的代价。
 **wasm 默认单线程**，这条约束在浏览器里不再是让步。
 
 ## 代价（照实记，不许在后续 issue 里假装没有）
