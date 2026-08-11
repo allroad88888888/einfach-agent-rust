@@ -116,3 +116,88 @@ fn stale_messages_cannot_touch_same_agent_retry_in_same_epoch() {
             .is_none()
     );
 }
+
+/// **117 验收第二条**：`sync_channel(0)` 换成 `futures` 的 `mpsc::channel(0)` 之
+/// 后，「泵划掉凭据」与「发送端手上那条已经写进 channel 的增量」之间第一次出现
+/// 了时间窗——旧的会合语义下这个窗口不存在（发送端会一直停在 `send` 里，泵不收
+/// 它就写不进去）。这条测试把那个窗口摆出来，断言晚到的增量按
+/// `(agent, attempt)` 找不到凭据而被丢弃。
+///
+/// 时序焊死，没有一处靠睡眠或运气：
+///
+/// 1. 起一个真的 IO 载体（[`crate::io_task::run`]，跟生产代码同一个函数，只是
+///    行源换成手工喂的 channel），凭据进在飞表。
+/// 2. 喂一行 → **只推 IO future、不收消息**：增量此刻真的躺在 channel 的槽位里。
+/// 3. 泵在这一刻划掉凭据并**开一次同 agent 的重试**（超时那条路的原样：
+///    `deadline::sweep` remove 掉旧凭据 → `Event::Timeout` → 转移表决定重试 →
+///    `provider_call::start` 放进一张新凭据）。重试与被放弃的那次**共用一个
+///    epoch**（重试不 bump 世代），所以此刻唯一还能分辨两者的东西就是
+///    `attempt`——红线 6 那道 epoch 闸在这里帮不上忙。
+/// 4. 收：消息**确实回来了**（`receive` 拿到了它，不是没跑到），而
+///    `provider_message::land` 认不出凭据 → 原地丢弃，不产事件、不产待办。
+///
+/// 断言把两件事钉在一起，跟 `tests/it/mcp_epoch_writeback.rs` 同款：幽灵确实回
+/// 来了 + 它没有留下任何痕迹。**把 `land` 里那句 `position(...)` 拆掉，这条会
+/// 立刻红**。
+#[test]
+fn a_delta_already_in_the_channel_is_dropped_once_its_credential_is_gone() {
+    use agent_providers::Provider;
+    use futures_channel::mpsc;
+
+    use crate::io_bus::IoBus;
+    use crate::io_stream::StreamItem;
+    use crate::io_task::{self, IoMsg};
+
+    let (mut ctx, events) = build();
+    let mut bus = IoBus::new(Duration::from_millis(20));
+    let (mut lines, line_source) = mpsc::channel::<StreamItem>(4);
+
+    let attempt = ProviderAttemptId::allocate();
+    bus.start(io_task::run(
+        bus.sender(),
+        bus.sender(),
+        AgentId::root(),
+        attempt,
+        DeepSeek.accumulator(),
+        line_source,
+    ));
+    let mut calls = vec![call(&ctx, attempt)];
+    let mut pending = VecDeque::new();
+
+    // 1–2. 一行文本增量进 channel，泵还没收。
+    lines
+        .try_send(StreamItem::Line(
+            r#"data: {"choices":[{"index":0,"delta":{"role":"assistant","content":"幽灵增量"},"finish_reason":null}]}"#
+                .to_string(),
+        ))
+        .unwrap();
+    bus.drive_tasks_once();
+
+    // 3. 旧凭据被划掉，同 agent 的重试立刻补上一张新的（同一个 epoch）。
+    let retry = ProviderAttemptId::allocate();
+    calls.clear();
+    calls.push(call(&ctx, retry));
+
+    // 4. 幽灵确实回到了泵。
+    let message = crate::block_on(bus.receive(Duration::from_secs(1)))
+        .expect("那条增量已经写进 channel 了，泵必须收得到——收不到这条测试就是空的");
+    let IoMsg::Provider(message) = message else {
+        panic!("该是一条 provider 消息");
+    };
+    assert_eq!(message.kind(), "delta");
+    assert_eq!(message.attempt(), attempt, "它属于那次已经被放弃的 attempt");
+
+    provider_message::land(&mut ctx, &mut calls, &mut pending, message);
+
+    assert!(
+        pending.is_empty(),
+        "幽灵增量不该变成任何待办事件——一旦变成事件，它就会被喂进 Session::step 写进消息历史"
+    );
+    assert!(
+        events.borrow().is_empty(),
+        "幽灵增量也不该经回调发给宿主（它会被当成重试那一次的输出流）：{} 条",
+        events.borrow().len()
+    );
+    assert_eq!(calls.len(), 1, "重试那张凭据必须原封不动地还在飞");
+    assert_eq!(calls[0].attempt, retry);
+}

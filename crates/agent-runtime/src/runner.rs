@@ -14,7 +14,7 @@
 //!   ├──────────────────────────────────────────────────────────┤
 //!   │ B 在飞表空了 → 收工（root 终态就落快照）                   │
 //!   │ C 到点的在飞调用 → 注入 Timeout 事件，回 A                 │
-//!   │ D 统一 mpsc 上等一条消息（增量 / 终态 / 线程没了），回 A    │
+//!   │ D 统一 mpsc 上等一条消息（增量 / 终态 / 载体没了），回 A    │
 //!   └──────────────────────────────────────────────────────────┘
 //! ```
 //!
@@ -45,21 +45,19 @@
 //! 调用顺序契约）。`spawn_child` 也是一条命令，它那一条在 `crate::dispatch` 里
 //! 转发。
 //!
-//! # 116：泵是 `async fn`，但只是套了层壳
+//! # 116/117：泵是 `async fn`，D 点是真的 await 点
 //!
 //! 115 拍板「一套路径、两边都 async」之后，`run_turn`/`resume_after_first_
-//! commit` 从这一版起是 `async fn`——D 点的 [`receive`] 从 `rx.recv_timeout`
-//! 改成 `.await`。**但 116 只改「怎么等」，不改「等什么」**：`io_thread` 仍是
-//! `std::thread`，`rx` 仍是 `std::sync::mpsc::sync_channel(0)`，`receive` 内部
-//! 还是原来那句阻塞调用，没有真正的 async IO。这是一座**临时桥**（`receive`
-//! 的文档细说了它的代价），117 会把桥的两端都换掉：`io_thread` 换成并发
-//! future，`sync_channel` 换成 `futures` 的 mpsc。桥拆掉之后，这个文件里除了
-//! `receive` 函数体，其它地方不需要再动。
+//! commit` 从 116 起是 `async fn`。116 只改了「怎么等」不改「等什么」，在同步
+//! channel 与 async 泵之间搭了一座临时桥（`receive` 里还是那句真阻塞的
+//! `rx.recv_timeout`）；**117 把桥拆了**：IO 载体从 `std::thread` 换成同一个
+//! 事件循环上的并发 future，`sync_channel(0)` 换成 `futures` 的
+//! `mpsc::channel(0)`，D 点第一次成为一个会让出线程的真实 await 点。三样东西
+//! 收在 [`crate::io_bus`] 里，这个文件只剩「什么时候等、等到了怎么落地」。
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus, UserImage};
@@ -67,7 +65,8 @@ use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus, UserImage};
 use crate::ctx::RunnerCtx;
 use crate::deadline;
 use crate::dispatch::{self, Dispatched};
-use crate::io_thread::IoMsg;
+use crate::io_bus::IoBus;
+use crate::io_task::IoMsg;
 use crate::mcp_call::{self, McpCall};
 use crate::orphan;
 use crate::persist;
@@ -75,8 +74,9 @@ use crate::provider_call::ProviderCall;
 use crate::provider_message;
 use crate::subtree::Subtree;
 
-/// actor 线程轮询统一 channel 的间隔。不需要跟超时预算同量级，只要比测试用的
-/// 超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
+/// 泵「什么都没发生也要醒一次」的节奏（117 之前是 `recv_timeout` 的参数，现在
+/// 是 `crate::heartbeat` 的心跳间隔，值和含义都没变）。不需要跟超时预算同量级，
+/// 只要比测试用的超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// 跑一整轮：喂 `user_input`，驱动整棵 agent 树直到没有任何东西在飞。
@@ -153,10 +153,10 @@ pub(crate) async fn resume_after_first_commit(
     initial: Event,
     after_commit: impl FnOnce(&mut RunnerCtx),
 ) -> TurnStatus {
-    // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
-    // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
-    // 断开——在飞与否由下面这张表回答，不是由 channel 的连接状态回答。
-    let (tx, rx) = mpsc::sync_channel::<IoMsg>(0);
+    // IO 载体：一条 channel + 一批并发在跑的 IO future + 心跳，见 `crate::io_bus`。
+    // 背压仍然是「发一条增量就等泵收走」，只是 `futures` 的容量 0 会给每个发送端
+    // 保底一个槽位（115 决策 3 拍板接受，代价与对抗测试见那边的模块文档）。
+    let mut bus = IoBus::new(POLL_INTERVAL);
     let mut pending: VecDeque<Event> = VecDeque::new();
     let mut calls: Vec<ProviderCall> = Vec::new();
     // MCP 第四路（043）的在飞表，跟 `calls` 并列——两类在飞凭据（工具结果 vs 模型
@@ -190,7 +190,7 @@ pub(crate) async fn resume_after_first_commit(
             }
             maybe_emit_tree(ctx, session, &mut last_tree);
             for effect in effects {
-                match dispatch::run_effect(session, ctx, &mut subtree, &tx, &source, effect) {
+                match dispatch::run_effect(session, ctx, &mut subtree, &bus, &source, effect) {
                     Dispatched::Nothing => {}
                     Dispatched::Event(next) => pending.push_back(next),
                     // 后台 spawn（052）：父的槽收敛 + 子开工，两件事按 dispatch
@@ -252,7 +252,7 @@ pub(crate) async fn resume_after_first_commit(
         }
 
         // D. 等一条 IO 消息。
-        receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending).await;
+        receive(ctx, &mut bus, &mut calls, &mut mcp_calls, &mut pending).await;
     }
 }
 
@@ -322,43 +322,32 @@ fn speak_for_root_on_cancel(
     }
 }
 
-/// D 点的实现，也是 116 那座「临时桥」本身。
+/// D 点：等一条 IO 消息，最多等 [`POLL_INTERVAL`]，等到了按键认领。
 ///
-/// **这是临时的，117 会拆掉。** `io_thread` 依然是 `std::thread`，`rx` 依然是
-/// `std::sync::mpsc` 的会合 channel（容量 0）——116 的范围明确写了「只改怎么等，
-/// 不改等什么」，所以这里的 `rx.recv_timeout(POLL_INTERVAL)` 还是那句原封不动
-/// 的**真阻塞**调用，没有换成对某个 async channel 的非阻塞 `poll`。这个函数体
-/// 内没有任何真正的 `.await` 点：它只是给这句阻塞调用套一层 `async fn` 的壳，
-/// 让 `resume_after_first_commit` 能整体变成 `async fn`、调用方能统一走
-/// `.await`/`block_on`，把「泵是 async 的」这件事的**接口**先定下来。
+/// 117 起这里是一个**真的 await 点**：`IoBus::receive` 会先把所有在飞的 IO
+/// future 推一遍（029 的并行就发生在那一步），再看 channel 上有没有消息；什么
+/// 都没有就把线程交还给执行器，由心跳在 20ms 后叫醒。等待期间泵不占着线程，
+/// 这正是 wasm 上「单线程也能一边等 fetch 一边跑事件循环」的前提。
 ///
-/// 在 native 上，调用方要么是单 future 的 `block_on`（`agent-cli`），要么是
-/// 裸 `std::thread` 上同样单 future 的 `block_on`（`agent-server` 的 session
-/// actor——它不在 tokio 运行时里，见 `crate::block_on` 的文档），两种情况下
-/// 执行器上都只有这一个 future 在跑，没有别的任务需要这段阻塞让出线程，所以
-/// 行为跟改动前逐字节一致。**但这句阻塞是这座桥的全部代价**：它没有真正把
-/// 控制权交还给执行器，在没有线程可以拿来阻塞等待的宿主（wasm）上会直接冻结
-/// 事件循环——117 的任务就是把这个函数体换成对 `futures::channel::mpsc`
-/// 之类的真正非阻塞 `.next().await`，让这里第一次成为一个会让出线程的
-/// 真实 await 点。
+/// 等到之后的落地逻辑一字未改——载体换了，认领规则没换。
 async fn receive(
     ctx: &mut RunnerCtx,
-    rx: &mpsc::Receiver<IoMsg>,
+    bus: &mut IoBus,
     calls: &mut Vec<ProviderCall>,
     mcp_calls: &mut Vec<McpCall>,
     pending: &mut VecDeque<Event>,
 ) {
-    match rx.recv_timeout(POLL_INTERVAL) {
+    match bus.receive(POLL_INTERVAL).await {
         // Provider replies are claimed by `(agent, attempt)` in one place. Late messages from an
         // abandoned attempt are expected and disappear without touching its same-agent retry.
-        Ok(IoMsg::Provider(message)) => {
+        Some(IoMsg::Provider(message)) => {
             provider_message::land(ctx, calls, pending, message);
         }
         // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
         // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
         // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
         // 不命中 provider attempt 同款。
-        Ok(IoMsg::McpDone {
+        Some(IoMsg::McpDone {
             agent,
             call_id,
             content,
@@ -368,9 +357,8 @@ async fn receive(
                 pending.push_back(mcp_call::finish(ctx, call, content, is_error));
             }
         }
-        Err(RecvTimeoutError::Timeout) => {}
-        // 结构上不可达：泵自己握着一份发送端，`rx` 不会断。当成一次空转，
-        // 下一圈 C 的截止线扫描会兜住任何真的没人再说话的情况。
-        Err(RecvTimeoutError::Disconnected) => {}
+        // 这一小段里没有消息（心跳把泵叫醒了）。回到循环顶部去扫截止线、看取消
+        // 标志——那两件事都不会有人主动叫醒我们，见 `crate::heartbeat`。
+        None => {}
     }
 }

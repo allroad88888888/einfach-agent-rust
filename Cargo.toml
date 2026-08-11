@@ -58,17 +58,29 @@ serde_json = "1"
 # TS 判别联合要跟协议的邻接标签形状（031 决策）对上，不能让 ts-rs 自己另起一套命名。
 ts-rs = { version = "12", features = ["serde-json-impl"] }
 
-# 116（M13）：泵 async 化，115 拍板的「futures 最小子集」——只要 futures-core +
-# futures-util，不要全量 `futures`（拉一堆本仓用不上的 io-compat/executor 变体），
-# 也不引 tokio 进 `agent-runtime` 这条核心执行路径（wasm32-unknown-unknown 上
+# 116/117（M13）：泵 async 化 + IO 载体换成并发 future，115 拍板的「futures 最小
+# 子集」——不要全量 `futures`（拉一堆本仓用不上的 io-compat/executor 变体），也
+# 不引 tokio 进 `agent-runtime` 这条核心执行路径（wasm32-unknown-unknown 上
 # tokio 的 `time`/`rt` 不完整，见 docs/issues/115-wasm-io-without-threads.md）。
-# 只在 `agent-runtime`（泵本体）与 `agent-cli`（需要 `block_on` 起步）两个
-# crate 里用——`agent-server` 经 `agent_runtime::block_on` 转发，不直接依赖。
-# 没有 `executor` feature：那是我们最初想用的 `futures_util::executor::
-# block_on`，**实测这个模块根本不存在**于 `futures-util`（它属于独立的
-# `futures-executor` crate，加了就在这份「最小子集」之外再添一个依赖）——
-# 116 改成手写 `block_on`（`agent-runtime/src/block_on.rs`，115 原文预先批准
-# 的口子）。这两个 crate 目前只被 `agent-runtime` 用默认 feature 引入，为的是
-# 117 要接的 `futures_util::channel::mpsc`，不是给这次的 block_on 用。
-futures-core = "0.3"
-futures-util = "0.3"
+# **只在 `agent-runtime` 一个 crate 里用**：`agent-cli`/`agent-server` 都只调
+# `agent_runtime::block_on`，不直接碰 futures（116 曾按 115 的字面要求给
+# `agent-cli` 也挂了一行 futures-util，117 确认 CLI 永远用不到，已删）。
+#
+# 子集为什么是这两个 crate、不是 116 写的那两个：
+# - `futures-channel`：115 决策 3 点名的 `futures::channel::mpsc` 就住在这个
+#   crate 里。`futures-util` **没有**转发它（`futures_util::channel` 不存在，
+#   只有全量门面 `futures` 才有 `futures::channel`）——实测确认，所以「引
+#   futures 的 mpsc」在最小子集下就等于直接依赖 `futures-channel`。
+#   `sink` feature 给的是 `Sender: Sink` 的实现，`SinkExt::send(..).await`
+#   （会合背压那一步）靠它。
+# - `futures-util`：`StreamExt`（`poll_next_unpin`）、`FuturesUnordered`
+#   （029 并行的新载体）、`SinkExt`。`sink` 同上，不是默认 feature。
+# - `futures-core` 116 声明过但从头到尾没有一行代码用到（它只提供 `Stream`/
+#   `Future` 的 trait 定义，我们用的是 `futures-util` 的扩展 trait），117 按
+#   「用不上就删」删掉；它仍是上面两个 crate 的传递依赖，不影响编译。
+#
+# 没有 `executor` feature：那是最初想用的 `futures_util::executor::block_on`，
+# **实测这个模块根本不存在**于 `futures-util`（它属于独立的 `futures-executor`
+# crate），116 改成手写 `block_on`（`agent-runtime/src/block_on.rs`）。
+futures-channel = { version = "0.3", features = ["sink"] }
+futures-util = { version = "0.3", features = ["sink"] }

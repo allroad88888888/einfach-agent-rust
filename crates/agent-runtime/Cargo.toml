@@ -20,12 +20,10 @@ agent-transport = { path = "../agent-transport" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-# 116：泵 async 化，115 拍板的 futures 最小子集（见根 Cargo.toml
-# `[workspace.dependencies]` 的注释）。**这两个 crate 目前没有被这里的代码直接
-# 用到**：115 原文建议的 `futures_util::executor::block_on` 实测不存在
-# （`executor` 是独立的 `futures-executor` crate 才有的东西），`block_on` 因此
-# 改成手写的（见 `src/block_on.rs`，115 原文预先批准的口子），零 futures 依赖。
-# 保留这两个依赖是为了 117：`receive` 换成真正非阻塞的那一步要用
-# `futures_util::channel::mpsc`，到时候不必再回来改一次 Cargo.toml。
-futures-core = { workspace = true }
+# 116/117：泵 async 化 + IO 载体换成并发 future，115 拍板的 futures 最小子集
+# （子集为什么正好是这两个 crate，见根 Cargo.toml `[workspace.dependencies]`）。
+# 117 起它们**真的被用上了**：`src/io_bus.rs`（`mpsc::channel(0)` +
+# `FuturesUnordered`）、`src/io_task.rs`（`SinkExt::send` 的会合背压）、
+# `src/io_stream.rs`（工作线程侧同一条 channel 的阻塞发送）。
+futures-channel = { workspace = true }
 futures-util = { workspace = true }

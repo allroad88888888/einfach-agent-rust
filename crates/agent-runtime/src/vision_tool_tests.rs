@@ -141,7 +141,10 @@ fn root_dispatch_without_profile_uses_stable_failure_and_child_cannot_use_host_s
     let mut session = Session::new(root.clone());
     let mut ctx = context(false);
     let mut subtree = Subtree::default();
-    let (tx, _rx) = std::sync::mpsc::sync_channel(0);
+    // 117 接线：`run_effect` 的第四个参数从「泵 channel 的发送端」换成了整条
+    // IO 总线（`crate::io_bus::IoBus`）。这两次调用都走不到起飞那一步（都在
+    // dispatch 里就被截获/拒绝了），总线只是个必须存在的参数。
+    let bus = crate::io_bus::IoBus::new(std::time::Duration::from_millis(20));
     let effect = Effect::ExecuteTool {
         agent: root.clone(),
         call_id: ToolCallId::new("vision-no-profile"),
@@ -150,7 +153,7 @@ fn root_dispatch_without_profile_uses_stable_failure_and_child_cannot_use_host_s
         epoch: Epoch::START,
     };
     let Dispatched::Event(Event::ToolFailed { error, .. }) =
-        dispatch::run_effect(&mut session, &mut ctx, &mut subtree, &tx, &root, effect)
+        dispatch::run_effect(&mut session, &mut ctx, &mut subtree, &bus, &root, effect)
     else {
         panic!("reserved root call without a profile must fail synchronously");
     };
@@ -168,7 +171,7 @@ fn root_dispatch_without_profile_uses_stable_failure_and_child_cannot_use_host_s
         epoch: Epoch::START,
     };
     let Dispatched::Event(Event::ToolFailed { error, .. }) =
-        dispatch::run_effect(&mut session, &mut ctx, &mut subtree, &tx, &child, effect)
+        dispatch::run_effect(&mut session, &mut ctx, &mut subtree, &bus, &child, effect)
     else {
         panic!("child must not execute a host-spoofed reserved facade");
     };

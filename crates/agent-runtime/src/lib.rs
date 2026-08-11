@@ -33,7 +33,7 @@
 //!
 //! | effect | 谁执行 | 怎么执行 |
 //! |---|---|---|
-//! | `CallProvider` | [`provider_call::start`] | actor 线程取料 → `encode` → 发前 `check_drift` → 起 IO 线程跑 `post_stream`。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
+//! | `CallProvider` | [`provider_call::start`] | 泵所在线程取料 → `encode` → 发前 `check_drift` → 把一个跑 `post_stream` 的 future 交给泵（117 之前是起一条 IO 线程）。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
 //! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
 //! | `CancelInFlight` | [`dispatch`] | 置共享的取消标志 + 斩断队列里还没喂进去的待办 |
 //! | `Emit(Notice)` | [`dispatch`] | 带上「出自谁的 `step`」转给 [`RunnerCtx`] 的事件回调 |
@@ -41,7 +41,8 @@
 //! # 子 agent（029）
 //!
 //! `run_turn` 驱动的是**整棵树**：`srv:agent/spawn` 长出子 agent，子 agent 的
-//! provider 调用各自一个 IO 线程真的并行，回写全部串行过泵；子 agent 落终态时
+//! provider 调用各自一个 IO future、在同一个事件循环上真的并行（117 之前是各自
+//! 一条 IO 线程，见 [`io_bus`]），回写全部串行过泵；子 agent 落终态时
 //! 它的最后一段文本作为 `tool_result` 回到父那个 spawn 槽（决策 20，不需要
 //! `ChildFinished` 事件也不需要汇聚 derived）。整轮共用一个 `turn_id`（root 铸，
 //! 决策 5），所以 `/undo` 一轮连带整棵子树。
@@ -73,10 +74,13 @@ mod deadline;
 mod dispatch;
 mod execution_binding;
 mod guard;
+mod heartbeat;
 mod image_materialization;
 mod image_preparation_failure;
 mod image_resolver;
-mod io_thread;
+mod io_bus;
+mod io_stream;
+mod io_task;
 mod mcp_call;
 mod orphan;
 mod provider_attempt;

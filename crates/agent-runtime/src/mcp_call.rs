@@ -32,7 +32,6 @@
 //! 就必须串行）。070 之前这里是整张表一把锁，任意两个 MCP 调用互相挡，最长堵到超时。
 
 use std::sync::Arc;
-use std::sync::mpsc::SyncSender;
 use std::thread;
 use std::time::Duration;
 
@@ -42,7 +41,7 @@ use serde_json::Value;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
-use crate::io_thread::IoMsg;
+use crate::io_task::{IoMsg, IoSender};
 
 /// 一次在飞的 MCP 调用。**一个 agent 可以同时有多张**——一轮里模型可以并列发多个
 /// 工具调用，所以 credential 的身份是 `(agent, call_id)`，不是光 `agent`
@@ -58,9 +57,19 @@ pub(crate) struct McpCall {
 
 /// 起飞：解析 server id + 裸工具名 → 起一个背景线程跑阻塞 `tools/call` → 立刻返回
 /// credential。**不等结果**（结果经 `tx` 回泵，落地由 [`finish`]）。
+///
+/// # 117 只换了管子，没换载体
+///
+/// provider 那一路的 `std::thread` 换成了并发 future，这一路**照旧是线程**：
+/// 浏览器形态下 `agent-mcp` 整个不编（决策 26），MCP 不在 M13 的范围里，native
+/// 上两种载体并存是可以的。本 issue 在这里的改动只有一处接线——泵的 channel 换
+/// 成了 `futures` 的，所以 `send` 换成 `try_send`：这条线程一辈子只经自己这份
+/// sender 发**一条**消息，而 `futures` 的有界 channel 给每个 sender 保底一个槽
+/// 位，所以它只可能因为「泵已经收工、接收端没了」而失败，不会因为「channel 满
+/// 了」而失败（同一条论证见 `io_task::DoneDebt`，那里有测试焊着）。
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn start(
-    tx: SyncSender<IoMsg>,
+    mut tx: IoSender,
     registry: Arc<McpRegistry>,
     agent: AgentId,
     call_id: ToolCallId,
@@ -87,7 +96,7 @@ pub(crate) fn start(
             Some(Err(err)) => (err.to_string(), true),
             None => (format!("MCP server '{server_id}' 不可用"), true),
         };
-        let _ = tx.send(IoMsg::McpDone {
+        let _ = tx.try_send(IoMsg::McpDone {
             agent: thread_agent,
             call_id: thread_call_id,
             content: Arc::from(content),

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::sync_channel;
 use std::time::{Duration, Instant};
 
 use agent_core::{
@@ -75,9 +74,10 @@ fn missing_named_profile_fails_before_provider_start() {
         )
         .unwrap();
     let mut ctx = build(Arc::new(DeepSeek));
-    let (tx, _) = sync_channel(1);
+    // 117 接线：`start` 的第三个参数从「泵 channel 的发送端」换成了 IO 总线。
+    let bus = crate::io_bus::IoBus::new(Duration::from_millis(20));
 
-    let event = match start(&session, &mut ctx, tx, child.clone(), Epoch::START) {
+    let event = match start(&session, &mut ctx, &bus, child.clone(), Epoch::START) {
         Err(event) => event,
         Ok(_) => panic!("unconfigured profile must not start an HTTP call"),
     };

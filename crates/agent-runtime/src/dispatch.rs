@@ -22,7 +22,6 @@
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::SyncSender;
 
 use agent_core::{
     AgentId, Effect, Epoch, Event, Reversibility, Session, ToolCallId, ToolCallRequest,
@@ -31,7 +30,7 @@ use agent_core::{
 use crate::collect_tool::{self, COLLECT_TOOL};
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
-use crate::io_thread::IoMsg;
+use crate::io_bus::IoBus;
 use crate::mcp_call::{self, McpCall};
 use crate::provider_call::{self, ProviderCall};
 use crate::skill::{self, SKILL_ACTIVATE, SKILL_DEACTIVATE};
@@ -77,7 +76,7 @@ pub(crate) fn run_effect(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     subtree: &mut Subtree,
-    tx: &SyncSender<IoMsg>,
+    bus: &IoBus,
     source: &AgentId,
     effect: Effect,
 ) -> Dispatched {
@@ -86,7 +85,7 @@ pub(crate) fn run_effect(
             // A retry starts a fresh attempt. Clear a previous vision timeout marker before
             // starting it so only the terminal attempt determines `vision_timeout`.
             subtree.record_provider_start(&agent);
-            match provider_call::start(session, ctx, tx.clone(), agent, epoch) {
+            match provider_call::start(session, ctx, bus, agent, epoch) {
                 Ok(call) => Dispatched::Call(call),
                 Err(event) => Dispatched::Event(event),
             }
@@ -171,7 +170,7 @@ pub(crate) fn run_effect(
             // MCP 工具落 `Pure` 无屏障，非 readOnly 落 `Irreversible` 带屏障，复用
             // 020/027 的既有屏障机制，MCP 不新造。
             if tool.starts_with("mcp:") && table_declared {
-                return start_mcp(ctx, tx, agent, call_id, request, epoch);
+                return start_mcp(ctx, bus, agent, call_id, request, epoch);
             }
             // 远端第五路（`web:` / `desk:`）：登记等待槽、把调用推给宿主，**挂起**
             // 不产事件。部署期声明或当前 agent 已激活的 host skill 声明才放行；`location`
@@ -228,7 +227,7 @@ pub(crate) fn run_effect(
 /// 在飞凭据给泵。
 fn start_mcp(
     ctx: &mut RunnerCtx,
-    tx: &SyncSender<IoMsg>,
+    bus: &IoBus,
     agent: AgentId,
     call_id: ToolCallId,
     request: ToolCallRequest,
@@ -242,7 +241,7 @@ fn start_mcp(
         },
     );
     let call = mcp_call::start(
-        tx.clone(),
+        bus.sender(),
         Arc::clone(&ctx.mcp),
         agent,
         call_id,

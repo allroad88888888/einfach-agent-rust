@@ -19,7 +19,6 @@ dependencies = [
  "agent-tools",
  "agent-transport",
  "ctrlc",
- "futures-util",
  "serde_json",
  "toml",
 ]
@@ -63,7 +62,7 @@ dependencies = [
  "agent-store",
  "agent-tools",
  "agent-transport",
- "futures-core",
+ "futures-channel",
  "futures-util",
  "serde",
  "serde_json",
@@ -375,6 +374,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "262590f4fe6afeb0bc83be1daa64e52657fe185690a958af7f3ad0e92085c5ae"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -414,6 +414,7 @@ checksum = "a77a90a256fce34da66415271e30f94ee91c57b04b8a2c042d9cf3220179deaa"
 dependencies = [
  "futures-core",
  "futures-macro",
+ "futures-sink",
  "futures-task",
  "pin-project-lite",
  "slab",
