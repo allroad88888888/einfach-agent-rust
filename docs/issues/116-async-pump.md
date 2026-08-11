@@ -1,5 +1,23 @@
 # 116 泵 async 化：引 `futures` 最小子集，native 先跑通
 
+> **⚠️ 本文正文有约 8 处已与代码相反，2026-08-11 合并 M13 到 main 时被推翻。**
+>
+> 正文写的是「`run_turn` 变 `async`，`agent-cli` / `agent-server` / 51+3 个测试用例
+> 逐个包 `block_on`」。**这一步后来被撤销了**：公开 API 保留了同步的 `run_turn`
+> （内部 `block_on(run_turn_async(..))`，`#[cfg(not(target_arch = "wasm32"))]`），
+> 于是 `agent-cli`、`agent-server`、以及所有既有测试**一行都没改**。
+> 实测 `rg block_on crates/agent-cli crates/agent-server crates/*/tests` **零命中**。
+>
+> **为什么撤销**：wasm 需要的是「泵内部 async」，不需要 native 的公开 API 也变 async。
+> 改了公开 API 的直接后果是 50 个测试文件跟着动，而 M12 同期也在改同一批文件
+> ——合并时 68 个冲突里约 50 个由此而来。用户的原话是「我们目标就是给加一个 wasm」，
+> M13 不该顺手改掉 native 的 API 形状。
+>
+> **仍然成立的**：泵内部确实是 async 的、`futures` 最小子集的选型、前缀缓存验收
+> （第 2 轮起 0.973/0.978/0.995）。**已不成立的**：一切关于「调用方要包 block_on」
+> 的描述（L18、L24-26、L64-70、L104-114、L117-130、L132-135）。
+
+
 **里程碑** M13 · **依赖** 115 · **模型** sonnet · **独测** ✅（碰核心执行路径）
 
 115 拍板「一套路径、两边都 async」之后的第一步。**本 issue 完全不碰 wasm**——
