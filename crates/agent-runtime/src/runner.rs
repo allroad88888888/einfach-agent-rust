@@ -44,6 +44,17 @@
 //! [`RunnerCtx`] 挂的 `SessionStore`，游标与裁剪事件同一次调用里一起转发（011 的
 //! 调用顺序契约）。`spawn_child` 也是一条命令，它那一条在 `crate::dispatch` 里
 //! 转发。
+//!
+//! # 116：泵是 `async fn`，但只是套了层壳
+//!
+//! 115 拍板「一套路径、两边都 async」之后，`run_turn`/`resume_after_first_
+//! commit` 从这一版起是 `async fn`——D 点的 [`receive`] 从 `rx.recv_timeout`
+//! 改成 `.await`。**但 116 只改「怎么等」，不改「等什么」**：`io_thread` 仍是
+//! `std::thread`，`rx` 仍是 `std::sync::mpsc::sync_channel(0)`，`receive` 内部
+//! 还是原来那句阻塞调用，没有真正的 async IO。这是一座**临时桥**（`receive`
+//! 的文档细说了它的代价），117 会把桥的两端都换掉：`io_thread` 换成并发
+//! future，`sync_channel` 换成 `futures` 的 mpsc。桥拆掉之后，这个文件里除了
+//! `receive` 函数体，其它地方不需要再动。
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -73,9 +84,19 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// `session` 原地推进，返回值只是 **root** 终态的一份拷贝，方便调用方立即判断
 /// 结果——真正的历史/状态变化都已经写进 `session`（并已经同步进持久化后端）。
 ///
-/// **公开签名从 012 起一个字没变**，029 也不许变：`agent-server` 的 session actor
-/// （030）接在它上面，031 的 HTTP/SSE 层又接在 actor 上面。泵是这个函数的内部
-/// 形状，不是它的契约。
+/// **公开签名从 012 到 115 一直没变，116 破了这条戒**：115 拍板「一套路径，
+/// 两边都 async」，native 也不例外——这个函数从这一版起是 `async fn`。
+/// `agent-server` 的 session actor（030）与 `agent-cli` 的 `repl::run` 都要
+/// 跟着接一个 [`crate::block_on`]（116 实做记录：115 原文建议的
+/// `futures_util::executor::block_on` 这条路径实测不存在——`executor` 是
+/// `futures-executor` 那个另外的 crate 才有的东西，`futures-util` 自己从来没有
+/// `executor` 模块，加它就在「futures 最小子集」之外多一个依赖，所以改成手写
+/// 的 `block_on`，115 原文也预先批准了这条口子）。`agent-cli` 与 `agent-server`
+/// 的 actor 线程（裸 `std::thread`，不在 tokio 运行时里）都调同一个
+/// `agent_runtime::block_on`——两边都不是「在已有的 async 运行时里
+/// `.await`」，而是「把这一整条 await 链在调用线程上跑到底」，跟改动前的同步
+/// 阻塞行为逐字节一致。泵的**内部形状**仍然不是契约，改的只是「怎么等」
+/// （116 范围），不是这个函数驱动整棵树、原地推进 `session` 的这套语义。
 ///
 /// 取消标志只在这里清零一次（每轮开始各清一次，理由跟 022 的 `agent-cli::
 /// repl::run` 一致：上一轮遗留的标志不该提前打断这一轮还没开始的请求）；
@@ -84,15 +105,15 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// **调用方必须先 `session.begin_turn()`**（除了会话的第一轮，`Session::new`
 /// 已经是 `Idle`）——`Session::begin_turn` 是显式命令（026 判断 13：turn 边界
 /// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
-pub fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
-    run_turn_with_images(session, ctx, user_input, Vec::new())
+pub async fn run_turn(session: &mut Session, ctx: &mut RunnerCtx, user_input: &str) -> TurnStatus {
+    run_turn_with_images(session, ctx, user_input, Vec::new()).await
 }
 
 /// 跑一整轮，连同已经由宿主准备好的用户图片一起喂入。
 ///
 /// 图片引用在进入这里之前已经是不可变的纯数据；上传之类的 IO 属于宿主边界，
 /// 不属于事件泵。保留 [`run_turn`] 的原签名，使没有图片的所有既有调用逐字不变。
-pub fn run_turn_with_images(
+pub async fn run_turn_with_images(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     user_input: &str,
@@ -109,19 +130,24 @@ pub fn run_turn_with_images(
             images,
         },
     )
+    .await
 }
 
 /// 从一项已发生的事件继续驱动会话。
 ///
 /// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
 /// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
-pub(crate) fn resume(session: &mut Session, ctx: &mut RunnerCtx, initial: Event) -> TurnStatus {
-    resume_after_first_commit(session, ctx, initial, |_| {})
+pub(crate) async fn resume(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    initial: Event,
+) -> TurnStatus {
+    resume_after_first_commit(session, ctx, initial, |_| {}).await
 }
 
 /// Resume the pump, invoking `after_commit` once after the initial event is committed and
 /// persisted, but before any effect from that event is dispatched.
-pub(crate) fn resume_after_first_commit(
+pub(crate) async fn resume_after_first_commit(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     initial: Event,
@@ -226,7 +252,7 @@ pub(crate) fn resume_after_first_commit(
         }
 
         // D. 等一条 IO 消息。
-        receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending);
+        receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending).await;
     }
 }
 
@@ -296,7 +322,26 @@ fn speak_for_root_on_cancel(
     }
 }
 
-fn receive(
+/// D 点的实现，也是 116 那座「临时桥」本身。
+///
+/// **这是临时的，117 会拆掉。** `io_thread` 依然是 `std::thread`，`rx` 依然是
+/// `std::sync::mpsc` 的会合 channel（容量 0）——116 的范围明确写了「只改怎么等，
+/// 不改等什么」，所以这里的 `rx.recv_timeout(POLL_INTERVAL)` 还是那句原封不动
+/// 的**真阻塞**调用，没有换成对某个 async channel 的非阻塞 `poll`。这个函数体
+/// 内没有任何真正的 `.await` 点：它只是给这句阻塞调用套一层 `async fn` 的壳，
+/// 让 `resume_after_first_commit` 能整体变成 `async fn`、调用方能统一走
+/// `.await`/`block_on`，把「泵是 async 的」这件事的**接口**先定下来。
+///
+/// 在 native 上，调用方要么是单 future 的 `block_on`（`agent-cli`），要么是
+/// 裸 `std::thread` 上同样单 future 的 `block_on`（`agent-server` 的 session
+/// actor——它不在 tokio 运行时里，见 `crate::block_on` 的文档），两种情况下
+/// 执行器上都只有这一个 future 在跑，没有别的任务需要这段阻塞让出线程，所以
+/// 行为跟改动前逐字节一致。**但这句阻塞是这座桥的全部代价**：它没有真正把
+/// 控制权交还给执行器，在没有线程可以拿来阻塞等待的宿主（wasm）上会直接冻结
+/// 事件循环——117 的任务就是把这个函数体换成对 `futures::channel::mpsc`
+/// 之类的真正非阻塞 `.next().await`，让这里第一次成为一个会让出线程的
+/// 真实 await 点。
+async fn receive(
     ctx: &mut RunnerCtx,
     rx: &mpsc::Receiver<IoMsg>,
     calls: &mut Vec<ProviderCall>,

@@ -12,11 +12,11 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, AgentEvent, ToolTable};
+use agent_runtime::{AgentEvent, ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about, wire_tool_name,
-    Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about,
+    wire_tool_name,
 };
 
 /// 两条路跑的是**同一个任务**、拿的是**同一份回答**——只有这样，最后那句
@@ -89,7 +89,7 @@ fn background_run(tag: &str) -> (String, Vec<AgentEvent>, RoutedServer) {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开个后台的");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "kickoff 开个后台的"));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());
@@ -146,7 +146,7 @@ fn blocking_run(tag: &str) -> String {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开个前台的");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "kickoff 开个前台的"));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let results = tool_results(&session, &AgentId::root());

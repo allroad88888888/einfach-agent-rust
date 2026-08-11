@@ -155,7 +155,7 @@ fn submit(
     assert_eq!(grant.request.input["opaque"], expected_input);
 
     let ack = RefCell::new(None);
-    let status = submit_remote_tool_result(
+    let status = agent_runtime::block_on(submit_remote_tool_result(
         session,
         ctx,
         RemoteToolSubmitRequest {
@@ -168,7 +168,7 @@ fn submit(
             },
         },
         |decision| *ack.borrow_mut() = Some(decision),
-    )
+    ))
     .expect("new source result must resume the turn");
     assert!(matches!(
         ack.into_inner(),
@@ -226,7 +226,7 @@ fn pull_search_read_then_terminal_candidate_stays_private() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "synthetic diagnosis"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "synthetic diagnosis")),
         TurnStatus::ToolsPending
     );
     assert_eq!(
@@ -255,7 +255,7 @@ fn pull_search_read_then_terminal_candidate_stays_private() {
 
     session.begin_turn();
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "fresh public turn"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "fresh public turn")),
         TurnStatus::Done { truncated: false }
     );
     assert_private_surfaces(&session, &events.borrow());

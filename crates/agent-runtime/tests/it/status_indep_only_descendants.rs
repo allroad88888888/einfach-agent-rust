@@ -22,8 +22,8 @@ use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::status_indep_support::{
-    build_ctx, listed_ids, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name, Route,
-    RoutedServer,
+    Route, RoutedServer, build_ctx, listed_ids, sse_text, sse_tool_calls, temp_dir, tool_result,
+    wire_tool_name,
 };
 
 /// 兄弟那一路的延迟。只要明显长过「root/a1 建孙子 + 读树 + 发下一跳」那一小段
@@ -101,11 +101,11 @@ fn a_child_sees_only_its_own_descendants_never_its_running_sibling_or_its_ancest
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff-scope two branches, the left one goes deeper",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

@@ -30,7 +30,7 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, ContentBlock, Notice, Session, TurnStatus, UndoReport};
-use agent_runtime::{run_turn, sweep_remote_tool_deadlines, RunnerEvent, ToolTable};
+use agent_runtime::{RunnerEvent, ToolTable, run_turn, sweep_remote_tool_deadlines};
 
 use crate::support::{build_ctx_with, spawn_scripted_server, sse_tool_call, temp_dir};
 
@@ -49,7 +49,7 @@ fn a_timeout_that_fires_after_an_undo_is_dropped_by_the_epoch_gate() {
     let mut ctx = ctx.with_remote_tool_timeout(BUDGET);
     let mut session = Session::new(AgentId::root());
 
-    let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片");
+    let parked = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "渲染一张卡片"));
     assert_eq!(parked, TurnStatus::ToolsPending);
     assert_eq!(
         ctx.pending_remote_tool_count(),
@@ -72,7 +72,7 @@ fn a_timeout_that_fires_after_an_undo_is_dropped_by_the_epoch_gate() {
 
     // 到点：扫描真的跑了（返回 Some、槽被消费），产出的事件带的是 epoch 0。
     std::thread::sleep(BUDGET + Duration::from_millis(20));
-    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx)
+    let status = agent_runtime::block_on(sweep_remote_tool_deadlines(&mut session, &mut ctx))
         .expect("到点该有槽过期——没有的话这条测试是空的");
     assert_eq!(ctx.pending_remote_tool_count(), 0, "过期槽取走即消费");
     assert!(

@@ -42,7 +42,7 @@ fn one_turn(session: &mut Session, ctx: &mut agent_runtime::RunnerCtx, input: &s
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
     }
-    let status = run_turn(session, ctx, input);
+    let status = agent_runtime::block_on(run_turn(session, ctx, input));
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         undo::after_cancelled_turn(session, ctx);
     }

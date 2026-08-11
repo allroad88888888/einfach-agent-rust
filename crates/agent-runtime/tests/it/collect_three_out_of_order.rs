@@ -14,11 +14,11 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, orphan_warnings, sse_text, sse_tool_call, sse_tool_calls, temp_dir, tool_results,
-    wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, orphan_warnings, sse_text, sse_tool_call, sse_tool_calls,
+    temp_dir, tool_results, wire_tool_name,
 };
 
 const SLOW: Duration = Duration::from_millis(400);
@@ -105,7 +105,8 @@ fn three_background_children_are_collected_fastest_first_and_nothing_is_left_to_
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 三件事一起拆出去");
+    let status =
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "kickoff 三件事一起拆出去"));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // --- 三个 agent_id + 三份答案，各就各位 ---

@@ -31,13 +31,15 @@ fn a_session_written_through_jsonl_survives_dropping_and_reopening_the_backend()
         let mut ctx = build_ctx_with_jsonl(port, &dir, &session_path);
         let mut session = Session::new(AgentId::root());
 
-        let status = agent_runtime::run_turn(&mut session, &mut ctx, "第一句话");
+        let status =
+            agent_runtime::block_on(agent_runtime::run_turn(&mut session, &mut ctx, "第一句话"));
         assert_eq!(status, TurnStatus::Done { truncated: false });
         agent_runtime::persist::maybe_snapshot(&mut ctx, &session);
 
         session.begin_turn();
         agent_runtime::persist::sync(&mut ctx, &mut session);
-        let status = agent_runtime::run_turn(&mut session, &mut ctx, "第二句话");
+        let status =
+            agent_runtime::block_on(agent_runtime::run_turn(&mut session, &mut ctx, "第二句话"));
         assert_eq!(status, TurnStatus::Done { truncated: false });
         assert_eq!(session.messages().len(), 4, "两轮各一问一答");
         // `ctx`（连同它的 `Jsonl`）在这个块结束时 drop——`Jsonl::drop` 关发送端
@@ -74,7 +76,11 @@ fn a_session_written_through_jsonl_survives_dropping_and_reopening_the_backend()
     let mut ctx2 = build_ctx_with_jsonl(port2, &dir, &session_path);
     recovered.begin_turn();
     agent_runtime::persist::sync(&mut ctx2, &mut recovered);
-    let status = agent_runtime::run_turn(&mut recovered, &mut ctx2, "复活之后的第一句话");
+    let status = agent_runtime::block_on(agent_runtime::run_turn(
+        &mut recovered,
+        &mut ctx2,
+        "复活之后的第一句话",
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(
         recovered.messages().len(),

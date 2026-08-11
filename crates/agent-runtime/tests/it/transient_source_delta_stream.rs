@@ -48,7 +48,7 @@ fn ordinary_delta_arrives_before_done_when_source_tools_are_available() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "hello"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "hello")),
         TurnStatus::Done { truncated: false }
     );
     assert!(terminal_started.load(Ordering::Acquire));

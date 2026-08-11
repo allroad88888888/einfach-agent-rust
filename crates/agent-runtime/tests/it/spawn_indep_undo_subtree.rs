@@ -10,7 +10,7 @@ use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -53,11 +53,11 @@ fn undo_after_a_spawn_turn_leaves_no_trace_in_the_next_real_request() {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "firstturn please delegate to a helper SECRET_ALPHA",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert_eq!(session.live_agents().len(), 2, "root + 一个子");
     assert!(!session.messages().is_empty());
@@ -77,11 +77,11 @@ fn undo_after_a_spawn_turn_leaves_no_trace_in_the_next_real_request() {
 
     // --- 再问一轮：显式 begin_turn（`run_turn` 不替调用方决定新一轮从哪开始）。
     session.begin_turn();
-    let status2 = run_turn(
+    let status2 = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "secondturn totally unrelated question",
-    );
+    ));
     assert_eq!(status2, TurnStatus::Done { truncated: false });
 
     let second_request = server

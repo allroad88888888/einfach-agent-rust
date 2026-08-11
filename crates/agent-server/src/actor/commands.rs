@@ -53,7 +53,13 @@ pub(super) fn handle_input(
         session.begin_turn();
         agent_runtime::persist::sync(ctx, session);
     }
-    let status = run_turn_with_images(session, ctx, text, images);
+    // 116：`run_turn_with_images` 是 `async fn` 了。这个函数（连同它的调用方
+    // `inbox::dispatch`/`body::run` 的命令循环）留在同步世界——session actor
+    // 是裸 `std::thread`，根本不在 tokio 运行时里（`actor/mod.rs` 的
+    // `thread::Builder::spawn`），所以这里不是「在已有运行时里 await」，是用
+    // `agent_runtime::block_on` 把这条 await 链在 actor 自己的线程上跑到底，
+    // 跟改动前逐条命令同步处理的行为一致。
+    let status = agent_runtime::block_on(run_turn_with_images(session, ctx, text, images));
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         erase_cancelled_turn(session, ctx, events);
     }
@@ -119,7 +125,8 @@ pub(super) fn handle_cancel(session: &mut Session, ctx: &mut RunnerCtx, events: 
     if session.status().is_terminal() {
         return;
     }
-    let status = cancel_pending_remote_tools(session, ctx);
+    // 116：见 `handle_input` 顶部注释——同一座临时桥。
+    let status = agent_runtime::block_on(cancel_pending_remote_tools(session, ctx));
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
         erase_cancelled_turn(session, ctx, events);
     }
@@ -141,7 +148,8 @@ pub(super) fn handle_remote_tool_result(
     } else {
         RemoteToolOutput::Success(content)
     };
-    match resolve_remote_tool(session, ctx, agent, call_id, output) {
+    // 116：见 `handle_input` 顶部注释——同一座临时桥。
+    match agent_runtime::block_on(resolve_remote_tool(session, ctx, agent, call_id, output)) {
         Ok(TurnStatus::Failed(Failure::Cancelled)) => erase_cancelled_turn(session, ctx, events),
         Ok(_) => {}
         Err(error) => emit_root(
@@ -163,7 +171,10 @@ pub(super) fn handle_remote_tool_timeout(
     ctx: &mut RunnerCtx,
     events: &Events,
 ) {
-    let Some(status) = agent_runtime::sweep_remote_tool_deadlines(session, ctx) else {
+    // 116：见 `handle_input` 顶部注释——同一座临时桥。
+    let Some(status) =
+        agent_runtime::block_on(agent_runtime::sweep_remote_tool_deadlines(session, ctx))
+    else {
         return;
     };
     if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {

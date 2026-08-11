@@ -49,7 +49,11 @@ fn a_cancelled_turn_that_already_ran_a_shell_command_is_kept_not_erased() {
     });
 
     let mut session = Session::new(AgentId::root());
-    let status = agent_runtime::run_turn(&mut session, &mut ctx, "跑个命令然后继续说点什么");
+    let status = agent_runtime::block_on(agent_runtime::run_turn(
+        &mut session,
+        &mut ctx,
+        "跑个命令然后继续说点什么",
+    ));
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));
     assert!(marker.exists(), "shell 命令已经真的执行过");

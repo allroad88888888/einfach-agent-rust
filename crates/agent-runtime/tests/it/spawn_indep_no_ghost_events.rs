@@ -12,7 +12,7 @@ use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -54,11 +54,11 @@ fn after_the_pump_reaches_a_terminal_state_no_further_events_arrive() {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff6 spawn two children then wrap up",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let events_at_return = events.borrow().len();

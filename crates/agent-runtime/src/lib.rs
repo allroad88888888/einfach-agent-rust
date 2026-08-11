@@ -64,6 +64,7 @@
 //! 差别只在模型什么时候把那一笔记上。绑了 collect 的子**不是孤儿**，[`orphan`]
 //! 的轮末清算认这条。
 
+mod block_on;
 mod child_outcome;
 mod child_slot;
 mod collect_tool;
@@ -120,6 +121,7 @@ pub mod jsonl;
 pub mod persist;
 
 pub use agent_mcp::McpRegistry;
+pub use block_on::block_on;
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
 pub use ctx::RunnerCtx;
 /// 072：远端等待槽的只读投影形状。`ctx_remote_tools` 本身是私有模块（等待槽只能

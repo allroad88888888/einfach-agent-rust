@@ -95,7 +95,7 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
     let (mut ctx, events) = build_ctx_with_store(port, &dir, tool_table(), None);
     let mut session = Session::new(AgentId::root());
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "synthetic rejection"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "synthetic rejection")),
         TurnStatus::ToolsPending
     );
 
@@ -113,7 +113,7 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
     };
     assert_eq!(grant.request.input["opaque"], PRIVATE_INPUT);
 
-    let status = submit_remote_tool_result(
+    let status = agent_runtime::block_on(submit_remote_tool_result(
         &mut session,
         &mut ctx,
         RemoteToolSubmitRequest {
@@ -126,7 +126,7 @@ fn assert_rejected(name: &str, response: ScriptedResponse) {
             },
         },
         |_| {},
-    );
+    ));
     assert_eq!(
         status,
         Some(TurnStatus::Failed(Failure::Provider(ErrorClass::Unknown)))

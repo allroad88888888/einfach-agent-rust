@@ -206,7 +206,13 @@ fn main() {
     // 会话是无害的空操作，不需要在这里分支判断「是不是恢复出来的」。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
     if recovered_source_needs_fail_close {
-        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+        // 116：`cancel_pending_remote_tools` 跟着泵一起变成 `async fn`——启动阶段
+        // 这里没有任何 async 运行时，`agent_runtime::block_on` 把它跑到底，
+        // 行为跟改动前一致（见 `repl.rs` 同款调用点的注释：手写的 block_on）。
+        agent_runtime::block_on(agent_runtime::cancel_pending_remote_tools(
+            &mut session,
+            &mut ctx,
+        ));
     }
 
     let cancel = ctx.cancel_flag();

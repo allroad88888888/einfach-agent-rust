@@ -15,7 +15,7 @@ use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -61,11 +61,11 @@ fn two_siblings_with_the_default_tool_subset_share_a_byte_identical_prefix_befor
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff5 spawn two siblings with the default tool subset",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

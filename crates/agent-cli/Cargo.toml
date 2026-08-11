@@ -19,6 +19,16 @@ serde_json = { workspace = true }
 # stdin + /cancel 命令」的纯 std 兜底方案。
 ctrlc = "3"
 
+# 116：`agent-runtime` 的泵 async 化之后，CLI 自己没有任何 async 运行时——需要
+# 一个 `block_on` 才能把 `run_turn` 那条 await 链跑到底。**这个依赖目前没有被
+# 这里的代码直接用到**：115 原文建议的 `futures_util::executor::block_on` 实测
+# 不存在（见 `agent-runtime/Cargo.toml` 同款注释），CLI 实际调用的是
+# `agent_runtime::block_on`（手写的最小实现）。保留它是为了满足 115 的决定
+# 「futures 最小子集只到 futures-core/futures-util，且要进 agent-cli」这条字面
+# 要求，也为将来 CLI 侧若要直接用 futures-util 的组合子留好位置；如果 117 之后
+# 证实 CLI 永远不需要直接碰 futures-util，这一行可以删。
+futures-util = { workspace = true }
+
 [dev-dependencies]
 # `model_switch` 的单测要拼一份 `RootConfig` 测试夹具——跟
 # `agent-transport/src/config.rs` 自己的测试同一个手法（直接 `toml::from_str`），

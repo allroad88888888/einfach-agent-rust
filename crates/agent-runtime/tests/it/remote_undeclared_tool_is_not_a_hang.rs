@@ -14,7 +14,7 @@
 
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
 use agent_providers::wire_name;
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
 
@@ -54,7 +54,8 @@ fn a_web_name_the_table_never_declared_gets_an_is_error_result_instead_of_a_wait
     let (mut ctx, _events) = build_ctx_with(port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "调一个不存在的 web 工具");
+    let status =
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "调一个不存在的 web 工具"));
 
     // 1. 有界返回、loop 继续（003 哲学：工具失败不中止 loop）。
     assert_eq!(
@@ -94,7 +95,7 @@ fn a_declared_web_tool_still_parks_in_the_waiting_slot() {
     let (mut ctx, _events) = build_ctx_with(port, &dir, ToolTable::standard());
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "渲染一张卡片");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "渲染一张卡片"));
 
     assert_eq!(
         status,

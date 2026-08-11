@@ -78,7 +78,7 @@ fn a_null_executor_runs_a_full_turn_and_undo_without_touching_disk() {
     let mut ctx = build_ctx_without_a_filesystem(port);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "读一个文件");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "读一个文件"));
 
     // 1. loop 没有因为工具被拒而中止（003 哲学：工具失败不中止 loop），
     //    跑完两跳收敛——不是卡在 `ToolsPending`。

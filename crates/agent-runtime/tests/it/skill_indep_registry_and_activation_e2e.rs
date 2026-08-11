@@ -44,7 +44,7 @@ use std::time::Duration;
 
 use agent_core::{AgentId, Session, SessionConfig, SkillId, TurnStatus, UndoReport};
 use agent_providers::deepseek::DeepSeek;
-use agent_runtime::{run_turn, RunnerCtx, SkillRegistry, ToolTable};
+use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable, run_turn};
 use agent_tools::ToolExecutor;
 use agent_transport::{Backoff, Client};
 
@@ -135,7 +135,7 @@ fn the_resident_index_is_in_the_very_first_request_before_any_activation() {
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "你好"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "你好")),
         TurnStatus::Done { truncated: false }
     );
 
@@ -184,7 +184,7 @@ fn activating_mid_turn_injects_body_and_tool_into_the_next_hop_then_undo_removes
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 testskill"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "帮我激活 testskill")),
         TurnStatus::Done { truncated: false }
     );
 

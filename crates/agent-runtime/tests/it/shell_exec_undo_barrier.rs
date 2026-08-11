@@ -84,7 +84,11 @@ fn undo_stops_at_the_shell_barrier_and_undo_force_crosses_it() {
     let mut ctx = build_ctx_with_shell(port, &dir);
     let mut session = Session::new(AgentId::root());
 
-    let status = agent_runtime::run_turn(&mut session, &mut ctx, "跑个 shell 命令");
+    let status = agent_runtime::block_on(agent_runtime::run_turn(
+        &mut session,
+        &mut ctx,
+        "跑个 shell 命令",
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
     assert!(marker.exists(), "shell 命令真的执行过，标记文件该在");
 

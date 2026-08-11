@@ -28,11 +28,11 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, Event, Failure, Session, ToolCallId, TurnStatus};
-use agent_runtime::{resolve_remote_tool, run_turn, RemoteToolOutput, RunnerEvent};
+use agent_runtime::{RemoteToolOutput, RunnerEvent, resolve_remote_tool, run_turn};
 
 use crate::spawn_bg_support::{
-    any_message_mentions, build_ctx, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
-    wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_call, sse_tool_calls,
+    temp_dir, wire_tool_name,
 };
 
 /// Web 宿主执行的交互工具之一（`ToolTable::standard` 注册，`Location::Web`）。
@@ -97,7 +97,11 @@ fn park(
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子 + 一个远端工具");
+    let status = agent_runtime::block_on(run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff 一个后台子 + 一个远端工具",
+    ));
     assert_eq!(
         status,
         TurnStatus::ToolsPending,
@@ -126,13 +130,13 @@ fn a_background_childs_late_result_is_dropped_by_the_epoch_gate() {
     assert_eq!(session.status(), TurnStatus::Failed(Failure::Cancelled));
 
     // 幽灵结果回来了。
-    let status = resolve_remote_tool(
+    let status = agent_runtime::block_on(resolve_remote_tool(
         &mut session,
         &mut ctx,
         child.clone(),
         ToolCallId::new("call_child_ask"),
         RemoteToolOutput::Success("GHOSTANSWER 幽灵答案".to_string()),
-    )
+    ))
     .expect("这次回传本身是合法的（槽位还在等它）—— 被挡掉的是它的落地，不是它的受理");
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));
 
@@ -166,13 +170,13 @@ fn and_the_very_same_result_lands_when_the_epoch_still_matches() {
     let (mut session, mut ctx, _events, _server) = park("bg-epoch-control");
     let child = AgentId::new("root/a1");
 
-    let _ = resolve_remote_tool(
+    let _ = agent_runtime::block_on(resolve_remote_tool(
         &mut session,
         &mut ctx,
         child.clone(),
         ToolCallId::new("call_child_ask"),
         RemoteToolOutput::Success("GHOSTANSWER 幽灵答案".to_string()),
-    )
+    ))
     .expect("回传该被受理");
 
     assert!(

@@ -28,9 +28,17 @@ pub(super) fn submit(
     request: RemoteToolSubmitRequest,
     reply: oneshot::Sender<RemoteToolSubmitDecision>,
 ) {
-    let status = submit_remote_tool_result(session, ctx, request, |decision| {
-        let _ = reply.send(decision);
-    });
+    // 116：跟 `commands::handle_input` 同一座临时桥（那边的顶部注释有完整理由）——
+    // `submit_remote_tool_result` 变成 `async fn` 之后，actor 线程用
+    // `agent_runtime::block_on` 把它跑到底。
+    let status = agent_runtime::block_on(submit_remote_tool_result(
+        session,
+        ctx,
+        request,
+        |decision| {
+            let _ = reply.send(decision);
+        },
+    ));
     if matches!(status, Some(TurnStatus::Failed(Failure::Cancelled))) {
         commands::erase_cancelled_turn(session, ctx, events);
     }

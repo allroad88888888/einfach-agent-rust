@@ -18,8 +18,8 @@ use agent_core::{AgentId, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
 use crate::spawn_bg_support::{
-    any_message_mentions, build_ctx, sse_text, sse_tool_call, streamed_text, temp_dir,
-    warned_about, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_call, streamed_text,
+    temp_dir, warned_about, wire_tool_name,
 };
 
 /// 子答得比父慢得多——父收尾时它还在飞。
@@ -61,7 +61,11 @@ fn an_uncollected_background_child_is_despawned_and_the_turn_still_ends_normally
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个后台子然后不管它");
+    let status = agent_runtime::block_on(run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff 一个后台子然后不管它",
+    ));
     let elapsed = start.elapsed();
 
     // ① 真的返回了，而且有界（泵还要等那条在飞的凭据落地，所以 >= CHILD 是对的，

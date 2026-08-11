@@ -8,10 +8,10 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name,
 };
 
 /// 让子先撞完 402 再让 root 醒来去领。
@@ -60,7 +60,11 @@ fn collecting_a_failed_background_child_yields_an_error_result_and_the_turn_goes
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个后台的，等会儿去领");
+    let status = agent_runtime::block_on(run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff 开一个后台的，等会儿去领",
+    ));
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
     assert_eq!(

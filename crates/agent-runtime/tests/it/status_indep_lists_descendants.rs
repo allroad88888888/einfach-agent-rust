@@ -16,8 +16,8 @@ use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::status_indep_support::{
-    build_ctx, listed_activities, listed_ids, sse_text, sse_tool_call, sse_tool_calls, temp_dir,
-    tool_result, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, listed_activities, listed_ids, sse_text, sse_tool_call,
+    sse_tool_calls, temp_dir, tool_result, wire_tool_name,
 };
 
 #[test]
@@ -79,11 +79,11 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff-status split this in two and watch them",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();

@@ -178,10 +178,11 @@ pub fn temp_dir(name: &str) -> PathBuf {
 /// 录制帧验证过 wire 形状的那家，测试直接复用它的形状，不必再摸一遍另外
 /// 两家的转义规则）。`cancel_poll_interval` 拉到 50ms——测试要快。
 ///
-/// 返回的 `Rc<RefCell<Vec<RunnerEvent>>>` 收集所有经回调发出的事件：
-/// `run_turn` 是同步阻塞的，回调只会在调用 `run_turn` 的这同一个线程上被喊到
-/// （IO 线程只经 channel 传数据，不直接碰回调，见 `provider_call` 模块文档），
-/// 所以这里不需要 `Arc<Mutex<_>>`。
+/// 返回的 `Rc<RefCell<Vec<RunnerEvent>>>` 收集所有经回调发出的事件：这些测试
+/// 用例经 `agent_runtime::block_on(run_turn(..))` 把泵跑到底（116：`run_turn`
+/// 是 `async fn` 了，但 `block_on` 单 future、无并发，回调依旧只会在调用它的
+/// 这同一个线程上被喊到——IO 线程只经 channel 传数据，不直接碰回调，见
+/// `provider_call` 模块文档），所以这里不需要 `Arc<Mutex<_>>`。
 /// 029 之前的用例只认 `RunnerEvent`：走 `RunnerCtx::new` 那条不带归属的回调，
 /// 断言因此一个字不用改（单 agent 时「谁说的」只有一个答案）。
 pub fn build_ctx(port: u16, root: &std::path::Path) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {

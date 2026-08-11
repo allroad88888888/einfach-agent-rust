@@ -17,7 +17,7 @@ use agent_core::{AgentId, ContentBlock, Session, TurnStatus, UndoReport};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
 };
 
 const SLOW: Duration = Duration::from_millis(350);
@@ -77,11 +77,11 @@ fn three_children_overlap_and_the_parent_waits_for_the_slowest() {
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff please split into three parallel workers",
-    );
+    ));
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Done { truncated: false });

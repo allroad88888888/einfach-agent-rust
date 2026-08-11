@@ -15,8 +15,8 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -116,11 +116,11 @@ fn cancel_mid_flight_cuts_every_child_and_the_server_sees_no_further_connections
 
     let mut session = Session::new(AgentId::root());
     let start = Instant::now();
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "cancelkick spawn three hanging workers",
-    );
+    ));
     let elapsed = start.elapsed();
 
     assert_eq!(status, TurnStatus::Failed(Failure::Cancelled));

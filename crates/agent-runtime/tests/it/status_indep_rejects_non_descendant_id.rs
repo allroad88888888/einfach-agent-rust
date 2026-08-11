@@ -15,7 +15,7 @@ use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::status_indep_support::{
-    build_ctx, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, tool_result, wire_tool_name,
 };
 
 #[test]
@@ -77,11 +77,11 @@ fn asking_about_an_ancestor_or_a_sibling_is_an_error_result_and_the_loop_keeps_g
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff-refusal one of them will try to peek",
-    );
+    ));
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },

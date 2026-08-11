@@ -46,3 +46,126 @@
   本 issue 只改等待方式。
 - `agent-cli` 的 `Ctrl-C` 走 `ctrlc` crate 设标志位，async 化后**确认那条路还通**
   ——它现在依赖泵在 `recv_timeout` 超时后回到循环顶部去看标志。
+
+## 实做记录（2026-08-11）
+
+**状态：完成。** `cargo test --workspace --no-fail-fast` 全绿（除既有的
+`http_image_input` 那条，已 `git stash` 验过在未改动的 HEAD 上同样失败）。
+
+### 临时桥搭在哪，117 要拆什么
+
+桥**只在 `runner.rs::receive` 这一个函数体内**，没有沿着调用链散开：
+
+- `io_thread`/`sync_channel(0)` 一字未动。
+- `receive` 从 `fn` 改成 `async fn`，函数体里还是原来那句
+  `rx.recv_timeout(POLL_INTERVAL)`——同步阻塞，**没有真正的 `.await` 点**。
+  这是刻意选的最小改动：调用方（`run_turn`/`resume_after_first_commit`）真
+  正 async 化、能被外面 `.await`，但泵内部「怎么等」这一步的血肉完全没变。
+- `run_turn`/`run_turn_with_images`/`resume`/`resume_after_first_commit` 以及
+  `remote_tool.rs`/`remote_tool_submission.rs`/`deadline.rs` 里另外四个公开
+  函数（`resolve_remote_tool`/`cancel_pending_remote_tools`/
+  `submit_remote_tool_result`/`sweep_remote_tool_deadlines`，它们都会兜回
+  `runner::resume`/`resume_after_first_commit`）全部变成 `async fn`，但**只是
+  逐句加 `.await`，一行控制流没改**（逐文件 diff 已确认：改动只有
+  `fn`→`async fn` 和插入 `.await`）。
+
+117 要拆的就是 `receive` 函数体那几行：把 `io_thread` 换成并发 future、
+`sync_channel(0)` 换成 `futures` 的 mpsc 之后，`receive` 要变成对新 channel
+的真正非阻塞 `.next().await`。除了这一个函数，`runner.rs` 和那四个远端工具
+函数的其余部分不需要再动——它们已经是「形状对了，内容还没换」的状态。
+
+### 一处偏离 115 原文，已验证：`futures_util::executor::block_on` 不存在
+
+115 与本 issue都写「`futures_util::executor::block_on` 即可，不用自己写」——
+**实测这个路径不存在**（`cargo build` 报 `E0432: unresolved import
+futures_util::executor`，换 `features = ["executor"]` 后 cargo 直接报
+`futures-util` 没有这个 feature，可选 feature 列表见 `Cargo.lock`）。
+`executor`/`block_on` 属于独立的 `futures-executor` crate（`futures` 全量门面
+才转发成 `futures::executor`），`futures-util` 本身从来没有这个模块。
+
+加 `futures-executor` 能解决，但会在「futures 最小子集」之外再添一个 crate，
+直接违反验收第 4 条的字面要求（`rg` 只认 `futures-core`/`futures-util`）。
+115 原文自己留了口子——「`block_on`（约 30 行）自己写完全没问题，错了当场
+暴露；risky 的是手写会合 channel」——所以改成手写：
+`crates/agent-runtime/src/block_on.rs`，`std::task::Wake` 官方文档给的教科书
+形状（`Arc<ThreadWaker>` + `thread::park`/`unpark`），约 60 行含文档注释、
+两个单测（一个测 `Ready` 直接返回，一个测至少经过一次 `Pending`+`wake`）。
+经 `agent-runtime` 的 `lib.rs` 导出为 `agent_runtime::block_on`，`agent-cli`
+与 `agent-server` 都调这一个函数，不是各写各的。
+
+`futures-core`/`futures-util` 仍然按 115 的决定留在 `agent-runtime` 与
+`agent-cli` 的 `Cargo.toml`（验收第 4 条要求它们出现在这两个 crate 里）——但
+**目前没有代码真正用到它们**，是为 117 要接的 `futures_util::channel::mpsc`
+预留位置。两个 Cargo.toml 里都写了这一点，别被这两行依赖误导成「已经在用
+futures 的组合子」。
+
+### 调用方怎么接线
+
+- `agent-cli`：`repl.rs` 与 `main.rs` 两处调用点分别包一层
+  `agent_runtime::block_on(...)`。
+- `agent-server`：**不是**「已有 tokio runtime 里 await」——session actor
+  （`actor/mod.rs`）是裸 `thread::Builder::spawn` 起的 OS 线程，从未经过
+  `tokio::spawn`/`rt.enter()`，`tokio::runtime::Handle::current()` 在那条线程
+  上会直接 panic。所以跟 `agent-cli` 是同一个手法：`actor/commands.rs`（4 处：
+  `handle_input`/`handle_cancel`/`handle_remote_tool_result`/
+  `handle_remote_tool_timeout`）、`actor/remote_tools.rs`（`submit`）、
+  `actor/body.rs`（恢复阶段那次 `cancel_pending_remote_tools`）一共 6 个调用点
+  各包一层 `agent_runtime::block_on`。`agent-server` 的 `Cargo.toml` 没有新增
+  任何依赖——`block_on` 是从 `agent-runtime` 借来的，不是自己拉的 `futures-util`。
+- axum/SSE 层（`http/`、`hub/`）一行没动，范围条款 4 兑现。
+
+### 测试怎么接线（60 个测试文件，机械改动，逐条列在这里而不是逐文件贴）
+
+`run_turn`/`run_turn_with_images`/`resolve_remote_tool`/
+`cancel_pending_remote_tools`/`submit_remote_tool_result`/
+`sweep_remote_tool_deadlines` 变成 `async fn` 之后，`agent-runtime/tests/it/`
+下 51 个用例、`agent-cli/tests/it/` 下 3 个用例原来直接同步调用这些函数——
+逐个改成 `agent_runtime::block_on(原调用)`，**只改这一层包装，调用参数、
+返回值处理、断言一个字没动**（脚本化改的：找函数名+左括号，配对括号插入
+`agent_runtime::block_on(` / `)`，对每个改动点跑过 `cargo build --tests`
+确认零编译错误；6 个调用点原文已经写成 `agent_runtime::run_turn(...)` 全限定
+路径，脚本第一版误插出 `agent_runtime::agent_runtime::block_on(run_turn(...))`
+的重复前缀，已手工修成 `agent_runtime::block_on(agent_runtime::run_turn(...))`，
+逐个 diff 核对过）。这些改动全部是「函数从同步变 async 之后接线方式跟着变」，
+不碰任何断言、任何期望值。
+
+另有一处非机械的测试代码改动：`agent-runtime/tests/it/support/mod.rs` 里
+`build_ctx` 的文档注释原文说「`run_turn` 是同步阻塞的」，改成「经
+`block_on` 跑，仍然阻塞调用线程」——纯文档措辞，不是断言，说明的还是同一个
+事实（回调只在调用线程上被喊到，不需要 `Arc<Mutex<_>>`）。
+
+### 验收四条的实际结果
+
+1. **`cargo test --workspace --no-fail-fast`**：110 passed / 1 failed（
+   `agent-server` 的 `http_image_input::
+   text_stays_on_old_wire_shape_and_attachment_reference_survives_recovery`），
+   其余全部 crate 全绿。`git stash` 到未改动的 HEAD 单独跑这一条，同样
+   panic 在同一行（`等待第 1 个模型请求超时`），确认是既有失败、不是本次
+   引入。
+2. **CLI 真机对话**：**没有跑到「模型能回话」这一步**——环境里唯一能找到的
+   `DEEPSEEK_API_KEY` 是无效的（真实请求返回 HTTP 401 `invalid_request_error`），
+   没有别的可用 provider 凭据（仓库只支持 deepseek/kimi/glm 三家，找不到
+   `providers.toml`，也没有 kimi/glm 的 key）。跑出来的部分信号：连续 4 轮
+   对话在 401 报错下 REPL 循环都正常继续（`[连接异常] HTTP 401 ...` →
+   `[本轮失败: Provider(Auth)]` → 回到 `>` 提示符），中途真实发送 `SIGINT`
+   给进程后 `kill -0` 确认进程存活，之后仍能继续接受输入直到 `/quit` 干净
+   退出（wait 后进程自然消失，没有靠超时兜底 `kill -9`）。这证明了「取消不
+   炸、进程收得了工、错误路径不卡死」，但**没有验证真实模型对话与工具调用**
+   ——如实记录，不算过这一条。
+3. **前缀缓存 `cached/prompt ≥ 0.9`**：**没跑**，同上——没有一次成功的模型
+   请求，没有 usage 数据可看。
+4. **`rg 'futures' crates/*/Cargo.toml`**：只命中 `agent-runtime`（
+   `futures-core`/`futures-util`）与 `agent-cli`（`futures-util`）的依赖声明
+   行（另外几行是同一文件里解释这件事的注释）；`agent-transport/Cargo.toml`
+   的 `wasm-bindgen-futures = "0.4"` 是子串误命中，113 就有、这次没碰，跟
+   `futures-core`/`futures-util` 无关。没有新增 `tokio`（`rg 'tokio'
+   crates/agent-runtime/Cargo.toml crates/agent-cli/Cargo.toml` 零命中）。
+
+### 遗留问题
+
+- 验收条 2、3 没有真正跑通，需要一把有效的 provider key 才能补——补测不需要
+  再动代码，只需要重跑「CLI 真机跑一轮对话」那一步。
+- `runner.rs` 在本 issue开始前就已经 332 行（超出 300 的硬上限），本次加了
+  文档注释后到 376 行。它是事件泵本体、单一状态机，够得上「复杂文件」候选
+  （上限 500），但没有为它正式走一遍认定；本 issue 范围只改「怎么等」，没有
+  去拆分或重新认定这个文件，原样标记给下一次触碰它的 issue。

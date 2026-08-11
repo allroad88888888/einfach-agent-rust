@@ -15,7 +15,7 @@ use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -63,11 +63,11 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff4 delegate with a deliberately narrow tool set",
-    );
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let root = AgentId::root();
@@ -124,7 +124,9 @@ fn a_child_cannot_grant_its_own_grandchild_a_tool_it_was_not_itself_granted() {
             _ => None,
         })
         .collect();
-    assert!(root_text
-        .iter()
-        .any(|t| t.contains("received child1's report")));
+    assert!(
+        root_text
+            .iter()
+            .any(|t| t.contains("received child1's report"))
+    );
 }

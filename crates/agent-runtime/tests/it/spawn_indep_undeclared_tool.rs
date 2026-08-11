@@ -9,7 +9,7 @@ use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -46,11 +46,11 @@ fn a_host_without_spawn_declared_treats_it_as_an_unknown_tool_and_the_tree_does_
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff3 try to spawn even though nobody declared it",
-    );
+    ));
 
     assert_eq!(
         status,

@@ -4,7 +4,7 @@
 
 use crate::support;
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
-use agent_runtime::{run_turn, RunnerEvent};
+use agent_runtime::{RunnerEvent, run_turn};
 
 use crate::support::ScriptedResponse;
 
@@ -36,7 +36,7 @@ fn two_hop_tool_call_then_end_turn() {
     let (mut ctx, events) = support::build_ctx(port, &dir);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "读一下 hello.txt");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "读一下 hello.txt"));
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
 

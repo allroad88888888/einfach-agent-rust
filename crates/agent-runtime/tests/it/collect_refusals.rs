@@ -15,10 +15,10 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, wire_tool_name,
 };
 
 /// 让 A 有时间答完：第一次 collect 因此走 stash 那条路，第二次才是货真价实的
@@ -87,7 +87,11 @@ fn collecting_twice_an_unknown_id_or_a_non_descendant_all_come_back_as_errors() 
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个，然后乱领一通");
+    let status = agent_runtime::block_on(run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff 开一个，然后乱领一通",
+    ));
 
     // 三次拒绝一次都没有打断这一轮。
     assert_eq!(

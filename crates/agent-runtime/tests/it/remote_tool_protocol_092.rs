@@ -33,7 +33,7 @@ fn parked_call(
     };
     let mut session = Session::new(AgentId::root());
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "render a card"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "render a card")),
         TurnStatus::ToolsPending,
         "precondition: the declared web tool must occupy a waiting slot"
     );
@@ -57,7 +57,7 @@ fn submit(
     outcome: RemoteToolSubmitOutcome,
 ) -> (Option<TurnStatus>, RemoteToolSubmitDecision) {
     let acknowledgement = RefCell::new(None);
-    let status = submit_remote_tool_result(
+    let status = agent_runtime::block_on(submit_remote_tool_result(
         session,
         ctx,
         RemoteToolSubmitRequest {
@@ -68,7 +68,7 @@ fn submit(
             outcome,
         },
         |decision| *acknowledgement.borrow_mut() = Some(decision),
-    );
+    ));
     (
         status,
         acknowledgement
@@ -247,7 +247,9 @@ fn deadlines_distinguish_unclaimed_from_claimed_outcome_unknown() {
             ));
         }
         std::thread::sleep(Duration::from_millis(30));
-        assert!(sweep_remote_tool_deadlines(&mut session, &mut ctx).is_some());
+        assert!(
+            agent_runtime::block_on(sweep_remote_tool_deadlines(&mut session, &mut ctx)).is_some()
+        );
         assert!(matches!(
             ctx.remote_tool_status().recent_terminal.as_slice(),
             [receipt] if receipt.status == expected && receipt.submission_id.is_none() && receipt.payload_digest.is_none() && receipt.payload_len.is_none()

@@ -29,10 +29,10 @@ use agent_core::{
     AgentId, HostSkill, Reversibility, Session, SessionConfig, SkillId, ToolSpec, TurnStatus,
 };
 use agent_providers::deepseek::DeepSeek;
-use agent_runtime::{run_turn, RunnerCtx, SkillRegistry, ToolTable};
+use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable, run_turn};
 use agent_tools::ToolExecutor;
 use agent_transport::{Backoff, Client};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::support::routed::{Route, RoutedServer};
 
@@ -93,7 +93,7 @@ fn dispatch_uses_the_table_declaration_when_an_active_skill_has_the_same_name() 
         .unwrap();
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "关闭 T-7"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "关闭 T-7")),
         TurnStatus::ToolsPending
     );
 
@@ -173,7 +173,7 @@ fn the_name_the_table_already_has_appears_exactly_once_and_the_skill_body_is_int
     let mut session = Session::new(AgentId::root());
 
     assert_eq!(
-        run_turn(&mut session, &mut ctx, "帮我激活 crm-flow"),
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "帮我激活 crm-flow")),
         TurnStatus::Done { truncated: false }
     );
 

@@ -16,7 +16,10 @@ use crate::transient_source_policy::{SAFE_ERROR, SAFE_RESULT, is_transient_sourc
 /// Submit an outcome through the epoch gate. `acknowledge` is invoked exactly once.  On a new
 /// terminal result it runs after the core event is persisted and before any resulting provider
 /// effect is dispatched; duplicate and rejection decisions run without advancing the pump.
-pub fn submit_remote_tool_result(
+///
+/// 116: `async fn` because the terminal-result path resumes the pump (`runner::
+/// resume_after_first_commit`); the duplicate/rejection early returns stay synchronous.
+pub async fn submit_remote_tool_result(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     request: RemoteToolSubmitRequest,
@@ -112,11 +115,8 @@ pub fn submit_remote_tool_result(
     let event_call = pending.call_id.clone();
     let event_tool = pending.request.tool.clone();
 
-    Some(runner::resume_after_first_commit(
-        session,
-        ctx,
-        event,
-        move |ctx| {
+    Some(
+        runner::resume_after_first_commit(session, ctx, event, move |ctx| {
             let receipt = ctx.record_remote_tool_terminal(
                 &pending,
                 status,
@@ -134,8 +134,9 @@ pub fn submit_remote_tool_result(
                     is_error,
                 },
             );
-        },
-    ))
+        })
+        .await,
+    )
 }
 
 fn replay_decision(

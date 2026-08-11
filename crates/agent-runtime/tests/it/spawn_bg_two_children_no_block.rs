@@ -22,8 +22,8 @@ use agent_core::{AgentId, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_bg_support::{
-    any_message_mentions, build_ctx, sse_text, sse_tool_calls, temp_dir, tool_results,
-    warned_about, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, any_message_mentions, build_ctx, sse_text, sse_tool_calls, temp_dir,
+    tool_results, warned_about, wire_tool_name,
 };
 
 const CHILD: Duration = Duration::from_millis(250);
@@ -78,7 +78,7 @@ fn two_background_children_run_while_the_parent_keeps_going_and_never_write_back
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 两个后台子");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "kickoff 两个后台子"));
 
     assert_eq!(status, TurnStatus::Done { truncated: false });
 

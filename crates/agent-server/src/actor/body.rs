@@ -235,7 +235,12 @@ pub(super) fn run(
         && (agent_runtime::has_unresolved_tool_calls(&session)
             || agent_runtime::recovered_transient_source_needs_fail_close(&session))
     {
-        agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx);
+        // 116：见 `actor::commands::handle_input` 顶部注释——同一座临时桥，这里是
+        // actor 线程握手阶段（还没进命令循环）的另一处调用点。
+        agent_runtime::block_on(agent_runtime::cancel_pending_remote_tools(
+            &mut session,
+            &mut ctx,
+        ));
     }
 
     let cancel = ctx.cancel_flag();

@@ -9,7 +9,7 @@
 
 use crate::support;
 use agent_core::{AgentId, ContentBlock, Session, TurnStatus};
-use agent_runtime::{run_turn, RunnerEvent};
+use agent_runtime::{RunnerEvent, run_turn};
 
 use crate::support::mcp;
 
@@ -44,7 +44,7 @@ fn mcp_call_takes_the_fourth_path_and_becomes_a_tool_result() {
     );
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "echo 一下");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "echo 一下"));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // 结果来自 MCP server，不是 ToolExecutor（后者对 mcp: 名只会 unknown_tool）。
@@ -83,7 +83,7 @@ fn mcp_server_error_becomes_an_is_error_tool_result_and_the_loop_continues() {
     let mut session = Session::new(AgentId::root());
 
     // server 报错不该 panic 也不该卡死——loop 照常走到 hop2 的 EndTurn。
-    let status = run_turn(&mut session, &mut ctx, "echo 一下");
+    let status = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "echo 一下"));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let (content, is_error) = tool_result_block(&session);

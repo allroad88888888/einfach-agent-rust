@@ -26,7 +26,7 @@ fn submit(
     content: String,
 ) -> RemoteToolSubmitDecision {
     let acknowledgement = RefCell::new(None);
-    submit_remote_tool_result(
+    agent_runtime::block_on(submit_remote_tool_result(
         session,
         ctx,
         RemoteToolSubmitRequest {
@@ -37,7 +37,7 @@ fn submit(
             outcome: RemoteToolSubmitOutcome::Succeeded { content },
         },
         |decision| *acknowledgement.borrow_mut() = Some(decision),
-    );
+    ));
     acknowledgement
         .into_inner()
         .expect("actor must acknowledge")
@@ -63,7 +63,7 @@ fn terminal_ledger_is_capped_and_eviction_is_honest() {
         let call_id = format!("cap-{index}");
         let mut session = Session::new(AgentId::root());
         assert_eq!(
-            run_turn(&mut session, &mut ctx, "render"),
+            agent_runtime::block_on(run_turn(&mut session, &mut ctx, "render")),
             TurnStatus::ToolsPending
         );
         latest_registered_at = Some(ctx.remote_tool_status().active[0].registered_at);

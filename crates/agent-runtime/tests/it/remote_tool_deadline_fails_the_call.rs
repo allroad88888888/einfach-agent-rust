@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, ContentBlock, Session, ToolCallId, TurnStatus};
 use agent_runtime::{
-    resolve_remote_tool, run_turn, sweep_remote_tool_deadlines, RemoteToolOutput, RunnerEvent,
-    ToolTable,
+    RemoteToolOutput, RunnerEvent, ToolTable, resolve_remote_tool, run_turn,
+    sweep_remote_tool_deadlines,
 };
 
 use crate::support::{build_ctx_with, spawn_scripted_server, sse_text, sse_tool_call, temp_dir};
@@ -42,7 +42,7 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
     let mut session = Session::new(AgentId::root());
 
     // 第一步：轮次派出远端调用就地停住（既有行为，不变）。
-    let parked = run_turn(&mut session, &mut ctx, "渲染一张卡片");
+    let parked = agent_runtime::block_on(run_turn(&mut session, &mut ctx, "渲染一张卡片"));
     assert_eq!(
         parked,
         TurnStatus::ToolsPending,
@@ -61,7 +61,8 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
     );
 
     // 第三步：到点扫一次 —— 槽被判失败，事件泵接着把这一轮跑完。
-    let status = sweep_remote_tool_deadlines(&mut session, &mut ctx).expect("到点该有槽过期");
+    let status = agent_runtime::block_on(sweep_remote_tool_deadlines(&mut session, &mut ctx))
+        .expect("到点该有槽过期");
     assert_eq!(
         status,
         TurnStatus::Done { truncated: false },
@@ -104,13 +105,13 @@ fn a_remote_tool_nobody_ever_answers_is_failed_at_its_deadline_and_the_turn_ends
 
     // 060 验收第四条：**迟到的回传**（客户端终于醒了）撞不进任何槽——`take_remote_tool`
     // 找不到 → 既有的 `RemoteToolResultError` 那条路，宿主翻成 `TransportTrouble`。
-    let late = resolve_remote_tool(
+    let late = agent_runtime::block_on(resolve_remote_tool(
         &mut session,
         &mut ctx,
         AgentId::root(),
         ToolCallId::new("call_card"),
         RemoteToolOutput::Success("{\"cardId\":\"card-1\"}".to_string()),
-    );
+    ));
     assert!(
         late.is_err(),
         "超时之后迟到的回传必须被安全拒绝，不能写进已经收尾的轮次"

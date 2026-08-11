@@ -94,7 +94,12 @@ pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig, mcp:
         // 取消标志的清零在 `run_turn` 内部做（跟 022 时代 `repl::run` 手动
         // `cancel.store(false, ..)` 是同一个理由：上一轮遗留的标志不该提前
         // 打断这一轮还没开始的请求），这里不用重复。
-        let status = run_turn(session, ctx, input);
+        //
+        // 116：`run_turn` 是 `async fn` 了，CLI 没有 async 运行时——
+        // `agent_runtime::block_on`（116 实做记录：手写的最小 block_on，
+        // `futures_util::executor::block_on` 这条路径实测不存在）把这条 await
+        // 链在当前线程上跑到底，跟改动前的同步阻塞行为一致。
+        let status = agent_runtime::block_on(run_turn(session, ctx, input));
         crate::print::turn_outcome(&status);
 
         if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {

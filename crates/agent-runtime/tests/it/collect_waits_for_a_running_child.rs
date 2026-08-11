@@ -16,11 +16,11 @@
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{ToolTable, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about, wire_tool_name,
-    Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, tool_results, warned_about,
+    wire_tool_name,
 };
 
 /// B 慢：足够长，让「root 第三跳在它之后」不是一次毫秒级的巧合。
@@ -71,7 +71,11 @@ fn collect_on_a_running_child_parks_the_parent_until_the_child_finishes() {
     let (mut ctx, events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(&mut session, &mut ctx, "kickoff 开一个慢的后台子，马上就领");
+    let status = agent_runtime::block_on(run_turn(
+        &mut session,
+        &mut ctx,
+        "kickoff 开一个慢的后台子，马上就领",
+    ));
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     // --- 结果真的回来了，而且是走 collect 那个槽回来的 ---

@@ -85,14 +85,18 @@ pub(crate) fn sweep(
 ///
 /// 多个槽同时过期时逐个恢复：每次 [`runner::resume`] 把泵驱动到静止，剩下的槽
 /// 让下一次继续——`Session::step` 一次只吃一条事件，攒成一批喂进去也是同一条路。
-pub fn sweep_remote_tool_deadlines(
+///
+/// 116：`async fn`，因为循环体里的 `runner::resume` 本身就是 await 链的一环；
+/// 逐个 `.await` 而不是并发等待——语义跟改动前逐个同步调用完全一致，槽位过期
+/// 的处理顺序不该被并发打乱。
+pub async fn sweep_remote_tool_deadlines(
     session: &mut Session,
     ctx: &mut RunnerCtx,
 ) -> Option<TurnStatus> {
     let events = expired(ctx, Instant::now());
     let mut status = None;
     for event in events {
-        status = Some(runner::resume(session, ctx, event));
+        status = Some(runner::resume(session, ctx, event).await);
     }
     status
 }

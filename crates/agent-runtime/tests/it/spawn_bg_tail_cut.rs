@@ -14,10 +14,10 @@
 use std::time::{Duration, Instant};
 
 use agent_core::{AgentId, Session, TurnStatus};
-use agent_runtime::{run_turn, RunnerEvent};
+use agent_runtime::{RunnerEvent, run_turn};
 
 use crate::spawn_bg_support::{
-    build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_call, temp_dir, wire_tool_name,
 };
 
 /// 子第一跳的延迟：留足时间让 root 先收尾。
@@ -80,7 +80,8 @@ fn run(
     let mut session = Session::new(AgentId::root());
 
     let start = Instant::now();
-    let status = run_turn(&mut session, &mut ctx, "kickoff 一个多轮后台子");
+    let status =
+        agent_runtime::block_on(run_turn(&mut session, &mut ctx, "kickoff 一个多轮后台子"));
     let elapsed = start.elapsed();
     let events = events.borrow().clone();
     (server, session, events, status, elapsed)

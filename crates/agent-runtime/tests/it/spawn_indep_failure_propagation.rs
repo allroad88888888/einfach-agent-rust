@@ -11,7 +11,7 @@ use agent_core::{AgentId, AgentLimits, ContentBlock, Session, TurnStatus};
 use agent_runtime::run_turn;
 
 use crate::spawn_indep_support::{
-    build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name, Route, RoutedServer,
+    Route, RoutedServer, build_ctx, sse_text, sse_tool_calls, temp_dir, wire_tool_name,
 };
 
 #[test]
@@ -60,11 +60,11 @@ fn one_child_fails_with_402_the_other_succeeds_and_both_tool_results_reach_the_p
     let (mut ctx, _events) = build_ctx(server.port, &dir, tools);
     let mut session = Session::new(AgentId::root());
 
-    let status = run_turn(
+    let status = agent_runtime::block_on(run_turn(
         &mut session,
         &mut ctx,
         "kickoff2 split into a doomed half and a good half",
-    );
+    ));
 
     // 003 跨 agent 版：一个子失败不中止父的 loop。
     assert_eq!(
