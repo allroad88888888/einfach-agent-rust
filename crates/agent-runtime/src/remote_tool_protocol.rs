@@ -1,8 +1,9 @@
 //! Transport-neutral values for claiming and completing a remote tool call.
 
-use std::time::SystemTime;
-
 use agent_core::{AgentId, ToolCallId, ToolCallRequest};
+// 114b：`SystemTime::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::SystemTime` 本尊，行为不变）。
+use web_time::SystemTime;
 
 use crate::remote_tool_digest::sha256;
 

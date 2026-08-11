@@ -75,7 +75,8 @@ einfach-agent-rust/
 **`agent-store`** —— 只认识 atom、依赖图、command log。不认识 agent、消息、工具。
 泛型或具体值类型由 `agent-core` 定，store 只要求它 `Clone + PartialEq + Serialize`。
 
-**`agent-core`** —— 不做任何 IO。理由不是「要编到 wasm」（wasm 目标已砍），而是
+**`agent-core`** —— 不做任何 IO。理由不是「要编到 wasm」（那是决策 26 的顺带结果，不是
+这条约束的理由——哪天不编 wasm 了它也不该松），而是
 **整个 agent loop 必须能在没有网络的情况下跑单元测试**：mock 一个 provider、mock 一个
 tool executor，loop 的状态流转、undo、恢复全部可测。IO 一旦渗进来，这些测试就变成集成
 测试，然后就没人写了。
@@ -311,8 +312,18 @@ Java 网关原样复用（§Java 网关），是它先验证的。
 > 「真需要调时再往 `BootstrapOptions` 加，不提前造」。不是缺陷，是没到需要的时候——
 > 但别把「设计好了」当成「能用了」。
 
-不做 wasm 编译目标。代价是浏览器无法离线自跑，换来少一个 crate、少一个编译目标、
-`agent-core` 不用维护 native/wasm 两套 provider。
+**wasm 是第三种宿主形态**（决策 26，2026-08-10，取代原先「不做 wasm 编译目标」）：核心编进
+浏览器直接跑，没有 agent-server 进程。三种形态并存，决策 12 的「`agent-server` 是库」不变。
+
+浏览器形态下的裁剪：不编 `agent-mcp`（stdio 不存在；浏览器够得着的 MCP 由前端自己连，
+见 [HOST-CAPABILITIES.md](HOST-CAPABILITIES.md) §七），不声明 `agent-tools` 的 `srv:` shell/fs
+specs（纯数据，不声明即可），`agent-transport` 换 fetch 实现——`fetch` 的流式响应体加
+`AbortController` 正好顶掉 `read_loop.rs` 为绕开 ureq 无中断句柄而写的那一整套。
+
+**唯一的结构性改动**是 `RunnerCtx.fs: ToolExecutor`：它是 concrete struct，`new()` 要
+canonicalize 一个真实目录，浏览器里没有。要开一个注入接缝——顺带一提，本文上面说「mock
+一个 tool executor」，按当前结构那个接缝**其实还不存在**，随这次一起开。
+展开见 [issues/111](issues/111-wasm-target-decision.md)–[114](issues/114-wasm-host.md)。
 
 ## Provider 适配
 

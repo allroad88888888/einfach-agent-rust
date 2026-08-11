@@ -6,6 +6,7 @@ use agent_core::TokenUsage;
 use agent_core::cache::TurnHit;
 use agent_providers::deepseek::DeepSeek;
 use agent_providers::kimi::Kimi;
+use agent_tools::ToolExecutor;
 
 use crate::tool_table::ToolTable;
 

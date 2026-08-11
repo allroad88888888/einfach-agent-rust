@@ -44,6 +44,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-mcp"
+version = "0.1.0"
+dependencies = [
+ "agent-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "agent-providers"
 version = "0.1.0"
 dependencies = [
@@ -62,8 +71,15 @@ dependencies = [
  "agent-store",
  "agent-tools",
  "agent-transport",
+ "futures-channel",
+ "futures-util",
+ "js-sys",
  "serde",
  "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -106,10 +122,15 @@ dependencies = [
 name = "agent-transport"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "serde",
  "serde_json",
  "toml 0.8.2",
  "ureq",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
 ]
 
 [[package]]
@@ -990,6 +1011,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "262590f4fe6afeb0bc83be1daa64e52657fe185690a958af7f3ad0e92085c5ae"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -4268,6 +4290,16 @@ name = "web-sys"
 version = "0.3.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8622dcb61c0bcc9fffa6938bed81210af2da9a7e4a1a834b2e37a59b6dfb6141"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

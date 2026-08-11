@@ -11,7 +11,7 @@ use std::time::Duration;
 use agent_core::cache::TurnHit;
 use agent_core::{ExecutionProfileId, SessionConfig};
 use agent_providers::Provider;
-use agent_transport::Client;
+use agent_transport::{Client, ProviderConfig};
 
 use crate::ctx::{DEFAULT_PROVIDER_TIMEOUT, RunnerCtx};
 
@@ -66,6 +66,34 @@ impl ExecutionBinding {
             session_config,
             timeout: DEFAULT_PROVIDER_TIMEOUT,
         }
+    }
+
+    /// 从「已经解析好的配置」（`agent_transport::ProviderConfig`）装配一条
+    /// binding（114d）：调用点不用各自拆 `provider_config.endpoint()` /
+    /// `provider_config.resolve_key()` 再传给 [`ExecutionBinding::new`]——这
+    /// 一个函数**就是**两条配置来源汇合的地方。`ProviderConfig` 不管自己是
+    /// `toml::from_str` 解析出来的（native）还是 `ProviderConfig::from_host`
+    /// 直接构造出来的（wasm 宿主注入），到这里都是同一个类型、走同一条装配
+    /// 路径，产出同一个 `ExecutionBinding`。
+    ///
+    /// key 没配就是 `None`——跟 [`ProviderConfig::resolve_key`] 同一个信号，
+    /// 不新造一个错误类型：调用点已经知道怎么把"没配 key"翻成自己的提示语
+    /// （CLI/server 现有的 `fail`/`BootstrapError` 各有各的措辞，这里不替它们
+    /// 决定）。
+    pub fn from_provider_config(
+        provider: Arc<dyn Provider>,
+        client: Arc<Client>,
+        provider_config: &ProviderConfig,
+        session_config: SessionConfig,
+    ) -> Option<Self> {
+        let api_key = provider_config.resolve_key()?;
+        Some(Self::new(
+            provider,
+            client,
+            provider_config.endpoint(),
+            api_key,
+            session_config,
+        ))
     }
 
     /// 为这条 binding 设置单次 provider 调用的总超时。

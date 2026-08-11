@@ -14,7 +14,7 @@
 //!   ├──────────────────────────────────────────────────────────┤
 //!   │ B 在飞表空了 → 收工（root 终态就落快照）                   │
 //!   │ C 到点的在飞调用 → 注入 Timeout 事件，回 A                 │
-//!   │ D 统一 mpsc 上等一条消息（增量 / 终态 / 线程没了），回 A    │
+//!   │ D 统一 mpsc 上等一条消息（增量 / 终态 / 载体没了），回 A    │
 //!   └──────────────────────────────────────────────────────────┘
 //! ```
 //!
@@ -44,11 +44,35 @@
 //! [`RunnerCtx`] 挂的 `SessionStore`，游标与裁剪事件同一次调用里一起转发（011 的
 //! 调用顺序契约）。`spawn_child` 也是一条命令，它那一条在 `crate::dispatch` 里
 //! 转发。
+//!
+//! # 116/117：泵是 `async fn`，D 点是真的 await 点
+//!
+//! 115 拍板「一套路径、两边都 async」之后，泵本体（[`run_turn_async`]/
+//! [`resume_after_first_commit`]）从 116 起是 `async fn`。116 只改了「怎么等」
+//! 不改「等什么」，在同步 channel 与 async 泵之间搭了一座临时桥（`receive` 里
+//! 还是那句真阻塞的 `rx.recv_timeout`）；**117 把桥拆了**：IO 载体从
+//! `std::thread` 换成同一个事件循环上的并发 future，`sync_channel(0)` 换成
+//! `futures` 的 `mpsc::channel(0)`，D 点第一次成为一个会让出线程的真实 await
+//! 点。三样东西收在 [`crate::io_bus`] 里，这个文件只剩「什么时候等、等到了怎么
+//! 落地」。
+//!
+//! # 但公开入口在 native 上仍然是同步的（M13 合并时的修正）
+//!
+//! 「泵内部 async」是 wasm 需要的；「native 的公开 API 也变成 async」不是。
+//! 116 当时顺手把后者也改了，代价是所有既有调用方（`agent-cli`、`agent-server`
+//! 的 actor 线程、五十来个集成测试）都得包一层 `block_on`——那是纯粹的连带
+//! 损伤。所以这里成对给出：
+//!
+//! - `*_async`：泵本体，两个目标共用，wasm 宿主直接用它；
+//! - 不带后缀的同步壳（`#[cfg(not(target_arch = "wasm32"))]`）：body 就是
+//!   `block_on(那个 async 的)`，签名与 116 之前逐字一致。
+//!
+//! wasm 上没有同步壳，因为 [`crate::block_on`] 靠 `thread::park` 停住当前线程，
+//! 而浏览器主线程停住就等于连驱动 `fetch` 的事件循环一起停住（死锁）。
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use agent_core::{AgentId, AgentTree, Event, Session, TurnStatus};
@@ -59,7 +83,8 @@ use crate::compact_writeback;
 use crate::ctx::RunnerCtx;
 use crate::deadline;
 use crate::dispatch::{self, Dispatched};
-use crate::io_thread::IoMsg;
+use crate::io_bus::IoBus;
+use crate::io_task::IoMsg;
 use crate::mcp_call::{self, McpCall};
 use crate::orphan;
 use crate::persist;
@@ -68,8 +93,9 @@ use crate::provider_message;
 use crate::subtree::Subtree;
 use crate::transient_source_failure::TransientSourceFailure;
 
-/// actor 线程轮询统一 channel 的间隔。不需要跟超时预算同量级，只要比测试用的
-/// 超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
+/// 泵「什么都没发生也要醒一次」的节奏（117 之前是 `recv_timeout` 的参数，现在
+/// 是 `crate::heartbeat` 的心跳间隔，值和含义都没变）。不需要跟超时预算同量级，
+/// 只要比测试用的超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 /// 跑一整轮：喂 `user_input`，驱动整棵 agent 树直到没有任何东西在飞。
@@ -88,14 +114,17 @@ const POLL_INTERVAL: Duration = Duration::from_millis(20);
 /// **调用方必须先 `session.begin_turn()`**（除了会话的第一轮，`Session::new`
 /// 已经是 `Idle`）——`Session::begin_turn` 是显式命令（026 判断 13：turn 边界
 /// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
-pub fn run_turn(
+///
+/// 这是泵本体，两个目标共用；native 上另有一个同名不带后缀的同步壳
+/// （[`run_turn`]），见模块文档「但公开入口在 native 上仍然是同步的」。
+pub async fn run_turn_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     user_input: &str,
 ) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
-    resume(
+    resume_async(
         session,
         ctx,
         Event::UserInput {
@@ -103,32 +132,56 @@ pub fn run_turn(
             text: Arc::from(user_input),
         },
     )
+    .await
+}
+
+/// [`run_turn_async`] 的同步壳：把整条 await 链在调用线程上跑到底。
+///
+/// **签名与 116 之前逐字一致**，所以 `agent-cli`、`agent-server` 的 actor 线程
+/// 和所有集成测试一个字都不用改。行为也逐字一致：它们本来就是「在一条裸
+/// `std::thread` 上把这一轮跑完」，只是「等」的实现从 `recv_timeout` 换成了
+/// [`crate::block_on`] 的 `thread::park`。
+///
+/// **wasm 上没有这个壳**（`cfg` 掉了），不是遗漏：`block_on` 靠停住当前线程来
+/// 等，浏览器主线程一停，驱动 `fetch` 的事件循环跟着停 = 死锁。wasm 宿主直接用
+/// [`run_turn_async`]，由浏览器的事件循环驱动。
+///
+/// 顺带说清这处 `cfg` 为什么可接受：它长在**公开 API 的便利壳**上，不在核心执行
+/// 逻辑里——泵本体、IO 载体、落地规则两个目标共用同一份代码（红线 12 管的是
+/// core 里的平台判断）。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run_turn(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    user_input: &str,
+) -> Result<TurnStatus, TransientSourceFailure> {
+    crate::block_on(run_turn_async(session, ctx, user_input))
 }
 
 /// 从一项已发生的事件继续驱动会话。
 ///
 /// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
 /// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
-pub(crate) fn resume(
+pub(crate) async fn resume_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     initial: Event,
 ) -> Result<TurnStatus, TransientSourceFailure> {
-    resume_after_first_commit(session, ctx, initial, |_| {})
+    resume_after_first_commit(session, ctx, initial, |_| {}).await
 }
 
 /// Resume the pump, invoking `after_commit` once after the initial event is committed and
 /// persisted, but before any effect from that event is dispatched.
-pub(crate) fn resume_after_first_commit(
+pub(crate) async fn resume_after_first_commit(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     initial: Event,
     after_commit: impl FnOnce(&mut RunnerCtx),
 ) -> Result<TurnStatus, TransientSourceFailure> {
-    // 容量 0（rendezvous）：一个 IO 线程发一条增量就等泵收走，天然背压。
-    // 泵自己握着一份发送端，所以 `recv` 永远不会因为「所有发送端都没了」而
-    // 断开——在飞与否由下面这张表回答，不是由 channel 的连接状态回答。
-    let (tx, rx) = mpsc::sync_channel::<IoMsg>(0);
+    // IO 载体：一条 channel + 一批并发在跑的 IO future + 心跳，见 `crate::io_bus`。
+    // 背压仍然是「发一条增量就等泵收走」，只是 `futures` 的容量 0 会给每个发送端
+    // 保底一个槽位（115 决策 3 拍板接受，代价与对抗测试见那边的模块文档）。
+    let mut bus = IoBus::new(POLL_INTERVAL);
     let mut pending: VecDeque<Event> = VecDeque::new();
     let mut calls: Vec<ProviderCall> = Vec::new();
     // MCP 第四路（043）的在飞表，跟 `calls` 并列——两类在飞凭据（工具结果 vs 模型
@@ -181,7 +234,7 @@ pub(crate) fn resume_after_first_commit(
                     ctx,
                     &mut subtree,
                     &mut compactions,
-                    &tx,
+                    &bus,
                     &source,
                     effect,
                 ) {
@@ -249,7 +302,9 @@ pub(crate) fn resume_after_first_commit(
         }
 
         // D. 等一条 IO 消息。
-        if let Some(failure) = receive(ctx, &rx, &mut calls, &mut mcp_calls, &mut pending) {
+        if let Some(failure) =
+            receive(ctx, &mut bus, &mut calls, &mut mcp_calls, &mut pending).await
+        {
             return Err(abort_after_transient_source_failure(ctx, &calls, failure));
         }
     }
@@ -335,22 +390,30 @@ fn speak_for_root_on_cancel(
     }
 }
 
-fn receive(
+/// D 点：等一条 IO 消息，最多等 [`POLL_INTERVAL`]，等到了按键认领。
+///
+/// 117 起这里是一个**真的 await 点**：`IoBus::receive` 会先把所有在飞的 IO
+/// future 推一遍（029 的并行就发生在那一步），再看 channel 上有没有消息；什么
+/// 都没有就把线程交还给执行器，由心跳在 20ms 后叫醒。等待期间泵不占着线程，
+/// 这正是 wasm 上「单线程也能一边等 fetch 一边跑事件循环」的前提。
+///
+/// 等到之后的落地逻辑一字未改——载体换了，认领规则没换。
+async fn receive(
     ctx: &mut RunnerCtx,
-    rx: &mpsc::Receiver<IoMsg>,
+    bus: &mut IoBus,
     calls: &mut Vec<ProviderCall>,
     mcp_calls: &mut Vec<McpCall>,
     pending: &mut VecDeque<Event>,
 ) -> Option<TransientSourceFailure> {
-    match rx.recv_timeout(POLL_INTERVAL) {
+    match bus.receive(POLL_INTERVAL).await {
         // Provider replies are claimed by `(agent, attempt)` in one place. Late messages from an
         // abandoned attempt are expected and disappear without touching its same-agent retry.
-        Ok(IoMsg::Provider(message)) => provider_message::land(ctx, calls, pending, message),
+        Some(IoMsg::Provider(message)) => provider_message::land(ctx, calls, pending, message),
         // MCP 第四路（043）落地：按 `(agent, call_id)` 认领在飞凭据 → 组一条工具结果
         // 事件（epoch 由凭据提供）喂回泵，过期与否交给 `Session::step` 的 epoch 闸。
         // 认不出（取消轮已划掉 / 迟到的重复回执）就丢，跟 provider 的 `take_call`
         // 不命中 provider attempt 同款。
-        Ok(IoMsg::McpDone {
+        Some(IoMsg::McpDone {
             agent,
             call_id,
             content,
@@ -361,9 +424,8 @@ fn receive(
             }
             None
         }
-        Err(RecvTimeoutError::Timeout) => None,
-        // 结构上不可达：泵自己握着一份发送端，`rx` 不会断。当成一次空转，
-        // 下一圈 C 的截止线扫描会兜住任何真的没人再说话的情况。
-        Err(RecvTimeoutError::Disconnected) => None,
+        // 这一小段里没有消息（心跳把泵叫醒了）。回到循环顶部去扫截止线、看取消
+        // 标志——那两件事都不会有人主动叫醒我们，见 `crate::heartbeat`。
+        None => None,
     }
 }

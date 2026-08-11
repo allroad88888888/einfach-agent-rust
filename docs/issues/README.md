@@ -447,6 +447,69 @@ B 支与 C 支从 100 之后**完全并行**，两个 agent 互不碰对方的�
 
 ---
 
+## M13 · 浏览器内核（wasm）
+
+**核心判断：wasm 是第三种宿主形态，不替代任何一种。** 独立跑 / 宿主子进程 / 浏览器内
+三者并存，决策 12「`agent-server` 是库」一行不动。
+
+这条**推翻了 ROADMAP 决策 10「砍掉 wasm 目标」**。决策 10 的两条理由都不成立了：
+`agent-providers` 里根本没有 HTTP 客户端（要维护两套的是 `agent-transport` 一个已隔离的
+crate），而浏览器侧的 transport **比 ureq 那套薄**（`read_loop.rs` 那 165 行是为绕开
+ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测：DeepSeek / Kimi / GLM
+三家预检全部回显任意 origin 且放行 `authorization`。
+
+**动手前必读 [111](111-wasm-target-decision.md)**——四条证据、四项代价、以及「哪两件事
+因此自动不存在」都在那里，别在实现 issue 里重新讨论。
+
+```
+111(决策) ─┬→ 112(ToolExecutor 注入接缝) ✅ ─┐
+           └→ 113(fetch transport) ✅ ──────┴→ 115(决策) ✅ → 116(泵 async 化) ✅ → 117(IO 换载体) ✅ → 114(wasm 宿主，M13 终点) ✅
+                                              ├ 114a IndexedDB SessionStore ✅
+                                              ├ 114b Instant/SystemTime 垫 web-time ✅
+                                              ├ 114c wasm 目标 + wasm-bindgen 宿主入口 ✅
+                                              └ 114d provider 配置由宿主注入 ✅
+
+**M13 完成**（2026-08-11）。浏览器里真跑通了：Chrome + DeepSeek 流式回复、模型调
+`web:page/title` 宿主工具、刷新 4 次后从 IndexedDB 重放 12 条消息且**重开后第一轮的
+`tools` 与关闭前最后一轮字符串全等（416 字节，红线 11）**、流到一半取消 65ms 内
+`abort()` 生效且下一轮正常。托管只有 `python3 -m http.server` 发三种静态字节，
+模型请求直连 `api.deepseek.com`，**没有任何服务端进程**。
+
+留下两条没验成的，见下方「M13 遗留」。
+
+116/117 的真机验收已于 2026-08-11 补齐（真 DeepSeek，非假 server）：前缀缓存
+第 2 轮起 0.973/0.978/0.995 全部 ≥ 0.9；SIGINT 取消后进程存活、痕迹擦除、
+下一轮缓存仍 0.98——取消轮若在前缀里留残渣，这个数会当场掉到 0。
+```
+
+112 与 113 从 111 之后**完全并行**，不碰对方的文件，均已完成。
+
+**115 是 113 实做时撞出来的，111 没预料到**：`post_stream` 的同步签名在 wasm 上
+没有线程就没法阻塞等 `fetch`（`thread::spawn` 能编译、运行时 trap，113 实测）。
+而 `io_thread` 同时扛着 029 的并行、`sync_channel(0)` 的会合背压和「放弃不 join」
+三件事，不是换个 async 就完。**115 不定，114 做不下去。**
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [111](111-wasm-target-decision.md) | **决策**：恢复 wasm 目标，取代决策 10；浏览器形态的裁剪清单与代价 | — | **opus** | 决策类 |
+| [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的（原写「本里程碑唯一的结构性改动」，**已被 113 证伪**，见 115） | 111 | sonnet | ✅ |
+| [113](113-fetch-transport.md) | `agent-transport` 的 fetch 实现，native 那条一行不动 | 111 | sonnet | ✅ |
+| [115](115-wasm-io-without-threads.md) | **决策**：wasm 上没有线程，provider IO 路径怎么办 —— 泵怎么等 / `sync_channel(0)` 换成什么 / 029 并行怎么保 / 决策 16 的理由是否还成立 | 113 | **opus** | 决策类 |
+| [116](116-async-pump.md) | 引 `futures` 最小子集、泵与 `run_turn` async 化 —— **纯 native，不碰 wasm** | 115 | sonnet | ✅ |
+| [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ 已完成 |
+| [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← **M13 终点，已完成** | 117 | a=sonnet b=sonnet c=opus d=sonnet | ✅ |
+
+**M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
+只有前端拿得到的 `web:` 工具并用结果回答；刷新后同会话 id 从 IndexedDB journal 回放，
+**第一轮工具表与关闭前逐字节相同**；取消能真的中断请求；`srv:` 的 shell/fs **不出现在
+工具表里**。
+
+ ---
+ 
+ ## 怎么做
+
+---
+
 ## 怎么做
 
 粒度标准、每个 issue 用什么模型、测试由谁写，见 **[../WORKFLOW.md](../WORKFLOW.md)**。
@@ -470,3 +533,28 @@ B 支与 C 支从 100 之后**完全并行**，两个 agent 互不碰对方的�
 
 **M11（图片附件）的四条 079–082 动手前必读 [../IMAGES.md](../IMAGES.md)**——决定、
 实测证据、以及「上传该放在哪」这个最容易放错的落点都在那里，别在 issue 里重新讨论。
+
+
+## M13 遗留（两条，都不阻塞，但别忘了）
+
+**一、只跑通了 DeepSeek 一家。** 三家各跑一轮那条验收没满足——本机
+`providers.toml` 里 kimi/glm 两段 `api_key` 是空的。用占位 key 各发过一轮：两家的请求
+都**穿过 CORS 拿到真实 401** 并被 adapter 正确分类成 `Failed(Provider(Auth))`，
+说明 transport 与 adapter 在 wasm 下无差异，**差的只是一把能用的 key**，不是代码问题。
+拿到 key 直接补跑，不需要改任何东西。
+
+**二、`agent-mcp` 仍被编进浏览器产物，是死重量。** 决策 26 说浏览器构建不编它，
+但真要摘掉得在 `ctx.rs` / `dispatch.rs` / `runner.rs` / `io_task.rs` / `mcp_call.rs` /
+`lib.rs` **六处撒 `#[cfg(target_arch)]`**——正是红线 12 与 114 硬约束要避免的形状。
+当前状态是「代码在、路径不可达」：工具表里没有任何 `mcp:` 名字、`McpRegistry` 是空表、
+`dispatch` 第四路要求 `starts_with("mcp:") && table_declared` 两个条件都不可能成立，
+所以 `mcp_call::start` 里那句在 wasm 上会 trap 的 `thread::spawn` 永远走不到。
+产物里 `strings` 得到 `tools/call` / `jsonrpc` 就是这些死代码。
+
+**正确的解法是把 MCP 做成 `agent-runtime` 的 feature，而不是撒 cfg。** 另开 issue 处理，
+不要为了「产物干净点」在核心执行路径上撒平台判断——那个代价比 772K 里的几 K 死代码大得多。
+
+> 顺带核实：产物里还能 `strings` 到 `srv:agent/spawn` / `srv:agent/collect` /
+> `srv:agent/status` / `srv:vision/inspect`。**这些不是漏网的 shell/fs**——是子 agent
+> 编排（029 的并行）与视觉检查，本来就该在。被裁掉的 `shell/exec` 与 `srv:fs/read`
+> 确实 `strings` 0 命中，spec 构造器从没被调用，整个被 DCE 删了。

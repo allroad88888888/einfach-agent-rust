@@ -17,7 +17,11 @@ use crate::transient_source_policy::{SAFE_ERROR, SAFE_RESULT, is_transient_sourc
 /// Submit an outcome through the epoch gate. `acknowledge` is invoked exactly once.  On a new
 /// terminal result it runs after the core event is persisted and before any resulting provider
 /// effect is dispatched; duplicate and rejection decisions run without advancing the pump.
-pub fn submit_remote_tool_result(
+///
+/// 116: `async fn` because the terminal-result path resumes the pump (`runner::
+/// resume_after_first_commit`); the duplicate/rejection early returns stay synchronous.
+/// native 上的同步入口见 [`submit_remote_tool_result`]。
+pub async fn submit_remote_tool_result_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     request: RemoteToolSubmitRequest,
@@ -132,7 +136,25 @@ pub fn submit_remote_tool_result(
             },
         );
     })
+    .await
     .map(Some)
+}
+
+/// [`submit_remote_tool_result_async`] 的同步壳。理由与 `cfg` 的取舍见
+/// `crate::runner` 模块文档「但公开入口在 native 上仍然是同步的」。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn submit_remote_tool_result(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    request: RemoteToolSubmitRequest,
+    acknowledge: impl FnOnce(RemoteToolSubmitDecision),
+) -> Result<Option<TurnStatus>, TransientSourceFailure> {
+    crate::block_on(submit_remote_tool_result_async(
+        session,
+        ctx,
+        request,
+        acknowledge,
+    ))
 }
 
 fn replay_decision(

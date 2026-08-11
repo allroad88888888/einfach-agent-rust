@@ -49,7 +49,11 @@ pub enum ResolveRemoteToolError {
 }
 
 /// 校验并消费一个等待中的远端工具调用，然后从该结果恢复事件泵。
-pub fn resolve_remote_tool(
+///
+/// 116：泵 async 化之后跟着变成 `async fn`——它内部调的 `runner::
+/// resume_after_first_commit` 本身就是 await 链的一环，不是新增的等待。native 上
+/// 的同步入口见 [`resolve_remote_tool`]。
+pub async fn resolve_remote_tool_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     agent: AgentId,
@@ -116,23 +120,53 @@ pub fn resolve_remote_tool(
             },
         );
     })
+    .await
     .map_err(ResolveRemoteToolError::TransientSource)
+}
+
+/// [`resolve_remote_tool_async`] 的同步壳。理由与 `cfg` 的取舍见 `crate::runner`
+/// 模块文档「但公开入口在 native 上仍然是同步的」。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn resolve_remote_tool(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    agent: AgentId,
+    call_id: ToolCallId,
+    output: RemoteToolOutput,
+) -> Result<TurnStatus, ResolveRemoteToolError> {
+    crate::block_on(resolve_remote_tool_async(
+        session, ctx, agent, call_id, output,
+    ))
 }
 
 /// 中止 Web 宿主尚未完成的调用，并把取消事件送回同一条事件泵。
 ///
 /// actor 处理 `Cancel` 时既已翻转共享取消标记，又会调用此函数，因此等待 Web
 /// 回传的空闲会话也能立即结束；迟到结果会因等待槽已清空被安全拒绝。
-pub fn cancel_pending_remote_tools(
+///
+/// 116：同上，`async fn` 只是跟着 `runner::resume_async` 走。native 上的同步入口
+/// 见 [`cancel_pending_remote_tools`]。
+pub async fn cancel_pending_remote_tools_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
 ) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.discard_remote_tools();
-    runner::resume(
+    runner::resume_async(
         session,
         ctx,
         Event::Cancel {
             agent: session.agent().clone(),
         },
     )
+    .await
+}
+
+/// [`cancel_pending_remote_tools_async`] 的同步壳。理由与 `cfg` 的取舍见
+/// `crate::runner` 模块文档「但公开入口在 native 上仍然是同步的」。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn cancel_pending_remote_tools(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+) -> Result<TurnStatus, TransientSourceFailure> {
+    crate::block_on(cancel_pending_remote_tools_async(session, ctx))
 }

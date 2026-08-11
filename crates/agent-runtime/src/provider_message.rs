@@ -70,6 +70,30 @@ impl ProviderMessage {
     }
 }
 
+/// 只读的内省口，**仅供本 crate 的测试**：信封里的三样东西在生产代码里只由
+/// [`land`] 一处消费（认领规则的唯一现场），但 117 的两条对抗测试要断言「这条
+/// 消息确实回到了泵、而且它属于那个已经被划掉的 attempt」——没有内省口就只能靠
+/// 「什么都没发生」来间接推断，那种测试删掉闸也照样绿。
+#[cfg(test)]
+impl ProviderMessage {
+    pub(crate) fn agent(&self) -> &AgentId {
+        &self.agent
+    }
+
+    pub(crate) fn attempt(&self) -> ProviderAttemptId {
+        self.attempt
+    }
+
+    /// 载荷的种类名，够断言用，不暴露内容。
+    pub(crate) fn kind(&self) -> &'static str {
+        match self.payload {
+            ProviderMessagePayload::Delta(_) => "delta",
+            ProviderMessagePayload::Done { .. } => "done",
+            ProviderMessagePayload::Gone => "gone",
+        }
+    }
+}
+
 /// Land a provider message only when its exact launch credential is still in flight.
 pub(crate) fn land(
     ctx: &mut RunnerCtx,

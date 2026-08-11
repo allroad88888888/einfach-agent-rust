@@ -1,6 +1,9 @@
 //! 真正碰文件的地方：专门的 IO 线程 + `mpsc`（issue 011 硬约束——写扔给这个线程，
-//! actor 不阻塞；`agent-runtime` 里 `io_thread.rs`（provider 那个）已经是这个手法的
-//! 先例，这里同名不是巧合）。
+//! actor 不阻塞）。这个手法原先在 provider 那一路也有一份同名的
+//! `agent-runtime/src/io_thread.rs`，**117 已经把那一份换成了并发 future**
+//! （见 `crate::io_task`）；落盘这一路没跟着换：它不在 M13 的范围里，native 上
+//! 两种载体并存是可以的，浏览器形态下要换的是整个 `SessionStore` 后端
+//! （IndexedDB，见 issue 114），不是给这里加一个 async 壳。
 //!
 //! ## 打开失败：报一次，之后静默吞
 //!

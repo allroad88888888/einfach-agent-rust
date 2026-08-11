@@ -1,5 +1,15 @@
 //! Moonshot 图片上传请求的 multipart 编码与响应翻译。
+//!
+//! **issue 113 平台适配**：类型定义（[`ImageUpload`]/[`UploadError`]/
+//! [`MAX_IMAGE_BYTES`]）与 multipart 编码/响应解析是平台无关的纯逻辑，两边
+//! 共用，就长在这个文件里，不拆。真正碰网络的 [`send`] 是 native 专属（吃
+//! `ureq::Agent`），本文件内用 `#[cfg(not(target_arch = "wasm32"))]` 单独
+//! 包住；wasm 侧的等价物是 `fetch_upload.rs` 的 `send()`，两者共享的
+//! `multipart_body`/`boundary_for`/`escaped_header_value`/`redact`/
+//! `UploadResponse` 从 `private` 改成 `pub(crate)`，除此之外**语义一个字
+//! 没动**——不是本 issue 该碰的事（M11 的东西）。
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::Read;
 
 use serde::Deserialize;
@@ -60,6 +70,7 @@ impl std::fmt::Display for UploadError {
 
 impl std::error::Error for UploadError {}
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn send(
     agent: &ureq::Agent,
     base_url: &str,
@@ -102,11 +113,14 @@ pub(crate) fn send(
     }
 }
 
+/// Moonshot `/files` 接口的响应形状。native/wasm 两条 `send()` 都要从响应体
+/// 解出这个，`pub(crate)` 给 `fetch_upload.rs` 复用。
 #[derive(Deserialize)]
-struct UploadResponse {
+pub(crate) struct UploadResponse {
     id: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn response_reference(response: ureq::Response, api_key: &str) -> Result<String, UploadError> {
     let mut body = String::new();
     response
@@ -119,6 +133,13 @@ fn response_reference(response: ureq::Response, api_key: &str) -> Result<String,
         serde_json::from_str(&body).map_err(|_| UploadError::InvalidResponse {
             message: "缺少合法 JSON 文件 id".to_string(),
         })?;
+    upload_response_reference(response)
+}
+
+/// `UploadResponse` → `ms://` 引用的翻译，从「怎么把响应体读成字符串」里
+/// 拆出来，是 native（`ureq::Response::into_reader`）和 wasm（`fetch` 的
+/// `Response::text()`）两条路径唯一共享的收尾逻辑。
+pub(crate) fn upload_response_reference(response: UploadResponse) -> Result<String, UploadError> {
     if response.id.is_empty() {
         return Err(UploadError::InvalidResponse {
             message: "文件 id 为空".to_string(),
@@ -127,7 +148,7 @@ fn response_reference(response: ureq::Response, api_key: &str) -> Result<String,
     Ok(format!("ms://{}", response.id))
 }
 
-fn multipart_body(boundary: &str, image: ImageUpload<'_>) -> Vec<u8> {
+pub(crate) fn multipart_body(boundary: &str, image: ImageUpload<'_>) -> Vec<u8> {
     let mut body = Vec::with_capacity(image.bytes.len() + 256);
     body.extend_from_slice(
         format!(
@@ -149,7 +170,7 @@ fn multipart_body(boundary: &str, image: ImageUpload<'_>) -> Vec<u8> {
 }
 
 /// 选一个不会出现在文件字节里的 boundary，避免二进制内容被服务端误判成分隔符。
-fn boundary_for(bytes: &[u8]) -> String {
+pub(crate) fn boundary_for(bytes: &[u8]) -> String {
     for suffix in 0u64.. {
         let boundary = format!("----einfach-agent-image-{suffix}");
         let delimiter = format!("--{boundary}");
@@ -168,7 +189,9 @@ fn escaped_header_value(value: &str) -> String {
     value.replace(['\r', '\n'], " ").replace('"', "'")
 }
 
-fn redact(message: &str, api_key: &str) -> String {
+/// 抹掉错误信息里可能带出的 API key——native/wasm 两条 `send()` 的错误分支
+/// 都要用。
+pub(crate) fn redact(message: &str, api_key: &str) -> String {
     if api_key.is_empty() {
         message.to_string()
     } else {

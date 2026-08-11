@@ -20,7 +20,7 @@
 //! `Provider::classify`（各家状态码分配不一致，见 PROVIDERS.md §四），
 //! transport 不知道自己在跟哪家说话，也不该猜。
 //!
-//! # Ctrl-C 中断阻塞流
+//! # Ctrl-C 中断阻塞流（native 侧）
 //!
 //! ureq 的阻塞 `read` 没有外部中断句柄。022 的第一版办法是给 socket 设短 read
 //! timeout 直接当轮询节奏用；023 发现这个办法在慢首字节的家（Kimi）上会把
@@ -30,18 +30,104 @@
 //! 解耦。办法与取舍见 [`client`] 顶部的事故记录、[`read_loop`] 模块文档，以及
 //! docs/issues/022-first-provider.md §注意（原始设计取舍，023 延续同一个
 //! 「不优雅但可测」的取舍，只是拆成了两个独立的旋钮）。
+//!
+//! # wasm 侧（issue 113）
+//!
+//! 上面那整套读线程 + 双超时旋钮，存在的唯一理由是 ureq 的阻塞 `read` 没有
+//! 外部中断句柄。浏览器的 `fetch` 原生给流式响应体（`ReadableStream`），
+//! `AbortController` 原生就是那个中断句柄——`read_loop.rs` 那 165 行在 wasm
+//! 目标上不需要存在。`wasm32` 目标编的是 [`client`]/[`read_loop`]/[`upload`]/
+//! [`config`] 的替身：[`fetch_client`]（`post_stream`/`post_stream_async`/
+//! `upload_image`）+ [`fetch_upload`]（图片上传的 fetch 版）。两边共享的部分：
+//!
+//! - [`backoff`]：`Backoff::delay` 的指数退避计算，纯函数，两边原样复用；
+//!   `sleep_cancelable`（真的挂起当前线程）是 native 专属，wasm 侧退避等待
+//!   用 `fetch_client` 里自己的 async 定时器，因为浏览器单线程模型下没有
+//!   「挂起当前线程」这回事。
+//! - [`line_framer`]：按 `\n` 拆行，语义与 `read_loop.rs` 里
+//!   `BufReader::read_line` + `trim_end_matches(['\r','\n'])` 逐条对齐。
+//! - [`stream_drive`]：`read_loop::run` 的 wasm 对应物，`drive_stream` 配
+//!   `ChunkSource` trait 决定字节从哪儿来——wasm 生产代码接
+//!   `ReadableStreamDefaultReader`，本 crate 自己的测试
+//!   （`framing_parity_tests`）接一个不碰任何 JS 绑定的内存 mock，在 native
+//!   目标上把**同一个 `drive_stream` 函数**跑起来，和 `read_loop::run` 喂
+//!   同一份字节比对逐行输出——这就是「wasm 分帧与 native 分帧逐字节相同」
+//!   的证明方式，细节见 `framing_parity_tests.rs` 顶部注释。
+//!
+//! `config.rs`（`providers.toml` 的文件查找 + 读取）**不移植**——浏览器里
+//! 没有这个文件；`wasm32` 目标不导出 `config` 模块，`load()`/`ConfigError::
+//! NotFound`/`Io`/`Parse` 那一套 native 专属。但 `config.rs` 解析出来的
+//! **类型**（`RootConfig`/`ProviderConfig`）搬进了平台无关的 `provider_config`
+//! 模块，两个目标都编——wasm 宿主的配置来源（issue 114d）就是对着同一个类型
+//! 调 `ProviderConfig::from_host`/`RootConfig::from_host`，不是另起一套结构。
+//!
+//! **上层零改动**：`agent-providers`/`agent-runtime`/`agent-tools` 看到的
+//! `Client` 方法表（`new`/`with_config`/`post_stream`/`upload_image`/
+//! `post_json`）在两个目标上完全相同，靠 `#[cfg(target_arch = "wasm32")]`
+//! 二选一 `pub use`，不是两份并存的类型。**这条不变量是有代价的**：M12 给
+//! native `Client` 加 `post_json`（`srv:vision/inspect` 用）时，wasm 那份就必须
+//! 跟着加，哪怕它只能返回「同步签名等不了 fetch」的错误——不然 `agent-tools`
+//! 在 wasm32 上整个编不过。加方法时两份都要动，这不是可选项。
 
 mod backoff;
-mod client;
-mod read_loop;
+// 「已经解析好的配置」中间形态（114d）：`RootConfig`/`ProviderConfig` 等，
+// toml 解析（native）与宿主注入（wasm）两条来源都用这一份类型定义，见模块
+// 文档。跟 `upload` 同款理由，模块声明不能整体 cfg 到 native。
+mod provider_config;
+// `upload` 的类型（`ImageUpload`/`UploadError`/`MAX_IMAGE_BYTES`）与 multipart
+// 编码是平台无关的纯逻辑，两边共用；只有本机 `send()`（吃 `ureq::Agent`）
+// 在文件内部用 `#[cfg(not(target_arch = "wasm32"))]` 单独包住，wasm 侧的
+// `send()` 在 `fetch_upload.rs` 里。模块声明本身不能整体 cfg 到 native——
+// 那样 wasm 目标就拿不到 `ImageUpload` 这个类型了。
 mod upload;
 
+#[cfg(not(target_arch = "wasm32"))]
+mod client;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod config;
+#[cfg(not(target_arch = "wasm32"))]
+mod read_loop;
+
+#[cfg(target_arch = "wasm32")]
+mod fetch_client;
+#[cfg(target_arch = "wasm32")]
+mod fetch_request;
+#[cfg(target_arch = "wasm32")]
+mod fetch_upload;
+#[cfg(target_arch = "wasm32")]
+mod js_timer;
+#[cfg(target_arch = "wasm32")]
+mod web_stream_source;
+
+// `line_framer`/`stream_drive` 是 wasm 的分帧核心，同时也是「wasm 分帧与
+// native 分帧逐字节相同」这条验收的证明现场——后者要在 native 目标上跑
+// `drive_stream` 才能和 `read_loop::run` 同框比较，所以两个模块在
+// wasm32 目标**或** `cfg(test)` 下都要编译，不能只挂在 wasm32 上。
+#[cfg(any(target_arch = "wasm32", test))]
+mod line_framer;
+#[cfg(any(target_arch = "wasm32", test))]
+mod stream_drive;
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "framing_parity_tests.rs"]
+mod framing_parity_tests;
 
 pub use backoff::Backoff;
-pub use client::Client;
-pub use config::{ConfigError, DefaultConfig, ProviderConfig, RootConfig, default_provider, load};
+// 两个目标都导出：native 侧 toml 解析、wasm 宿主注入产出的都是这几个类型
+// （114d）。文件加载本身（`load`/`ConfigError::NotFound` 的实际触发点）仍
+// native 专属，见下面 `#[cfg(not(wasm32))] pub use config::load`。
+pub use provider_config::{
+    ConfigError, DefaultConfig, ProviderConfig, RootConfig, default_provider,
+};
 pub use upload::{ImageUpload, MAX_IMAGE_BYTES, UploadError};
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use client::Client;
+#[cfg(not(target_arch = "wasm32"))]
+pub use config::load;
+
+#[cfg(target_arch = "wasm32")]
+pub use fetch_client::Client;
 
 /// 一次 `post_stream` 读到头的方式。
 #[derive(Clone, Debug, PartialEq, Eq)]

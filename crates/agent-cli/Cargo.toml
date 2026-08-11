@@ -19,6 +19,12 @@ serde_json = { workspace = true }
 # stdin + /cancel 命令」的纯 std 兜底方案。
 ctrlc = "3"
 
+# 117：这里原本挂着一行 `futures-util`（116 按 115 的字面要求加的，注释里写明
+# 「没有被这里的代码直接用到……如果 117 之后证实 CLI 永远不需要直接碰
+# futures-util，这一行可以删」）。117 做完了，答案是**不需要**。M13 并入 main
+# 之后更彻底：`run_turn` 在 native 上仍是同步壳（见 `agent-runtime` 的
+# `runner` 模块文档），CLI 连 `block_on` 都不用直接调，一行 async 代码都没有。
+
 [dev-dependencies]
 # `model_switch` 的单测要拼一份 `RootConfig` 测试夹具——跟
 # `agent-transport/src/config.rs` 自己的测试同一个手法（直接 `toml::from_str`），

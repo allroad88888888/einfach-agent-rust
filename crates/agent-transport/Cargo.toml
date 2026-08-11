@@ -1,16 +1,49 @@
-# 阻塞 HTTP transport（issue 022）：ureq 流式 POST + 连接期退避 + providers.toml 解析。
+# HTTP transport：native 侧 ureq 阻塞流式 POST（issue 022）+ 连接期退避 +
+# providers.toml 解析；wasm32 侧 fetch + ReadableStream + AbortController
+# （issue 113），backoff 的纯计算部分两边共用。
 #
 # 红线 7 的镜像约束：`ureq` 只许出现在这个 crate 的依赖里，其余 crate（尤其
 # agent-core / agent-store）一律不许依赖它——check-invariants.sh 只查
 # agent-core/agent-store，这条「只此一家」靠人读 Cargo.toml 里没有第二处。
+# ureq/toml 放进 `[target.cfg(not(wasm32))]`：wasm32 目标编不动、也用不上
+# 阻塞 socket 客户端和 providers.toml 解析（配置来源见 issue 114）。
 [package]
 name = "agent-transport"
 version = "0.1.0"
 edition.workspace = true
 publish = false
 
+# `web-time` 不放进 target-gated 段：它自己内部按 target 二选一（native 直接
+# `pub use std::time`），两个目标都要能解析这一行——114b。
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+web-time = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 toml = "0.8"
 ureq = "2"
+
+# wasm-bindgen 系列版本锁定在 0.2.100+：`web-sys` 的 ReadableStream/
+# AbortController 绑定需要较新的 wasm-bindgen 才有完整方法集。
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3"
+features = [
+    "AbortController",
+    "AbortSignal",
+    "Headers",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+]
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"

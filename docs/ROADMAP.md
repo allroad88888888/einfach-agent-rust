@@ -20,13 +20,13 @@
 | 7 | **工具按执行位置三分**：Server / Web / Desktop | `reversibility`（Pure/Reversible/Irreversible）是**正交**维度，不合并；不叫 `Effect`，那个词留给 loop |
 | 8 | **agent 之间只允许上下读，禁止横读** | 依赖图恒为树，两个方向可读的 slot 集合不相交，环在结构上不可能 |
 | 9 | **传输：SSE 下行 + 普通 POST 上行** | 不要 WebSocket。服务端「反向调用客户端」只是在流上推事件 |
-| 10 | **砍掉 wasm 目标，Tauri 内嵌 server** | 少一个 crate、少一个编译目标、provider 不用维护两套 |
+| 10 | ~~**砍掉 wasm 目标，Tauri 内嵌 server**~~ **被 26 取代** | 见 26。「provider 不用维护两套」与代码不符——`agent-providers` 里没有 HTTP 客户端 |
 | 11 | **server 不做鉴权 / 日志规范 / 集群** | 企业边缘层，每家规范不同。只读 identity header 不验证，只遵守 W3C `traceparent` |
 | 12 | **`agent-server` 是库不是二进制** | 桌面版内嵌它，企业内部服务也内嵌它。只给二进制的话他们只能在外面套代理 |
 | 13 | **Java 网关只是参考实现**，不发 Maven、不跟版 | 避免 Spring Boot 2/3 双分支与 JDK 矩阵的长期维护税 |
 | 14 | ~~`Capabilities` 是 core 读的唯一接缝~~ **被 17 取代** | 见 17。能力位分支只是 `match provider` 换了层皮 |
 | 15 | **请求组装归 adapter，core 只供料** | 组装的每个决策都依赖能力位（工具晚加放哪、skill 注入到哪、thinking 进不进前缀、temperature 能不能改），core 里做只能做成不看能力位的搬运 |
-| 16 | **`ProviderRequest` 存在的理由是线程边界，不是组装** | store 是 `Rc<RefCell>` 不 `Send`，HTTP 在别的线程。必须有一份「在 actor 线程上提取、能带走」的东西 |
+| 16 | **`ProviderRequest` 存在的理由是线程边界，不是组装**（2026-08-11 补注：**是双理由**，见右） | store 是 `Rc<RefCell>` 不 `Send`，HTTP 在别的线程。必须有一份「在 actor 线程上提取、能带走」的东西。**补注**：决策 26 的 wasm 形态下没有那条线程边界，第一个理由不成立；但它**同时是 `check_drift` 的快照**，这第二个理由与目标无关。**结论保留，别因为第一个理由不成立就删掉它**（issue 115 §要定的四件事 · 4） |
 | 17 | **core 里不许有任何模型相关的判断**（红线 12）：从「事前问能力」改成「事后报调整」 | core 只说意图，adapter 做不到就报一条 `Adjustment`（encode 时产生，宿主随 `ProviderDone` 事件喂进 loop）。事前分支 N 位就是 2^N 种组合、多数没跑过、加一家要改 core；事后报调整是可见可审计的，加 provider 不动 core，测试组合掉回 1 |
 | 18 | **压缩三分**：触发在 core（当前 tokens vs `SessionConfig` 的窗口大小，纯算术——红线 12 禁分支不禁参数）；实现在 core（统一一份，压缩是状态变更，走 command 层进 undo log）；压后摆盘在 adapter（前缀树的家能保共享分支，仅扩展的认赔并报 `Adjustment`） | adapter 是纯函数无权改世界——它偷偷压，prompt 和状态对不上，undo / 审计 / 前缀镜像一起断 |
 | 21 | **skill 激活 = 模型经工具 + 常驻索引，宿主可显式预激活，否决自动触发** | 鸡生蛋靠索引解：system 常驻每 skill 一行「名字+描述」（前缀稳定近零成本），模型按需调 `srv:skill/activate` 拉全量。与决策 20 同一条开山原则：AI 决定用哪个能力。关键词/向量自动触发否决——prompt 被看不见的机制改动是静默行为，缓存后果还最大。中途激活的注入位置**待 038 探针实测**（消息级 system 注入三家收不收、保不保前缀），不猜 |
@@ -36,6 +36,8 @@
 | 23 | **子 agent 可观测 = 派生读，不新增状态**：`Session::agent_tree()` 是对现有 atom 的一次纯派生读（往下读，红线 10 方向）；**不为「当前动作」加 primitive**（那是第二真值源，undo 破）；树由 core 权威算、UI 哑渲染（不让 UI 从事件流重建状态机）；M7 范围 = **活树**（当前快照 + 变化推 SSE），可回放时间线（任意 epoch 快照）延后 | 子 agent 的状态早就是 atom（整棵树共用一个 store），"看它在干啥"是把已有状态摆出来，不是造监控。派生读 → undo/恢复/回放一致性白拿（第五个投影）。UI 重建状态机脆且 reconnect 断，快照做真值最省。接缝完整定义见 [OBSERVABILITY.md](OBSERVABILITY.md) |
 | 25 | **企业集成三条**（M9）：①**拉取式是 ring 的第二个投影**——`GET /events/poll` 复用 `RingState::replay` 与 **`Last-Event-ID` 同一个游标 header**（仓库 axum 没开 `query` feature，且「没有查询参数协议」是既有约定），SSE 端点保留不动；②**会话身份 = 业务侧 chatid**，`POST /sessions` 幂等三态（活着接上 / 磁盘有则恢复 / 都没有才建），id 走白名单**拒绝不 sanitize**；③**生命周期归 Java**——`ProcessBuilder` 起子进程（`--port 0` + `--ready-file` 原子握手 + SIGTERM 优雅落盘）；Rust 提供最小启动协议而不进入 JVM | SSE 的复杂度只该出现在「**产生** SSE」那一跳（Spring 标准做法），不该出现在「**代理** SSE」那一跳（四个坑全在这里 + 强制 WebFlux，而企业存量多是 MVC）。拉取式的断开检测**整套复用 `SubscriberGuard`**（每次 poll 期间持有 → 计数/宽限/取消路一行新逻辑都不用写），比自造 last-poll 时间戳少一个真值源。JNI/FFI 真嵌入**否决**：流式跨 FFI 难做好、Rust panic 会杀 JVM、进程隔离全丢。接缝完整定义见 [INTEGRATION.md](INTEGRATION.md) |
 | 24 | **模型侧异步编排 = turn 内**（M8）：给模型三个工具（`spawn` 加 `background`、`status` 非阻塞下读子树、`collect` 领后台子结果），让它**中途观测子 agent 并改变编排**（不是加并行——并行 spawn 早有）；但**子 agent 仍不跨 turn**——后台子在父这一次 `run_turn` 内必须 collect 完或被孤儿取消。前台 spawn（决策 20）≡ `spawn(bg)+collect` 融进一槽，一行不改 | 决策 20 的干净全靠「子在父同一 turn 内生死」（`turn_id` 继承、undo 连带子树、`Subtree` 局部绑定、pump 静止条件 `calls.is_empty()` 把「root 终态+子树跑」列为无定义）。跨 turn 后台子要 store 落地的跨-`run_turn` 映射 + 重写 undo 语义 + per-child 取消——收益未证，延后。turn 内已给全「观测+反应」能力且红线全不破。接缝完整定义见 [ORCHESTRATION.md](ORCHESTRATION.md) |
+
+| 26 | **恢复 wasm 目标**（2026-08-10，取代决策 10）：核心编进浏览器直接跑，**wasm 是第三种宿主形态**——独立跑 / 宿主子进程 / 浏览器内三者并存，决策 12「`agent-server` 是库」不动。浏览器形态下不编 `agent-mcp`（stdio 不存在；浏览器够得着的 MCP 由前端自己连，HOST-CAPABILITIES §七 早定的方向），不声明 `agent-tools` 的 `srv:` shell/fs specs（纯数据，不声明即可），`agent-transport` 换 fetch 实现 | 决策 10 的两条理由都不成立了。①**「provider 不用维护两套」与代码不符**：`agent-providers` 依赖只有 `agent-core`+serde，**没有任何 HTTP 客户端**，IO 全在 `agent-transport` 一个已隔离的 crate（红线镜像约束「唯一允许依赖 ureq」）；②**浏览器侧 transport 更薄不更厚**：`read_loop.rs` 那 165 行读线程 + `mpsc::sync_channel` + 双超时旋钮，存在的唯一理由是 ureq 阻塞 read 没有外部中断句柄（自称「不优雅但可测」），`fetch` + `AbortController` 原生就是那个句柄；③**前提已实测**：DeepSeek / Kimi / GLM 三家预检全部回显任意 origin 且放行 `authorization`，浏览器直连可行——这是决策 10 当时没验的前提；④决策 16 的 `Rc<RefCell>` 不 `Send` 在原生是让步，单线程 wasm 里变成 fit。**代价照实记**：`RunnerCtx.fs: ToolExecutor` 是 concrete struct（`new()` 要 canonicalize 真实目录），必须开注入接缝——本次移植唯一的结构性改动；`Instant`/`SystemTime` 要垫 `web-time`；多一个编译目标要长期维护；key 落在浏览器，定为每人一把自己的。逐条证据与验收见 [issues/111](issues/111-wasm-target-decision.md) |
 
 ## 二、现状
 

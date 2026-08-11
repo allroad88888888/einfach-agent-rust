@@ -34,7 +34,7 @@
 //!
 //! | effect | 谁执行 | 怎么执行 |
 //! |---|---|---|
-//! | `CallProvider` | [`provider_call::start`] | actor 线程取料 → `encode` → 发前 `check_drift` → 起 IO 线程跑 `post_stream`。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
+//! | `CallProvider` | [`provider_call::start`] | 泵所在线程取料 → `encode` → 发前 `check_drift` → 把一个跑 `post_stream` 的 future 交给泵（117 之前是起一条 IO 线程）。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
 //! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
 //! | `Compact` | [`compact_spawn::intercept`] | 106：spawn 一个窄范围子 agent（`ChildConfig::execution_profile` 来自 [`ctx::RunnerCtx::with_compaction_execution_profile`]，`agent-core` 没有为摘要新增任何 provider 分支），把 `[0, upto)` 那段历史渲染成它的第一条 user 消息；子落终态由 [`compact_slot::CompactSlots`] 收割成 `Event::CompactDone`/`CompactFailed`。spawn 被拒或子agent失败都是**正常事件**（`CompactFailed`，原样带回同一个 `epoch`）——压缩这一次作废、边界不动、下一轮照常跑 |
 //! | `CancelInFlight` | [`dispatch`] | 置共享的取消标志 + 斩断队列里还没喂进去的待办 |
@@ -43,7 +43,8 @@
 //! # 子 agent（029）
 //!
 //! `run_turn` 驱动的是**整棵树**：`srv:agent/spawn` 长出子 agent，子 agent 的
-//! provider 调用各自一个 IO 线程真的并行，回写全部串行过泵；子 agent 落终态时
+//! provider 调用各自一个 IO future、在同一个事件循环上真的并行（117 之前是各自
+//! 一条 IO 线程，见 [`io_bus`]），回写全部串行过泵；子 agent 落终态时
 //! 它的最后一段文本作为 `tool_result` 回到父那个 spawn 槽（决策 20，不需要
 //! `ChildFinished` 事件也不需要汇聚 derived）。整轮共用一个 `turn_id`（root 铸，
 //! 决策 5），所以 `/undo` 一轮连带整棵子树。
@@ -82,6 +83,7 @@
 //! `max_children` 默认 8，长会话压 8 次之后自动压缩永久失效。
 //!
 
+mod block_on;
 mod child_outcome;
 mod child_slot;
 mod collect_tool;
@@ -96,7 +98,10 @@ mod deadline;
 mod dispatch;
 mod execution_binding;
 mod guard;
-mod io_thread;
+mod heartbeat;
+mod io_bus;
+mod io_stream;
+mod io_task;
 mod mcp_call;
 mod orphan;
 mod provider_attempt;
@@ -139,13 +144,16 @@ pub mod jsonl;
 pub mod persist;
 
 pub use agent_mcp::McpRegistry;
+pub use block_on::block_on;
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
 pub use ctx::RunnerCtx;
 /// 072：远端等待槽的只读投影形状。`ctx_remote_tools` 本身是私有模块（等待槽只能
 /// 由 actor 线程改），但**投影是要跨层出去的**——`agent-server` 拿它填
 /// `GET /sessions/{id}/pending_tools` 的响应体。
 pub use ctx_remote_tools::RemoteToolWaiting;
+#[cfg(not(target_arch = "wasm32"))]
 pub use deadline::sweep_remote_tool_deadlines;
+pub use deadline::sweep_remote_tool_deadlines_async;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
 pub use jsonl::{Jsonl, SessionStoreError};
@@ -153,9 +161,11 @@ pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
 };
 pub use remote_tool::{
-    RemoteToolOutput, RemoteToolResultError, ResolveRemoteToolError, cancel_pending_remote_tools,
-    resolve_remote_tool,
+    RemoteToolOutput, RemoteToolResultError, ResolveRemoteToolError,
+    cancel_pending_remote_tools_async, resolve_remote_tool_async,
 };
+#[cfg(not(target_arch = "wasm32"))]
+pub use remote_tool::{cancel_pending_remote_tools, resolve_remote_tool};
 pub use remote_tool_claim::claim_remote_tool;
 pub use remote_tool_protocol::{
     RemoteToolActive, RemoteToolActiveState, RemoteToolClaimDecision, RemoteToolClaimGrant,
@@ -164,8 +174,17 @@ pub use remote_tool_protocol::{
     RemoteToolTerminalOrigin, RemoteToolTerminalStatus,
 };
 pub use remote_tool_receipt::REMOTE_TOOL_RECEIPT_CAP;
+#[cfg(not(target_arch = "wasm32"))]
 pub use remote_tool_submission::submit_remote_tool_result;
+pub use remote_tool_submission::submit_remote_tool_result_async;
+/// native 的公开入口是同步的（`run_turn`），wasm 上只有 `run_turn_async`——
+/// 成对的理由与那处 `cfg` 的取舍见 [`runner`] 模块文档「但公开入口在 native 上
+/// 仍然是同步的」。远端工具的四个入口（`resolve_remote_tool`、
+/// `cancel_pending_remote_tools`、`submit_remote_tool_result`、
+/// `sweep_remote_tool_deadlines`）同款成对。
+#[cfg(not(target_arch = "wasm32"))]
 pub use runner::run_turn;
+pub use runner::run_turn_async;
 pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};

@@ -39,7 +39,11 @@ impl Backoff {
 /// 粗糙但够用的抖动源：系统时钟纳秒位的低位。这里不需要密码学质量的随机数，
 /// 引入 `rand` 依赖换一个可预测性上无所谓的数字不划算。
 fn jitter_ms(max: u64) -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
+    // 114b：`delay()`（这个函数的唯一调用方）是模块文档点名「两边共用」的纯
+    // 计算——wasm 侧的 `fetch_client` 退避也走它。`SystemTime::now()` 在
+    // `wasm32-unknown-unknown` 上 panic，垫 `web-time`（native 目标下就是
+    // `std::time::SystemTime` 本尊，行为不变）。
+    use web_time::{SystemTime, UNIX_EPOCH};
     if max == 0 {
         return 0;
     }

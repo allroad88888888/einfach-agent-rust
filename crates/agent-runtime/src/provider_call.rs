@@ -7,8 +7,8 @@
 //! 底 → 返回一个 `Event`。「等到底」在单 agent 下没有代价，多 agent 下就是把并行
 //! 掐死的那一句——root 和两个子 agent 的调用会一个接一个地跑完。
 //!
-//! 拆开之后：`start` 只做「在 actor 线程上能做完的部分」（取料、`encode`、发前
-//! 第 1 层判读、起线程）并返回一张**在飞凭据** [`ProviderCall`]；等谁先回来、
+//! 拆开之后：`start` 只做「在泵所在线程上能做完的部分」（取料、`encode`、发前
+//! 第 1 层判读、把 IO future 交给泵）并返回一张**在飞凭据** [`ProviderCall`]；等谁先回来、
 //! 谁超时了归泵（`crate::runner`）统一管；某一个回来了再调 `finish` 把它翻译成
 //! 一个 loop 事件。凭据里装的全是「起飞时就定了、落地时才用得上」的东西
 //! （第 1 层判读结论、预测命中、adjustments、这次请求的前缀镜像）——它们必须是
@@ -22,13 +22,12 @@
 //! 构造 chat body 前观察这枚 call-local 标志。已经进入稳定同步上传 API 的请求允许
 //! 物理完成；完成后若已取消，不会继续下一张上传或 chat。
 //!
-//! 这里仍然不保留、也不 join IO 线程。runner 在超时后放弃 `(agent, attempt)` 凭据，
-//! 所以已开始上传的迟到结果无法回写、重试或重新进入本次调用。
+//! 这里仍然不保留、也不等待 IO 载体（117 之前是线程，现在是泵手上的一个
+//! future）。runner 在超时后放弃 `(agent, attempt)` 凭据，所以已开始上传的迟到
+//! 结果无法回写、重试或重新进入本次调用。
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::SyncSender;
-use std::time::Instant;
 
 use agent_core::cache::{self, PrefixIntent};
 use agent_core::value::send_plan::project;
@@ -37,11 +36,16 @@ use agent_core::{
     Session,
 };
 use agent_providers::{Encoded, Ingredients};
+// 114b：`Instant::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::Instant` 本尊，行为不变）。
+// `ProviderCall.deadline` 存的正是绝对时刻，每一次 provider 调用都会算它。
+use web_time::Instant;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::execution_binding::{ExecutionBinding, GuardScope};
-use crate::io_thread::{self, IoMsg};
+use crate::io_bus::IoBus;
+use crate::io_task;
 use crate::provider_attempt::ProviderAttemptId;
 use crate::subagent;
 use crate::transient_source_failure::TransientSourceFailure;
@@ -56,7 +60,7 @@ pub(crate) enum StartFailure {
 }
 
 /// 一次仍由 runner 认领的 provider 调用。**一个 agent 同时最多一张凭据**；超时
-/// 划掉的旧 IO 线程可以与重试短暂重叠，但它持有不同的 [`ProviderAttemptId`]。
+/// 划掉的旧 IO 载体可以与重试短暂重叠，但它持有不同的 [`ProviderAttemptId`]。
 pub(crate) struct ProviderCall {
     pub(crate) agent: AgentId,
     /// One transport launch. Retries may share an epoch, so epoch cannot correlate IO replies.
@@ -90,11 +94,11 @@ impl ProviderCall {
     }
 }
 
-/// 起飞：取料 → `encode` → 发前第 1 层 → 起 IO 线程。**不等结果。**
+/// 起飞：取料 → `encode` → 发前第 1 层 → 把 IO future 交给泵。**不等结果。**
 pub(crate) fn start(
     session: &Session,
     ctx: &mut RunnerCtx,
-    tx: SyncSender<IoMsg>,
+    bus: &IoBus,
     agent: AgentId,
     epoch: Epoch,
 ) -> Result<ProviderCall, StartFailure> {
@@ -216,14 +220,19 @@ pub(crate) fn start(
     // latch. The runner propagates later session cancellation and deadlines into the same token.
     let cancel_token = Arc::new(AtomicBool::new(ctx.cancel_flag().load(Ordering::Relaxed)));
     let attempt = ProviderAttemptId::allocate();
-    io_thread::spawn(
-        tx,
+    // 两份独立的发送端：增量走一份（会被会合背压停住），终态债走另一份（它一辈
+    // 子只发一条，靠 `futures` 的「每个 sender 一个保底槽位」保证发得出去）。
+    // 共用一份 = 债有可能因为「槽位被增量占着」而发不出去 = 泵为一个已经没了的
+    // 调用永远等下去，见 `io_task::DoneDebt`。
+    bus.start(io_task::task(
+        bus.sender(),
+        bus.sender(),
         agent.clone(),
         attempt,
         binding.clone(),
         body,
         Arc::clone(&cancel_token),
-    );
+    ));
 
     Ok(ProviderCall {
         agent,

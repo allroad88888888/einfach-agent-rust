@@ -24,9 +24,11 @@
 //! 不必等它收工。两半共用 [`expired`]，产出的事件逐字节同款。
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use agent_core::{Event, Session, TurnStatus};
+// 114b：`Instant::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::Instant` 本尊，行为不变）。
+use web_time::Instant;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
@@ -82,18 +84,34 @@ pub(crate) fn sweep(
 /// 调用的原始失败事实（`agent-server` 的
 /// `commands::handle_remote_tool_timeout`）。
 ///
-/// 多个槽同时过期时逐个恢复：每次 [`runner::resume`] 把泵驱动到静止，剩下的槽
-/// 让下一次继续——`Session::step` 一次只吃一条事件，攒成一批喂进去也是同一条路。
-pub fn sweep_remote_tool_deadlines(
+/// 多个槽同时过期时逐个恢复：每次 [`runner::resume_async`] 把泵驱动到静止，剩下
+/// 的槽让下一次继续——`Session::step` 一次只吃一条事件，攒成一批喂进去也是同一
+/// 条路。
+///
+/// 116：`async fn`，因为循环体里的 `runner::resume_async` 本身就是 await 链的
+/// 一环；逐个 `.await` 而不是并发等待——语义跟改动前逐个同步调用完全一致，槽位
+/// 过期的处理顺序不该被并发打乱。native 上的同步入口见
+/// [`sweep_remote_tool_deadlines`]。
+pub async fn sweep_remote_tool_deadlines_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
 ) -> Result<Option<TurnStatus>, TransientSourceFailure> {
     let events = expired(ctx, Instant::now());
     let mut status = None;
     for event in events {
-        status = Some(runner::resume(session, ctx, event)?);
+        status = Some(runner::resume_async(session, ctx, event).await?);
     }
     Ok(status)
+}
+
+/// [`sweep_remote_tool_deadlines_async`] 的同步壳。理由与 `cfg` 的取舍见
+/// `crate::runner` 模块文档「但公开入口在 native 上仍然是同步的」。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn sweep_remote_tool_deadlines(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+) -> Result<Option<TurnStatus>, TransientSourceFailure> {
+    crate::block_on(sweep_remote_tool_deadlines_async(session, ctx))
 }
 
 /// 到点的远端等待槽 → 一条 `is_error` 的工具结果事件。

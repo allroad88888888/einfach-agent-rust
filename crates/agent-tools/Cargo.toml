@@ -7,6 +7,7 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
+web-time = { workspace = true }
 agent-core = { path = "../agent-core" }
 # s5 识图工具（srv:vision/inspect）复用 transport 的 Kimi files 上传与
 # post_json（chat completions）——图片字节只在工具执行内存里过一遍，

@@ -1,9 +1,11 @@
 //! Atomic claim transition for one pending remote tool call.
 
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
 
 use agent_core::Session;
+// 114b：`Instant`/`SystemTime::now()` panic 在 wasm32-unknown-unknown 上，垫
+// `web-time`（native 目标下就是 `std::time` 里那两个类型本尊，行为不变）。
+use web_time::{Instant, SystemTime};
 
 use crate::ctx::RunnerCtx;
 use crate::remote_tool_protocol::{

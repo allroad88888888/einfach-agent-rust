@@ -77,6 +77,17 @@ pub struct RoutedServer {
 
 impl RoutedServer {
     pub fn start(routes: Vec<Route>) -> Self {
+        Self::start_with_line_delay(routes, Duration::ZERO)
+    }
+
+    /// 逐行滴：每写一行之前先等 `line_delay`（对这台服务器的**所有**路由生效）。
+    ///
+    /// 117 加的旋钮。`Route::after` 只能让整条应答整体晚一点吐出来，那样两条流
+    /// 虽然在服务端的时间区间上重叠，客户端那边仍可能一条读完再读另一条——要断
+    /// 言「泵真的在并发驱动两个 IO future」（029 的并行退化不报错、只变慢），需
+    /// 要两条流在**同一段时间里各自有数据可读**。放在服务器上而不是 `Route` 上
+    /// 是为了不动已有的一百来处 `Route { .. }` 字面量。
+    pub fn start_with_line_delay(routes: Vec<Route>, line_delay: Duration) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let routes = Arc::new(routes);
@@ -89,7 +100,7 @@ impl RoutedServer {
                 let routes = Arc::clone(&routes);
                 let calls = Arc::clone(&calls_bg);
                 // 每条连接一个线程——这正是「时间上重叠」得以发生的地方。
-                thread::spawn(move || serve(stream, &routes, &calls));
+                thread::spawn(move || serve(stream, &routes, &calls, line_delay));
             }
         });
 
@@ -117,7 +128,7 @@ impl RoutedServer {
     }
 }
 
-fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
+fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>, line_delay: Duration) {
     let body = read_request(&mut stream);
     let start = Instant::now();
     let Some(route) = routes.iter().find(|r| body.contains(r.needle)) else {
@@ -139,8 +150,10 @@ fn serve(mut stream: TcpStream, routes: &[Route], calls: &Mutex<Vec<Call>>) {
         let _ = stream.flush();
         thread::sleep(route.delay);
         for line in &route.lines {
+            thread::sleep(line_delay);
             let _ = stream.write_all(line.as_bytes());
             let _ = stream.write_all(b"\n");
+            let _ = stream.flush();
         }
     } else {
         thread::sleep(route.delay);

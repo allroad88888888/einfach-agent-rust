@@ -10,8 +10,10 @@
 //! | [`snapshot`] | 快照节奏：每 N 个 turn 落一张 |
 //! | [`recover`] | 崩溃恢复：`SessionStore::load()` → 翻译 → `Session::restore` |
 //! | [`backend`] | 挑后端：有路径 `Jsonl`，没有 `Memory` |
+//! | [`idb`] | 114a：`SessionStore` 的 IndexedDB 后端（`IdbStore`）+ 它复用的异步 `KvStore` 端口，`Jsonl` 的兄弟，见该模块文档 |
 
 pub mod backend;
+pub mod idb;
 pub mod meta;
 pub mod recover;
 pub mod snapshot;
