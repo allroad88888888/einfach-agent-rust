@@ -401,13 +401,15 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 
 ```
 111(决策) ─┬→ 112(ToolExecutor 注入接缝) ✅ ─┐
-           └→ 113(fetch transport) ✅ ──────┴→ 115(决策) ✅ → 116(泵 async 化) ⚠️ → 117(IO 换载体) → 114(wasm 宿主，M13 终点)
+           └→ 113(fetch transport) ✅ ──────┴→ 115(决策) ✅ → 116(泵 async 化) ✅ → 117(IO 换载体) ✅ → 114(wasm 宿主，M13 终点)
+                                              ├ 114a IndexedDB SessionStore（可与 117 并行）
+                                              ├ 114b Instant/SystemTime 垫 web-time
+                                              ├ 114c wasm 目标 + wasm-bindgen 宿主入口
+                                              └ 114d provider 配置由宿主注入
 
-⚠️ 116 的代码进去了（ba9b70b，cargo test 除既有失败外全绿），但**验收条 2（CLI 真机跑一轮）
-   与条 3（前缀缓存 cached/prompt ≥ 0.9）没跑**——环境里唯一的 DEEPSEEK_API_KEY 返回 401，
-   没有任何可用的 provider 凭据。补测不需要改代码，拿到有效 key 直接跑。
-   **在补上之前，不要把「前缀缓存没断」当成已验证的事实**——async 化理论上不碰 prompt 组装，
-   但这条验收本来就是为了兜住「理论上不该动，实际动了」。
+116/117 的真机验收已于 2026-08-11 补齐（真 DeepSeek，非假 server）：前缀缓存
+第 2 轮起 0.973/0.978/0.995 全部 ≥ 0.9；SIGINT 取消后进程存活、痕迹擦除、
+下一轮缓存仍 0.98——取消轮若在前缀里留残渣，这个数会当场掉到 0。
 ```
 
 112 与 113 从 111 之后**完全并行**，不碰对方的文件，均已完成。
@@ -423,8 +425,8 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 | [112](112-tool-executor-seam.md) | `ToolExecutor` 开注入接缝，顺带把 ARCHITECTURE 那句「mock 一个 tool executor」变成真的（原写「本里程碑唯一的结构性改动」，**已被 113 证伪**，见 115） | 111 | sonnet | ✅ |
 | [113](113-fetch-transport.md) | `agent-transport` 的 fetch 实现，native 那条一行不动 | 111 | sonnet | ✅ |
 | [115](115-wasm-io-without-threads.md) | **决策**：wasm 上没有线程，provider IO 路径怎么办 —— 泵怎么等 / `sync_channel(0)` 换成什么 / 029 并行怎么保 / 决策 16 的理由是否还成立 | 113 | **opus** | 决策类 |
-| [116](116-async-pump.md) | 引 `futures` 最小子集、泵与 `run_turn` async 化 —— **纯 native，不碰 wasm** | 115 | sonnet | ⚠️ 已实现，**验收条 2/3 欠着** |
-| [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ |
+| [116](116-async-pump.md) | 引 `futures` 最小子集、泵与 `run_turn` async 化 —— **纯 native，不碰 wasm** | 115 | sonnet | ✅ |
+| [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ 已完成 |
 | [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← M13 终点 | 117 | sonnet | — |
 
 **M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
