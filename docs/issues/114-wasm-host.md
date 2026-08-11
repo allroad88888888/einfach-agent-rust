@@ -71,3 +71,75 @@
 - `web_sys::IdbDatabase` 那层做薄，薄到「看一眼就知道对不对」。
 
 这样 114a 里唯一必须等浏览器才能验的东西，就只剩那层薄绑定。
+
+---
+
+## 114c 实做记录（2026-08-11）
+
+浏览器里真跑通了。产物 `crates/agent-wasm`（独立 workspace，理由同 `probes/api`），
+构建 `scripts/build-wasm.sh`，页面 `crates/agent-wasm/www/index.html`。
+
+### 接缝落在哪（`agent-core` 里仍然零 `cfg`，红线 12）
+
+117 之后 native 只剩两处线程，两处都在平台接缝之下，这次各拆成一个目录：
+
+| | 契约 | native | wasm32 |
+|---|---|---|---|
+| `agent-runtime/src/io_stream/` | `open() -> Receiver<StreamItem>`，同步返回、请求当场起飞 | 工作线程 + `block_on` 发送 | 两个 `spawn_local`：生产侧跑 `post_stream_async`，转发侧把行会合式交给泵 |
+| `agent-runtime/src/heartbeat/` | `start`/`register`/`Drop` | 只睡觉只叫人的线程 | `setInterval`/`clearInterval` |
+
+`io_task.rs`/`io_bus.rs`/`runner.rs` 一行没改——这是接缝位置正确的判据。
+
+**wasm 行源为什么中间多一条 unbounded channel**：`post_stream_async` 的 `on_line`
+是同步回调（与 native 逐字同签名），而浏览器单线程模型下没有「阻塞等一个
+Promise」这回事。所以同步回调只做不阻塞的 `unbounded_send`，另一个任务把它转成
+会合式 `send().await` 交给泵——**并且它是泵那条 channel 唯一的写入方**，否则
+`Done` 会插到还排队的行前面。代价：`fetch` 与转发任务之间没有背压（浏览器本来
+就在自己那层缓冲响应体，我们没有手段把背压传回 `ReadableStream`）。
+
+### 会话持久化：`persist/idb/web_store.rs`
+
+`SessionStore::load()` 是同步的、IndexedDB 不是，所以真正的重放挪到一个 `async`
+构造器 `WebIdbStore::open()`（宿主开会话时 `await` 一次），此后 `load()` 读它自己
+连续维护的 mirror。这不是「缓存了一份可能过期的数据」——`worker.rs` 的整套记账
+本来就建立在「mirror 与 journal 重放结果恒等」上，这里只是把同一条不变量用在读的
+一侧。写入走一条内存队列 + 同一时刻至多一个 drain 任务（journal key 是递增计数器，
+每个写各 `spawn_local` 一次会让事务完成顺序决定编号顺序）。
+
+### 真机验收结果
+
+1. **跑完一轮** ✅ Chrome + DeepSeek `deepseek-v4-pro`，流式回复。托管只有
+   `python3 -m http.server`（只发 html/js/wasm 三种字节，不参与任何模型请求）。
+2. **模型调宿主工具** ✅ 声明 `web:page/title` / `web:page/url`（`crate::tools`），
+   模型调 `web:page/title` 拿到 42 字节标题并据此作答。走的是 M10 远端等待槽那条
+   既有路，同进程只是把 HTTP 往返换成一次函数调用。
+3. **刷新接着聊 + 红线 11** ✅ 刷新四次、同一 id 重开，历史从 IndexedDB 重放
+   （最后一次 12 条，含 tool_use/tool_result）。抓真实请求体比对：重开后第一轮的
+   `tools` 与关闭前最后一轮**逐字节相同**（416 字节，字符串全等）。这是 114a
+   `web_kv.rs` 第一次真跑，`put`/`scan_prefix` 都对。
+4. **取消** ✅ 流到一半点取消 → 65ms 内 `AbortController.abort()` 被调用（100ms
+   取消轮询节奏），`performance` 里那条请求的 duration 正好停在点击那一刻；
+   `Failed(Cancelled)` + `undo_turn` 丢弃半轮（`Applied { entries: 3 }`），下一轮
+   正常作答。
+5. **`srv:` 不出现** ✅ 工具表从 `ToolTable::empty()` 起步，只 `with_host_tools`。
+   真实请求体里没有 `srv:`；连 wasm 产物里都搜不到 `shell/exec`/`srv:fs/read`
+   ——那些 spec 构造器从没被调用，被 DCE 整个删掉了。
+6. `cargo test --workspace --no-fail-fast` ✅ 唯一失败是既有的
+   `agent-server` `http_image_input::text_stays_on_old_wire_shape_...`。
+
+**没验成的两条，如实记：**
+
+- **三家 provider 各跑通一轮 —— 只跑通了 DeepSeek。** 这台机器的
+  `~/.config/agent/providers.toml` 里 kimi/glm 两段 `api_key` 是空的，环境变量也
+  没有。用占位 key 各发了一轮，两家的请求都**穿过 CORS 拿到真实 401**并被 adapter
+  正确分类成 `Failed(Provider(Auth))`——说明 transport 与 adapter 在 wasm 下无差异，
+  差的只是一把能用的 key。
+- **`agent-mcp` 仍然编进了浏览器产物。** 111 决策表第一行要求「不编」，但
+  `agent-runtime` 对它是无条件依赖，摘掉要在 `ctx.rs`/`dispatch.rs`/`runner.rs`/
+  `io_task.rs`/`mcp_call.rs`/`lib.rs` 六处撒 cfg——那正是本 issue「别往业务逻辑里
+  撒 cfg」要避免的。当前状态是**代码在、路径不可达**：工具表里没有任何 `mcp:` 名字，
+  `McpRegistry` 是空表，`dispatch` 的第四路要求 `tool.starts_with("mcp:") &&
+  table_declared`，两个条件都不可能成立，所以 `mcp_call::start` 里那句
+  `thread::spawn`（wasm 上会 trap）永远走不到。产物里搜得到 `tools/call`/`jsonrpc`
+  字符串，是死重量不是活代码。真要摘干净，该另开一个 issue 把 MCP 做成
+  `agent-runtime` 的 feature，而不是在这里顺手加六处条件编译。

@@ -1,0 +1,63 @@
+# issue 114c：wasm-bindgen 宿主入口——浏览器里那第三种宿主形态（决策 26）。
+# CLI / server 装配的是同一套 `agent-runtime`，这里只是把装配线的三个外部输入
+# （provider 配置、会话身份、宿主能力）换成「页面给的」。
+#
+# **独立 workspace**（下面的空 `[workspace]` 表），理由跟 `probes/api` 与
+# `apps/desktop/src-tauri` 一模一样：构建剖面不同（`wasm32-unknown-unknown` +
+# cdylib + wasm-bindgen 后处理），混进主 workspace 会让 `cargo test --workspace`
+# 去 native 编译一堆 `wasm_bindgen_futures` 只在 wasm 上成立的东西。路径依赖
+# 不受影响——它只是文件系统坐标，跟依赖方在哪个 workspace 无关。
+[package]
+name = "agent-wasm"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+# `cdylib` 是 wasm-bindgen 要的产物形态；`rlib` 留着让 `cargo check` 之类的
+# 工具能把它当普通库看。
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+agent-providers = { path = "../agent-providers" }
+agent-runtime = { path = "../agent-runtime" }
+agent-tools = { path = "../agent-tools" }
+agent-transport = { path = "../agent-transport" }
+
+serde = { version = "1", features = ["derive", "rc"] }
+# 不开 `preserve_order`：工具表要逐字节确定（红线 11），`Map` 必须留在
+# BTreeMap 后端。跟根 workspace 同一条理由。
+serde_json = "1"
+
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    # `web:page/*` 两个宿主工具读的东西——只有页面拿得到。
+    "Document",
+    "Location",
+    "Window",
+    # 会话持久化：开库、建 object store。KV 那三个操作本身在
+    # `agent_runtime::persist::idb::IdbDatabaseKv` 里（114a）。
+    "DomStringList",
+    "Event",
+    "EventTarget",
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbObjectStore",
+    "IdbOpenDbRequest",
+    "IdbRequest",
+    "IdbTransaction",
+    "console",
+]
+
+# 浏览器要下载这个产物，体积就是加载时延。`opt-level = "s"` 是 wasm 的常规
+# 选择；不开 LTO——本 issue 没有为构建时长换体积的验收要求。
+[profile.release]
+opt-level = "s"

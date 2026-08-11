@@ -21,12 +21,13 @@
 //! | [`memory_kv`] | [`memory_kv::MemoryKv`]：`KvStore` 的假实现，纯内存，native 测试用，不需要浏览器 | 通用 |
 //! | [`web_kv`] | `KvStore` 的真实现，`web_sys::IdbDatabase` | 仅 `wasm32` |
 //! | `blocking` / `worker` / `store` | 把上面几层包成一个真正的 `SessionStore`：工作线程 + channel，`IdbStore`（对外的公开类型） | 仅非 `wasm32` |
+//! | `web_store` | 同一件事的浏览器版：`spawn_local` + 一条内存队列，[`web_store::WebIdbStore`]（114c 真正用的那个） | 仅 `wasm32` |
 //!
-//! 后一组三个文件是「证明这套引擎写→load→重放的语义是对的」（114a 的验收主证据，
-//! 用 [`memory_kv::MemoryKv`] 在 native 上跑），不是 wasm 生产环境的最终形态——
-//! `wasm32-unknown-unknown` 没有 `std::thread` 这条路可走。wasm 生产环境的接线
-//! （114c）会直接组装 `kv`/`record`/`replay` 三层，派发换成
-//! `wasm_bindgen_futures::spawn_local`，不会用到 [`store::IdbStore`]。
+//! `blocking`/`worker`/`store` 那一组是「证明这套引擎写→load→重放的语义是对的」
+//! （114a 的验收主证据，用 [`memory_kv::MemoryKv`] 在 native 上跑），不是 wasm
+//! 生产环境的最终形态——`wasm32-unknown-unknown` 没有 `std::thread` 这条路可走。
+//! wasm 生产环境的接线（114c）就是 `web_store`：直接组装 `kv`/`record`/`replay`
+//! 三层，派发换成 `wasm_bindgen_futures::spawn_local`，用不到 [`store::IdbStore`]。
 //!
 //! ## 与 `Jsonl` 刻意不同的一点：journal 只增不删
 //!
@@ -54,6 +55,8 @@ mod worker;
 
 #[cfg(target_arch = "wasm32")]
 mod web_kv;
+#[cfg(target_arch = "wasm32")]
+mod web_store;
 
 pub use error::IdbStoreError;
 pub use kv::{KvError, KvStore};
@@ -64,6 +67,8 @@ pub use store::IdbStore;
 
 #[cfg(target_arch = "wasm32")]
 pub use web_kv::IdbDatabaseKv;
+#[cfg(target_arch = "wasm32")]
+pub use web_store::WebIdbStore;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod parity_tests;

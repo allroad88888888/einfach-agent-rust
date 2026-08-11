@@ -1,17 +1,5 @@
-//! 泵的心跳：每隔 `POLL_INTERVAL` 把它叫醒一次。
-//!
-//! # 为什么泵必须能「什么都没发生也醒过来」
-//!
-//! 117 之前这件事藏在 `rx.recv_timeout(POLL_INTERVAL)` 的那个 `timeout` 参数
-//! 里，没人把它当成一件独立的事。换成 async channel 之后它必须被显式做出来，
-//! 否则**两条既有能力会静默失效**（两条都不报错，只表现为「卡住」）：
-//!
-//! 1. **截止线**（`crate::deadline::sweep`）。服务端写完响应头就再也不吭声时，
-//!    channel 上一个字节都不会来——没有心跳，泵会永远停在等待里，provider 超时
-//!    永远不到点。`tests/it/timeout.rs` 盯着这条。
-//! 2. **Ctrl-C**（`RunnerCtx::cancel_flag`）。它是另一条线程翻的一枚
-//!    `AtomicBool`，翻它不会唤醒任何 future；泵要靠回到循环顶部去看它，才能把
-//!    取消传播进每个在飞调用的 call-local 标志。`tests/it/cancel.rs` 盯着这条。
+//! 心跳的 **native 实现**：一条只睡觉、只叫人的线程。契约与「为什么泵需要心跳」
+//! 见 [`super`] 的模块文档，这里只说这一份实现自己的取舍。
 //!
 //! # 为什么是一条线程，以及它凭什么不算「IO 载体又长回来了」
 //!
@@ -20,9 +8,6 @@
 //! 觉、只叫人**的线程：它不碰 socket、不碰状态、不发消息，只是把「20ms 到了」
 //! 这件事翻译成一次 `Waker::wake`。语义与 117 之前的 `recv_timeout(20ms)` 逐字
 //! 相同（那一版也是每 20ms 醒一次），成本是每轮一条短命线程。
-//!
-//! wasm 上这个文件换成 `setInterval` + `clearInterval`（drop 时清），泵那一侧
-//! 一行不用改——这正是把心跳单独拎成一个东西的理由。
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

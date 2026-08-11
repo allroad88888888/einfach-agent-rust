@@ -1,12 +1,11 @@
-//! 「一次 provider 请求 → 一串可以 `await` 的行」——117 之后本 crate 里**唯一**
-//! 还需要按平台分身的 IO 环节。
+//! 行源的 **native 实现**：一条只把字节读成行的工作线程。契约见 [`super`] 的
+//! 模块文档，这里只说这一份实现自己的取舍。
 //!
-//! # 为什么接缝切在「行」这一层
+//! # 为什么必须有一条工作线程
 //!
-//! 117 把 `CallProvider` 的载体从 `std::thread` 换成了并发 future
-//! （[`crate::io_task`]），但 native 的 HTTP 客户端是 **ureq，物理上是阻塞的**：
-//! `post_stream` 里的 `read` 没有任何非阻塞形态，调用它的那一刻线程就走不了。
-//! 谁来扛这份阻塞，只有两种可能：
+//! native 的 HTTP 客户端是 **ureq，物理上是阻塞的**：`post_stream` 里的 `read`
+//! 没有任何非阻塞形态，调用它的那一刻线程就走不了。谁来扛这份阻塞，只有两种
+//! 可能：
 //!
 //! 1. 在泵的线程上扛 —— 那就是把 029 的并行当场掐死（一个调用阻塞住整个事件
 //!    循环，其余在飞的 future 一个都 poll 不到），而且**不报错，只变慢**；
@@ -15,9 +14,7 @@
 //! 本文件是 2。**这不是把 `io_thread.rs` 换个名字**：旧的 IO 线程上跑的是「发
 //! 请求 + 累积 + 组终态消息 + 认领相关的一切」，新的工作线程上只剩「把字节读成
 //! 行」，累积器、`(agent, attempt)` 信封、会合背压、欠债—还债全部搬回了泵所在
-//! 的单线程上（[`crate::io_task`]）。wasm 上要换掉的就只有这一个文件：
-//! `fetch` 的 `ReadableStream` 自己就是异步行源，`open` 变成一个不起线程的
-//! `async` 生产者，[`StreamItem`] 那份契约与上面所有代码一字不动。
+//! 的单线程上（[`crate::io_task`]）。
 //!
 //! # 背压：这一段也是会合的
 //!
@@ -38,31 +35,13 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::thread;
 
-use agent_transport::{StreamOutcome, TransportError};
 use futures_channel::mpsc;
 use futures_util::SinkExt;
 
 use crate::execution_binding::ExecutionBinding;
 use crate::image_materialization::ProviderRequest;
-use crate::image_preparation_failure::ImagePreparationFailure;
 
-/// 行源送回来的东西。顺序是固定的：`Prepared` 恰好一条（或者以
-/// `PreparationFailed` 收场），之后是任意多条 `Line`，最后恰好一条 `Done`。
-///
-/// **少了 `Done` 不是错误状态，是「欠债没还」**：[`crate::io_task`] 的
-/// `DoneDebt` 会在 future 被丢掉时替它还上一条终态消息，泵因此不会为一个已经
-/// 没人管的调用干等（117 验收第三条）。
-pub(crate) enum StreamItem {
-    /// 请求准备完成（图片上传/重编码那一步），带回**本次请求专属**的图片引用。
-    /// 落地时要拿它做终态脱敏，所以必须从这条路带回来，不能落地时再算一遍。
-    Prepared(Vec<Arc<str>>),
-    /// 准备阶段失败（含被取消）。
-    PreparationFailed(ImagePreparationFailure),
-    /// 流式响应体的一行，已经按 `\r\n`/`\n` 去过尾。
-    Line(String),
-    /// 这次请求读到头的方式。
-    Done(Result<StreamOutcome, TransportError>),
-}
+use super::StreamItem;
 
 /// 起一个行源。**同步返回接收端，请求当场起飞**——跟 117 之前
 /// `io_thread::spawn` 立刻发请求的时机逐字一致，`provider_call::start`

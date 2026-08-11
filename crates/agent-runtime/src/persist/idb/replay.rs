@@ -59,6 +59,9 @@ where
 /// 一节）：如果这里也报错，`on_error` 会在进程/工作线程刚起步、用户还没做任何操作
 /// 时就响一次，而应用层显式 `load()`/`recover()` 时还会因为同一个原因再报一次
 /// ——两次报告说的是同一件事，只会让人以为出了两个问题。
+// 只有 native 那条装配路径（`worker.rs`）用它——wasm 的 `web_store.rs` 直接调
+// `replay_all` 并把失败留给 `load()` 报（它没有「工作线程刚起步」这个时机问题）。
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(super) async fn seed<K, V, M>(kv: &impl KvStore) -> (SessionLog<K, V, M>, u64)
 where
     K: Clone + DeserializeOwned,
@@ -72,6 +75,9 @@ where
 
 /// [`agent_store::SessionStore::load`] 的产物：重放全部 journal，三态化（`Absent`/
 /// `Refused`/`Loaded`，见 [`LoadOutcome`] 文档）。
+// 同 `seed`：native 专属入口（`store.rs` 的 `SessionStore::load` 在调用线程上
+// 把它跑到底）。wasm 上 `load()` 读的是 mirror，见 `web_store.rs` 模块文档。
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 pub(super) async fn load_async<K, V, M>(
     kv: &impl KvStore,
     on_error: &(dyn Fn(IdbStoreError) + Send + Sync),

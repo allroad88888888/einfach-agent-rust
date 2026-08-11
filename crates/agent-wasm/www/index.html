@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent-wasm 浏览器宿主（issue 114c）</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    margin: 0 auto; max-width: 62rem; padding: 1.5rem 1rem 4rem;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  .sub { opacity: .7; margin: 0 0 1.5rem; }
+  fieldset { border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; margin: 0 0 1rem; padding: .75rem 1rem 1rem; }
+  legend { padding: 0 .4rem; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .35rem 0; }
+  label { min-width: 6.5rem; }
+  input, select, textarea, button { font: inherit; padding: .35rem .5rem; border-radius: .35rem; border: 1px solid rgba(128,128,128,.5); background: transparent; color: inherit; }
+  input[type=text], input[type=password] { flex: 1 1 18rem; }
+  button { cursor: pointer; }
+  button[disabled] { opacity: .45; cursor: default; }
+  #transcript { min-height: 12rem; max-height: 26rem; overflow-y: auto; border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; padding: .75rem; white-space: pre-wrap; word-break: break-word; }
+  .turn { margin: 0 0 .9rem; }
+  .who { font-weight: 600; opacity: .75; }
+  .tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; opacity: .8; border-left: 3px solid rgba(128,128,128,.5); padding-left: .5rem; margin: .3rem 0; }
+  pre { overflow: auto; max-height: 20rem; background: rgba(128,128,128,.08); padding: .6rem; border-radius: .35rem; font-size: .8rem; }
+  .warn { border-left: 3px solid #d08700; padding-left: .6rem; }
+  #status { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; opacity: .8; }
+</style>
+</head>
+<body>
+
+<h1>agent-wasm 浏览器宿主</h1>
+<p class="sub">
+  issue 114c 的真机验收页。整个 agent 核心（事件泵、转移表、provider adapter、
+  IndexedDB 持久化）编成 wasm 跑在这个页面里，<strong>没有任何服务端进程</strong>——
+  这个页面本身由一个静态文件服务器托管，它只发送 <code>.html</code>/<code>.js</code>/<code>.wasm</code>
+  三种字节，不参与任何一次模型请求。请求由浏览器直接 <code>fetch</code> 到 provider。
+</p>
+
+<p class="warn">
+  <strong>key 只来自你自己。</strong>这个页面不内置任何 key，也不把你填的 key 存进
+  localStorage / cookie / 任何地方——它只活在这个标签页的内存里，刷新即失。
+</p>
+
+<fieldset>
+  <legend>1 · provider 配置（宿主注入，114d）</legend>
+  <div class="row">
+    <label for="provider">provider</label>
+    <select id="provider">
+      <option value="deepseek">deepseek</option>
+      <option value="kimi">kimi</option>
+      <option value="glm">glm</option>
+    </select>
+    <label for="model">model</label>
+    <input type="text" id="model" value="deepseek-v4-pro">
+  </div>
+  <div class="row">
+    <label for="baseUrl">base_url</label>
+    <input type="text" id="baseUrl" value="https://api.deepseek.com">
+  </div>
+  <div class="row">
+    <label for="apiKey">api_key</label>
+    <input type="password" id="apiKey" placeholder="粘你自己的 key" autocomplete="off">
+    <button id="connect">建宿主</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>2 · 会话（IndexedDB，114a）</legend>
+  <div class="row">
+    <label for="sessionId">会话 id</label>
+    <input type="text" id="sessionId" value="demo-1">
+    <button id="open" disabled>打开 / 切换会话</button>
+  </div>
+  <div class="row"><span id="status">未连接</span></div>
+</fieldset>
+
+<fieldset>
+  <legend>3 · 对话</legend>
+  <div id="transcript"></div>
+  <div class="row">
+    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="说一句话，比如：这个页面的标题是什么？"></textarea>
+  </div>
+  <div class="row">
+    <button id="send" disabled>发送</button>
+    <button id="cancel" disabled>取消</button>
+  </div>
+</fieldset>
+
+<details>
+  <legend></legend>
+  <summary>工具表（进 prompt 最前面的那份，红线 11 的比对面）</summary>
+  <pre id="tools">（先建宿主）</pre>
+</details>
+
+<details open>
+  <summary>事件流</summary>
+  <pre id="log"></pre>
+</details>
+
+<script type="module">
+import init, { AgentHost } from './pkg/agent_wasm.js';
+
+const $ = (id) => document.getElementById(id);
+let host = null;
+let assistantNode = null;
+
+function log(line) {
+  const pre = $('log');
+  pre.textContent += line + '\n';
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function turnNode(who) {
+  const div = document.createElement('div');
+  div.className = 'turn';
+  const label = document.createElement('div');
+  label.className = 'who';
+  label.textContent = who;
+  div.appendChild(label);
+  const body = document.createElement('div');
+  div.appendChild(body);
+  $('transcript').appendChild(div);
+  $('transcript').scrollTop = $('transcript').scrollHeight;
+  return body;
+}
+
+function note(text) {
+  const div = document.createElement('div');
+  div.className = 'tool';
+  div.textContent = text;
+  $('transcript').appendChild(div);
+  $('transcript').scrollTop = $('transcript').scrollHeight;
+}
+
+// runner 事件 → 页面。形状见 crates/agent-wasm/src/events.rs。
+function onEvent(json) {
+  const ev = JSON.parse(json);
+  switch (ev.type) {
+    case 'text_delta':
+      if (!assistantNode) assistantNode = turnNode('assistant');
+      assistantNode.textContent += ev.text;
+      $('transcript').scrollTop = $('transcript').scrollHeight;
+      break;
+    case 'tool_executing':
+      note(`→ 调用宿主工具 ${ev.tool}  input=${JSON.stringify(ev.input)}`);
+      break;
+    case 'tool_executed':
+      note(`← ${ev.tool} 返回 ${ev.output_len} 字节${ev.is_error ? '（错误）' : ''}`);
+      break;
+    case 'turn_guard':
+      log(`[usage] prompt=${ev.prompt_tokens} completion=${ev.completion_tokens} cached=${ev.cached_tokens}`);
+      break;
+    case 'text_delta_end':
+      break;
+    default:
+      log(`[${ev.type}] ${ev.detail ?? ev.status ?? ev.name ?? ''}`);
+  }
+}
+
+function renderHistory(entries) {
+  $('transcript').textContent = '';
+  for (const message of entries) {
+    const body = turnNode(message.role);
+    for (const block of message.blocks) {
+      if (block.kind === 'text') body.textContent += block.text;
+      else if (block.kind === 'tool_use') note(`→ ${block.name} ${JSON.stringify(block.input)}`);
+      else if (block.kind === 'tool_result') note(`← ${block.content}`);
+    }
+  }
+  assistantNode = null;
+}
+
+$('connect').addEventListener('click', () => {
+  try {
+    host = new AgentHost(JSON.stringify({
+      provider: $('provider').value,
+      base_url: $('baseUrl').value.trim(),
+      model: $('model').value.trim(),
+      api_key: $('apiKey').value,
+    }));
+    host.onEvent(onEvent);
+    $('tools').textContent = host.toolTableJson();
+    $('open').disabled = false;
+    $('status').textContent = `宿主已建：provider=${$('provider').value} model=${$('model').value} key=${host.keyLen()} 字符`;
+    window.__agentHost = host;
+  } catch (e) {
+    $('status').textContent = `建宿主失败：${e.message ?? e}`;
+  }
+});
+
+$('open').addEventListener('click', async () => {
+  $('open').disabled = true;
+  try {
+    const replayed = await host.openSession($('sessionId').value.trim());
+    renderHistory(JSON.parse(replayed));
+    $('status').textContent = `会话 ${host.sessionId()} 已打开，从 IndexedDB 重放出 ${JSON.parse(replayed).length} 条消息`;
+    $('send').disabled = false;
+  } catch (e) {
+    $('status').textContent = `打开会话失败：${e.message ?? e}`;
+  } finally {
+    $('open').disabled = false;
+  }
+});
+
+$('send').addEventListener('click', async () => {
+  const text = $('input').value.trim();
+  if (!text) return;
+  $('input').value = '';
+  turnNode('user').textContent = text;
+  assistantNode = null;
+  $('send').disabled = true;
+  $('cancel').disabled = false;
+  try {
+    const outcome = JSON.parse(await host.send(text));
+    $('status').textContent = `本轮结束：${outcome.status}` +
+      (outcome.cancelledTurn ? `（取消轮丢弃：${outcome.cancelledTurn}）` : '');
+  } catch (e) {
+    $('status').textContent = `发送失败：${e.message ?? e}`;
+  } finally {
+    $('send').disabled = false;
+    $('cancel').disabled = true;
+    assistantNode = null;
+  }
+});
+
+$('cancel').addEventListener('click', () => host?.cancel());
+
+await init();
+$('status').textContent = 'wasm 已加载，填配置后点「建宿主」';
+window.__agentReady = true;
+</script>
+
+</body>
+</html>

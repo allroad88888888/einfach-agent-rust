@@ -10,8 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 // `srv:fs`、浏览器构建里本来就不声明这类工具，但代码仍会被编进 wasm 产物——
 // 留着 `std::time` 等于留一颗「只要有别的路径走到这儿就 panic」的雷，
 // 而换掉的代价是零。
-use std::time::UNIX_EPOCH;
-use web_time::SystemTime;
+use web_time::{SystemTime, UNIX_EPOCH};
 
 static JOURNAL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
