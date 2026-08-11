@@ -28,7 +28,6 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 
 use agent_core::cache::{self, PrefixIntent};
 use agent_core::{
@@ -36,6 +35,10 @@ use agent_core::{
     Segment, Session,
 };
 use agent_providers::{Encoded, Ingredients};
+// 114b：`Instant::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::Instant` 本尊，行为不变）。
+// `ProviderCall.deadline` 存的正是绝对时刻，每一次 provider 调用都会算它。
+use web_time::Instant;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;

@@ -84,3 +84,14 @@ ts-rs = { version = "12", features = ["serde-json-impl"] }
 # crate），116 改成手写 `block_on`（`agent-runtime/src/block_on.rs`）。
 futures-channel = { version = "0.3", features = ["sink"] }
 futures-util = { version = "0.3", features = ["sink"] }
+
+# 114b：`Instant`/`SystemTime` 在 `wasm32-unknown-unknown` 上编得过、
+# `now()` 一调就 panic（没有时钟源）——这正是「编得过不等于跑得起来」的典型例。
+# `web-time` 是同形 drop-in：non-wasm 目标直接 `pub use std::time::*`（就是
+# 原来那个类型，native 侧零行为变化），`wasm32-unknown-unknown` 目标用
+# `Performance.now()`/`Date.now()` 实现同一套 API。所以不按 113 那样在每个
+# crate 里各写一份 `#[cfg(target_arch = "wasm32")] pub use`——`web-time` 自己
+# 就是那层「一处 pub use」，我们只需要把用到 `Instant`/`SystemTime` 的 `use`
+# 行指向它，不给依赖方也不给调用点加 cfg 分支。`Duration` 不受影响（纯值类型，
+# 不碰时钟源）仍然走 `std::time::Duration`，不跟着搬家。
+web-time = "1"

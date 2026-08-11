@@ -19,6 +19,11 @@ agent-tools = { path = "../agent-tools" }
 agent-transport = { path = "../agent-transport" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# 114b：`ProviderCall.deadline` / `PendingRemoteTool.deadline` 存的是绝对
+# 时刻，`std::time::Instant`/`SystemTime` 在 wasm32-unknown-unknown 上
+# `now()` 一调就 panic。不是 target-gated 依赖——`web-time` 自己按 target 内部
+# 二选一（native 直接是 `std::time` 那个类型），两个目标都要能解析这一行。
+web-time = { workspace = true }
 
 # 116/117：泵 async 化 + IO 载体换成并发 future，115 拍板的 futures 最小子集
 # （子集为什么正好是这两个 crate，见根 Cargo.toml `[workspace.dependencies]`）。

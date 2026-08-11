@@ -24,9 +24,11 @@
 //! 不必等它收工。两半共用 [`expired`]，产出的事件逐字节同款。
 
 use std::sync::Arc;
-use std::time::Instant;
 
 use agent_core::{Event, Session, TurnStatus};
+// 114b：`Instant::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::Instant` 本尊，行为不变）。
+use web_time::Instant;
 
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;

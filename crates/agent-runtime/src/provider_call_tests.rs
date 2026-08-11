@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use agent_core::{
     AgentId, ChildConfig, DriftVerdict, ErrorClass, ExecutionProfileId, PrefixImage, Session,
@@ -11,6 +11,10 @@ use agent_providers::{Decoded, Encoded, Ingredients, Provider, StreamAccumulator
 use agent_tools::ToolExecutor;
 use agent_transport::{Client, TransportError};
 use serde_json::Value;
+// 114b：`ProviderCall.deadline` 的字段类型已经是 `web_time::Instant`（见
+// `provider_call.rs`），这里显式跟着改来源，避免和 `use super::*` 隐式带进来
+// 的同名类型只是「刚好同一个」而非「本来就该一个」。
+use web_time::Instant;
 
 use super::*;
 use crate::tool_table::ToolTable;

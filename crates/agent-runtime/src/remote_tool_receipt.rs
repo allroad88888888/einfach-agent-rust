@@ -1,9 +1,11 @@
 //! Hard-bounded terminal receipts for recent remote tool calls.
 
 use std::collections::VecDeque;
-use std::time::SystemTime;
 
 use agent_core::{AgentId, ToolCallId};
+// 114b：`SystemTime::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
+// （native 目标下就是 `std::time::SystemTime` 本尊，行为不变）。
+use web_time::SystemTime;
 
 use crate::ctx::RunnerCtx;
 use crate::ctx_remote_tools::{PendingRemoteTool, PendingRemoteTools};

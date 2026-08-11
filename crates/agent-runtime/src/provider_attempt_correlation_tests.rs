@@ -3,12 +3,15 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use agent_core::{DriftVerdict, PrefixImage, SessionConfig, StopReason, TokenUsage};
 use agent_providers::deepseek::DeepSeek;
 use agent_tools::ToolExecutor;
 use agent_transport::{Client, StreamOutcome};
+// 114b：`ProviderCall.deadline` 的字段类型已经是 `web_time::Instant`（见
+// `provider_call.rs`），这里显式跟着改来源。
+use web_time::Instant;
 
 use super::*;
 use crate::event::RunnerEvent;

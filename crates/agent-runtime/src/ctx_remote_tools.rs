@@ -26,9 +26,11 @@
 //! `tool_executing` 广播出去了；投影晚一步，客户端就有一个「收到帧 → 去问 →
 //! 说没有」的窗口，那是漏活。
 
-use std::time::{Instant, SystemTime};
-
 use agent_core::{AgentId, Epoch, ToolCallId, ToolCallRequest};
+// 114b：`Instant`/`SystemTime::now()` panic 在 wasm32-unknown-unknown 上，垫
+// `web-time`（native 目标下就是 `std::time` 里那两个类型本尊，行为不变）。
+// `PendingRemoteTool.deadline`/`deadline_at` 存的正是本 issue 点名的绝对时刻。
+use web_time::{Instant, SystemTime};
 
 use crate::ctx::RunnerCtx;
 use crate::remote_tool_protocol::RemoteToolTerminalStatus;
