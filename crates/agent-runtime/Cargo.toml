@@ -27,3 +27,24 @@ serde_json = { workspace = true }
 # `src/io_stream.rs`（工作线程侧同一条 channel 的阻塞发送）。
 futures-channel = { workspace = true }
 futures-util = { workspace = true }
+
+# 114a：`persist::idb::web_kv` 是 `KvStore` 的真浏览器实现（`web_sys::IdbDatabase`
+# 上薄薄一层），只在 wasm32 编译（该文件 `#[cfg(target_arch = "wasm32")]`）。放进
+# `[target.'cfg(...)'.dependencies]` 而不是 `[dependencies]`：native 构建
+# （`cargo test --workspace` 覆盖的那一侧）完全不需要解析/编译这几个 crate，
+# 114a 的验收主证据（回放语义、红线 11）全部在 native 上用假的 `MemoryKv`
+# 跑掉，见 `persist/idb/mod.rs` 模块文档。
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Event",
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbKeyRange",
+    "IdbObjectStore",
+    "IdbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+] }
