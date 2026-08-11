@@ -499,7 +499,6 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 | [117](117-io-without-threads.md) | `io_thread` 换并发 future、channel 换 futures mpsc —— 029 并行保全 + 幽灵增量对抗测试 | 116 | **opus** | ✅ 已完成 |
 | [114](114-wasm-host.md) | wasm 宿主打通 + IndexedDB 持久化 ← **M13 终点，已完成** | 117 | a=sonnet b=sonnet c=opus d=sonnet | ✅ |
 | [118](118-living-docs-io-carrier-drift.md) | 活文档里「IO 线程池」的措辞已对不上形状（结论没错，形状错了） | 114 | sonnet | ✅ |
-| [119](119-mcp-as-a-feature.md) | `agent-mcp` 做成 feature —— 把「不可达」从每次都要论证的性质变成编译期事实 | 114 | sonnet | — |
 
 **M13 验收**（可判定）：浏览器里**没有任何服务端进程**跑完一轮真实对话；模型调用一个
 只有前端拿得到的 `web:` 工具并用结果回答；刷新后同会话 id 从 IndexedDB journal 回放，
@@ -553,8 +552,12 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 所以 `mcp_call::start` 里那句在 wasm 上会 trap 的 `thread::spawn` 永远走不到。
 产物里 `strings` 得到 `tools/call` / `jsonrpc` 就是这些死代码。
 
-**正确的解法是把 MCP 做成 `agent-runtime` 的 feature，而不是撒 cfg。** 另开 issue 处理，
+**正确的解法是把 MCP 做成 `agent-runtime` 的 feature，而不是撒 cfg**，
 不要为了「产物干净点」在核心执行路径上撒平台判断——那个代价比 772K 里的几 K 死代码大得多。
+
+**但现在不做，也不占 issue 号。** 它不阻塞任何事，路径今天确实不可达；
+真到有人要动 MCP 派发、或者产物体积成了问题的那天，再拿这段话去开 issue。
+（这条曾被开成 issue 119，随后撤销——收尾时该做的是把结论记清楚，不是多开一个待办。）
 
 > 顺带核实：产物里还能 `strings` 到 `srv:agent/spawn` / `srv:agent/collect` /
 > `srv:agent/status` / `srv:vision/inspect`。**这些不是漏网的 shell/fs**——是子 agent
