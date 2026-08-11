@@ -6,7 +6,12 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+// 时钟走 `web-time`（114b）：native 上就是 `std::time` 本尊。这里虽然背后是
+// `srv:fs`、浏览器构建里本来就不声明这类工具，但代码仍会被编进 wasm 产物——
+// 留着 `std::time` 等于留一颗「只要有别的路径走到这儿就 panic」的雷，
+// 而换掉的代价是零。
+use std::time::UNIX_EPOCH;
+use web_time::SystemTime;
 
 static JOURNAL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 

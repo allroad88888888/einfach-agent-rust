@@ -71,3 +71,4 @@ mod transient_source_output_gate;
 mod tree_snapshot_background_children;
 mod tree_snapshot_emits_on_change;
 mod undo_after_turns;
+mod wasm_clock_source;

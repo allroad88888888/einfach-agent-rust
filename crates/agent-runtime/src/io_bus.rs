@@ -32,7 +32,11 @@
 
 use std::future::{Future, poll_fn};
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+// 时钟走 `web-time`（114b）：native 上它就是 `pub use std::time::*`，wasm 上走
+// `performance.now()`。这行如果退回 `std::time::Instant`，**编译照样过，wasm 上
+// 第一次泵循环就 panic**——`wasm32-unknown-unknown` 没有时钟源。
+use web_time::Instant;
 
 use futures_channel::mpsc;
 use futures_util::StreamExt;
