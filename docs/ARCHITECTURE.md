@@ -16,8 +16,9 @@ pending 汇聚、UI 投影）都是 derived，由引擎重算。因此**记录�
 的存在，`agent-core` 永远是单线程视角。
 
 session 的边界是**一个 root agent + 它的整棵子树**——所有子 agent 共用这一个 store 和
-这一个线程。子 agent 的并发是 IO 并发（LLM 调用、tool 执行在 IO 池上），状态回写一律
-串行回 actor 线程。见 [STATE-MODEL.md](STATE-MODEL.md) §「子 agent」。
+这一个线程。子 agent 的并发是 IO 并发（LLM 调用、tool 执行泵在同一条线程上的并发
+future 里跑，`FuturesUnordered`），状态回写一律串行回 actor 线程。见
+[STATE-MODEL.md](STATE-MODEL.md) §「子 agent」。
 
 **2. prompt 的料单是 derived atom，wire 组装在 adapter。**
 换一个 skill 只重算 system 段，加一条消息不重跑 skill 注入——料单（`Ingredients`

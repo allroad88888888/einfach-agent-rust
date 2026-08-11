@@ -75,7 +75,7 @@ stdio server 是一个子进程。它的句柄（stdin/stdout pipe、`Child`、r
 | | 谁在用 | 代价 |
 |---|---|---|
 | 同步 | `fs/read`、`shell/exec`（`tool_exec::execute`，actor 线程上跑完） | **冻住所有 agent**，undo/cancel 一起卡。shell 靠内部超时兜，但它的慢有上限 |
-| 异步 | provider 调用（`provider_call::start/finish`，起 IO 线程 + 在飞凭据 + 泵管落地） | 多 agent 并行不被掐死；**epoch 校验天然在这条路上** |
+| 异步 | provider 调用（`provider_call::start/finish`，起一个 IO future（同线程 `FuturesUnordered` 泵进度）+ 在飞凭据 + 泵管落地） | 多 agent 并行不被掐死；**epoch 校验天然在这条路上** |
 
 **MCP 走异步。** 三个理由：
 

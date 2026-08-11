@@ -324,8 +324,9 @@ get-or-create，已经这么干。这条 lazily-recreate 路径必须写进 appl
 
 ### 并发
 
-**子 agent 的并发是 IO 并发，不是状态并发。** LLM 调用和 tool 执行在 IO 线程池上并发跑，
-回写必须回到 actor 线程串行——和 `tool_result` 走同一条回写路径，不新增机制。
+**子 agent 的并发是 IO 并发，不是状态并发。** LLM 调用和 tool 执行泵在同一条线程上的
+并发 future 里跑（`agent-runtime/src/io_bus.rs` 的 `FuturesUnordered`），回写必须回到
+actor 线程串行——和 `tool_result` 走同一条回写路径，不新增机制。
 
 session 边界因此很自然：**一个 root agent + 它的整棵子树 = 一个 session = 一个 actor
 线程 = 一个 store**。跨 root 不共享 store。

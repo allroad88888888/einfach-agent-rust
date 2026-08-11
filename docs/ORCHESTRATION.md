@@ -8,7 +8,7 @@
 
 先钉死一个容易搞错的前提：**并行 spawn 现在就能做**。`srv:agent/spawn` 是普通 tool call，
 模型在一条 assistant 消息里发多个 spawn，它们并发跑（STATE-MODEL §并发：「子 agent 的并发
-是 IO 并发」——provider 调用在 IO 线程池上并行，回写串行）。
+是 IO 并发」——provider 调用泵在同一条线程上的并发 future 里并行，回写串行）。
 
 所以本里程碑的价值**不是「能并行」**，而是唯一多出来的那件事：
 
