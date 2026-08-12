@@ -32,6 +32,7 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 | [docs/HOST-CAPABILITIES.md](docs/HOST-CAPABILITIES.md) | 宿主声明自己的 tool / skill / MCP | M10 |
 | [docs/IMAGES.md](docs/IMAGES.md) | 图片附件：怎么进 prompt、吃不下的家怎么降级 | M11 |
 | [docs/issues/119-browser-host-capability-decision.md](docs/issues/119-browser-host-capability-decision.md) | 浏览器宿主的通用工具回调与图片：JS/Rust 分工在哪切 | M14 |
+| [docs/EXTENSIONS.md](docs/EXTENSIONS.md) | Rust 扩展包：交付物形状、两阶段装配、`Session` 手套的能与不能 | M16 |
 
 新会话先读 `ROADMAP.md`（知道在哪）、`docs/issues/`（知道下一步做什么）、
 `INVARIANTS.md`（知道什么不能碰）。
@@ -61,8 +62,11 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 ## 当前状态
 
-**M1–M15 全部完成**（2026-08-01 ~ 08-12）。每个里程碑都有真机 dogfood 收官
-（真 provider，不是 mock），逐条兑现记录在 `docs/ROADMAP.md` §二和各 issue 的实做记录里。
+**M1–M15 全部完成**（2026-08-01 ~ 08-12），**M16 Rust 扩展包前半完成**（146–149：
+截获注册表 / `ExtensionPack` 接缝 / 第一个真扩展包 `ext:stats` 六条真机全过，
+接缝见 [docs/EXTENSIONS.md](docs/EXTENSIONS.md)；后半 150–152 是 derived 公式与谓词触发）。
+每个里程碑都有真机 dogfood 收官（真 provider，不是 mock），逐条兑现记录在
+`docs/ROADMAP.md` §二和各 issue 的实做记录里。
 
 同一个核心库的**五种**形态都真实验收过：CLI（undo/恢复/屏障）、浏览器前端（SSE/多 agent
 并行/断开取消）、独立 server bin、桌面 app（内嵌同库同前端），**以及跑在浏览器里的

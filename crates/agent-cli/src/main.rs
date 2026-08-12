@@ -35,10 +35,10 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agent_cli::{mcp, print, provider, repl, session_path, session_start};
+use agent_cli::{ext_stats, mcp, print, provider, repl, session_path, session_start, vision};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
 use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
-use agent_tools::{ToolExecutor, VisionLinkSource, VisionRuntime};
+use agent_tools::ToolExecutor;
 use agent_transport::{Client, config};
 
 fn main() {
@@ -81,7 +81,7 @@ fn main() {
     // LocalRoot`）。没配 kimi 段或没可用 key → 工具不配置、不声明，模型根本
     // 不知道有它（跟 `agent-server::bootstrap::resolve_vision` 同一个「vision
     // 是可选项」取舍，只是链接来源换成 LocalRoot）。
-    let vision = resolve_vision(&root, &tool_root);
+    let vision = vision::resolve(&root, &tool_root);
     let vision_enabled = vision.is_some();
     if let Some(v) = vision {
         fs = fs.with_vision(v);
@@ -97,14 +97,7 @@ fn main() {
         tool_root.display(),
         provider_cfg.context_window,
     );
-    eprintln!(
-        "vision={}",
-        if vision_enabled {
-            "可用（kimi 已配置）".to_string()
-        } else {
-            "（未配置 kimi 段，无 srv:vision/inspect）".to_string()
-        }
-    );
+    eprintln!("vision={}", vision::banner(vision_enabled));
 
     let args: Vec<String> = std::env::args().collect();
     let session_file = session_path::resolve(&args);
@@ -145,7 +138,9 @@ fn main() {
     });
     eprintln!("mcp={}", mcp.summary());
 
-    let store = agent_runtime::open_backend(session_file, |e| eprintln!("[会话文件] {e}"));
+    let store = agent_runtime::open_backend(session_file.clone(), |e| {
+        eprintln!("[会话文件] {e}")
+    });
 
     // 135：新建会话才跑开局工具——记下这一支，装完工具表后据此决定要不要调。
     let mut is_new_session = false;
@@ -198,6 +193,16 @@ fn main() {
     if vision_enabled {
         tool_table = tool_table.with_vision_inspect();
     }
+    // 149：`--ext-stats` 开了才装 `ext:stats` 扩展包，追加在**表尾**（红线 11：
+    // 前面那段所有会话共有的字节一个都不动）。不开 = `with_extension` 一次都不调，
+    // 工具表逐字节回到不装扩展的样子。`pending` 是 ctx 半边，下面 `RunnerCtx` 建好
+    // 之后必须 install——忘了 debug 构建会在它的 `Drop` 里当场炸（EXTENSIONS.md §防呆）。
+    let (tool_table, ext_pending) = ext_stats::install(
+        tool_table,
+        ext_stats::enabled(&args),
+        session_file.as_deref(),
+        &mut |m| eprintln!("ext-stats={m}"),
+    );
     let mut ctx = RunnerCtx::new(
         Arc::from(adapter),
         Arc::new(Client::new()),
@@ -231,6 +236,11 @@ fn main() {
     // 活句柄表进 ctx（红线 3，store 外）：dispatch 的第四路（`mcp:` 前缀且工具表声明）
     // 拿它 + server id 查 client 起异步 `tools/call`。没连上任何 server 就是空表。
     .with_mcp(mcp.registry);
+    // 149：扩展包的 ctx 半边（截获执行体）。两半边来自同一个包实例，机制保证；
+    // 没开开关时是 `None`，一行都不跑。
+    if let Some(pending) = ext_pending {
+        pending.install(&mut ctx);
+    }
     // 恢复之后必调——`persisted_seq` 这个同步水位不对齐，`persist::sync` 会把
     // `Session::restore` 灌回来的旧条目当新条目重新 append 一遍，连续几次
     // 「重启」之后 seq 会在文件中段跌回 0，下一次启动直接撞
@@ -277,26 +287,6 @@ fn provider_names(root: &config::RootConfig) -> String {
         .cloned()
         .collect::<Vec<_>>()
         .join(" / ")
-}
-
-/// `srv:vision/inspect` 的 CLI 运行时（写死 Kimi 3）：从 `[providers.kimi]`
-/// 段解 base_url/key/model；`image` 参数按启动目录内的本地相对路径解析
-/// （`VisionLinkSource::LocalRoot`）——CLI 没有 server 的上传端点。kimi 段
-/// 缺失或没配可用 key → `None`（工具不配置、不声明，其余照常），跟
-/// `agent-server::bootstrap::resolve_vision` 同一个取舍。
-fn resolve_vision(
-    root: &config::RootConfig,
-    tool_root: &std::path::PathBuf,
-) -> Option<VisionRuntime> {
-    let kimi = root.providers.get("kimi")?;
-    let api_key = kimi.resolve_key()?;
-    Some(VisionRuntime::new(
-        Arc::new(Client::new()),
-        kimi.base_url.clone(),
-        api_key,
-        Arc::from(kimi.model.as_str()),
-        VisionLinkSource::LocalRoot(tool_root.clone()),
-    ))
 }
 
 fn fail(message: &str) -> ! {

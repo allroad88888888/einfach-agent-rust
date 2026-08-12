@@ -50,15 +50,18 @@ M10 的宿主声明（`capabilities.tools[].reversibility`）是第二个真元�
 
 ### 命名空间：两族并存
 
-约定是 `<location-prefix>:<namespace>/<tool>`，MCP 再多一层 server id：`mcp:<server>/<tool>`。
+约定是 `<location-prefix>:<namespace>/<tool>`，MCP 再多一层 server id：`mcp:<server>/<tool>`，
+M16 的 Rust 扩展再多一层 pack id：`ext:<pack>/<tool>`。
 `location_of` 按前缀推位置：`web:` → `Web`、`desk:` → `Desktop`、`mcp:` → `Server`
-（MCP 调用在宿主本地起子进程往返，不需要远端回传）、其余落 `Server`。
+（MCP 调用在宿主本地起子进程往返，不需要远端回传）、`ext:` → `Server`
+（扩展是编译期依赖，执行体就是本进程里的一个闭包）、其余落 `Server`。
 
 **但只有一族工具遵守这个约定**：
 
 - **遵守**：`srv:fs/read`、`srv:shell/exec`、`srv:skill/read`、`srv:agent/spawn` 等
   由 `ToolTable::builtin()`/`with_*()` 装的；MCP 翻译出来的 `mcp:<server>/<tool>`；
-  M10 宿主注入的（前缀由校验**强制**，见下）。
+  M10 宿主注入的（前缀由校验**强制**，见下）；M16 扩展包带的 `ext:<pack>/<tool>`
+  （前缀由装配期**强制**，见下）。
 - **不遵守**：`ToolTable::standard()` / `standard_local()` 那一族——`read_file`、`list_files`、
   `search_files`、`rg_search`、`apply_patch`、`write_file`、`delete_path`、`copy_path`、
   `move_path`、`revert_workspace_change`、`find_test_lint_commands`、`git_diff_review`、
@@ -90,6 +93,19 @@ M10 注入的工具没有这个坑：`capabilities` 校验**强制**工具名以
 `srv:`/`mcp:`/裸名一律 400。理由是同一条——位置从前缀推，注入的工具跑在宿主侧，
 标成 `srv:` 会让 dispatch 去本进程里找一个根本不存在的实现。
 
+**M16 又添一族（站在「遵守」这一侧）：`ext:<pack>/<tool>`**（决策 29，
+[EXTENSIONS.md](EXTENSIONS.md)）。Rust 扩展包
+（`ExtensionPack`）带进来的工具，前缀同样**强制**——裸名、`srv:`/`web:`/`desk:`/`mcp:`、
+别的包的命名空间，一律在**装配期**拒绝。它跟 M10 那一族的差别只在「最早能报给有权修它的人」
+是谁（见下面 §撞名的那张判据表）：注入声明来自一次活的请求，所以整份 400；扩展包是**编译期
+依赖、作者是程序员**，所以是 `debug_assert!` + release 丢弃**那一条**（同 `push_spec`/
+`with_timed` 的既有哲学，不丢整包——一个钩子名的笔误不该顺手关掉同包里合法的工具）。
+
+包名进名字是为了同一份红利：`ext:` 族与内置五档、`web:`/`desk:` 注入族、`mcp:` 族之间
+**结构上撞不了**，两个扩展之间也撞不了，于是三条路都不需要冲突策略。`location_of` 对
+`ext:` 落 `Server`，那一条是**显式**写出来的（不是靠兜底）——它是接缝的承诺，
+兜底哪天改主意不该把它一起改掉。
+
 ### 撞名
 
 企业级多来源一定会撞名——两个 MCP server 各有一个 `search`，前端和后端各有一个 `read_file`。
@@ -106,7 +122,7 @@ M10 注入的工具没有这个坑：`capabilities` 校验**强制**工具名以
 
 **判据（决定每条路怎么满足红线）：撞名一律在「最早能报给有权修它的人」的那个点上失败；
 那个点不存在时，才退到「后来的整条不进表」，绝不退到「两条都进表」。**
-四条路行为不同，是因为「谁写的、还能不能被告知」不同：
+五条路行为不同，是因为「谁写的、还能不能被告知」不同：
 
 | 路径 | 撞名的作者 | 最早可报点 | 行为 |
 |---|---|---|---|
@@ -114,6 +130,7 @@ M10 注入的工具没有这个坑：`capabilities` 校验**强制**工具名以
 | **MCP 多 server** | 第三方 server | 配置解析 / 握手 | 重复 server id 是**硬错误**（`ConfigError::DuplicateServerId`）；工具名自带 server id，跨 server **结构上撞不了** |
 | **skill 目录装载**（`SkillRegistry::load`） | 部署者，而且**目录顺序是他显式排的** | 没有——先后本身就是他给的信息 | **后来居上**（有意的例外，见下） |
 | **内置工具表装配**（`ToolTable::with_*`） | 一半是程序员（五档 + CLI 链），一半是运行时数据（MCP 回包、客户端请求体） | 程序员那半 = **本地测试** | **`debug_assert!` + 看门狗测试**；运行时那半 = **后来的整条不进表**，不 panic |
+| **M16 扩展包装配**（`ToolTable::with_extension`） | 程序员（扩展是编译期依赖） | **本地测试**（他自己那次 `cargo test`） | 跟上一行同一套：**`debug_assert!` + release 丢弃那一条**（连它的执行体一起丢，声明与执行路径同进同出）；包名进工具名，跨包**结构上撞不了** |
 
 **为什么 `capabilities` 是「拒绝」**：两个候选出自同一份声明、同一个作者、同一口气，
 没有先后可言，替它选一个就是替它做决定，而它此刻还站在那儿等 200/400——

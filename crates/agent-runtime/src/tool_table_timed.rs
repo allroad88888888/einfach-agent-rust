@@ -107,10 +107,16 @@ impl ToolTable {
         self
     }
 
-    /// timed 区是否已经有这个名字。`with_timed` 撞名双向查的一侧；另一侧是
-    /// `pub(super)`，给 `push_spec` 反向查用——specs 区的新名字也不能撞已经注册
-    /// 过的 timed 名（见那边的调用点与本模块文档「撞名：双向查」）。
-    pub(super) fn declares_timed(&self, tool: &str) -> bool {
+    /// timed 区是否已经有这个名字。`with_timed` 撞名双向查的一侧，`push_spec`
+    /// 反向查用——specs 区的新名字也不能撞已经注册过的 timed 名（见那边的调用点
+    /// 与本模块文档「撞名：双向查」）。
+    ///
+    /// 146 起可见性从 `pub(super)` 放宽到 `pub(crate)`：`crate::intercept_registry`
+    /// 的 `register_session_tool` 是第三个调用点——一个注册进截获表的名字同样
+    /// 不能撞 timed 区（timed 工具有自己的驱动，从不经过 `ExecuteTool`，被这张表
+    /// 截获会让一个 `declares()` 为假的名字反而被执行），判据与前两个调用点相同，
+    /// 因此复用同一个方法而不是另开一个。
+    pub(crate) fn declares_timed(&self, tool: &str) -> bool {
         self.timed_tools.iter().any(|t| &*t.spec.name == tool)
     }
 

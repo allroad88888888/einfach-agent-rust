@@ -58,6 +58,34 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 进行中：M16 Rust 扩展包（**前半完成**，2026-08-12，真机 dogfood 六条全过）
+
+决策 29 的前半落地：截获注册表（[146](issues/146-intercept-registry.md)）、既有四条截获
+迁进同一张表（[147](issues/147-migrate-intercepts.md)）、`ExtensionPack` 接缝
+（[148](issues/148-extension-pack-seam.md)），并由第一个**真扩展包**走完全程
+（[149](issues/149-extension-dogfood.md)）。接缝定义见 [EXTENSIONS.md](EXTENSIONS.md)，
+§五「写你的第一个扩展包」就是这次 dogfood 的教材化。
+
+**真机数字**（CLI + DeepSeek，`agent-cli` 里的 `ext:stats` 包，`--ext-stats` 开关默认关）：
+
+- **undo 的活演示**（账本卖点的正面戏）：模型 spawn 一个子 agent 之后调扩展工具拿到
+  「4 轮、19 条 entry、2 个 agent、工具调用 2 次」；两次 `/undo` 之后同一个工具报
+  「3 轮、11 条 entry、1 个 agent、工具调用 1 次」，`spawn_child×1` 整条从 entry 分布里
+  消失。**扩展这一侧没有一行代码认识「撤销」**——第三方读到的世界与账本严格一致是白拿的。
+- **不装包 = 逐字节零变化**：拿本地 recorder 收请求体，改动前的二进制与改动后不开开关的
+  二进制，body 的 sha256 **相等**（23957 字节）；开了开关那份前 23955 字节逐字相同，多出
+  的一条工具整段在表尾（红线 11）。
+- 十轮 14 跳缓存命中 **96.1%–99.0%，均值 97.9%**（含五个扩展工具调用轮）——扩展工具的
+  结果跟 skill 正文一样从消息尾进来，不破前缀。
+- `TurnEnd` 钩子每个完成轮恰一行审计、`Ctrl-C` 取消的那一轮 0 行；`kill -9` 恢复后再调，
+  崩溃前的数字原样在。
+
+**交给后半的手感**：`TurnEnd` 钩子的 `TimedRun` 签名里**没有 `Session`**（133 的 v1
+边界），所以「每轮把账本数字写进审计文件」只能由截获那半边经宿主内存的一格传话，审计行
+得如实标注 `seen_at=` 哪一轮观测。[150](issues/150-derived-extension-decision.md) 要决的
+「触发 hook 与 TurnEnd 的关系」直接接手这条缝——本轮**不动 133 的签名**，dogfood 的职责是
+交手感，不是抢着定形状。
+
 ### 已完成：M15 调用时机与 skills 工具化（2026-08-12，真机 dogfood 七条全过）
 
 决策 27 落地。core/runtime 收敛为「一张工具表 + 三个调用时机」，skills 从此不是

@@ -39,6 +39,14 @@ pub(super) fn location_of(tool: &str) -> Location {
         // MCP 调用在**宿主本地**执行（`crate::mcp_call` 起子进程往返），对 loop 而言
         // 结果经泵落地、不需要远端回传——所以是 `Server`，不是 remote（043）。
         Some("mcp") => Location::Server,
+        // 148：扩展包的工具（`ext:<pack>/<tool>`，决策 29）。扩展是**编译期依赖**，
+        // 执行体就是本进程里的一个闭包（截获式工具拿 `Session` 手套当场跑完，
+        // 纯 IO 工具同样经截获注册表接入）——没有任何远端回传，所以是 `Server`。
+        //
+        // 兜底分支本来也给 `Server`，这一条仍然显式写出来：`ext:` 落 `Server` 是
+        // 接缝的**承诺**（docs/EXTENSIONS.md §ext: 命名规则），不是兜底捡到的
+        // 副产品。哪天兜底改了主意，这条承诺不会跟着一起无声改掉。
+        Some("ext") => Location::Server,
         // `srv` 或者压根没有认得出的前缀：M1 没有 router，落进这个分支的只有
         // 013 的内置工具，全部是 `srv:` 前缀——保守当作本地服务端处理。
         _ => Location::Server,
@@ -94,5 +102,25 @@ mod tests {
     #[test]
     fn skill_read_is_pure() {
         assert_eq!(reversibility_of(SKILL_READ), Reversibility::Pure);
+    }
+
+    /// 148：`ext:` 落 `Server`（扩展是编译期依赖，执行体在本进程）。断言的是那条
+    /// **显式**分支——判成 `Web`/`Desktop` 会让 dispatch 去等一个永远不会来的宿主
+    /// 回传，而那是不报错、只是这个工具永远调不通的那类失效。
+    #[test]
+    fn extension_tools_run_in_the_server_process() {
+        assert_eq!(location_of("ext:demo/tree_echo"), Location::Server);
+    }
+
+    /// 名字规则这一层对 `ext:` 的可逆性**不表态**——落兜底的 `Irreversible`。
+    /// 真实答案总是由包作者显式声明、经 `with_extension` 记进注入映射，
+    /// `snapshot` 的第一级先查表（`tool_table_extension.rs` 模块文档），永远轮不到
+    /// 这里。这条钉的是「没人替它说话时保守值是什么」。
+    #[test]
+    fn extension_names_never_infer_a_reversibility() {
+        assert_eq!(
+            reversibility_of("ext:demo/tree_echo"),
+            Reversibility::Irreversible
+        );
     }
 }

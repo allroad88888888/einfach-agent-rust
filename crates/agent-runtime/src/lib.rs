@@ -84,6 +84,7 @@
 //!
 
 mod block_on;
+mod builtin_intercepts;
 mod child_outcome;
 mod child_slot;
 mod collect_tool;
@@ -97,9 +98,11 @@ mod ctx_remote_tools;
 mod deadline;
 mod dispatch;
 mod execution_binding;
+mod extension_pack;
 mod guard;
 mod heartbeat;
 mod host_declaration;
+mod intercept_registry;
 mod io_bus;
 mod io_stream;
 mod io_task;
@@ -119,6 +122,7 @@ mod remote_tool_submission;
 mod reply;
 mod runner;
 mod session_start;
+mod session_tool_ext;
 mod skill;
 mod spawn_request;
 mod spawn_tool;
@@ -163,6 +167,14 @@ pub use deadline::sweep_remote_tool_deadlines;
 pub use deadline::sweep_remote_tool_deadlines_async;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
+/// 148：一个 Rust 扩展的交付物（决策 29）。宿主 `with_extension` 一次吃一包，
+/// 装配是两阶段的——ctx 半边那个必须被消费的中间产物是
+/// [`PendingInterceptors`]，接缝文档 `docs/EXTENSIONS.md`。
+pub use extension_pack::ExtensionPack;
+/// 146：`RunnerCtx::register_session_tool` 收的公开层签名——`intercept_registry`
+/// 本身是私有模块（注册表只能在装配期改），但这个类型要跨层出去：扩展/独测
+/// 拿它构造要注册的闭包。
+pub use intercept_registry::SessionToolFn;
 /// 122：一份宿主工具声明 JSON → [`ToolTable::with_host_tools`] 要的料。纯函数，
 /// 给**没有 HTTP 那一层**的宿主用（浏览器宿主 `agent-wasm` 是第一个）；server
 /// 形态走的仍是自己那份绑着请求体与 `ts-rs` 的 `http/capabilities`，两份的分界与
@@ -201,6 +213,7 @@ pub use session_start::{SessionStartError, run_session_start};
 pub use skill::{SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
+pub use tool_table::extension::PendingInterceptors;
 pub use tool_table::{CallTiming, TimedRun, TimedTool, ToolTable};
 pub use transient_source_failure::TransientSourceFailure;
 /// 124：跨 crate 判定一个工具名是不是 transient-source（`web:source/`），

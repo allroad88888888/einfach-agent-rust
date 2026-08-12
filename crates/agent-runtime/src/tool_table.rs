@@ -17,6 +17,8 @@
 //! | [`skill_tools`]（`tool_table_skill.rs`，039/139） | **skill 这件事**：registry 归表拥有，`read`/`index` 怎么装配 |
 //! | [`disable`]（`tool_table_disable.rs`，076） | **关掉内置这件事**：会话建立时把部署方给的某几件整条剔掉（唯一往回减的一件） |
 //! | [`timed`]（`tool_table_timed.rs`，133） | **调用时机这件事**：timed 工具独立区，`specs`/`declares`/`snapshot` 一个字节看不见它 |
+//! | [`standard`]（`tool_table_standard.rs`，148 拆出） | **web-agent 标准集这件事**：裸名一族的两档构造 |
+//! | [`extension`]（`tool_table_extension.rs`，148） | **装一个扩展包这件事**：两阶段（表半边/ctx 半边）怎么拆、怎么防「只装一半」 |
 //!
 //! 拆的判据是「说得清它是干嘛的、且不含『和』」（红线 9）：注入、skill、关掉内置、
 //! 名字规则各自都有一整套自己的理由要写，混在这里会让「工具表是什么」这句话说不完。
@@ -51,6 +53,11 @@ pub struct ToolTable {
     /// 宿主建会话时注入的工具（062）→ 它的可逆性。装配、排序与「为什么另挂一张表
     /// 而不是给 `ToolSpec` 加字段」全在 [`host`]（`with_host_tools`）。空表 = 这个
     /// 会话没有注入。
+    ///
+    /// 148 起**扩展包声明的可逆性也记在这张表里**（[`extension`]）：这一级答的是
+    /// 「有人在装配期按名字显式声明过吗」，`ext:` 与 `web:`/`desk:` 的差别只是声明
+    /// 来源，而 `snapshot` 只问值是多少——不新开第三张表的完整理由（含撞不了键的
+    /// 依据）在 [`extension`] 模块文档。
     host_reversibility: BTreeMap<Arc<str>, Reversibility>,
     /// timed 工具独立区（133）。**不进 `specs`，`declares()`/`snapshot()` 看不见
     /// 它**——模型面的表只有一个答案，这是 076 disable 判据的延续；`with_timed`/
@@ -73,6 +80,12 @@ mod disable;
 
 #[path = "tool_table_timed.rs"]
 mod timed;
+
+#[path = "tool_table_standard.rs"]
+mod standard;
+
+#[path = "tool_table_extension.rs"]
+pub(crate) mod extension;
 
 impl ToolTable {
     /// 从一组 specs 造一张表：空 skill registry、空 MCP 映射、空注入映射。四个内置
@@ -133,24 +146,6 @@ impl ToolTable {
     pub fn with_shell() -> Self {
         let mut specs = agent_tools::builtin_specs();
         specs.push(agent_tools::shell_spec());
-        Self::from_specs(specs)
-    }
-
-    /// web-agent 兼容的本地标准工具集：四个只读文件工具、受版本保护的工作区
-    /// 事务、测试/lint 命令发现与六个静态命令工具。`read_file` 直接返回事务所需
-    /// revision，因此模型不需要学习额外的内部前置工具。
-    ///
-    /// 此构造器不夹带历史 `srv:*` 别名，避免模型面对两套同义工具。浏览器交互工具
-    /// 必须由 [`ToolTable::standard`] 的远程 router 注册，不能伪装为本地 executor。
-    pub fn standard_local() -> Self {
-        Self::from_specs(standard_local_specs())
-    }
-
-    /// 完整的 web-agent 标准工具集：本地工具外加三个由 Web 宿主执行并回传的交互
-    /// 工具。它不注册计划、子 agent 或 MCP 工具。
-    pub fn standard() -> Self {
-        let mut specs = standard_local_specs();
-        specs.extend(agent_tools::interaction_specs());
         Self::from_specs(specs)
     }
 
@@ -281,18 +276,6 @@ impl ToolTable {
     }
 }
 
-fn standard_local_specs() -> Vec<ToolSpec> {
-    let mut specs = agent_tools::standard_readonly_file_specs();
-    specs.extend(agent_tools::standard_workspace_file_specs());
-    specs.push(agent_tools::find_test_lint_commands_spec());
-    specs.extend(agent_tools::command_specs());
-    specs
-}
-
 #[cfg(test)]
 #[path = "tool_table_tests.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "standard_local_tests.rs"]
-mod standard_local_tests;

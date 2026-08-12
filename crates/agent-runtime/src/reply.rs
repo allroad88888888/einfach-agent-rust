@@ -27,12 +27,18 @@ use crate::dispatch::Dispatched;
 use crate::event::RunnerEvent;
 
 /// 当场算出了结果：通报 + 收敛槽位。
+///
+/// `tool` 是 `&str` 不是 `&'static str`——146 起 `intercept_registry` 的适配器
+/// 拿到的名字是装配期注册的 `Arc<str>`，没有 `'static` 生命周期；`settle` 内部
+/// 只做一次 `Arc::from(tool)`，这个操作对任意生命周期的 `&str` 都成立，放宽签名
+/// 对既有四条截获（都传 `&'static str` 常量）零影响，`&'static str` 天然满足
+/// 更宽的 `&str`。
 pub(crate) fn ok(
     ctx: &mut RunnerCtx,
     agent: &AgentId,
     call_id: ToolCallId,
     epoch: Epoch,
-    tool: &'static str,
+    tool: &str,
     body: String,
 ) -> Dispatched {
     settle(ctx, agent, call_id, epoch, tool, body, false)
@@ -45,7 +51,7 @@ pub(crate) fn refuse(
     agent: &AgentId,
     call_id: ToolCallId,
     epoch: Epoch,
-    tool: &'static str,
+    tool: &str,
     message: String,
 ) -> Dispatched {
     settle(ctx, agent, call_id, epoch, tool, message, true)
@@ -58,7 +64,7 @@ pub(crate) fn settle(
     agent: &AgentId,
     call_id: ToolCallId,
     epoch: Epoch,
-    tool: &'static str,
+    tool: &str,
     body: String,
     is_error: bool,
 ) -> Dispatched {

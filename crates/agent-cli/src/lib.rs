@@ -13,6 +13,8 @@
 //! `Session::begin_turn` 接过「一轮到下一轮」，`undo::after_cancelled_turn`
 //! 接过「取消轮怎么处理」，两者都是会话层面的正牌答案，不再需要一个专门
 //! 模块手写字段搬运。
+pub mod ext_stats;
+pub mod ext_stats_report;
 pub mod mcp;
 pub mod model_switch;
 pub mod print;
@@ -21,3 +23,4 @@ pub mod repl;
 pub mod session_path;
 pub mod session_start;
 pub mod undo;
+pub mod vision;

@@ -1,6 +1,6 @@
 # 147 五条既有截获迁移进注册表，dispatch 只剩查表
 
-**里程碑** M16 · **依赖** [146](146-intercept-registry.md) · **模型** sonnet · **独测** — · **状态** 待做
+**里程碑** M16 · **依赖** [146](146-intercept-registry.md) · **模型** sonnet · **独测** — · **状态** 完成（2026-08-12）
 
 ## 目标
 
@@ -41,3 +41,12 @@ spawn / collect / status / skill-read 四条工具截获迁进 146 的注册表�
 - 纯迁移，一行为变化都不许有——这条的价值就是「零变化」本身。
 - 若 spawn 的 `Dispatched::Events` 或 collect 的槽绑定装不进 146 的签名，
   **回 146 改签名**再来，别在本条打补丁绕。
+
+## 实做记录（2026-08-12）
+
+- 注册点选 A：`RunnerCtx::new` 末尾按 `declares` 条件注册四条（`builtin_intercepts.rs`），
+  三宿主零改动，声明与执行同开同关自动成立；看门狗双向 debug_assert。
+- **双重记账陷阱的正解**：把 027 包装从通用 `dispatch()` 挪进 SessionToolFn 适配器
+  ——通用路纯查表直调，四条老截获原样直转（它们各自管自己的事件），既有 179 条
+  集成测试零断言改动全绿。`InterceptArgs.input` 调成 `&Arc<Value>`（Arc::clone 需要）。
+- dispatch.rs 262→231 行，四个工具名常量在其中零命中。

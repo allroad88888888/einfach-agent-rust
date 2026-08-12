@@ -78,6 +78,12 @@ pub struct RunnerCtx {
     /// 存在跨会话共享的场景。
     pub(crate) fs: Box<dyn ToolExecution>,
     pub(crate) tools: ToolTable,
+    /// 146：截获式扩展工具注册表（决策 29 的正门），builder 期注册、会话期不变。
+    /// 机制细节全在 [`crate::intercept_registry`]，这里只是它的家。147 起，
+    /// 既有四条内置截获（spawn/collect/status/skill-read）也住这张表——
+    /// [`RunnerCtx::new`] 收尾时调 `crate::builtin_intercepts::
+    /// register_builtin_intercepts` 按 `declares()` 迁进来。
+    pub(crate) session_tools: crate::intercept_registry::SessionToolRegistry,
     /// MCP server 的活句柄表（store 外的进程内 registry，红线 3）。dispatch 的第四路
     /// 只拿它 + server id 去查 client 起一次异步 `tools/call`（`crate::mcp_call`），
     /// client 句柄从不进任何 command/atom。默认空表——没接 MCP 的宿主永远查不到。
@@ -144,7 +150,7 @@ impl RunnerCtx {
     ) -> Self {
         let on_event: Box<dyn FnMut(AgentEvent)> =
             Box::new(move |ev: AgentEvent| on_event(ev.event));
-        RunnerCtx {
+        let mut ctx = RunnerCtx {
             default_binding: ExecutionBinding::new(
                 provider,
                 client,
@@ -159,6 +165,7 @@ impl RunnerCtx {
             next_guard_scope: GuardScope::FIRST_DYNAMIC,
             fs: Box::new(fs),
             tools,
+            session_tools: crate::intercept_registry::SessionToolRegistry::default(),
             mcp: Arc::new(McpRegistry::new()),
             system,
             cancel: Arc::new(AtomicBool::new(false)),
@@ -175,7 +182,13 @@ impl RunnerCtx {
             on_tree_change: None,
             on_pending_remote_tools: None,
             on_remote_tool_status: None,
-        }
+        };
+        // 147：既有四条内置截获（spawn/collect/status/skill-read）按 `declares()`
+        // 迁进同一张注册表——跟各自 `with_*` 让 declares() 为真同一条件，声明与
+        // 执行路径因此同开同关，cli/server/wasm 三个宿主零改动（都经这一个构造
+        // 函数）。细节见 `crate::builtin_intercepts` 模块文档。
+        crate::builtin_intercepts::register_builtin_intercepts(&mut ctx);
+        ctx
     }
 
     /// 覆盖快照节奏（`0` = 关闭，只靠 entry 日志重放）。

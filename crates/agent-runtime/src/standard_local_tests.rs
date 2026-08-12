@@ -1,5 +1,12 @@
+//! 148 起这些用例住在 `tool_table_standard` 底下（被测的两档构造器搬去了那里），
+//! `super::*` 因此只白拿 `ToolTable`/`ToolSpec`；`snapshot` 那几条要的三样各自
+//! 显式 `use`——076 那句「名字规则搬走之后不再白拿 `Location`」的同款延续。
+use std::sync::Arc;
+
+use agent_core::{Location, Reversibility};
+use serde_json::Value;
+
 use super::*;
-use agent_core::Location; // 076：名字规则搬进 `tool_table_names.rs` 之后不再白拿。
 
 #[test]
 fn standard_local_exposes_the_safe_local_standard_set_in_stable_order() {

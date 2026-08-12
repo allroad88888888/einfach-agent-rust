@@ -4,18 +4,21 @@
 //!
 //! # 会话状态类工具的截获点就在这里，**但实现不在**
 //!
-//! `srv:agent/spawn` / `srv:agent/status` / `srv:agent/collect` 走的都是
-//! `Effect::ExecuteTool`（它们对 core 而言就是普通的工具调用，这正是决策 20
-//! 想要的：spawn 天然进日志、天然有 undo 语义），但它们**不进 `ToolExecutor`**
+//! `srv:agent/spawn` / `srv:agent/status` / `srv:agent/collect` / `srv:skill/read`
+//! 走的都是 `Effect::ExecuteTool`（对 core 而言就是普通的工具调用，这正是决策
+//! 20 想要的：spawn 天然进日志、天然有 undo 语义），但它们**不进 `ToolExecutor`**
 //! ——它们要碰的是会话状态或泵的记账，而 executor 够不着 `Session`、也够不着
-//! `Subtree`。所以在分派处按名字截下来。按工具名 match 在宿主侧是合法的：宿主
-//! 本来就持有工具表，这里没有任何模型相关判断（红线 12 管的是 core，且管的是
-//! provider 分支）。`srv:skill/read`（137）同一个理由被截获，但它是纯读，不碰
-//! `Session`。
+//! `Subtree`。051/053/137 把它们一条条截到这个文件的手工 `if` 链里；147 把这条
+//! 链换成一次查表（[`crate::intercept_registry`]）：这四条连同
+//! `RunnerCtx::register_session_tool` 注册的扩展工具（146，决策 29）现在共用
+//! 同一张装配期建好的表，`ctx.session_tool_registered` 命中即截获。按名字分流
+//! 在宿主侧是合法的：宿主本来就持有工具表，这里没有任何模型相关判断（红线 12
+//! 管的是 core，且管的是 provider 分支）。
 //!
-//! 这个文件只回答「这个名字归谁执行」，**怎么执行跟着工具自己走**
-//! （`spawn_tool::intercept` / `status_tool::intercept` / `collect_tool::intercept`
-//! / `skill::read_intercept`）——051 立的规矩，053 的前置重构把 spawn 也搬了回去。
+//! 这个文件只回答「这个名字归谁执行」，**怎么执行跟着工具自己走**——既有四条住
+//! `crate::builtin_intercepts`（迁移前是 `spawn_tool::intercept` /
+//! `status_tool::intercept` / `collect_tool::intercept` / `skill::read_intercept`
+//! 各自的文件），扩展工具住 `crate::session_tool_ext`。
 //!
 //! 截获**以工具表里有没有这个声明为准**：宿主没把 spawn 放进表，模型就看不见
 //! 这个名字，万一它凭空猜出来一个，那就该跟别的不存在的工具一样落
@@ -33,17 +36,14 @@ use agent_core::{
     AgentId, Effect, Epoch, Event, Reversibility, Session, ToolCallId, ToolCallRequest,
 };
 
-use crate::collect_tool::{self, COLLECT_TOOL};
 use crate::compact_slot::CompactSlots;
 use crate::compact_spawn;
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
+use crate::intercept_registry;
 use crate::io_bus::IoBus;
 use crate::mcp_call::{self, McpCall};
 use crate::provider_call::{self, ProviderCall};
-use crate::skill::{self, SKILL_READ};
-use crate::spawn_tool::{self, SPAWN_TOOL};
-use crate::status_tool::{self, STATUS_TOOL};
 use crate::subtree::Subtree;
 use crate::tool_exec;
 
@@ -108,36 +108,18 @@ pub(crate) fn run_effect(
             input,
             epoch,
         } => {
-            if &*tool == SPAWN_TOOL && ctx.tools.declares(SPAWN_TOOL) {
-                return spawn_tool::intercept(
-                    session, ctx, subtree, &agent, call_id, &input, epoch,
+            // 146/147：截获式扩展工具注册表——装配期注册进来的工具，Rust 扩展
+            // 访问会话状态的正门（决策 29）。既有四条（spawn/collect/status/
+            // skill-read）与 `RunnerCtx::register_session_tool` 注册的扩展共用
+            // 同一张表，`crate::builtin_intercepts`/`crate::session_tool_ext` 各
+            // 管各的注册与执行细节，这里只回答「这个名字有没有登记」。命中即
+            // 截获；未命中原路往下走（大概率落 unknown_tool——两条注册路径都
+            // 保证「注册名 ⊆ declares()」，反过来「declares() 里的名字未必注册
+            // 了截获」完全合法：一个只声明不截获的普通工具）。
+            if ctx.session_tool_registered(&tool) {
+                return intercept_registry::dispatch(
+                    session, ctx, subtree, compactions, bus, &agent, call_id, &tool, input, epoch,
                 );
-            }
-            // collect 同款截获（053）：它读的是**泵的记账**（`Subtree` 的 detached
-            // 名单与 stash），executor 连这张表的存在都不知道。两条出路：子已经跑完
-            // 躺在 stash 里 → 当场回写（领取即消费）；还在跑 → 绑一个槽到这次 collect
-            // 的 `call_id` 上、返回 `Nothing`，父那个槽保持 `Pending` 等收割回写
-            // ——**跟前台 spawn 逐字同一条路**，只是绑定的时机由模型自己选。
-            if &*tool == COLLECT_TOOL && ctx.tools.declares(COLLECT_TOOL) {
-                return collect_tool::intercept(
-                    session, ctx, subtree, &agent, call_id, &input, epoch,
-                );
-            }
-            // status 同款截获（051）：它要读的是**整棵会话的 agent 树**
-            // （`Session::agent_tree`），executor 够不着 `Session`。跟上面两条不同
-            // 的是它是一次**纯读**——当场算完当场回写，没有 Pending、没有在飞
-            // 凭据、也没有 entry 要同步（`status_tool::intercept` 的文档记了为什么
-            // 它不调 `persist::sync`）。收窄到「调用者的后代」也在那里（红线 10 只
-            // 下读；core 只负责算权威的整棵树）。
-            if &*tool == STATUS_TOOL && ctx.tools.declares(STATUS_TOOL) {
-                return status_tool::intercept(session, ctx, &agent, call_id, &input, epoch);
-            }
-            // skill 正文按需读（137）：跟 status 同款 dispatch 截获，但它不碰
-            // `Session`——纯读 registry，甚至不需要拿到 session 这个参数。宿主没
-            // 声明（没开 skill）就不截获，模型凭空猜出来的这个名字跟别的不存在的
-            // 工具走同一条路（`unknown_tool`）。
-            if &*tool == SKILL_READ && ctx.tools.declares(SKILL_READ) {
-                return skill::read_intercept(ctx, &agent, call_id, &input, epoch);
             }
             // 027：发起时快照在这里造一次，`Irreversible` 的立刻登记——记录点
             // 必须在**派发**这一刻，而不是等结果落地才回头看，否则进程在工具

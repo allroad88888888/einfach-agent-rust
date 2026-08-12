@@ -104,7 +104,7 @@ pub(crate) fn fire(ctx: &RunnerCtx) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use agent_core::{AgentId, SessionConfig, ToolSpec};
+    use agent_core::{SessionConfig, ToolSpec};
     use agent_providers::deepseek::DeepSeek;
     use agent_tools::ToolExecutor;
     use agent_transport::Client;
