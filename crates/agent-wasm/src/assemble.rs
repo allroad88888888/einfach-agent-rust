@@ -10,9 +10,10 @@
 //! | 会话落点 | `Jsonl`（文件） | `WebIdbStore`（IndexedDB，114a + 114c） |
 //! | 工具 executor | `ToolExecutor`（真文件系统） | `NullToolExecutor`（112 的注入接缝） |
 //!
-//! 工具表见 [`crate::tools`]：空表起步 + 两条 `web:` 声明，没有 `srv:`、没有
-//! `mcp:`、不开 spawn/status/collect/skill。**每一档 `with_*` 都是一次独立授权**
-//! ——浏览器宿主目前一档都不开，所以 prompt 最前面那段字节就是那两条声明。
+//! 工具表见 [`crate::tools`]：空表起步 + 三条内建 `web:` 声明 + 页面自己声明的
+//! 那一段（122），没有 `srv:`、没有 `mcp:`、不开 spawn/status/collect/skill。
+//! **每一档 `with_*` 都是一次独立授权**——浏览器宿主目前一档都不开，所以 prompt
+//! 最前面那段字节就是那几条声明。
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -30,6 +31,29 @@ use crate::db;
 /// 写进 system prompt——那会让每一轮都是全新前缀、每一轮都全价。
 const BASE_SYSTEM: &str =
     "你是一个简洁、诚实的助手，跑在用户的浏览器里。需要页面本身的信息（标题、地址）时调对应的工具，不要猜。";
+
+/// 一条 `web:` 工具等页面回调的截止线（123）。**比 native 默认短一个数量级**
+/// （`agent_runtime::ctx::DEFAULT_REMOTE_TOOL_TIMEOUT` = 10 分钟），因为那个数是
+/// 按「另一头是个真人：读完问题、切个标签页、回来作答」定的，而这一头是同一个
+/// 标签页里的一个 JS 回调——机器干活。
+///
+/// 60 秒的两个边：
+///
+/// - **下边界**由这个里程碑里最慢的一条合法回调定：一张浏览器侧上限 2 MB 的图
+///   （119 §五-1）走 multipart 上传 + 一次识图往返，弱网上几十秒是可能的。60s ≈ 那个
+///   量级的两倍，留了余量。
+/// - **上边界**由「挂住的代价」定，而浏览器这边的代价比 server 大得多：`send()`
+///   在整轮期间握着 `live.borrow_mut()`，所以一条挂住的回调不是「一次调用慢」，
+///   是整个 `AgentHost` 对页面失去响应（[`crate::host_session`] 的借用纪律）。
+///   server 形态下 actor 只是空闲着，代价小，所以它能忍 10 分钟。
+///
+/// 取消是更快的那条逃生舱（用户一按立刻生效，见 `AgentHost::cancel`），所以这条线
+/// 只需要兜住**没人看着**的那种挂死。
+///
+/// 不做成页面可配：那是宿主声明自己能力时该一起带进来的东西
+/// （HOST-CAPABILITIES.md §四），122 之前没有那个入口，现在给的是一个固定默认
+/// 加 `RunnerCtx::with_remote_tool_timeout` 这个既有的口。
+const HOST_TOOL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// 装配好的一个活会话。`Session` 与 `RunnerCtx` 一起活、一起换——「切会话」就是
 /// 整个换掉这个结构体。
@@ -87,7 +111,9 @@ pub(crate) async fn open(
         // 112 的注入接缝：浏览器没有文件系统，本地工具一件都执行不了。表里
         // 本来也没有声明任何本地工具，所以这个 executor 永远不会被查到。
         NullToolExecutor,
-        crate::tools::browser_tool_table(),
+        // 122：三条内建 + 页面在建宿主时声明的那一段（料在 `config` 上，它建宿主
+        // 那一刻就定死了——同一个 `AgentHost` 开多少次会话都是同一份字节）。
+        crate::tools::browser_tool_table(config.declared_tools()),
         vec![SystemChunk {
             label: Arc::from("base"),
             text: Arc::from(BASE_SYSTEM),
@@ -103,7 +129,8 @@ pub(crate) async fn open(
         // 的 `with_agent_events`。两条是**同一个字段**，后设的替换先设的。
         Box::new(|_| {}),
     )
-    .with_agent_events(on_event);
+    .with_agent_events(on_event)
+    .with_remote_tool_timeout(HOST_TOOL_TIMEOUT);
 
     // 恢复之后必调：`persisted_seq` 这个同步水位不对齐，`persist::sync` 会把
     // `Session::restore` 灌回来的旧条目当新条目重新 append 一遍（CLI 那边抓到过

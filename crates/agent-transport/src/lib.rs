@@ -90,6 +90,10 @@ mod read_loop;
 
 #[cfg(target_arch = "wasm32")]
 mod fetch_client;
+// 非流式 JSON POST（`Client::post_json_async`，issue 125）的一次连接尝试，
+// 跟 `fetch_request`（流式 POST 的连接尝试）同一类文件、同一个拆分理由。
+#[cfg(target_arch = "wasm32")]
+mod fetch_json;
 #[cfg(target_arch = "wasm32")]
 mod fetch_request;
 #[cfg(target_arch = "wasm32")]
@@ -111,6 +115,22 @@ mod stream_drive;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 #[path = "framing_parity_tests.rs"]
 mod framing_parity_tests;
+
+// `redacted_error`：带遮罩的 `TransportError` 构造器。生产调用点今天只有 wasm 侧
+// 的 `fetch_client`，但它必须在 native 上也编译——**否则钉它的测试跑不到**，
+// 而「测试锁不住调用点漏掉遮罩」正是这个模块存在的理由（见其模块文档）。
+// 跟上面 `line_framer`/`stream_drive` 挂同一套条件、同一个理由。
+#[cfg(any(target_arch = "wasm32", test))]
+mod redacted_error;
+
+// `Client::post_json_async`（issue 125）本身只能在 wasm32 目标编译/跑
+// （fetch/web_sys），但它用来造错误的 `redacted_error` 是平台无关的。跟
+// `framing_parity_tests` 同样的理由，这条独立测试文件挂在 lib.rs 而不是
+// `fetch_client.rs`：后者整个模块被 `#[cfg(target_arch = "wasm32")]` 挡在
+// native 编译之外，挂在那里面的测试永远跑不到 `cargo test --workspace`。
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "post_json_redaction_tests.rs"]
+mod post_json_redaction_tests;
 
 pub use backoff::Backoff;
 // 两个目标都导出：native 侧 toml 解析、wasm 宿主注入产出的都是这几个类型

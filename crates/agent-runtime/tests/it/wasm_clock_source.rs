@@ -29,6 +29,12 @@ const WASM_REACHABLE: &[&str] = &[
     "agent-transport",
     "agent-tools",
     "agent-runtime",
+    // 123 补：`agent-wasm` 是**唯一一个只在浏览器里存在**的 crate，却一直不在这张
+    // 表里——它是独立 workspace，`cargo test --workspace` 编都不编它，所以这条文本
+    // 扫描是它唯一够得着的守卫。123 让它第一次跟时间打交道（宿主工具的截止线），
+    // 办法是只从 `agent-runtime` 拿**相对时长**、自己一次时钟都不读；这一行把
+    // 「不读」锁住，下一个人想在这里 `Instant::now()` 会当场变红。
+    "agent-wasm",
 ];
 
 fn repo_root() -> PathBuf {
@@ -40,7 +46,9 @@ fn repo_root() -> PathBuf {
 }
 
 fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else { return };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -63,7 +71,9 @@ fn strip_test_blocks(src: &str) -> String {
     while let Some(marker) = rest.find("#[cfg(test)]") {
         out.push_str(&rest[..marker]);
         let after = &rest[marker..];
-        let Some(open) = after.find('{') else { return out };
+        let Some(open) = after.find('{') else {
+            return out;
+        };
 
         let mut depth = 0usize;
         let mut end = None;
@@ -104,10 +114,15 @@ fn wasm_reachable_crates_never_take_the_clock_from_std_time() {
             // **无一例外**都在 `#[cfg(test)]`（或 `cfg(all(test, …))`）之下，
             // 已核实。这类文件里的 `#[cfg(test)]` 在**声明处**而不在文件里，
             // 下面按块剥离的办法看不见它，只能按文件名认。
-            if file.file_name().is_some_and(|n| n.to_string_lossy().ends_with("_tests.rs")) {
+            if file
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().ends_with("_tests.rs"))
+            {
                 continue;
             }
-            let Ok(text) = fs::read_to_string(&file) else { continue };
+            let Ok(text) = fs::read_to_string(&file) else {
+                continue;
+            };
             let code = strip_test_blocks(&text);
 
             for (i, line) in code.lines().enumerate() {

@@ -99,6 +99,7 @@ mod dispatch;
 mod execution_binding;
 mod guard;
 mod heartbeat;
+mod host_declaration;
 mod io_bus;
 mod io_stream;
 mod io_task;
@@ -151,11 +152,20 @@ pub use ctx::RunnerCtx;
 /// 由 actor 线程改），但**投影是要跨层出去的**——`agent-server` 拿它填
 /// `GET /sessions/{id}/pending_tools` 的响应体。
 pub use ctx_remote_tools::RemoteToolWaiting;
+/// 123：一条等待槽还剩多久到点。就地执行宿主工具的形态（浏览器）拿它把那次
+/// `await` 变成可打断的等待，跟 [`sweep_remote_tool_deadlines_async`] 是同一份
+/// 截止线的两个用法——一个问「还剩多久」，一个做「到点了怎么收」。
+pub use deadline::remote_tool_deadline_in;
 #[cfg(not(target_arch = "wasm32"))]
 pub use deadline::sweep_remote_tool_deadlines;
 pub use deadline::sweep_remote_tool_deadlines_async;
 pub use event::{AgentEvent, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
+/// 122：一份宿主工具声明 JSON → [`ToolTable::with_host_tools`] 要的料。纯函数，
+/// 给**没有 HTTP 那一层**的宿主用（浏览器宿主 `agent-wasm` 是第一个）；server
+/// 形态走的仍是自己那份绑着请求体与 `ts-rs` 的 `http/capabilities`，两份的分界与
+/// 漂移风险写在 [`host_declaration`] 模块文档里。
+pub use host_declaration::{HostDeclarationError, host_tools_from_declaration};
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
@@ -190,4 +200,7 @@ pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::ToolTable;
 pub use transient_source_failure::TransientSourceFailure;
+/// 124：跨 crate 判定一个工具名是不是 transient-source（`web:source/`），
+/// 不带前缀常量本身——见 [`transient_source_policy::is_transient_source`] 文档。
+pub use transient_source_policy::is_transient_source;
 pub use transient_source_recovery::recovered_transient_source_needs_fail_close;
