@@ -1,8 +1,9 @@
-//! wasm32 目标的流式 POST 客户端：`fetch` + `ReadableStream` +
-//! `AbortController`，`Client::post_stream` 的 wasm 对应物。`lib.rs` 顶部
-//! 「wasm 侧」一节说了为什么这条比 native 薄——分帧交给
-//! [`crate::stream_drive::drive_stream`]，一次连接尝试的 `web_sys` 接线在
-//! [`crate::fetch_request`]，这里只管「要不要重试、退避多久」这层策略。
+//! wasm32 目标的 POST 客户端：`fetch` + `ReadableStream` + `AbortController`，
+//! `Client::post_stream`/`Client::post_json`（issue 125）的 wasm 对应物。
+//! `lib.rs` 顶部「wasm 侧」一节说了为什么这条比 native 薄——分帧交给
+//! [`crate::stream_drive::drive_stream`]，一次流式连接尝试的 `web_sys` 接线
+//! 在 [`crate::fetch_request`]，一次非流式 JSON POST 的接线在
+//! [`crate::fetch_json`]，这里只管「要不要重试、退避多久」这层策略。
 //!
 //! # `post_stream` 与 `post_stream_async`：一个绕不开的平台差异
 //!
@@ -39,16 +40,18 @@ use std::time::Duration;
 use web_sys::AbortController;
 
 use crate::backoff::Backoff;
+use crate::fetch_json::{attempt_json_fetch, read_json_response_body};
 use crate::fetch_request::{attempt_fetch, read_bounded_error_body, response_stream_source};
 use crate::js_timer::delay_ms;
 use crate::stream_drive::drive_stream;
+use crate::redacted_error;
 use crate::upload::ImageUpload;
 use crate::web_stream_source::describe_js_error;
 use crate::{StreamOutcome, TransportError, UploadError};
 
 /// 说明为什么 `post_stream`/`upload_image`/`post_json` 这几个同步入口不会真的
 /// 发请求。
-const WASM_SYNC_BLOCKING_UNSUPPORTED: &str = "wasm32 目标上 post_stream/upload_image/post_json 的同步签名无法真正阻塞等待 fetch（单线程模型下会死锁，浏览器不提供无 atomics 的阻塞原语）；改调 post_stream_async/upload_image_async，见 fetch_client.rs 模块文档";
+const WASM_SYNC_BLOCKING_UNSUPPORTED: &str = "wasm32 目标上 post_stream/upload_image/post_json 的同步签名无法真正阻塞等待 fetch（单线程模型下会死锁，浏览器不提供无 atomics 的阻塞原语）；改调 post_stream_async/upload_image_async/post_json_async，见 fetch_client.rs 模块文档";
 
 pub struct Client {
     cancel_poll_interval: Duration,
@@ -185,11 +188,12 @@ impl Client {
     ///
     /// **它存在的唯一理由是保住「`Client` 方法表两个目标完全相同」这条不变量**
     /// （见 `lib.rs` 模块文档）：M12 的 `srv:vision/inspect`
-    /// （`agent-tools/src/vision_inspect.rs`）调这个方法，而 `ToolExecutor` 这
-    /// 条缝是同步的，所以浏览器里它只能失败——没有这个 stub，`agent-tools` 在
-    /// wasm32 目标上**整个编不过**，M13 的 wasm 目标与 M12 的识图工具就只能二选
-    /// 一。这里不配 `post_json_async`：没有调用方，而真要让浏览器里的识图工作，
-    /// 要动的是 `ToolExecutor` 那条同步缝，不是在这里先摆一个没人用的方法。
+    /// （`agent-tools/src/vision_inspect.rs`）在两个目标上都调用这个签名，
+    /// 而 `ToolExecutor` 这条缝在两个目标上都是同步的（119 拍板不 async 化
+    /// `ToolExecution::execute`）——没有这个 stub，`agent-tools` 在 wasm32
+    /// 目标上**整个编不过**。真要让浏览器里的识图工作，走的是下面的
+    /// [`Client::post_json_async`]（issue 125）：119 拍板 wasm 上识图是
+    /// `web:` 宿主工具的异步回调路径，不经这个同步入口，接线归 127。
     pub fn post_json(
         &self,
         _url: &str,
@@ -200,6 +204,41 @@ impl Client {
             attempts: 0,
             message: WASM_SYNC_BLOCKING_UNSUPPORTED.to_string(),
         })
+    }
+
+    /// 真正的 wasm 实现：非流式 JSON POST，`Client::post_json` 的异步对应物
+    /// （issue 125，识图工具的真实调用方见 127）。跟 native `post_json` 一样
+    /// 单次请求、不重试——`post_json` 不是流式连接，没有「服务端可能已经在
+    /// 生成」的顾虑（`client.rs::post_json` 同样没有退避循环）。比
+    /// [`Self::post_stream_async`] 简单：不需要 `ReadableStream`、不需要
+    /// 分帧，响应到手就整体读完；非 200 打包成 `TransportError::Http`，
+    /// **不在这里分类成 `ErrorClass`**（`lib.rs` 顶部「错误分类不在这里」）。
+    ///
+    /// **key 不泄漏**：连接失败的错误信息、非 2xx 的响应体，一律经
+    /// [`redacted_error`] 的两个构造器进 `TransportError`，**不在这里就地
+    /// 构造**——遮罩和装箱合成一步，才能被一条会红的测试钉住（那个模块的
+    /// 文档解释了为什么单独拆出去）。2xx 的成功响应体不 redact：不是错误
+    /// 消息，且 `redact` 是字面替换，用在正常业务内容上有误伤风险。
+    pub async fn post_json_async(
+        &self,
+        url: &str,
+        api_key: &str,
+        body: &[u8],
+    ) -> Result<(u16, String), TransportError> {
+        let response = match attempt_json_fetch(url, api_key, body).await {
+            Ok(response) => response,
+            // 两条错误路径都**必须**走 `redacted_error`，不要就地构造
+            // `TransportError`——那是 125 第一版踩过的缝：实现对了，但锁不住，
+            // 删掉遮罩没有任何测试会红。理由见 `redacted_error` 模块文档。
+            Err(message) => return Err(redacted_error::connect(1, &message, api_key)),
+        };
+        let status = response.status();
+        let text = read_json_response_body(&response).await;
+        if (200..300).contains(&status) {
+            Ok((status, text))
+        } else {
+            Err(redacted_error::http(status, &text, api_key))
+        }
     }
 }
 

@@ -505,6 +505,74 @@ ureq 没有中断句柄，`AbortController` 原生就是）。前提也已实测
 **第一轮工具表与关闭前逐字节相同**；取消能真的中断请求；`srv:` 的 shell/fs **不出现在
 工具表里**。
 
+---
+
+## M14 · 浏览器的宿主能力（通用工具回调 + 图片）
+
+**核心判断：这是同一条缝的两个投影，而且有严格先后。** 需求原本是两条——
+「wasm 不支持图片」与「同步的 `host_tool::execute()` 改成可等待 JS Promise 的通用回调」
+——核查之后：**后者是前者的前提，而后者本身几乎免费**（`drain_host_tools` 已经是
+`async fn`，那句 `host_tool::execute` 是整条 await 链上唯一剩下的同步点）。
+
+图片的传输层**在 wasm 上早就通了**（113 的 `fetch_upload.rs`）。真正卡住的是
+`fetch_client.rs:189-192` 那个只报错的 `post_json` stub，而它的注释自己写了答案：
+「真要让浏览器里的识图工作，要动的是 `ToolExecutor` 那条同步缝」。
+**119 拍板不动那条缝**——浏览器里 vision 根本不该是 `srv:` 工具，它是 `web:` 宿主工具，
+页面声明、页面执行。这是 M10 能力注入链路，一行新机制都不需要。
+
+**动手前必读 [119](119-browser-host-capability-decision.md)**——JS/Rust 分工、
+四条参数（2 MiB 上限、会话级生命周期、同一个库、不求 durable）、以及
+`web:source/` 前缀白捡的那一整套机制，都在那里，别在实现 issue 里重新讨论。
+
+```
+119(决策) ─┬→ 120(执行侧 async 化) → 121(JS 工具回调) ─┬→ 122(页面声明工具表) ─┐
+           │                                          └→ 123(取消与超时) ────┐│
+           ├→ 124(transient-source 分流) ──────────────────────────────────┐ ││
+           ├→ 125(post_json_async) ─┐                                      │ ││
+           ├→ 126(vision 纯逻辑) ───┴→ 127(inspectImage) ──────────────────┤ ││
+           ├→ 128(images store + deleteSession) → 129(页面图片管理) ───────┤ ││
+           └→ 131(措辞订正) ★建议最先落                                     │ ││
+                                                    130(端到端) ←──────────┘ ││
+                                                         └→ 132(dogfood，M14 终点) ←┘
+```
+
+**第一天就能同时开工的有五条**：124 / 125 / 126 / 128 / 131（全部无依赖）。
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [119](119-browser-host-capability-decision.md) | **决策**：两条需求是一条缝；不 async 化 `ToolExecution`；JS/Rust 分工；四条参数 | 111+114 | **opus** | 决策类 |
+| [120](120-host-tool-async.md) | `host_tool::execute` 执行侧 async 化，**行为一字不变** | 119 | sonnet | 否 |
+| [121](121-js-tool-callback.md) | JS 工具回调接缝 `onToolCall`——**需求 2 的正身** | 120 | **opus** | 真机 |
+| [122](122-page-declared-tools.md) | 页面声明自己的工具表（红线 11 的责任推给页面） | 121 | **opus** | 真机+native |
+| [123](123-host-tool-deadline.md) | 工具执行期的取消与超时——一个在 121 之前**结构上不存在**的问题 | 121 | **opus** | 是 |
+| [124](124-transient-source-in-browser.md) | `drain_host_tools` 认得 `web:source/`（今天调的是会被显式拒绝的那个函数） | 120 | sonnet | 是 |
+| [125](125-fetch-post-json-async.md) | 补上 wasm transport 最后一个只报错的 stub | — | sonnet | 否 |
+| [126](126-vision-pure-logic.md) | 把 vision 的纯逻辑从 IO 里摘出来（**为了 native 可测**） | — | sonnet | 是 |
+| [127](127-agent-host-inspect-image.md) | `AgentHost.inspectImage`：Rust 侧的识图协议 | 125+126 | sonnet | 真机 |
+| [128](128-idb-images-store.md) | IndexedDB 加 `images` store + `deleteSession`（**唯一会碰已有会话数据的一条**） | 119 | **opus** | 真机 |
+| [129](129-page-image-manager.md) | 页面侧图片管理：选图 → 存 → 发链接（纯 JS） | 128 | sonnet | 真机 |
+| [130](130-browser-vision-end-to-end.md) | 接起来：`web:source/vision` 端到端 | 122+124+127+129 | sonnet | 真机 |
+| [131](131-vision-persistence-wording.md) | 订正 vision 那句「不进任何持久化」——**它准得刚好能把本里程碑否掉** | — | sonnet | 否 |
+| [132](132-m14-dogfood.md) | 真机 dogfood ← **M14 终点**，五个跨 issue 的交界处 | 123+130 | **opus** | 本条即验收 |
+
+> ✅ **M14 完成**（2026-08-12）。十四条全部落地，**每一条都跑过真机**（Chrome +
+> 真 Kimi key），逐条记录在各自 issue 的「真机验收」一节。终点 dogfood 见
+> [132](132-m14-dogfood.md)：一次连贯会话里模型**自己决定**调页面声明的识图工具、
+> 答对图里内容、追问第二次仍成功，而**图片字节一个都没进 journal**。
+> 三条遗留（刷新后识图对话不可重放 / 压缩×transient-source 未验 / 验收脚手架待摘）
+> 记在 132 文末，都不阻塞。
+
+**M14 验收**（可判定）：页面声明一条 Rust 完全不认识的工具，回调里真的 `await`
+了一次异步操作，模型调用它并用结果回答；上传一张图，**模型自己调
+`web:source/vision`** 答对内容，**追问第二次仍然成功**；历史里那条调用的入参与结果
+都是 redacted 占位、**图片字节一个都不在 journal 里**；刷新后工具表逐字节相同、
+图还在；`deleteSession` 之后同 id 重开是空会话。
+
+> ⚠️ **验收手段受一条硬约束**：`agent-wasm` 是独立 workspace + wasm32 目标，
+> `cargo test --workspace` **覆盖不到它**。所以每条 issue 写验收时必须挑明用的是
+> native 可测 / `bash scripts/build-wasm.sh` / 真机 三者中的哪一种。
+> **能摘到 native 侧用纯函数钉住的就不要留到真机去看**——[126](126-vision-pure-logic.md)
+> 存在的唯一理由就是这条。
 ## M15 · 调用时机与 skills 工具化
 
 决策 27（2026-08-11 拍板，取代决策 21 的注入形态，理由见 ROADMAP §一）。
@@ -607,7 +675,8 @@ core/runtime 的概念收敛为「**一张工具表 + 三个调用时机**」：
 
 **但现在不做，也不占 issue 号。** 它不阻塞任何事，路径今天确实不可达；
 真到有人要动 MCP 派发、或者产物体积成了问题的那天，再拿这段话去开 issue。
-（这条曾被开成 issue 119，随后撤销——收尾时该做的是把结论记清楚，不是多开一个待办。）
+（这条曾被开成 issue 119 随后撤销——收尾时该做的是把结论记清楚，不是多开一个待办。
+119 这个号后来给了 M14 的决策 issue，跟本条无关。）
 
 > 顺带核实：产物里还能 `strings` 到 `srv:agent/spawn` / `srv:agent/collect` /
 > `srv:agent/status` / `srv:vision/inspect`。**这些不是漏网的 shell/fs**——是子 agent

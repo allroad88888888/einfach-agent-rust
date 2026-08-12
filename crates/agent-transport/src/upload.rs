@@ -15,6 +15,11 @@ use std::io::Read;
 use serde::Deserialize;
 
 /// Moonshot 同时限制单文件和整个请求体为 100 MiB。
+///
+/// **这是传输层的上限，不是各宿主的上限。** 浏览器宿主另有一个小得多的
+/// 2 MiB 闸（`agent_wasm::vision::MAX_BROWSER_IMAGE_BYTES`，M14 issue 119 §五-1）
+/// ——那条管的是 IndexedDB 的 origin 配额，一张 100 MiB 的图能把整个配额吃光，
+/// 跟「Moonshot 收不收」是两回事。**别把这两个数字合成一个。**
 pub const MAX_IMAGE_BYTES: usize = 100 * 1024 * 1024;
 
 /// 一张待上传图片的元数据与原始字节。

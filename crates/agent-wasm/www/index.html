@@ -57,6 +57,10 @@
     <input type="text" id="model" value="deepseek-v4-pro">
   </div>
   <div class="row">
+    <label for="contextWindow">context_window</label>
+    <input type="text" id="contextWindow" placeholder="留空 = 不压缩；填小值（如 8000）可逼出 M12 的五档分级">
+  </div>
+  <div class="row">
     <label for="baseUrl">base_url</label>
     <input type="text" id="baseUrl" value="https://api.deepseek.com">
   </div>
@@ -64,6 +68,23 @@
     <label for="apiKey">api_key</label>
     <input type="password" id="apiKey" placeholder="粘你自己的 key" autocomplete="off">
     <button id="connect">建宿主</button>
+  </div>
+  <div class="row">
+    <label for="visionBaseUrl">识图 base_url</label>
+    <input type="text" id="visionBaseUrl" value="https://api.moonshot.cn/v1">
+  </div>
+  <div class="row">
+    <label for="visionKey">识图 api_key</label>
+    <input type="password" id="visionKey" placeholder="Kimi 的 key，跟上面主对话那个各填各的（127）" autocomplete="off">
+  </div>
+  <div class="row">
+    <label for="toolCallback">工具回调</label>
+    <label><input type="checkbox" id="toolCallback" checked> 建宿主时装上（121）</label>
+    <label><input type="checkbox" id="toolCallbackThrow"> 让它 throw new Error("boom")</label>
+  </div>
+  <div class="row">
+    <label for="badTools">工具声明</label>
+    <label><input type="checkbox" id="badTools"> 改声明一条 <code>srv:</code> 前缀的工具（122 反向锁：必须被拒）</label>
   </div>
 </fieldset>
 
@@ -84,14 +105,24 @@
     <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="说一句话，比如：这个页面的标题是什么？"></textarea>
   </div>
   <div class="row">
+    <label for="imageFile">图片</label>
+    <input type="file" id="imageFile" accept="image/*" disabled>
+    <span id="imageStatus" class="sub" style="margin:0"></span>
+  </div>
+  <div class="row">
     <button id="send" disabled>发送</button>
     <button id="cancel" disabled>取消</button>
   </div>
 </fieldset>
 
 <details>
+  <summary>已上传的图片（本会话，129）</summary>
+  <div id="imageList" class="tool">（没有打开的会话）</div>
+</details>
+
+<details>
   <legend></legend>
-  <summary>工具表（进 prompt 最前面的那份，红线 11 的比对面）</summary>
+  <summary>工具表（三条内建 + 本页声明的那一段；进 prompt 最前面，红线 11 的比对面）</summary>
   <pre id="tools">（先建宿主）</pre>
 </details>
 
@@ -102,89 +133,78 @@
 
 <script type="module">
 import init, { AgentHost } from './pkg/agent_wasm.js';
+import { mountImageManager } from './image-manager.js';
+import {
+  PAGE_TOOL_DECLARATION,
+  REJECTED_TOOL_DECLARATION,
+  createToolCallback,
+} from './page-tools.js';
+import { mountTranscript } from './transcript.js';
 
 const $ = (id) => document.getElementById(id);
 let host = null;
-let assistantNode = null;
 
-function log(line) {
-  const pre = $('log');
-  pre.textContent += line + '\n';
-  pre.scrollTop = pre.scrollHeight;
-}
+// 129：图片入口/出口——选图、存 IndexedDB 的 images store、发链接、按链接取回
+// 字节。跟 host 的会话生命周期对齐，见 image-manager.js 模块文档。
+const imageManager = mountImageManager({
+  fileInput: $('imageFile'),
+  list: $('imageList'),
+  status: $('imageStatus'),
+  textInput: $('input'),
+});
+window.__agentImages = imageManager;
 
-function turnNode(who) {
-  const div = document.createElement('div');
-  div.className = 'turn';
-  const label = document.createElement('div');
-  label.className = 'who';
-  label.textContent = who;
-  div.appendChild(label);
-  const body = document.createElement('div');
-  div.appendChild(body);
-  $('transcript').appendChild(div);
-  $('transcript').scrollTop = $('transcript').scrollHeight;
-  return body;
-}
+// 画：runner 事件与重放出来的历史 → DOM，见 transcript.js 模块文档。
+const { log, onEvent, renderHistory, appendUserTurn, endTurn } = mountTranscript({
+  transcript: $('transcript'),
+  logPre: $('log'),
+});
 
-function note(text) {
-  const div = document.createElement('div');
-  div.className = 'tool';
-  div.textContent = text;
-  $('transcript').appendChild(div);
-  $('transcript').scrollTop = $('transcript').scrollHeight;
-}
-
-// runner 事件 → 页面。形状见 crates/agent-wasm/src/events.rs。
-function onEvent(json) {
-  const ev = JSON.parse(json);
-  switch (ev.type) {
-    case 'text_delta':
-      if (!assistantNode) assistantNode = turnNode('assistant');
-      assistantNode.textContent += ev.text;
-      $('transcript').scrollTop = $('transcript').scrollHeight;
-      break;
-    case 'tool_executing':
-      note(`→ 调用宿主工具 ${ev.tool}  input=${JSON.stringify(ev.input)}`);
-      break;
-    case 'tool_executed':
-      note(`← ${ev.tool} 返回 ${ev.output_len} 字节${ev.is_error ? '（错误）' : ''}`);
-      break;
-    case 'turn_guard':
-      log(`[usage] prompt=${ev.prompt_tokens} completion=${ev.completion_tokens} cached=${ev.cached_tokens}`);
-      break;
-    case 'text_delta_end':
-      break;
-    default:
-      log(`[${ev.type}] ${ev.detail ?? ev.status ?? ev.name ?? ''}`);
-  }
-}
-
-function renderHistory(entries) {
-  $('transcript').textContent = '';
-  for (const message of entries) {
-    const body = turnNode(message.role);
-    for (const block of message.blocks) {
-      if (block.kind === 'text') body.textContent += block.text;
-      else if (block.kind === 'tool_use') note(`→ ${block.name} ${JSON.stringify(block.input)}`);
-      else if (block.kind === 'tool_result') note(`← ${block.content}`);
-    }
-  }
-  assistantNode = null;
-}
+// 121/122/130：页面这一侧的工具表——声明什么、怎么执行，全在 page-tools.js
+// （红线 11 的契约和「谁实现谁声明」的理由都在那个文件的模块文档里）。这里只
+// 负责把它接到 DOM 上：日志出口、勾选框、129 的 resolveImage、127 的 inspectImage。
+const onToolCall = createToolCallback({
+  log,
+  shouldThrow: () => $('toolCallbackThrow').checked,
+  resolveImage: (link) => imageManager.resolveImage(link),
+  // host 是上面那个 let，取值发生在回调真被调用的时候——那时宿主一定已经建好了。
+  // inspectImage 不碰 live，回调里调它是正常用法（见 onToolCall 的文档注释）。
+  inspectImage: (bytes, mime, question) => host.inspectImage(bytes, mime, question),
+});
 
 $('connect').addEventListener('click', () => {
   try {
+    // 第二个入参就是 122 的声明入口：**建宿主那一刻定死**，没有中途改表的方法。
+    // 这里传的永远是一个常量，不是现拼的对象——两个分支各自都是常量。
+    const declaration = $('badTools').checked
+      ? REJECTED_TOOL_DECLARATION
+      : PAGE_TOOL_DECLARATION;
     host = new AgentHost(JSON.stringify({
       provider: $('provider').value,
       base_url: $('baseUrl').value.trim(),
       model: $('model').value.trim(),
       api_key: $('apiKey').value,
-    }));
+      // M12 的压缩靠「上一轮实测 prompt / context_window」判触发。留空 = 不填 =
+      // 压缩永远不开火（功能全在、状态全对、一次都不触发）。填一个小值可以在
+      // 几轮之内把五档分级逼出来，是 132 那条交界处的验收手段。
+      ...($('contextWindow').value.trim()
+        ? { context_window: Number($('contextWindow').value.trim()) }
+        : {}),
+      // 127：识图写死 Kimi 3，配置是**独立的一段**，跟主对话 provider 无关——
+      // 哪怕主 provider 也是 kimi 也不隐式复用它的 key（vision.rs 模块文档
+      // 「key 从哪来」，照抄 native 那条「总是独立查 [providers.kimi]」）。
+      // 两个字段留空是合法的：建宿主照样成功，只是识图会 reject not_configured。
+      vision: {
+        base_url: $('visionBaseUrl').value.trim(),
+        api_key: $('visionKey').value,
+      },
+    }), declaration);
     host.onEvent(onEvent);
+    if ($('toolCallback').checked) host.onToolCall(onToolCall);
     $('tools').textContent = host.toolTableJson();
     $('open').disabled = false;
-    $('status').textContent = `宿主已建：provider=${$('provider').value} model=${$('model').value} key=${host.keyLen()} 字符`;
+    // 111 契约第 4 条：横幅只许显示 key 的**长度**，两个 key 都一样。
+    $('status').textContent = `宿主已建：provider=${$('provider').value} model=${$('model').value} key=${host.keyLen()} 字符，识图 key=${$('visionKey').value.length} 字符`;
     window.__agentHost = host;
   } catch (e) {
     $('status').textContent = `建宿主失败：${e.message ?? e}`;
@@ -198,6 +218,7 @@ $('open').addEventListener('click', async () => {
     renderHistory(JSON.parse(replayed));
     $('status').textContent = `会话 ${host.sessionId()} 已打开，从 IndexedDB 重放出 ${JSON.parse(replayed).length} 条消息`;
     $('send').disabled = false;
+    await imageManager.refresh(host.sessionId());
   } catch (e) {
     $('status').textContent = `打开会话失败：${e.message ?? e}`;
   } finally {
@@ -209,8 +230,7 @@ $('send').addEventListener('click', async () => {
   const text = $('input').value.trim();
   if (!text) return;
   $('input').value = '';
-  turnNode('user').textContent = text;
-  assistantNode = null;
+  appendUserTurn(text);
   $('send').disabled = true;
   $('cancel').disabled = false;
   try {
@@ -222,7 +242,7 @@ $('send').addEventListener('click', async () => {
   } finally {
     $('send').disabled = false;
     $('cancel').disabled = true;
-    assistantNode = null;
+    endTurn();
   }
 });
 

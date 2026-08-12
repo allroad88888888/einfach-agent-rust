@@ -11,7 +11,7 @@
 //! |---|---|---|
 //! | provider 配置与 key | `providers.toml` | 页面传进来（[`config`]，114d 的 `from_host`） |
 //! | 会话落点 | `Jsonl`（文件） | IndexedDB（[`db`] 开库 + `agent-runtime` 的 `WebIdbStore`，114a/114c） |
-//! | 工具 | `srv:` 本地表 + 真 executor | 两条 `web:` 声明 + `NullToolExecutor`（[`tools`]/[`host_tool`]，111 的裁剪 + 112 的接缝） |
+//! | 工具 | `srv:` 本地表 + 真 executor | 三条内建 `web:` 声明 + **页面自己声明的那一段** + 页面装的执行回调 + `NullToolExecutor`（[`tools`]/[`host_tool`]/[`callback`]，111 的裁剪 + 112 的接缝 + 121 的回调 + 122 的声明入口） |
 //!
 //! 平台差异**不在这个 crate 里**，也不在任何业务逻辑里：`fetch` vs. ureq 在
 //! `agent-transport`（113），行源与心跳在 `agent-runtime` 的 `io_stream`/
@@ -22,16 +22,20 @@
 //!
 //! | | 那一件事 |
 //! |---|---|
-//! | [`host`] | 暴露给页面 JS 的类型 `AgentHost`（唯一的 `#[wasm_bindgen]` 面） |
+//! | [`host`] | `AgentHost` 上**不碰 `live`** 的那一面：构造、装回调、工具表/key 长度/识图 |
+//! | [`host_session`] | `AgentHost` 上**碰 `live`** 的那一面：开/切/删会话、说一句话、取消、查历史。「借用纪律」住在这里 |
+//! | [`callback`] | 页面装进来的 JS 函数：事件 sink、store 错误 sink、工具执行回调（121） |
 //! | [`assemble`] | 一次「开会话」的装配线：开库 → store → 恢复 → `RunnerCtx` |
 //! | [`turn`] | 一整轮对话：`begin_turn` 时机 + 宿主工具就地排空 + 取消轮丢弃 |
-//! | [`config`] | 页面给的配置 JSON → `agent_transport::ProviderConfig` + adapter |
-//! | [`tools`] | 浏览器形态的工具表（空表起步，只有 `web:`） |
-//! | [`host_tool`] | 那两条 `web:` 工具真正读 `document.title` / `location.href` 的地方 |
-//! | [`db`] | IndexedDB 开库：一个会话一个库，库里一张 `journal` 表 |
+//! | [`interrupt`] | 工具执行期间的两条打断路：用户取消 / 截止线到点（123） |
+//! | [`config`] | 页面**建宿主那一刻**给定、此后不变的外部输入：provider 配置 + 声明好的工具那一段 |
+//! | [`tools`] | 浏览器这张工具表怎么装出来（空表起步 + 三条内建 + 页面声明的那一段）。声明**怎么解析校验**不在这里，在 `agent_runtime::host_tools_from_declaration`（native 可测） |
+//! | [`host_tool`] | `web:` 工具的执行与派发顺序：内建（读 `document.title` / `location.href` / 回显）优先，没命中才交给页面回调 |
+//! | [`db`] | IndexedDB 库的 schema 与生死：一个会话一个库，`journal` + `images` 两张表，删会话 = 删整个库 |
 //! | [`session_id`] | 会话 id 白名单（055 的规则，拒绝不 sanitize） |
 //! | [`events`] | `AgentEvent` → 页面收得到的一条 JSON |
 //! | [`history`] | 重放出来的会话历史 → 页面能重画的一份 JSON |
+//! | [`vision`] | `inspectImage` 的四步编排 + 独立于主 provider 的 Kimi 连接配置（127） |
 //!
 //! # key
 //!
@@ -41,14 +45,18 @@
 //! 任何 key——它只有一个输入框。
 
 mod assemble;
+mod callback;
 mod config;
 mod db;
 mod events;
 mod history;
 mod host;
+mod host_session;
 mod host_tool;
+mod interrupt;
 mod session_id;
 mod tools;
 mod turn;
+mod vision;
 
 pub use host::AgentHost;
