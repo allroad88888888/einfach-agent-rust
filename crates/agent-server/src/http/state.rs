@@ -250,7 +250,14 @@ mod tests {
             let id = state.generate_id();
             let spec = state
                 .template()
-                .open_spec(id.clone(), None, Vec::new(), Vec::new(), Vec::new())
+                .open_spec(
+                    id.clone(),
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                )
                 .expect("工具根目录该建得起来");
             state
                 .registry()

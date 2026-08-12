@@ -14,6 +14,7 @@
 //! | 本文件 | 五档装配 + `snapshot` 的三级判定 + `push_spec` 判重（075） |
 //! | [`names`]（`tool_table_names.rs`，076 拆出） | **名字规则**：全名怎么机械推出 `Location`/`Reversibility` |
 //! | [`host`]（`tool_table_host.rs`，062） | **宿主注入这件事**：那张可逆性映射怎么进表、为什么排序、为什么另挂一张表 |
+//! | [`host_prefix`]（`tool_table_host_prefix.rs`，155/决策 31） | **宿主声明开局块这件事**：`(name, text)` 对怎么合成 `SessionStart` timed 条目 |
 //! | [`skill_tools`]（`tool_table_skill.rs`，039/139） | **skill 这件事**：registry 归表拥有，`read`/`index` 怎么装配 |
 //! | [`disable`]（`tool_table_disable.rs`，076） | **关掉内置这件事**：会话建立时把部署方给的某几件整条剔掉（唯一往回减的一件） |
 //! | [`timed`]（`tool_table_timed.rs`，133） | **调用时机这件事**：timed 工具独立区，`specs`/`declares`/`snapshot` 一个字节看不见它 |
@@ -71,6 +72,9 @@ mod names;
 
 #[path = "tool_table_host.rs"]
 mod host;
+
+#[path = "tool_table_host_prefix.rs"]
+mod host_prefix;
 
 #[path = "tool_table_skill.rs"]
 mod skill_tools;

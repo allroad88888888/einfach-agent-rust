@@ -159,6 +159,15 @@ enum CreateSessionOutcome {
 /// 上面 073 那条闸对它同样一视同仁：`capabilities` 是整体判断的，只带
 /// `disable_builtin` 的请求撞上有历史的会话照样 **400 `session_has_history`**——
 /// 开关跟声明一样是会话状态，那段历史就是在**那一份减过的表**下产生的。
+///
+/// # 156（M17，决策 31）：`capabilities.prefix` 是第三样「加法」
+///
+/// 跟 `tools`/`skills` 同一条路：[`crate::http::capabilities::validate`] 里过
+/// 校验（名字前缀、内部/跨 `tools` 重名、空 text），[`crate::http::capabilities::host_prefix`]
+/// 翻成 `Vec<(Arc<str>, Arc<str>)>` 当参数交给 `open_spec`。073 那条闸同样一视
+/// 同仁——只带 `prefix` 的请求撞上有历史的会话照样 400 `session_has_history`，
+/// 因为它跟工具/skill 一样是**会话状态**（154 的 `Slot::HostPrefix`），不是每次
+/// 连接都要素重报一遍的东西。
 pub(in crate::http) async fn create(
     State(state): State<AppState>,
     ApiJson(body): ApiJson<CreateSessionRequest>,
@@ -208,6 +217,7 @@ pub(in crate::http) async fn create(
             let host_tools = capabilities::host_tools(capabilities.as_ref());
             let host_skills = capabilities::host_skills(capabilities.as_ref());
             let disable_builtin = capabilities::disabled_builtins(capabilities.as_ref());
+            let host_prefix = capabilities::host_prefix(capabilities.as_ref());
             let spec = state
                 .template()
                 .open_spec(
@@ -216,6 +226,7 @@ pub(in crate::http) async fn create(
                     host_tools,
                     host_skills,
                     disable_builtin,
+                    host_prefix,
                 )
                 .map_err(|error| {
                     ApiError::conflict(format!(

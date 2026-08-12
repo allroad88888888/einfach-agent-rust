@@ -35,7 +35,8 @@ use crate::engine::state::SlotState;
 use crate::ids::AgentId;
 use crate::value::atom_value::AgentValue;
 
-use super::slot::{AtomKey, DerivedKey, Slot};
+use super::atom_key::{AtomKey, DerivedKey};
+use super::slot::Slot;
 
 /// 整棵 agent 树共用的这一个 store（STATE-MODEL §「子 agent」）。
 pub type AgentStore = Store<AgentValue>;

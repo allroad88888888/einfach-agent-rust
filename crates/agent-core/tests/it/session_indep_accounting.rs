@@ -52,7 +52,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 134 新增：会话创建期定下的一列 system 前缀块（顺序即信息，不排序）。
             | Slot::PrefixChunks
             // 144 新增：spawn 时快照的「开局产物」授予名单。
-            | Slot::PrefixAllowed => {}
+            | Slot::PrefixAllowed
+            // 154 新增：宿主经 capabilities.prefix 声明的开局块（决策 31）。
+            | Slot::HostPrefix => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

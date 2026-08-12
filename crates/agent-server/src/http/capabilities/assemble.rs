@@ -102,6 +102,21 @@ pub(in crate::http) fn host_skills(capabilities: Option<&Capabilities>) -> Vec<H
         .collect()
 }
 
+/// 把 `capabilities.prefix` 翻成 `ToolTable::with_host_prefix` 要的 `(name, text)`
+/// 对（156，M17）。同 [`host_tools`]/[`host_skills`]：只翻译、不排序、不决定
+/// 位置（红线 11 那两下在更靠近落盘/prompt 的地方各做一次）。没带 `capabilities`
+/// 或声明为空 → 空 `Vec`，跟 156 之前逐字节相同。
+pub(in crate::http) fn host_prefix(capabilities: Option<&Capabilities>) -> Vec<(Arc<str>, Arc<str>)> {
+    let Some(capabilities) = capabilities else {
+        return Vec::new();
+    };
+    capabilities
+        .prefix
+        .iter()
+        .map(|p| (Arc::from(p.name.as_str()), Arc::from(p.text.as_str())))
+        .collect()
+}
+
 /// 宿主省略可逆性时落保守值；顶层工具与 skill 工具共用同一条解释。
 fn reversibility(tool: &CapabilityTool) -> Reversibility {
     tool.reversibility

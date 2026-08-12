@@ -105,10 +105,10 @@ impl SessionTemplate {
     /// 层负责翻成 500（这是宿主环境的磁盘/权限问题，不是客户端输入错误，不该
     /// 套用 `ApiError` 那几个 4xx 语义）。
     ///
-    /// # 062/064/076：后三个参数是**这一次请求**带来的，不是模板的一部分
+    /// # 062/064/076/156：后四个参数是**这一次请求**带来的，不是模板的一部分
     ///
-    /// 五个参数正好是「每次开会话才知道的东西」：`id`、`session_path`，以及宿主这一次
-    /// 声明的工具与 skill、这一次关掉的内置工具。它们跟 `self` 上那些部署期就定好的
+    /// 六个参数正好是「每次开会话才知道的东西」：`id`、`session_path`，以及宿主这一次
+    /// 声明的工具、skill、开局块，这一次关掉的内置工具。它们跟 `self` 上那些部署期就定好的
     /// 字段（provider、工具表五档、超时……）分得清清楚楚——**`SessionTemplate` 全进程
     /// 只有一份**（`AppState` 持有），往它身上写注入的能力就等于开了一个全局表的写口，
     /// A 客户端声明的东西 B 客户端下一次建会话就看得见。所以注入从参数进、原样落进
@@ -119,7 +119,8 @@ impl SessionTemplate {
     /// 知道存在过，查起来没有任何线索。这里同样只落进这一次的 `OpenSpec`
     /// （`self.tools` 这个五档字段一个字节不动，天花板还是那张表）。
     ///
-    /// 什么都不带就传三个 `Vec::new()`，工具表与 system 段跟 062/064/076 之前逐字节相同。
+    /// 什么都不带就传四个 `Vec::new()`，工具表与 system 段跟 062/064/076/156 之前
+    /// 逐字节相同。
     pub fn open_spec(
         &self,
         id: SessionId,
@@ -127,6 +128,7 @@ impl SessionTemplate {
         host_tools: Vec<(ToolSpec, Reversibility)>,
         host_skills: Vec<HostSkill>,
         disable_builtin: Vec<Arc<str>>,
+        host_prefix: Vec<(Arc<str>, Arc<str>)>,
     ) -> std::io::Result<OpenSpec> {
         let tools_root = self.tools_root.join(id.as_str());
         std::fs::create_dir_all(&tools_root)?;
@@ -159,6 +161,7 @@ impl SessionTemplate {
             host_tools,
             host_skills,
             disable_builtin,
+            host_prefix,
             vision: self.vision.clone(),
         })
     }

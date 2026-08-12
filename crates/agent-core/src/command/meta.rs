@@ -66,7 +66,8 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
 /// （`declare_host_skills` / `disable_builtins`）+ 100 的 `SendPlan` 整体替换
 /// （`replace_send_plan`——104 的 `advance_boundary` 生效时也是调它，复用同一个
 /// 标签，不另开一格）+ 107 的摘要回写（`apply_summary`）+ 134 的会话开局前缀
-/// （`prefix_init`）。
+/// （`prefix_init`）+ 154 的宿主开局块声明（`declare_host_prefix`——决策 31，跟
+/// `declare_host_tools` 同一条理由）。
 ///
 /// **134 为什么不叫 `set_prefix_chunks`**：label 记的是「当时发生了什么」，而这一步
 /// 发生的事是「这个会话的开局前缀在这里定下来了」——它按设计只发生一次、在第一轮
@@ -111,6 +112,7 @@ const KNOWN_LABELS: &[&str] = &[
     "replace_send_plan",
     "apply_summary",
     "prefix_init",
+    "declare_host_prefix",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

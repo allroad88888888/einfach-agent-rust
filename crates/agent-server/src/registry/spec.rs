@@ -99,6 +99,20 @@ pub struct OpenSpec {
     ///
     /// 空 = 这次什么都没关，工具表跟 076 之前逐字节相同。
     pub disable_builtin: Vec<Arc<str>>,
+    /// 宿主这一次建会话时声明的开局块（156，M17，决策 31，`POST /sessions` 的
+    /// `capabilities.prefix` 经 `crate::http::capabilities::host_prefix` 翻译
+    /// 而来）。跟 [`host_tools`](OpenSpec::host_tools) 同一档「加法」、同一个
+    /// per-session 作用域论证：装配那一侧（`crate::actor::capabilities::assemble`）
+    /// 在 per-session 装配链**尾部**（`with_host_tools` 之后）接
+    /// `ToolTable::with_host_prefix(&host_prefix)`，每对合成一条「执行体 = 返回
+    /// 常量文本」的 `SessionStart` timed 工具（155）。
+    ///
+    /// **这个字段是「一份声明」，不是「一次 HTTP 请求」**：类型是纯 `agent_core`
+    /// 数据，跟请求体没有任何耦合——「新建」看这次请求（`spec.host_prefix`），
+    /// 「恢复」看回放出的会话状态（`Session::host_prefix()`，154 落的
+    /// `Slot::HostPrefix`），装配那一侧一行都不用改（跟 073 时 `host_tools` 的
+    /// 论证一样）。空 = 这次没有声明，工具表/前缀块跟 156 之前逐字节相同。
+    pub host_prefix: Vec<(Arc<str>, Arc<str>)>,
     /// s5 `srv:vision/inspect` 的运行时。`Some` → actor 线程现造 `ToolExecutor`
     /// 时注入（`ToolExecutor::with_vision`），并把工具追加进工具表
     /// （`ToolTable::with_vision_inspect`）；`None` → 工具不声明。API key 只随

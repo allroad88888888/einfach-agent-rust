@@ -1,5 +1,5 @@
-//! 宿主注入的能力在**这一个会话**里怎么落地（062/064/073/076 四条 issue 汇到的那一
-//! 件事）。
+//! 宿主注入的能力在**这一个会话**里怎么落地（062/064/073/076/156 五条 issue 汇到
+//! 的那一件事）。
 //!
 //! 从 [`body`](super::body) 分出来的一件事，三步一条线，全在这个文件里：
 //!
@@ -62,15 +62,17 @@ use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
 
 use crate::registry::OpenSpec;
 
-/// 这个会话的三样 per-session 料：注入的工具、注入的 skill、关掉的内置工具。
+/// 这个会话的四样 per-session 料：注入的工具、注入的 skill、关掉的内置工具、
+/// 156 加的开局块。
 ///
-/// 三样一起从 [`declaration`] 出来，是因为它们的**来源判据只有一个**（`restored`
-/// 与否）——分成三个函数各判一次，早晚会出现「工具从历史来、开关却从这次请求来」
+/// 四样一起从 [`declaration`] 出来，是因为它们的**来源判据只有一个**（`restored`
+/// 与否）——分成四个函数各判一次，早晚会出现「工具从历史来、开关却从这次请求来」
 /// 这种半新半旧的表，而那种不一致不报错，只在下一次恢复时以少几个工具的形式浮出来。
 type Declared = (
     Vec<(ToolSpec, Reversibility)>,
     Vec<HostSkill>,
     Vec<Arc<str>>,
+    Vec<(Arc<str>, Arc<str>)>,
 );
 
 /// 这个会话的两段「进 prompt 的料」：工具表 + system 段。
@@ -96,17 +98,20 @@ pub(super) fn assemble(
 ) -> Result<Assembled, String> {
     if restored && !nothing_declared(spec) {
         return Err(format!(
-            "session \"{}\" 是从历史恢复出来的，能力只能从历史来：它当初声明的 {} 个工具 / {} 个 skill、关掉的 {} 个内置工具已经在日志里，这次又带了 {} 个工具 / {} 个 skill / {} 个关闭项——恢复是忠实重放，不接受改写（docs/HOST-CAPABILITIES.md §三）",
+            "session \"{}\" 是从历史恢复出来的，能力只能从历史来：它当初声明的 {} 个工具 / {} 个 skill、关掉的 {} 个内置工具、{} 个开局块已经在日志里，这次又带了 {} 个工具 / {} 个 skill / {} 个关闭项 / {} 个开局块——恢复是忠实重放，不接受改写（docs/HOST-CAPABILITIES.md §三）",
             spec.id,
             session.host_tools().len(),
             session.host_skills().len(),
             session.disabled_builtins().len(),
+            session.host_prefix().len(),
             spec.host_tools.len(),
             spec.host_skills.len(),
             spec.disable_builtin.len(),
+            spec.host_prefix.len(),
         ));
     }
-    let (host_tools, host_skills, disable_builtin) = declaration(spec, session, restored);
+    let (host_tools, host_skills, disable_builtin, host_prefix) =
+        declaration(spec, session, restored);
     let skills = SkillRegistry::from_host_skills(host_skills);
 
     // 139 起常驻索引不再是这里手拼的一段 system chunk——`with_skills`（下面）把
@@ -136,8 +141,14 @@ pub(super) fn assemble(
     } else {
         tools.with_skills(skills)
     };
+    // 156：`with_host_prefix` 排在装配链**最后**，在 `with_host_tools` 之后
+    // （155 的表尾约定、HOST-CAPABILITIES.md §六）——内置 timed（skills 索引）
+    // 先注册，宿主声明的开局块因此永远排在最后。空切片是 `with_host_prefix`
+    // 自己的空操作（155），这里不必再判一次空。
     Ok(Assembled {
-        tools: tools.with_host_tools(host_tools),
+        tools: tools
+            .with_host_tools(host_tools)
+            .with_host_prefix(&host_prefix),
         system,
     })
 }
@@ -149,21 +160,26 @@ fn declaration(spec: &OpenSpec, session: &Session, restored: bool) -> Declared {
             session.host_tools(),
             session.host_skills(),
             session.disabled_builtins(),
+            session.host_prefix(),
         )
     } else {
         (
             spec.host_tools.clone(),
             spec.host_skills.clone(),
             spec.disable_builtin.clone(),
+            spec.host_prefix.clone(),
         )
     }
 }
 
-/// 这一次请求**一个字都没带**（三样全空）。两处判据共用一个函数：拒绝那一道闸和
+/// 这一次请求**一个字都没带**（四样全空）。两处判据共用一个函数：拒绝那一道闸和
 /// 「要不要 journaled 地写一次」用的必须是同一句话——分开写的那一刻，就可能出现
 /// 「拒绝时算带了、写入时算没带」这种自相矛盾。
 fn nothing_declared(spec: &OpenSpec) -> bool {
-    spec.host_tools.is_empty() && spec.host_skills.is_empty() && spec.disable_builtin.is_empty()
+    spec.host_tools.is_empty()
+        && spec.host_skills.is_empty()
+        && spec.disable_builtin.is_empty()
+        && spec.host_prefix.is_empty()
 }
 
 /// ③：全新会话把这一次的声明**journaled 地写一次**，落进这个会话自己的日志，恢复时
@@ -186,8 +202,9 @@ fn nothing_declared(spec: &OpenSpec) -> bool {
 /// skill 的会话不该平白多一条空的工具声明（`declare_host_*` / `disable_builtins` 传空
 /// `Vec` 本来就是空操作，这里的判空是为了连 `begin_turn` 那一下也不做）。
 ///
-/// 076 的开关跟前两样**同进同退**：它也是会话状态（这段历史是在那一份减过的表下产生
-/// 的），也 journaled、也自成一轮、也在恢复时从日志回放。
+/// 076 的开关、156 的开局块跟前两样**同进同退**：都是会话状态（076 那段历史是
+/// 在减过的表下产生的，156 那段是在带着这些开局块的前缀下产生的），也
+/// journaled、也自成一轮、也在恢复时从日志回放。
 pub(super) fn record(ctx: &mut RunnerCtx, session: &mut Session, spec: &OpenSpec, restored: bool) {
     if restored || nothing_declared(spec) {
         return;
@@ -200,6 +217,9 @@ pub(super) fn record(ctx: &mut RunnerCtx, session: &mut Session, spec: &OpenSpec
     }
     if !spec.disable_builtin.is_empty() {
         session.disable_builtins(spec.disable_builtin.clone());
+    }
+    if !spec.host_prefix.is_empty() {
+        session.declare_host_prefix(spec.host_prefix.clone());
     }
     session.begin_turn();
     agent_runtime::persist::sync(ctx, session);

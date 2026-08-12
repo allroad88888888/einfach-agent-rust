@@ -61,6 +61,21 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M17 宿主声明开局块（2026-08-12，真机 dogfood 六条全过，157 后置）
+
+决策 31 落地：`capabilities.prefix` 声明**内容**不声明执行体，装配期合成常量文本
+timed 工具（[154](issues/154-host-prefix-slot.md) 状态位 /
+[155](issues/155-with-host-prefix.md) 合成 /
+[156](issues/156-server-prefix-declaration.md) server 全链），
+`run_session_start`、恢复回放、`inherit_prefix` 校验、`session_has_history` 闸
+四处机制零改动认识它。156 独测抓出 name 本体白名单缺口并当场收紧到与
+`capabilities.tools` 一字不差。真机（DeepSeek）：声明块进真实 system 段且序正确；
+跨二进制 sha256 相等（不声明零字节差）；口令实验三连（现答 / `kill -9` 恢复后
+仍答 / 缓存 95%–97.3%）；spawn 活对照——`[]` 的子缓存在 128 断、真不知道，缺省的子
+思考里逐字引用简报口令。[157](issues/157-wasm-prefix-declaration.md)（wasm 同路）
+**后置**等另一会话的 agent-wasm capabilities 在飞工作合并，不阻塞本里程碑。
+逐条记录见 [158](issues/158-m17-dogfood.md)。
+
 ### 已完成：M16 Rust 扩展包（2026-08-12，前半真机 dogfood 六条全过，153 收口）
 
 决策 29 落地：截获注册表（[146](issues/146-intercept-registry.md)）、既有四条截获
@@ -362,6 +377,14 @@ M1 从零开始，十四个 issue。**第一个能停下来说「能用了」的
   装配期合成常量文本 timed 工具，校验（`web:`/`desk:` 前缀即撞名判据）与恢复语义
   （`Slot::HostPrefix` 照 073）连着一起定了，没有只加字段。远程执行的路仍然封着、
   TurnEnd 不进协议（宿主墙外天然观测），理由进决策 31。落地 M17（154–158）。
+- **`existing` 活会话带 `capabilities` 被静默忽略——文档与代码分歧**（158 真机
+  发现，2026-08-12，M17 之前就存在）。代码自 062 起对活在 registry 里的会话忽略
+  这次声明（sessions.rs 注释的理由：活会话换表 = 前缀缓存当场全断，红线 11），
+  HOST-CAPABILITIES §三的表却写着「磁盘上有会话文件的一律拒绝」。对 `tools`/
+  `skills`/`prefix` 一视同仁。要么把 existing 也改成 400（代价：并发建会话的
+  第二个请求会挨拒），要么把 §三那行改成如实描述忽略（代价：默认吞掉声明正是
+  073 点名过的「以为登记上了其实没有」）。等真实宿主撞上再拍，拍之前两边文字
+  已各自标注对方的存在。
 - **要不要 `AgentStart` 第四时机**（子 agent 出生时跑自己的初始化工具；M15 讨论
   记录，2026-08-12）。今天没有用户。真要做是**新时机**不是 `SessionStart` 加
   旗子——执行点（spawn 路径 vs 会话创建）、产物落点（per-agent 状态 vs 会话级

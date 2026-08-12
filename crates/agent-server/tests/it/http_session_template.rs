@@ -51,6 +51,7 @@ fn open_spec_carries_the_templates_context_window() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
     assert_eq!(spec.context_window, Some(128_000));
@@ -68,6 +69,7 @@ fn open_spec_keeps_none_when_the_template_has_no_context_window() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
     assert_eq!(spec.context_window, None);
@@ -80,6 +82,7 @@ fn no_default_dir_and_no_explicit_path_stays_memory() {
         .open_spec(
             SessionId::from("s-1"),
             None,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -103,6 +106,7 @@ fn explicit_session_path_wins_over_default_dir() {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
     assert_eq!(
@@ -120,6 +124,7 @@ fn missing_session_path_auto_assigns_under_default_dir() {
         .open_spec(
             SessionId::from("s-3"),
             None,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -155,6 +160,7 @@ fn injected_tools_ride_this_one_spec_and_never_stick_to_the_template() {
             injected,
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
     assert_eq!(declared.host_tools.len(), 1);
@@ -165,6 +171,7 @@ fn injected_tools_ride_this_one_spec_and_never_stick_to_the_template() {
         .open_spec(
             SessionId::from("s-5"),
             None,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -194,6 +201,7 @@ fn injected_skills_ride_this_one_spec_and_never_stick_to_the_template() {
             Vec::new(),
             injected,
             Vec::new(),
+            Vec::new(),
         )
         .unwrap();
     assert_eq!(declared.host_skills.len(), 1);
@@ -208,6 +216,7 @@ fn injected_skills_ride_this_one_spec_and_never_stick_to_the_template() {
         .open_spec(
             SessionId::from("s-7"),
             None,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),

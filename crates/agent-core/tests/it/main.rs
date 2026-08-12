@@ -44,6 +44,7 @@ mod guard_indep_meta;
 mod guard_indep_reconcile;
 mod guard_indep_report;
 mod guard_indep_window;
+mod host_prefix_indep;
 mod host_skills_indep_restore;
 mod host_tools_indep_restore;
 mod ladder_core_order_and_replay;

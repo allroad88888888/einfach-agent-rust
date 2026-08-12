@@ -89,7 +89,9 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
             Slot::HostTools,
             Slot::HostSkills,
             Slot::DisabledBuiltins,
-            Slot::PrefixChunks
+            Slot::PrefixChunks,
+            // 154 追加 `HostPrefix`，同一条判据（声明是会话级事实）。
+            Slot::HostPrefix,
         ]
     );
     // 144 追加 `PrefixAllowed`，跟 `ToolsAllowed` 同一边（理由见

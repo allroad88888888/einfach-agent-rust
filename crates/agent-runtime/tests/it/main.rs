@@ -17,6 +17,7 @@ mod disabled_builtins_never_reach_the_prompt;
 mod extension_pack_indep;
 mod happy_two_hop;
 mod harvest_omits_child_turns_support;
+mod host_prefix_table_indep;
 mod host_skills_index_is_byte_deterministic;
 mod host_tools_bytes_support;
 mod host_tools_prefix_head_never_moves;

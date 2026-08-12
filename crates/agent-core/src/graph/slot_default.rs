@@ -23,9 +23,10 @@
 
 use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::value::atom_value::AgentValue;
-use crate::value::{prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries};
+use crate::value::{host_prefix, prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries};
 
-use super::slot::{AtomKey, Slot, ToolCallSlot};
+use super::atom_key::{AtomKey, ToolCallSlot};
+use super::slot::Slot;
 
 impl AtomKey {
     /// 这个键「没有值」的时候是什么。见模块文档「为什么必须只有一份」。
@@ -108,6 +109,13 @@ impl Slot {
             // 拿去过滤组料，就是静默削掉不该削的东西——跟 `ToolsAllowed` 默认成
             // 「活着」是同一类错误，只是这里错的方向反过来。
             Slot::PrefixAllowed => AgentValue::Null,
+            // 空列表的编码，不是 `Null`：同 `HostTools`——「没有声明任何开局块」=
+            // 空数组，槽位永远持一个数组，读取点不必区分「空」和「类型错」。
+            // **默认值必须是空**——019 的按需重建拿的就是它，若默认成别的，undo
+            // 路径上凭空重建出来的 atom 会给一个从没声明过的会话平添几行开局块，
+            // 而开局块跟工具表一样排在 prompt 最前面（红线 11：整份缓存作废，
+            // 还不报错）。
+            Slot::HostPrefix => host_prefix::to_value(Vec::new()),
         }
     }
 }
