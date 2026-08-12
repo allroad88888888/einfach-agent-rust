@@ -26,7 +26,7 @@ fn a_spawn_lands_exactly_one_entry_carrying_the_childs_initial_slot() {
     let mut s = Session::new(root());
     let before = s.history_len();
 
-    let child = s.spawn_child(&root(), cfg(&["srv:fs/read"])).unwrap();
+    let child = s.spawn_child(&root(), cfg(&["srv:fs/read"]), None).unwrap();
 
     assert_eq!(s.history_len(), before + 1, "spawn 恰好落一条 entry");
     let entry = s.last_entry().unwrap();
@@ -50,7 +50,7 @@ fn a_spawn_lands_exactly_one_entry_carrying_the_childs_initial_slot() {
 #[test]
 fn the_child_shows_up_on_the_tree_with_a_full_slot_table() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg(&[])).unwrap();
+    let child = s.spawn_child(&root(), cfg(&[]), None).unwrap();
 
     assert_eq!(child.as_str(), "root/a1");
     assert!(s.is_live(&child));
@@ -70,13 +70,13 @@ fn the_child_shows_up_on_the_tree_with_a_full_slot_table() {
 #[test]
 fn depth_four_is_refused_with_a_value_not_a_panic() {
     let mut s = Session::new(root());
-    let a1 = s.spawn_child(&root(), cfg(&[])).unwrap();
-    let a2 = s.spawn_child(&a1, cfg(&[])).unwrap();
-    let a3 = s.spawn_child(&a2, cfg(&[])).unwrap();
+    let a1 = s.spawn_child(&root(), cfg(&[]), None).unwrap();
+    let a2 = s.spawn_child(&a1, cfg(&[]), None).unwrap();
+    let a3 = s.spawn_child(&a2, cfg(&[]), None).unwrap();
     assert_eq!(a3.depth(), 3);
 
     assert_eq!(
-        s.spawn_child(&a3, cfg(&[])),
+        s.spawn_child(&a3, cfg(&[]), None),
         Err(SpawnRefused::DepthExceeded { depth: 4, max: 3 })
     );
     // 被拒的那一下什么都没写。
@@ -88,13 +88,13 @@ fn depth_four_is_refused_with_a_value_not_a_panic() {
 fn the_ninth_child_is_refused() {
     let mut s = Session::new(root());
     for i in 1..=8 {
-        let child = s.spawn_child(&root(), cfg(&[])).unwrap();
+        let child = s.spawn_child(&root(), cfg(&[]), None).unwrap();
         assert_eq!(child.as_str(), format!("root/a{i}"));
     }
     let len = s.history_len();
 
     assert_eq!(
-        s.spawn_child(&root(), cfg(&[])),
+        s.spawn_child(&root(), cfg(&[]), None),
         Err(SpawnRefused::TooManyChildren { live: 8, max: 8 })
     );
     assert_eq!(s.history_len(), len, "被拒的 spawn 不留 entry");
@@ -107,11 +107,11 @@ fn despawning_frees_a_slot_but_not_the_seq() {
     let mut s = Session::new(root());
     let mut kids = Vec::new();
     for _ in 1..=8 {
-        kids.push(s.spawn_child(&root(), cfg(&[])).unwrap());
+        kids.push(s.spawn_child(&root(), cfg(&[]), None).unwrap());
     }
     let _ = s.despawn_child(&kids[0]).unwrap();
 
-    let ninth = s.spawn_child(&root(), cfg(&[])).unwrap();
+    let ninth = s.spawn_child(&root(), cfg(&[]), None).unwrap();
     assert_eq!(ninth.as_str(), "root/a9");
     assert_eq!(s.children_of(&root()).len(), 8);
 }
@@ -131,13 +131,13 @@ fn limits_are_parameters_and_can_be_dialed() {
         max_depth: 1,
         max_children: 1,
     });
-    let a1 = s.spawn_child(&root(), cfg(&[])).unwrap();
+    let a1 = s.spawn_child(&root(), cfg(&[]), None).unwrap();
     assert_eq!(
-        s.spawn_child(&root(), cfg(&[])),
+        s.spawn_child(&root(), cfg(&[]), None),
         Err(SpawnRefused::TooManyChildren { live: 1, max: 1 })
     );
     assert_eq!(
-        s.spawn_child(&a1, cfg(&[])),
+        s.spawn_child(&a1, cfg(&[]), None),
         Err(SpawnRefused::DepthExceeded { depth: 2, max: 1 })
     );
 }
@@ -145,16 +145,16 @@ fn limits_are_parameters_and_can_be_dialed() {
 #[test]
 fn a_dead_or_foreign_parent_is_refused() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg(&[])).unwrap();
+    let child = s.spawn_child(&root(), cfg(&[]), None).unwrap();
     let _ = s.despawn_child(&child).unwrap();
 
     assert_eq!(
-        s.spawn_child(&child, cfg(&[])),
+        s.spawn_child(&child, cfg(&[]), None),
         Err(SpawnRefused::ParentNotLive { parent: child })
     );
     let alien = AgentId::new("other/a1");
     assert_eq!(
-        s.spawn_child(&alien, cfg(&[])),
+        s.spawn_child(&alien, cfg(&[]), None),
         Err(SpawnRefused::NotInSession { parent: alien })
     );
 }

@@ -42,7 +42,7 @@ fn one_undo_turn_takes_the_whole_subtree_with_it() {
     let root = AgentId::root();
 
     let _ = s.step(user_input_event("帮我分解一下这个任务"));
-    let child = s.spawn_child(&root, cfg()).unwrap();
+    let child = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "子任务：读文件"));
 
     assert!(s.is_live(&child));
@@ -88,7 +88,7 @@ fn redo_brings_the_whole_subtree_back() {
     let root = AgentId::root();
 
     let _ = s.step(user_input_event("分解"));
-    let child = s.spawn_child(&root, cfg()).unwrap();
+    let child = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "子任务"));
     let live = subtree_of(&s, &child);
 
@@ -108,7 +108,7 @@ fn the_parent_and_the_child_rewind_together() {
     let root = AgentId::root();
 
     let _ = s.step(user_input_event("一"));
-    let child = s.spawn_child(&root, cfg()).unwrap();
+    let child = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "二"));
 
     assert_eq!(s.messages().len(), 1);
@@ -129,9 +129,9 @@ fn undoing_a_despawn_rebuilds_the_subtree_with_its_live_values() {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
 
-    let child = s.spawn_child(&root, cfg()).unwrap();
+    let child = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "干活"));
-    let grandchild = s.spawn_child(&child, ChildConfig::default()).unwrap();
+    let grandchild = s.spawn_child(&child, ChildConfig::default(), None).unwrap();
     let _ = s.step(user_input_for(&grandchild, "更细的活"));
 
     let child_live = subtree_of(&s, &child);
@@ -172,7 +172,7 @@ fn undoing_a_despawn_rebuilds_the_subtree_with_its_live_values() {
 fn a_rebuilt_child_keeps_working() {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
-    let child = s.spawn_child(&root, cfg()).unwrap();
+    let child = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "干活"));
 
     s.begin_turn();

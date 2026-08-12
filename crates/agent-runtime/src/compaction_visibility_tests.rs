@@ -81,7 +81,7 @@ fn a_successful_summary_writeback_emits_compaction_applied_with_matching_fields(
     });
 
     let child = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("root 是活的，深度/子数都在默认上限内");
     let epoch = session.epoch();
     session.step(Event::UserInput {

@@ -20,7 +20,7 @@ fn default_is_null_and_explicit_profile_shares_the_spawn_entry() {
     let root = AgentId::root();
     let mut default_session = Session::new(root.clone());
     let default_child = default_session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("default child");
 
     assert_eq!(default_session.execution_profile_of(&root), None);
@@ -40,7 +40,7 @@ fn default_is_null_and_explicit_profile_shares_the_spawn_entry() {
     let mut explicit_session = Session::new(root.clone());
     let profile = ExecutionProfileId::new("worker-low-risk");
     let child = explicit_session
-        .spawn_child(&root, explicit_config(profile.as_str()))
+        .spawn_child(&root, explicit_config(profile.as_str()), None)
         .expect("explicit child");
 
     assert_eq!(
@@ -81,7 +81,7 @@ fn undo_and_redo_remove_and_restore_the_same_profile() {
     let mut session = Session::new(root.clone());
     let profile = ExecutionProfileId::new("worker-replay");
     let child = session
-        .spawn_child(&root, explicit_config(profile.as_str()))
+        .spawn_child(&root, explicit_config(profile.as_str()), None)
         .expect("child");
 
     assert!(matches!(session.undo_turn(), UndoReport::Applied { .. }));
@@ -105,6 +105,7 @@ fn child_retry_override_is_atomic_with_the_trusted_profile() {
                 execution_profile: Some(ExecutionProfileId::new("worker")),
                 max_retries: Some(0),
             },
+            None,
         )
         .expect("worker child");
 
@@ -126,7 +127,7 @@ fn snapshot_restore_preserves_profile_and_legacy_missing_slot_is_null() {
     let mut session = Session::new(root.clone());
     let profile = ExecutionProfileId::new("worker-restored");
     let child = session
-        .spawn_child(&root, explicit_config(profile.as_str()))
+        .spawn_child(&root, explicit_config(profile.as_str()), None)
         .expect("child");
     let entries: Vec<_> = session.history().entries().cloned().collect();
     let cursor = session.cursor();

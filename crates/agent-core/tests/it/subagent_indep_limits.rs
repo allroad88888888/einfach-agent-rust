@@ -7,8 +7,8 @@
 //! `Session::set_agent_limits` 的文档注释（不追溯的理由）。不读
 //! `src/command/spawn.rs` 源码。
 
-use agent_core::{AgentLimits, ChildConfig, SpawnRefused};
 use crate::support::session::new_session;
+use agent_core::{AgentLimits, ChildConfig, SpawnRefused};
 
 #[test]
 fn depth_four_is_refused_without_panicking() {
@@ -18,12 +18,12 @@ fn depth_four_is_refused_without_panicking() {
     let mut current = root.clone();
     for _ in 0..3 {
         current = session
-            .spawn_child(&current, ChildConfig::default())
+            .spawn_child(&current, ChildConfig::default(), None)
             .expect("depth <= 3 应该被允许");
     }
     assert_eq!(current.depth(), 3);
 
-    let refused = session.spawn_child(&current, ChildConfig::default());
+    let refused = session.spawn_child(&current, ChildConfig::default(), None);
     assert_eq!(
         refused,
         Err(SpawnRefused::DepthExceeded { depth: 4, max: 3 })
@@ -41,12 +41,12 @@ fn the_ninth_sibling_is_refused_without_panicking() {
 
     for _ in 0..8 {
         session
-            .spawn_child(&root, ChildConfig::default())
+            .spawn_child(&root, ChildConfig::default(), None)
             .expect("前 8 个该被允许");
     }
     assert_eq!(session.children_of(&root).len(), 8);
 
-    let refused = session.spawn_child(&root, ChildConfig::default());
+    let refused = session.spawn_child(&root, ChildConfig::default(), None);
     assert_eq!(
         refused,
         Err(SpawnRefused::TooManyChildren { live: 8, max: 8 })
@@ -61,7 +61,7 @@ fn set_agent_limits_does_not_retroactively_kill_existing_children() {
 
     for _ in 0..8 {
         session
-            .spawn_child(&root, ChildConfig::default())
+            .spawn_child(&root, ChildConfig::default(), None)
             .expect("先在默认上限内长满");
     }
     assert_eq!(session.children_of(&root).len(), 8);
@@ -86,7 +86,7 @@ fn set_agent_limits_does_not_retroactively_kill_existing_children() {
     }
 
     // 但新的一次 spawn 立刻按新上限拒绝。
-    let refused = session.spawn_child(&root, ChildConfig::default());
+    let refused = session.spawn_child(&root, ChildConfig::default(), None);
     assert_eq!(
         refused,
         Err(SpawnRefused::TooManyChildren { live: 8, max: 2 })
@@ -97,13 +97,13 @@ fn set_agent_limits_does_not_retroactively_kill_existing_children() {
 fn lowering_max_depth_does_not_kill_an_existing_deep_agent() {
     let mut session = new_session();
     let a1 = session
-        .spawn_child(&session.agent().clone(), ChildConfig::default())
+        .spawn_child(&session.agent().clone(), ChildConfig::default(), None)
         .expect("depth 1");
     let a2 = session
-        .spawn_child(&a1, ChildConfig::default())
+        .spawn_child(&a1, ChildConfig::default(), None)
         .expect("depth 2");
     let a3 = session
-        .spawn_child(&a2, ChildConfig::default())
+        .spawn_child(&a2, ChildConfig::default(), None)
         .expect("depth 3");
     assert_eq!(a3.depth(), 3);
 
@@ -117,7 +117,7 @@ fn lowering_max_depth_does_not_kill_an_existing_deep_agent() {
         "已经存在的深度 3 agent 不该被追溯清理"
     );
 
-    let refused = session.spawn_child(&a1, ChildConfig::default());
+    let refused = session.spawn_child(&a1, ChildConfig::default(), None);
     assert_eq!(
         refused,
         Err(SpawnRefused::DepthExceeded { depth: 2, max: 1 })

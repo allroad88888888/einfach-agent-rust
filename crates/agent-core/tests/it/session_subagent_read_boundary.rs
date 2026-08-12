@@ -23,9 +23,10 @@ fn tree() -> (Session, AgentId, AgentId, AgentId) {
                 tools_allowed: vec![Arc::from("srv:fs/read")],
                 ..ChildConfig::default()
             },
+            None,
         )
         .unwrap();
-    let a2 = s.spawn_child(&root, ChildConfig::default()).unwrap();
+    let a2 = s.spawn_child(&root, ChildConfig::default(), None).unwrap();
     (s, root, a1, a2)
 }
 
@@ -44,7 +45,7 @@ fn a_child_can_read_its_ancestors_messages() {
 #[test]
 fn a_grandchild_can_read_the_root() {
     let (mut s, root, a1, _) = tree();
-    let a1_a1 = s.spawn_child(&a1, ChildConfig::default()).unwrap();
+    let a1_a1 = s.spawn_child(&a1, ChildConfig::default(), None).unwrap();
     let _ = s.step(user_input_event("hi"));
 
     assert!(s.read_ancestor(&a1_a1, &root, Slot::Messages).is_ok());

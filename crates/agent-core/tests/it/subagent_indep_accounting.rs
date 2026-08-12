@@ -10,9 +10,9 @@
 //! STATE-MODEL 说的「`agent` 仅用于 UI 时间线显示，不参与 undo 判定」在这份
 //! 落地代码里的具体形状。
 
-use agent_core::{AgentId, ChildConfig, Session};
 use crate::support::session::new_session;
 use crate::support::{provider_done_end_turn_for, user_input_for};
+use agent_core::{AgentId, ChildConfig, Session};
 
 fn turn_ids_touching(session: &Session, agent: &AgentId) -> Vec<u64> {
     session
@@ -28,7 +28,7 @@ fn a_childs_entries_carry_the_turn_id_root_was_on_when_they_were_written() {
     let mut session = new_session();
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn");
 
     let turn_at_spawn = session.turn_id();
@@ -50,7 +50,7 @@ fn a_new_root_turn_changes_the_turn_id_the_childs_later_entries_carry() {
     let mut session = new_session();
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn");
     session.step(user_input_for(&child, "开始思考")); // 子: Idle -> Thinking，落在 turn_one
     let turn_one = session.turn_id();

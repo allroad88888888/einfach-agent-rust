@@ -5,17 +5,17 @@
 //! §2 与「注意」段、cargo doc 的 `graph::visibility` / `command::cross_read`
 //! 模块文档。不读 `src/graph/visibility.rs` 与 `src/command/cross_read.rs` 源码。
 
-use agent_core::{AgentId, ChildConfig, ReadDenied, Session, Slot, Visibility};
 use crate::support::session::new_session;
+use agent_core::{AgentId, ChildConfig, ReadDenied, Session, Slot, Visibility};
 
 /// root -> child -> grandchild 三层，够覆盖「隔代」和「兄弟」两类关系。
 fn spawn_two_level(session: &mut Session) -> (AgentId, AgentId) {
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn child");
     let grandchild = session
-        .spawn_child(&child, ChildConfig::default())
+        .spawn_child(&child, ChildConfig::default(), None)
         .expect("spawn grandchild");
     (child, grandchild)
 }
@@ -37,8 +37,9 @@ fn for_every_slot_at_most_one_direction_can_succeed() {
 
 /// 比上一条更强：不只是「不冲突」，是每个槽位的实际可读方向跟它自己声明的
 /// `visibility()` 完全一致，而且三类合起来恰好是 `Slot::ALL` 的一个划分。
-/// 当前具体归属（issue 实做记录判断 7）：Upward = {Messages}，
-/// Downward = {Status, ToolsAllowed}，其余 Private。
+/// 当前具体归属（issue 实做记录判断 7，144 追加 PrefixAllowed 站
+/// Downward）：Upward = {Messages, ...}，
+/// Downward = {Status, ToolsAllowed, PrefixAllowed}，其余 Private。
 #[test]
 fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
     let mut session = new_session();
@@ -91,7 +92,12 @@ fn each_slot_behaves_exactly_as_its_declared_visibility_says() {
             Slot::PrefixChunks
         ]
     );
-    assert_eq!(downward, vec![Slot::Status, Slot::ToolsAllowed]);
+    // 144 追加 `PrefixAllowed`，跟 `ToolsAllowed` 同一边（理由见
+    // `src/graph/visibility.rs` 的 match 分支注释：站队但不是活名单）。
+    assert_eq!(
+        downward,
+        vec![Slot::Status, Slot::ToolsAllowed, Slot::PrefixAllowed]
+    );
     assert_eq!(
         upward.len() + downward.len() + private.len(),
         Slot::ALL.len(),
@@ -105,10 +111,10 @@ fn siblings_cannot_read_each_other_and_the_attempt_has_no_side_effect() {
     let mut session = new_session();
     let root = session.agent().clone();
     let a1 = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn a1");
     let a2 = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn a2");
 
     let before = session.primitives();

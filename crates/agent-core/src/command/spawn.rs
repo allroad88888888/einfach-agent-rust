@@ -26,6 +26,8 @@
 //! 而 undo 日志的键正是这个 id。despawn 刻意留下 `ToolsAllowed` 墓碑，
 //! 为的就是让这个「最大号」在逐出之后仍然单调（见 `despawn.rs`）。
 
+use std::sync::Arc;
+
 use crate::graph::{AtomKey, Slot, build_agent};
 use crate::ids::AgentId;
 use crate::value::str_set;
@@ -101,14 +103,25 @@ impl Session {
     /// 1. 两道闸（深度 / 子数）——超了返回 [`SpawnRefused`]，**不 panic**；
     /// 2. 铸一个不复用的号（见模块文档），`build_agent` 建这个 agent 的整张图
     ///    （整份 `Slot::ALL` + 一个 derived，与 root 同一条路径）；
-    /// 3. 一条 `Entry`：原子写入工具授权、已解析 profile 与可选重试上限。
+    /// 3. 一条 `Entry`：原子写入工具授权、可选前缀授予名单、已解析 profile 与
+    ///    可选重试上限。
+    ///
+    /// `prefix_allowed` 是 144（决策 28 的 core 半边）追加的参数，跟
+    /// `config.tools_allowed` 同一个形状、不同的家：前者是 `ChildConfig` 的
+    /// 一个字段，后者留在参数列表末尾——**不并进 `ChildConfig`**，因为 145 的
+    /// 组料过滤要靠调用方在每个 call site 显式回答「这个子给不给开局产物」，
+    /// 塞进带 `#[derive(Default)]` 的配置结构会让漏传变成静默的「什么都不给」
+    /// 而不是编译期就看得见的缺项。`Some` 排序去重后落 [`Slot::PrefixAllowed`]，
+    /// `None` 落 `Null`（= 不设限 = 全带，见该槽位文档）。
     ///
     /// # 为什么默认配置的 `changes` 里只有一个槽位
     ///
     /// 其余槽位此刻**就是**它们的默认值，`record_set` 不给没变的值落 `Change`
     /// （009 的「幽灵步不落条目」）。这不是记漏了：undo 这一条的语义是「回到 spawn
     /// 之前」，而 spawn 之前它们本来就是默认值。子 agent 在这一轮里后来写的东西
-    /// 各有各的 entry，`undo_turn` 一并退掉。
+    /// 各有各的 entry，`undo_turn` 一并退掉。`prefix_allowed` 传 `None` 时同一条
+    /// 纪律成立：落的 `Null` 就是 `Slot::PrefixAllowed` 的默认值，不产生新 `Change`
+    /// ——这正是「既有调用点全传 `None`，行为零变化」在这里的落点。
     ///
     /// 029 给子 agent 播种任务消息时，那次写入落在**同一个 batch** 里，于是它自然
     /// 出现在这条 `Entry` 的 `changes` 中——机制不用改。
@@ -123,6 +136,7 @@ impl Session {
         &mut self,
         parent: &AgentId,
         config: ChildConfig,
+        prefix_allowed: Option<Vec<Arc<str>>>,
     ) -> Result<AgentId, SpawnRefused> {
         if !self.in_session(parent) {
             return Err(SpawnRefused::NotInSession {
@@ -155,15 +169,25 @@ impl Session {
         // 排序去重后落盘（红线 11），机制在 `value::str_set`——跟 039 激活的 skill
         // 集是同一个「有序字符串集当值」的形状，只有一处编解码。
         let tools = str_set::to_value(config.tools_allowed);
+        // 同一个「有序字符串集当值」的形状（144，`Slot::PrefixAllowed` 文档）：
+        // `Some` 排序去重落值，`None` 落 `Null`（= 不设限）——跟 `tools` 那一行
+        // 唯一的差别是 `None` 时不经过 `str_set::to_value`，因为「不设限」不是
+        // 「空集」，两者不能被编码塌成同一个值。
+        let prefix_allowed_value = match prefix_allowed {
+            Some(items) => str_set::to_value(items),
+            None => crate::value::atom_value::AgentValue::Null,
+        };
         let profile = config
             .execution_profile
             .map(|id| crate::value::atom_value::AgentValue::Text(id.into_inner()))
             .unwrap_or(crate::value::atom_value::AgentValue::Null);
         let tools_key = AtomKey::Agent(child.clone(), Slot::ToolsAllowed);
+        let prefix_allowed_key = AtomKey::Agent(child.clone(), Slot::PrefixAllowed);
         let profile_key = AtomKey::Agent(child.clone(), Slot::ExecutionProfile);
         let retries_key = AtomKey::Agent(child.clone(), Slot::MaxRetries);
         self.commit_as(parent, "spawn_child", |txn| {
             txn.set_key(tools_key, tools);
+            txn.set_key(prefix_allowed_key, prefix_allowed_value);
             txn.set_key(profile_key, profile);
             if let Some(max_retries) = config.max_retries {
                 txn.set_key(
@@ -198,74 +222,10 @@ fn child_seq(parent: &AgentId, child: &AgentId) -> Option<u32> {
     tail.strip_prefix('/')?.strip_prefix('a')?.parse().ok()
 }
 
+/// 单测拆到独立文件（144 加了四条 `prefix_allowed` 白盒测试后本文件顶破 300 行
+/// ——同 `despawn.rs`/`despawn_tests.rs` 的先例：实现与它的测试是两件事，只是
+/// 测试需要 `super::*` 才能碰到 `pub(crate)`/私有项，`#[path]` 把两者接回同一个
+/// 编译单元）。
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::Arc;
-
-    fn session() -> Session {
-        Session::new(AgentId::root())
-    }
-
-    fn cfg(tools: &[&str]) -> ChildConfig {
-        ChildConfig {
-            tools_allowed: tools.iter().map(|t| Arc::from(*t)).collect(),
-            ..ChildConfig::default()
-        }
-    }
-
-    /// 红线 11 的最小实检：入参顺序不同、含重复，落进槽位的值逐字节相同。
-    /// 机制现在住在 `value::str_set`（跟 039 的 skill 集共用），这里验的是
-    /// spawn 真的走了它。
-    #[test]
-    fn the_tool_subset_is_sorted_and_deduped_before_it_lands() {
-        let a = str_set::to_value(vec![Arc::from("srv:fs/read"), Arc::from("srv:shell/exec")]);
-        let b = str_set::to_value(vec![
-            Arc::from("srv:shell/exec"),
-            Arc::from("srv:fs/read"),
-            Arc::from("srv:fs/read"),
-        ]);
-        assert_eq!(a, b);
-        let crate::value::atom_value::AgentValue::Json(v) = &a else {
-            panic!("工具子集落 Json")
-        };
-        assert_eq!(
-            serde_json::to_string(&**v).unwrap(),
-            r#"["srv:fs/read","srv:shell/exec"]"#
-        );
-    }
-
-    /// 铸号跳过认不出的段，不猜、不 panic。
-    #[test]
-    fn an_unparseable_segment_is_skipped_when_minting() {
-        let root = AgentId::root();
-        assert_eq!(child_seq(&root, &root.child(7)), Some(7));
-        assert_eq!(child_seq(&root, &AgentId::new("root/weird")), None);
-        assert_eq!(child_seq(&root, &AgentId::new("other/a1")), None);
-    }
-
-    /// 号不复用：spawn → despawn → spawn，第二个孩子拿的是新号。
-    /// （墓碑存在的理由，见模块文档。）
-    #[test]
-    fn a_seq_is_never_handed_out_twice() {
-        let mut s = session();
-        let root = AgentId::root();
-        let first = s.spawn_child(&root, cfg(&["srv:fs/read"])).unwrap();
-        assert_eq!(first.as_str(), "root/a1");
-        let _ = s.despawn_child(&first).unwrap();
-        let second = s.spawn_child(&root, cfg(&["srv:fs/read"])).unwrap();
-        assert_eq!(second.as_str(), "root/a2");
-    }
-
-    /// undo 掉 spawn 之后再 spawn，同样拿新号——被撤销的那个 id 也算用过了。
-    #[test]
-    fn undoing_a_spawn_does_not_release_its_seq() {
-        let mut s = session();
-        let root = AgentId::root();
-        let first = s.spawn_child(&root, cfg(&[])).unwrap();
-        let _ = s.undo_turn();
-        assert!(!s.is_live(&first));
-        let second = s.spawn_child(&root, cfg(&[])).unwrap();
-        assert_ne!(first, second);
-    }
-}
+#[path = "spawn_tests.rs"]
+mod tests;

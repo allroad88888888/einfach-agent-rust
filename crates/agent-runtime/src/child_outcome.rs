@@ -117,7 +117,7 @@ mod tests {
             text: Arc::from("派一个子去跑几轮"),
         });
         let child = session
-            .spawn_child(&root, ChildConfig::default())
+            .spawn_child(&root, ChildConfig::default(), None)
             .expect("root 是活的，深度/子数都在默认上限内");
         session.step(Event::UserInput {
             agent: child.clone(),

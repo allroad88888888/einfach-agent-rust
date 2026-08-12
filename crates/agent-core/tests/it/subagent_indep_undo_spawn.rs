@@ -54,6 +54,7 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("spawn child");
 
@@ -67,7 +68,8 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
         session.history_len() > before_write,
         "子的 UserInput 该留一条 entry"
     );
-    assert_eq!(child_slot_count(&session, &child), 19);
+    // 144 追加 `Slot::PrefixAllowed`：19 → 20。
+    assert_eq!(child_slot_count(&session, &child), 20);
 
     let report = session.undo_turn();
     assert!(
@@ -79,10 +81,11 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     assert_eq!(session.live_agents(), vec![root.clone()]);
     assert!(session.children_of(&root).is_empty());
 
-    // 裁决的核心：atom 还在（十九个槽位一个不少），只是值回默认。
+    // 裁决的核心：atom 还在（二十个槽位一个不少，144 追加了 PrefixAllowed），
+    // 只是值回默认。
     assert_eq!(
         child_slot_count(&session, &child),
-        19,
+        20,
         "undo 不逐出 atom，只回滚值——这是跟 despawn 墓碑语义的关键区别"
     );
     assert_eq!(tools_allowed_of(&session, &child), AgentValue::Null);
@@ -93,7 +96,7 @@ fn events_for_an_undone_spawn_are_silently_dropped_by_the_liveness_gate() {
     let mut session = new_session();
     let root = session.agent().clone();
     let child = session
-        .spawn_child(&root, ChildConfig::default())
+        .spawn_child(&root, ChildConfig::default(), None)
         .expect("spawn child");
     session.step(user_input_for(&child, "hi"));
     let undo = session.undo_turn();
@@ -133,6 +136,7 @@ fn redo_brings_the_whole_subtree_back_and_it_keeps_working() {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("spawn child");
     session.step(user_input_for(&child, "hello from child"));

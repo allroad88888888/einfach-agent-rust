@@ -614,6 +614,16 @@ core/runtime 的概念收敛为「**一张工具表 + 三个调用时机**」：
 > 97.5%–99.8%（均值 98.5%），含 3 个 read 跳，零条低于 0.9**——决策 27 那个
 > 「正文走消息尾不破前缀」的赌注兑现了。
 
+**M15 追加（2026-08-12，决策 28）**：子 agent 的开局材料按名单授予——
+`srv:agent/spawn` 加可选入参 `inherit_prefix`（timed 工具名数组；**缺省全带**，
+143 的结论不受影响；`[]` 全不带；列名挑着带）。取舍记录在 ROADMAP §一 决策 28
+（为什么否掉「混进 tools 名单」与「从工具子集推导」两案）。
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [144](144-prefix-allowed-slot.md) | `Slot::PrefixAllowed`：spawn 快照的前缀授予名单 | — | sonnet | ✅ |
+| [145](145-spawn-inherit-prefix.md) | spawn 入参 `inherit_prefix` + `system_for` 过滤 + 「子不重跑开局工具」看门狗 | 144 | sonnet | ✅ |
+
 **M15 验收**（可判定，[143](143-m15-dogfood.md) 逐条扛）：首轮 system 只有索引没有
 正文；模型两跳自主 read（router → hidden 子 skill）说出藏的口令；undo 撤 read 轮后
 正文字节从 body 消失；`kill -9` 恢复后前缀块逐字节原样、开局工具执行计数仍为 1；

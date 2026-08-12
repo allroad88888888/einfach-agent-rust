@@ -77,7 +77,7 @@ pub(crate) fn intercept(
         execution_profile: ctx.compaction_execution_profile.clone(),
         ..ChildConfig::default()
     };
-    let child = match session.spawn_child(&agent, child_config) {
+    let child = match session.spawn_child(&agent, child_config, None) {
         Ok(child) => child,
         Err(_refused) => return Dispatched::Event(Event::CompactFailed { agent, epoch }),
     };
@@ -138,8 +138,14 @@ fn render_message(out: &mut String, message: &Message) {
                 out.push_str(&input.to_string());
                 out.push('\n');
             }
-            ContentBlock::ToolResult { content, is_error, .. } => {
-                out.push_str(if *is_error { "工具报错：" } else { "工具结果：" });
+            ContentBlock::ToolResult {
+                content, is_error, ..
+            } => {
+                out.push_str(if *is_error {
+                    "工具报错："
+                } else {
+                    "工具结果："
+                });
                 out.push_str(content);
                 out.push('\n');
             }

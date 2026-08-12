@@ -9,7 +9,7 @@ use super::*;
 
 fn spawn_child(session: &mut Session, parent: &AgentId) -> AgentId {
     session
-        .spawn_child(parent, ChildConfig::default())
+        .spawn_child(parent, ChildConfig::default(), None)
         .expect("root 是活的，深度/子数都在默认上限内")
 }
 
@@ -98,7 +98,7 @@ fn ten_consecutive_compactions_never_run_out_of_child_slots() {
 
     for round in 0..10 {
         let child = session
-            .spawn_child(&root, ChildConfig::default())
+            .spawn_child(&root, ChildConfig::default(), None)
             .unwrap_or_else(|e| panic!("第 {} 次压缩 spawn 就被拒了：{e:?}", round + 1));
         let epoch = session.epoch();
         finish_child(&mut session, &child, "摘要");
@@ -155,7 +155,9 @@ fn a_stale_writeback_is_dropped_and_can_never_be_taken() {
     let _ = slots.harvest(&mut session);
 
     // 用户按了取消：世代推走一格。
-    session.step(Event::Cancel { agent: root.clone() });
+    session.step(Event::Cancel {
+        agent: root.clone(),
+    });
     let now = session.epoch();
     assert_ne!(now, epoch);
 

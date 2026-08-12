@@ -82,6 +82,7 @@ fn spawn_and_drive_child(session: &mut Session) -> AgentId {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("spawn child");
     session.step(user_input_for(&child, "do something"));
@@ -145,8 +146,8 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
     // 064 加 `HostSkills` 是 13、076 加 `DisabledBuiltins` 是 14、
     // 093 加 `ExecutionProfile` 是 15、100 加 `SendPlan` 是 16、
     // 103 加 `PrevSendPlan` 是 17、107 加 `Summaries` 是 18、
-    // 134 加 `PrefixChunks` 是 19。
-    assert_eq!(child_key_count(&session, &child), 19);
+    // 134 加 `PrefixChunks` 是 19、144 加 `PrefixAllowed` 是 20。
+    assert_eq!(child_key_count(&session, &child), 20);
 
     let report = session
         .despawn_child(&child)
@@ -154,13 +155,14 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
 
     assert_eq!(report.agents, vec![child.clone()]);
     assert_eq!(
-        report.atoms_evicted, 18,
-        "十九个槽位里只留 ToolsAllowed 一个墓碑"
+        report.atoms_evicted, 19,
+        "二十个槽位里只留 ToolsAllowed 一个墓碑（144 的 PrefixAllowed 不是墓碑，\
+         照样被逐出——despawn.rs 只特化 ToolsAllowed 一个变体）"
     );
     assert_eq!(
         child_key_count(&session, &child),
         1,
-        "其余十八个 atom 该被物理逐出"
+        "其余十九个 atom 该被物理逐出"
     );
     assert!(!session.is_live(&child));
     assert_eq!(
@@ -195,8 +197,8 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     assert_eq!(session.children_of(&root), vec![child.clone()]);
     assert_eq!(
         child_key_count(&session, &child),
-        19,
-        "全部十九个槽位都该被按需重建"
+        20,
+        "全部二十个槽位都该被按需重建（144 加了 PrefixAllowed）"
     );
     assert_eq!(
         value_of(&session, &child, Slot::Status),

@@ -21,7 +21,7 @@ fn cfg() -> ChildConfig {
 #[test]
 fn the_teardown_entry_carries_every_live_value_as_prev() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "干活"));
 
     let live: Vec<(AtomKey, AgentValue)> = s
@@ -59,9 +59,9 @@ fn default_of(key: &AtomKey) -> AgentValue {
 fn the_whole_subtree_comes_apart_leaf_first() {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
-    let a1 = s.spawn_child(&root, cfg()).unwrap();
-    let a1_a1 = s.spawn_child(&a1, cfg()).unwrap();
-    let a1_a1_a1 = s.spawn_child(&a1_a1, cfg()).unwrap();
+    let a1 = s.spawn_child(&root, cfg(), None).unwrap();
+    let a1_a1 = s.spawn_child(&a1, cfg(), None).unwrap();
+    let a1_a1_a1 = s.spawn_child(&a1_a1, cfg(), None).unwrap();
 
     let report = s.despawn_child(&a1).unwrap();
     assert_eq!(
@@ -92,8 +92,8 @@ fn the_whole_subtree_comes_apart_leaf_first() {
 fn a_sibling_subtree_is_untouched() {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
-    let a1 = s.spawn_child(&root, cfg()).unwrap();
-    let a2 = s.spawn_child(&root, cfg()).unwrap();
+    let a1 = s.spawn_child(&root, cfg(), None).unwrap();
+    let a2 = s.spawn_child(&root, cfg(), None).unwrap();
     let _ = s.step(user_input_for(&a2, "兄弟还在干活"));
 
     let before: Vec<_> = s
@@ -117,7 +117,7 @@ fn a_sibling_subtree_is_untouched() {
 #[test]
 fn root_strangers_and_the_already_dead_are_refused() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
 
     assert_eq!(s.despawn_child(&AgentId::root()), Err(DespawnRefused::Root));
 
@@ -145,7 +145,7 @@ fn root_strangers_and_the_already_dead_are_refused() {
 #[test]
 fn events_for_a_despawned_child_are_dropped_silently() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "干活"));
     let _ = s.despawn_child(&child).unwrap();
 

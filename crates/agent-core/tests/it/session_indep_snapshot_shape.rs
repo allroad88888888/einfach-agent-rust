@@ -20,7 +20,8 @@ use agent_core::{AgentValue, AtomKey};
 /// 100 追加 `Slot::SendPlan`（这一轮实际要发给 provider 的历史坐标）→ 16；
 /// 103 追加 `Slot::PrevSendPlan`（上一次请求实际用的那份 `SendPlan`）→ 17；
 /// 107 追加 `Slot::Summaries`（历次压缩产出的摘要正文）→ 18；
-/// 134 追加 `Slot::PrefixChunks`（会话创建期定下的 system 前缀块）→ 19。
+/// 134 追加 `Slot::PrefixChunks`（会话创建期定下的 system 前缀块）→ 19；
+/// 144 追加 `Slot::PrefixAllowed`（spawn 时快照的「开局产物」授予名单）→ 20。
 /// 改这个数之前先问：新槽位是不是真的**必须**进快照。
 ///
 /// `HostTools` 的答案是必须：不进快照 = 一次落快照之后声明就丢了，恢复出来的
@@ -36,7 +37,11 @@ use agent_core::{AgentValue, AtomKey};
 /// 不进快照 = 恢复出来的会话要么少一整段 system 前缀、要么得重跑那些算出前缀的
 /// 东西（而它们读的是外部世界，这一次的结果不保证跟当初一样）——前缀在 prompt
 /// 最前面，两种结局都是缓存全断 + 上下文跟历史对不上，且都不报错。
-const EXPECTED_SLOT_COUNT: usize = 19;
+/// `PrefixAllowed`（144）跟 `ToolsAllowed` 同一条理由：不进快照 = undo 回到
+/// spawn 那一刻时，重建出来的子 agent 拿不到「当时被授予了什么」，只能落一个
+/// 猜出来的默认值——而 undo 的语义正是要精确回到 spawn 那一刻，不是回到一个
+/// 看起来差不多的状态。
+const EXPECTED_SLOT_COUNT: usize = 20;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

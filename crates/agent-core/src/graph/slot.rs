@@ -193,6 +193,27 @@ pub enum Slot {
     /// 「确定」不是「排序」，而确定性这里由「一次写定、之后不改」的写入点保证。
     /// 完整论证在 [`value::prefix_chunks`](crate::value::prefix_chunks) 的模块文档。
     PrefixChunks,
+    /// **spawn 当时快照的「开局产物」授予名单**（144，决策 28 的 core 半边）。
+    ///
+    /// 值同 [`Slot::ToolsAllowed`]——[`AgentValue::Json`] 里一个字符串数组，
+    /// `Null` = **不设限 = 全带**。跟 `ToolsAllowed` 的 `Null` 语义刻意不同：
+    /// 这里没有「活着/死了」的一面，`Null` 单纯是「这个子 agent 没被限定子集，
+    /// 拿到父 agent 能给的全部」——判活名单继续、只能继续由 `ToolsAllowed` 一个
+    /// 槽位负责（见 [`visibility`](super::visibility) 对它俩方向相同但理由不同
+    /// 的说明）。core 不知道「开局产物」具体是什么（红线 12 的精神：它只是一份
+    /// spawn 时刻定死的名单，装的是工具结果、skill 正文还是别的，是 145 模型面
+    /// 才回答的问题）。
+    ///
+    /// 为什么是 spawn 当时的快照而不是现查（跟 `ToolsAllowed` 同一条理由，
+    /// issue 006 §注意）：undo 回到 spawn 那一刻，用的必须是当时能给的名单，
+    /// 不是现在的——「从没 spawn 过」「spawn 被 undo 掉了」「已经 despawn」
+    /// 三种情况下这个槽位该看起来完全一致，那正是「随 `Session::spawn_child`
+    /// 那一条命令一起落盘」换来的，不是靠约定各处保持同步。
+    ///
+    /// 排序去重后落盘（红线 11），编解码复用 `value::str_set`——跟
+    /// `ToolsAllowed`/`SkillsActive`/`DisabledBuiltins` 是同一个「有序字符串集
+    /// 当值」的形状，只有一处编解码。写入点只有一个：`Session::spawn_child`。
+    PrefixAllowed,
 }
 
 /// 一次工具调用自己的槽位。
@@ -235,7 +256,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 19] = [
+    pub const ALL: [Slot; 20] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -255,6 +276,8 @@ impl Slot {
         Slot::PrevSendPlan,
         Slot::Summaries,
         Slot::PrefixChunks,
+        // 144 追加 PrefixAllowed。
+        Slot::PrefixAllowed,
     ];
 }
 

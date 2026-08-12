@@ -159,6 +159,7 @@ pub(crate) fn intercept(
             tools_allowed,
             ..ChildConfig::default()
         },
+        None,
     ) {
         Ok(child) => child,
         Err(refused) => {

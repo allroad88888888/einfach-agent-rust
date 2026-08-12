@@ -50,9 +50,7 @@ pub use command::{
     DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused,
     DespawnReport, EntryMeta, ReadDenied, Session, SpawnRefused, UndoReport, known_label,
 };
-pub use engine::{
-    Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus,
-};
+pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};
 pub use ids::{
     AGENT_PATH_SEP, AgentId, ExecutionProfileId, MessageId, SkillId, SummaryId, ToolCallId,

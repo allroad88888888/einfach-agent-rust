@@ -203,8 +203,12 @@ mod tests {
     fn spawned_children_show_up_with_parent_depth_and_stable_order() {
         let mut session = Session::new(AgentId::root());
         let root = AgentId::root();
-        let c1 = session.spawn_child(&root, ChildConfig::default()).unwrap();
-        let c2 = session.spawn_child(&root, ChildConfig::default()).unwrap();
+        let c1 = session
+            .spawn_child(&root, ChildConfig::default(), None)
+            .unwrap();
+        let c2 = session
+            .spawn_child(&root, ChildConfig::default(), None)
+            .unwrap();
 
         let first = session.agent_tree();
         let second = session.agent_tree();
@@ -227,7 +231,9 @@ mod tests {
     fn undoing_a_spawn_drops_the_child_from_the_tree() {
         let mut session = Session::new(AgentId::root());
         let root = AgentId::root();
-        let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
+        let child = session
+            .spawn_child(&root, ChildConfig::default(), None)
+            .unwrap();
         assert_eq!(session.agent_tree().nodes.len(), 2);
 
         let _ = session.undo_turn();

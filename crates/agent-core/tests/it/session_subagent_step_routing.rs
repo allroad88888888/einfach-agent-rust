@@ -30,7 +30,7 @@ fn status_of(s: &Session, agent: &AgentId) -> TurnStatus {
 #[test]
 fn an_event_routes_to_the_agent_it_names() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
 
     let effects = s.step(user_input_for(&child, "子任务"));
 
@@ -48,8 +48,8 @@ fn an_event_routes_to_the_agent_it_names() {
 fn each_agent_keeps_its_own_turn_state() {
     let mut s = Session::new(AgentId::root());
     let root = AgentId::root();
-    let a1 = s.spawn_child(&root, cfg()).unwrap();
-    let a2 = s.spawn_child(&root, cfg()).unwrap();
+    let a1 = s.spawn_child(&root, cfg(), None).unwrap();
+    let a2 = s.spawn_child(&root, cfg(), None).unwrap();
 
     let _ = s.step(user_input_event("root 自己也在跑"));
     let _ = s.step(user_input_for(&a1, "a1 的活"));
@@ -82,7 +82,7 @@ fn each_agent_keeps_its_own_turn_state() {
 #[test]
 fn the_turn_budget_is_per_agent() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
 
     let _ = s.step(user_input_event("root"));
     assert_eq!(s.turns_used(), 1);
@@ -100,7 +100,7 @@ fn the_turn_budget_is_per_agent() {
 #[test]
 fn every_entry_inherits_the_root_minted_turn_id() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "第一轮的活"));
 
     s.begin_turn();
@@ -127,7 +127,7 @@ fn every_entry_inherits_the_root_minted_turn_id() {
 #[test]
 fn epoch_stays_session_wide() {
     let mut s = Session::new(AgentId::root());
-    let child = s.spawn_child(&AgentId::root(), cfg()).unwrap();
+    let child = s.spawn_child(&AgentId::root(), cfg(), None).unwrap();
     let _ = s.step(user_input_event("root 在飞"));
     let stale = s.epoch();
     let _ = s.step(user_input_for(&child, "子也在飞"));

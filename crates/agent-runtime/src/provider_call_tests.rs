@@ -75,6 +75,7 @@ fn missing_named_profile_fails_before_provider_start() {
                 execution_profile: Some(profile),
                 ..ChildConfig::default()
             },
+            None,
         )
         .unwrap();
     let mut ctx = build(Arc::new(DeepSeek));

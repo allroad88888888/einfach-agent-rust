@@ -50,7 +50,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 107 新增：历次压缩产出的摘要正文（引用在 `SendPlan` 里）。
             | Slot::Summaries
             // 134 新增：会话创建期定下的一列 system 前缀块（顺序即信息，不排序）。
-            | Slot::PrefixChunks => {}
+            | Slot::PrefixChunks
+            // 144 新增：spawn 时快照的「开局产物」授予名单。
+            | Slot::PrefixAllowed => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

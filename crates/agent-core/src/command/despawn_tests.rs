@@ -16,6 +16,7 @@ fn session_with_child() -> (Session, AgentId) {
                 tools_allowed: vec![Arc::from("srv:fs/read")],
                 ..ChildConfig::default()
             },
+            None,
         )
         .unwrap();
     (session, child)

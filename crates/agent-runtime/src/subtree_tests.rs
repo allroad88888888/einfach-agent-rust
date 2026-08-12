@@ -29,7 +29,9 @@ fn session_with_a_finished_child() -> (Session, AgentId, Epoch) {
     });
 
     let spawned_at = session.epoch();
-    let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
+    let child = session
+        .spawn_child(&root, ChildConfig::default(), None)
+        .unwrap();
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
@@ -128,7 +130,9 @@ fn and_lands_in_it_without_the_bump() {
 fn a_running_background_child_is_the_orphan_candidate() {
     let mut session = Session::new(AgentId::root());
     let root = AgentId::root();
-    let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
+    let child = session
+        .spawn_child(&root, ChildConfig::default(), None)
+        .unwrap();
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
@@ -154,7 +158,9 @@ fn a_running_background_child_is_the_orphan_candidate() {
 fn a_child_bound_to_a_slot_is_not_an_orphan() {
     let mut session = Session::new(AgentId::root());
     let root = AgentId::root();
-    let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
+    let child = session
+        .spawn_child(&root, ChildConfig::default(), None)
+        .unwrap();
     let _ = session.step(Event::UserInput {
         agent: child.clone(),
         text: Arc::from("BGTASK"),
@@ -182,7 +188,9 @@ fn a_child_bound_to_a_slot_is_not_an_orphan() {
 fn a_child_that_is_no_longer_live_is_not_an_orphan() {
     let mut session = Session::new(AgentId::root());
     let root = AgentId::root();
-    let child = session.spawn_child(&root, ChildConfig::default()).unwrap();
+    let child = session
+        .spawn_child(&root, ChildConfig::default(), None)
+        .unwrap();
     let spawned_at = session.epoch();
 
     let mut subtree = Subtree::default();

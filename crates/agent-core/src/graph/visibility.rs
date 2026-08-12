@@ -103,6 +103,14 @@ impl Slot {
             // （`Session::is_live`）。汇聚 derived 要先知道「有哪些活着的子」才能
             // 去读它们的 `Status`，所以这一条边也是往下的。
             Slot::ToolsAllowed => Visibility::Downward,
+            // `PrefixAllowed`（144）站 `ToolsAllowed` 同一边，但不是同一条理由：
+            // 它**不是**活名单，判活继续只看 `ToolsAllowed`（模块文档：一个槽位
+            // 只能站一边，双重身份是 `ToolsAllowed` 一家的事）。站 Downward 是因为
+            // 它描述的是「这个子 agent 出生时被授予了什么」——跟 `Status` 一样是
+            // **关于子的事实**，观测/父侧汇聚要查一个子拿到了哪些开局产物，读的
+            // 是子自己头上的这个槽位，不是子要往上继承的会话级上下文（那是
+            // Upward 那一组的判据）。
+            Slot::PrefixAllowed => Visibility::Downward,
 
             // —— 私有：一个 agent 的内部账本 ————————————————
             //
@@ -198,9 +206,11 @@ mod tests {
                 Slot::PrefixChunks,
             ]
         );
+        // 144 追加 PrefixAllowed，跟 ToolsAllowed 同一边（理由不同，见上面的
+        // match 分支注释）。
         assert_eq!(
             slots_with(Visibility::Downward),
-            vec![Slot::Status, Slot::ToolsAllowed]
+            vec![Slot::Status, Slot::ToolsAllowed, Slot::PrefixAllowed]
         );
     }
 }

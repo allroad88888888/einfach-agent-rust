@@ -141,6 +141,26 @@ impl Session {
         )
     }
 
+    /// spawn 当时快照的「开局产物」授予名单（`Slot::PrefixAllowed`，144）。
+    ///
+    /// `None` = 这个槽位是 `Null`，即**不设限 = 全带**——跟
+    /// [`Session::tools_allowed_of`] 的 `None`（「不是被 spawn 出来的」）语义
+    /// 不同：那个槽位的 `Null` 同时是活名单，这个槽位没有这层含义，root、从没
+    /// 被限定过的子 agent、以及被限定成「全不带」（`Some(vec![])`，跟 `None`
+    /// 是两个不同的值）都要靠调用方各自区分，读口本身不替调用方下判断。
+    ///
+    /// 顺序原样返回（写入时已经排序去重，红线 11）。
+    pub fn prefix_allowed_of(&self, agent: &AgentId) -> Option<Vec<Arc<str>>> {
+        let value = self.slot_of(agent, Slot::PrefixAllowed);
+        let array = value.as_json()?.as_array()?.clone();
+        Some(
+            array
+                .iter()
+                .filter_map(|v| v.as_str().map(Arc::from))
+                .collect(),
+        )
+    }
+
     /// 这个 agent 出生时固化的不透明执行 profile id。
     ///
     /// `None` 对 root、默认 spawn、旧 snapshot 和已回滚的 spawn 都成立。core 不把

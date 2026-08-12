@@ -127,8 +127,8 @@ fn new_session_has_a_single_idle_root_node() {
 #[test]
 fn spawning_two_children_yields_three_nodes_in_stable_order() {
     let mut s = Session::new(root());
-    let a1 = s.spawn_child(&root(), cfg()).unwrap();
-    let a2 = s.spawn_child(&root(), cfg()).unwrap();
+    let a1 = s.spawn_child(&root(), cfg(), None).unwrap();
+    let a2 = s.spawn_child(&root(), cfg(), None).unwrap();
 
     let first = s.agent_tree();
     assert_eq!(first.nodes.len(), 3, "root + 两个子");
@@ -179,7 +179,7 @@ fn root_activity_is_thinking_right_after_the_first_message() {
 #[test]
 fn a_child_that_has_not_been_spoken_to_yet_stays_idle() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
 
     let tree = s.agent_tree();
     let node = find(&tree, &child);
@@ -195,7 +195,7 @@ fn a_child_that_has_not_been_spoken_to_yet_stays_idle() {
 #[test]
 fn a_child_running_a_tool_shows_up_as_working() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
 
     let _ = s.step(user_input_for(&child, "子任务：读文件"));
     let _ = s.step(provider_done_tool_use_for(
@@ -237,7 +237,7 @@ fn a_child_running_a_tool_shows_up_as_working() {
 #[test]
 fn a_child_that_finishes_its_turn_shows_up_as_done() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
 
     let _ = s.step(user_input_for(&child, "子任务"));
     let _ = s.step(provider_done_end_turn_for(&child, s.epoch(), "干完了"));
@@ -256,7 +256,7 @@ fn a_child_that_finishes_its_turn_shows_up_as_done() {
 #[test]
 fn a_cancelled_child_shows_up_as_failed() {
     let mut s = Session::new(root());
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
 
     // 016 验收原文「取消在任意状态下都生效」——从 Idle 直接 Cancel 就够造出 Failed，
     // 不需要先把它推进 Thinking/ToolsPending。
@@ -286,7 +286,7 @@ fn undo_of_the_spawn_turn_drops_the_child_from_the_tree() {
     let mut s = Session::new(root());
 
     let _ = s.step(user_input_event("帮我分解一下这个任务"));
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "子任务：读文件"));
 
     let before = s.agent_tree();
@@ -326,7 +326,7 @@ fn redo_after_undo_brings_the_child_back_into_the_tree() {
     let mut s = Session::new(root());
 
     let _ = s.step(user_input_event("分解"));
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "子任务"));
 
     let _ = s.undo_turn();
@@ -379,7 +379,7 @@ fn root_task_is_the_first_message_and_survives_a_second_turn() {
 fn child_task_is_its_own_spawn_message_not_roots() {
     let mut s = Session::new(root());
     let _ = s.step(user_input_event("root 自己的第一句"));
-    let child = s.spawn_child(&root(), cfg()).unwrap();
+    let child = s.spawn_child(&root(), cfg(), None).unwrap();
     let _ = s.step(user_input_for(&child, "子任务：分析日志"));
 
     let tree = s.agent_tree();

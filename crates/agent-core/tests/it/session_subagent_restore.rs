@@ -26,9 +26,11 @@ fn a_whole_tree_survives_a_snapshot_and_replay() {
     let mut live = Session::new(AgentId::root());
     let root = AgentId::root();
     let _ = live.step(user_input_event("root 说话"));
-    let child = live.spawn_child(&root, cfg()).unwrap();
+    let child = live.spawn_child(&root, cfg(), None).unwrap();
     let _ = live.step(user_input_for(&child, "子干活"));
-    let grandchild = live.spawn_child(&child, ChildConfig::default()).unwrap();
+    let grandchild = live
+        .spawn_child(&child, ChildConfig::default(), None)
+        .unwrap();
 
     let snapshot = live.primitives();
     let entries: Vec<AgentEntry> = live.history().entries().cloned().collect();
@@ -73,7 +75,7 @@ fn a_whole_tree_survives_a_snapshot_and_replay() {
 fn the_restored_tree_keeps_stepping_and_undoing() {
     let mut live = Session::new(AgentId::root());
     let root = AgentId::root();
-    let child = live.spawn_child(&root, cfg()).unwrap();
+    let child = live.spawn_child(&root, cfg(), None).unwrap();
     let _ = live.step(user_input_for(&child, "干活"));
 
     let entries: Vec<AgentEntry> = live.history().entries().cloned().collect();
@@ -123,7 +125,7 @@ fn the_restored_tree_keeps_stepping_and_undoing() {
 fn a_tombstone_survives_and_still_reserves_its_seq() {
     let mut live = Session::new(AgentId::root());
     let root = AgentId::root();
-    let first = live.spawn_child(&root, cfg()).unwrap();
+    let first = live.spawn_child(&root, cfg(), None).unwrap();
     let _ = live.despawn_child(&first).unwrap();
 
     let snapshot = live.primitives();
@@ -148,7 +150,7 @@ fn a_tombstone_survives_and_still_reserves_its_seq() {
     .unwrap();
 
     assert!(!restored.is_live(&first));
-    let second = restored.spawn_child(&root, cfg()).unwrap();
+    let second = restored.spawn_child(&root, cfg(), None).unwrap();
     assert_ne!(second, first, "重启之后也不会把用过的号再发一次");
     assert_eq!(second.as_str(), "root/a2");
 }

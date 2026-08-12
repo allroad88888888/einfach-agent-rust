@@ -101,6 +101,13 @@ impl Slot {
             // （红线 11：整份缓存作废，还不报错）。空列表也走同一条编解码路径，
             // 读取点因此不必区分「没写过」和「写了零块」——它们就是同一个值。
             Slot::PrefixChunks => prefix_chunks::to_value(&[]),
+            // `Null` = 不设限（144 追加；语义跟 `ToolsAllowed` 的 `Null` 不同，见
+            // `Slot::PrefixAllowed` 文档）。**默认值必须是 `Null`**——019 的按需
+            // 重建拿的就是它，若默认成空数组，一个从没被限定过的子 agent 会在
+            // undo 路径上凭空多出一份「什么都不给」的名单，而这份名单一旦被 145
+            // 拿去过滤组料，就是静默削掉不该削的东西——跟 `ToolsAllowed` 默认成
+            // 「活着」是同一类错误，只是这里错的方向反过来。
+            Slot::PrefixAllowed => AgentValue::Null,
         }
     }
 }

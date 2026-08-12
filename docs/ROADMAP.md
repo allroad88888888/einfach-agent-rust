@@ -39,6 +39,7 @@
 
 | 26 | **恢复 wasm 目标**（2026-08-10，取代决策 10）：核心编进浏览器直接跑，**wasm 是第三种宿主形态**——独立跑 / 宿主子进程 / 浏览器内三者并存，决策 12「`agent-server` 是库」不动。浏览器形态下不编 `agent-mcp`（stdio 不存在；浏览器够得着的 MCP 由前端自己连，HOST-CAPABILITIES §七 早定的方向），不声明 `agent-tools` 的 `srv:` shell/fs specs（纯数据，不声明即可），`agent-transport` 换 fetch 实现 | 决策 10 的两条理由都不成立了。①**「provider 不用维护两套」与代码不符**：`agent-providers` 依赖只有 `agent-core`+serde，**没有任何 HTTP 客户端**，IO 全在 `agent-transport` 一个已隔离的 crate（红线镜像约束「唯一允许依赖 ureq」）；②**浏览器侧 transport 更薄不更厚**：`read_loop.rs` 那 165 行读线程 + `mpsc::sync_channel` + 双超时旋钮，存在的唯一理由是 ureq 阻塞 read 没有外部中断句柄（自称「不优雅但可测」），`fetch` + `AbortController` 原生就是那个句柄；③**前提已实测**：DeepSeek / Kimi / GLM 三家预检全部回显任意 origin 且放行 `authorization`，浏览器直连可行——这是决策 10 当时没验的前提；④决策 16 的 `Rc<RefCell>` 不 `Send` 在原生是让步，单线程 wasm 里变成 fit。**代价照实记**：`RunnerCtx.fs: ToolExecutor` 是 concrete struct（`new()` 要 canonicalize 真实目录），必须开注入接缝——本次移植唯一的结构性改动；`Instant`/`SystemTime` 要垫 `web-time`；多一个编译目标要长期维护；key 落在浏览器，定为每人一把自己的。逐条证据与验收见 [issues/111](issues/111-wasm-target-decision.md) |
 | 27 | **工具加「调用时机」维度；skills 降级为外层工具包**（2026-08-11，取代 21）：`ToolTable` 判定侧加 `CallTiming`——空 = 模型自主调；`SessionStart` = 会话创建时按注册顺序自动调、结果落状态、组料时成为 system 前缀块（恢复读状态不重跑；失败 = 创建报错；执行体是注册时给的本地函数，远端时机工具结构上不存在）；`TurnEnd` = 每个完成轮后自动调、结果丢弃（v1 不回灌、不续 loop）。**时机非空不进模型清单**。skills 从此不是 core/runtime 概念：索引 = 一个开局工具、正文 = 普通 `srv:skill/read`（Pure）按需读、以 tool result 进对话；树形靠正文引用 + frontmatter `hidden`；用户点名走 user 消息；激活子系统（`skills_active`/activate/deactivate/拼进 system 段尾部的注入）已删除（141 落地，2026-08-12） | ①业内已收敛（Agent Skills 开放标准，40+ 平台）：目录进 system + 正文按需，主流通道就是「读取 → tool result」——消息尾追加是缓存专门设计的方向；**真机已验**：DeepSeek 十轮 cached/prompt 全部 ≥ 97.8%（含 read 轮），段尾税与每轮 drift 上报消失 ②概念收敛：core/runtime 只剩「一张表 + 三个时机」，「谁发起」是继 location、reversibility 之后第三个正交维度，且不进 `ToolSpec`——模型面契约一字不动 ③正文撤回并进 undo（read 是普通 entry），独立停用机制不再需要 ④M10 的 skill 专用通道收编为「宿主给工具包喂数据源」（skill 携带工具 v1 裁剪，声明即 400）。逐条任务见 [issues/README §M15](issues/README.md) |
+| 28 | **子 agent 的开局材料按名单授予**（2026-08-12）：`srv:agent/spawn` 加可选入参 `inherit_prefix`（字符串数组）——**缺省 = 全带**（今天的行为）；`[]` = 全不带；`["srv:skill/index",…]` = 挑着带。值随 spawn 快照落 `Slot::PrefixAllowed`（编码照 `ToolsAllowed`：排序去重、`Null` = 不设限）；`system_for` 按纯名字匹配过滤 `init:<name>` 前缀块；名字不在 timed 区 → `is_error` 让模型自纠（决策 20 兜底同款）；字段只管 `SessionStart` 产物——`TurnEnd` 无 per-child 语义（子不跨 turn，没有轮末）。落地 144/145 | ①子任务常不需要会话开局材料（如技能索引）——正文的懒加载 M15 已解决，索引行本身也该能按子省掉 ②**缺省必须全带**：被否的「混进 `tools` 名单」案（名单即继承，零新状态是它唯一的优点）有个真脚枪——收窄工具的子会静默丢索引，模型必须记得补名字否则静默降级，正是本仓最怕的形状 ③独立字段保 `tools` 类型纯净（名单里不出现调不了的名字），两字段各对各区校验 ④「给 read 不带 index」是真组合：父在任务文本里点名 skill id，子不需要目录 ⑤决策 20 一致：模型 spawn 时自选——静态部署字段与「从工具子集推导」两案都答不了「每次 spawn 动态决定」这个真问题 |
 
 ## 二、现状
 
@@ -320,6 +321,15 @@ M1 从零开始，十四个 issue。**第一个能停下来说「能用了」的
     后 DeepSeek 十轮 cached/prompt 全部 ≥ 97.8%（含 read 发生的轮），段尾税消失。
     「所有工具的 schema 索引化 + `describe`」仍未决——等宿主注入的工具到规模再开，
     届时通道是现成的。
+- **宿主声明不了 timed 工具**（M15 遗留，2026-08-12）。`capabilities` 协议没有
+  时机字段，「企业宿主换掉默认索引工具」今天只有重新装配一条路，HTTP 声明走不到。
+  等真有宿主要换再开——协议扩展要连校验（timed 名与模型面名的撞名判据）和
+  恢复语义一起定，别只加字段。
+- **要不要 `AgentStart` 第四时机**（子 agent 出生时跑自己的初始化工具；M15 讨论
+  记录，2026-08-12）。今天没有用户。真要做是**新时机**不是 `SessionStart` 加
+  旗子——执行点（spawn 路径 vs 会话创建）、产物落点（per-agent 状态 vs 会话级
+  前缀块）、姊妹缓存含义全不同。决策 28 的「时机管执行、可见性管谁读、两者
+  正交」是当时的判据，重开讨论先读它。
 
 ## 五、这份文档怎么维护
 

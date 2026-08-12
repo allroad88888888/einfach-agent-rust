@@ -57,9 +57,10 @@ fn the_complete_state_is_exactly_the_source_slot_table() {
     // `Slot::HostSkills` → 13；076 加 `Slot::DisabledBuiltins` → 14；
     // 093 加 `Slot::ExecutionProfile` → 15；100 加 `Slot::SendPlan` → 16；
     // 103 加 `Slot::PrevSendPlan` → 17；107 加 `Slot::Summaries` → 18；
-    // 134 加 `Slot::PrefixChunks` → 19）——上面那句
-    // 比的是「和 `Slot::ALL` 一致」，这句比的是「`Slot::ALL` 本身没被顺手加过东西」。
-    assert_eq!(primitives.len(), 19);
+    // 134 加 `Slot::PrefixChunks` → 19；144 加 `Slot::PrefixAllowed` → 20）——
+    // 上面那句比的是「和 `Slot::ALL` 一致」，这句比的是「`Slot::ALL` 本身没被
+    // 顺手加过东西」。
+    assert_eq!(primitives.len(), 20);
 
     // derived 一个都不在里面——它们的键是另一张表。
     assert!(

@@ -79,7 +79,11 @@ mod tests {
     fn a_replacement_is_journaled_and_undo_takes_it_back() {
         let mut s = session();
         let root = AgentId::root();
-        assert_eq!(s.send_plan_of(&root), SendPlan::new(), "全新会话默认 pristine");
+        assert_eq!(
+            s.send_plan_of(&root),
+            SendPlan::new(),
+            "全新会话默认 pristine"
+        );
 
         let mut plan = SendPlan::new();
         plan.clear_tool_results([ToolCallId::new("call_1")]);
@@ -88,7 +92,11 @@ mod tests {
 
         let before = s.history_len();
         s.replace_send_plan(&root, plan.clone());
-        assert_eq!(s.history_len(), before + 1, "整体替换是一条 journaled entry");
+        assert_eq!(
+            s.history_len(),
+            before + 1,
+            "整体替换是一条 journaled entry"
+        );
         assert_eq!(s.send_plan_of(&root), plan);
 
         let report = s.undo_step();
@@ -124,7 +132,7 @@ mod tests {
         let mut s = session();
         let root = AgentId::root();
         let child = s
-            .spawn_child(&root, crate::command::ChildConfig::default())
+            .spawn_child(&root, crate::command::ChildConfig::default(), None)
             .expect("spawn 一个子 agent");
 
         let mut plan = SendPlan::new();

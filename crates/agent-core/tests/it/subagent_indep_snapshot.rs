@@ -21,6 +21,7 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("a1");
     let a2 = session
@@ -30,6 +31,7 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
                 tools_allowed: vec!["srv:web/fetch".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("a2");
     session.step(user_input_for(&a1, "a1 说话"));
@@ -44,9 +46,9 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     assert!(agents_present.contains(&a2));
     assert_eq!(
         snap.len(),
-        57,
-        "root + a1 + a2，每个 agent 十九个槽位（103 追加了 PrevSendPlan，107 追加了 \
-         Summaries，134 追加了 PrefixChunks）"
+        60,
+        "root + a1 + a2，每个 agent 二十个槽位（103 追加了 PrevSendPlan，107 追加了 \
+         Summaries，134 追加了 PrefixChunks，144 追加了 PrefixAllowed）"
     );
 }
 
@@ -61,6 +63,7 @@ fn primitives_survive_a_serde_round_trip_unchanged() {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("a1");
     session.step(user_input_for(&a1, "hello"));
@@ -86,6 +89,7 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
                 tools_allowed: vec!["srv:fs/read".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("a1");
     let a2 = session
@@ -95,6 +99,7 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
                 tools_allowed: vec!["srv:web/fetch".into()],
                 ..ChildConfig::default()
             },
+            None,
         )
         .expect("a2");
     session.step(user_input_for(&a1, "a1 说话"));
