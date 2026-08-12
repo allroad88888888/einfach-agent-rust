@@ -69,6 +69,7 @@ pub fn open_spec(id: &str, endpoint: String, store_path: Option<PathBuf>) -> Ope
         host_tools: Vec::new(),
         host_skills: Vec::new(),
         disable_builtin: Vec::new(),
+        host_prefix: Vec::new(),
     }
 }
 

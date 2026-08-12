@@ -34,10 +34,13 @@
 
 mod assemble;
 mod builtin_switch;
+mod capability_prefix;
 mod validate;
+mod validate_prefix;
 
-pub(in crate::http) use assemble::{host_skills, host_tools};
+pub(in crate::http) use assemble::{host_prefix, host_skills, host_tools};
 pub(in crate::http) use builtin_switch::{check_builtin_switch, disabled_builtins};
+pub(in crate::http) use capability_prefix::CapabilityPrefix;
 pub(in crate::http) use validate::validate;
 
 use serde::Deserialize;
@@ -73,6 +76,15 @@ pub(crate) struct Capabilities {
     #[serde(default)]
     #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<String>>"))]
     pub(crate) disable_builtin: Vec<String>,
+    /// M17（决策 31，156）：宿主建会话**之前**自己跑完逻辑、把结果文本带进来的
+    /// 开局块——装配期合成「执行体 = 返回这段常量文本」的 `SessionStart` timed
+    /// 工具（`agent_runtime::ToolTable::with_host_prefix`，155），落进
+    /// `init:<name>` 前缀块（135 的契约）。跟 [`tools`](Self::tools) 同一个
+    /// 「加法」阵营，形状也照它：省略 = `Vec::new()`，工具表/前缀块与本条落地
+    /// 前逐字节相同。
+    #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional, as = "Option<Vec<CapabilityPrefix>>"))]
+    pub(crate) prefix: Vec<CapabilityPrefix>,
 }
 
 /// 一个跑在宿主侧的工具。前三个字段对着 `agent_core::ToolSpec`
@@ -165,6 +177,7 @@ mod tests {
     fn every_field_has_a_default() {
         assert!(parse(json!({})).tools.is_empty());
         assert!(parse(json!({})).skills.is_empty());
+        assert!(parse(json!({})).prefix.is_empty());
 
         let only_tools = parse(json!({ "tools": [ { "name": "web:crm/lookup" } ] }));
         assert!(only_tools.skills.is_empty());
@@ -175,6 +188,10 @@ mod tests {
         assert!(only_skills.tools.is_empty());
         assert_eq!(only_skills.skills[0].body, "");
         assert!(only_skills.skills[0].tools.is_empty());
+
+        // M17：`prefix[].name`/`.text` 同一套「缺了也解析成功」（细节测试见
+        // `capability_prefix` 子模块）——那一拒是 `validate` 的事，不是 serde 的事。
+        assert!(parse(json!({ "prefix": [ {} ] })).prefix[0].name.is_empty());
     }
 
     /// 061 验收原文：`reversibility` 缺省 → 解析成 `None`（062 才把它落成保守的

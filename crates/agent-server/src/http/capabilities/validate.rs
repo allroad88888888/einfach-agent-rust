@@ -19,6 +19,7 @@
 //! | skill 自带的工具 | **v1 不支持**：`tools` 非空就整份 400（140，决策 27），不看形状 |
 //! | skill id | 非空、只许 `[A-Za-z0-9_-]`、≤ 128 字节 |
 //! | 重名 | 整份声明里工具名（只可能来自顶层）全局唯一、skill id 唯一，撞了就拒 |
+//! | `capabilities.prefix` 的名字/text | 156，三条规则的具体逻辑在 [`super::validate_prefix`]：名字前缀同上一行；跟工具名共用同一个「全局唯一」集合（内部重名 + 跟 `capabilities.tools` 撞名都拒）；`text` 不许空串 |
 //!
 //! # 140：skill 为什么不能带 `tools`
 //!
@@ -46,11 +47,14 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
+use super::validate_prefix::{self, PrefixRejection};
 use super::{Capabilities, CapabilityTool};
 
-/// 工具名合法前缀的白名单——这里是唯一一处，加第三个前缀改这一行。
-const TOOL_PREFIXES: [&str; 2] = ["web:", "desk:"];
-const MAX_TOOL_NAME_LEN: usize = 128;
+/// 工具名合法前缀的白名单——这里是唯一一处，加第三个前缀改这一行。`pub(super)`：
+/// `validate_prefix.rs`（156）校验 `capabilities.prefix` 的名字前缀时复用同一份
+/// 白名单，不重新拍一遍。
+pub(super) const TOOL_PREFIXES: [&str; 2] = ["web:", "desk:"];
+pub(super) const MAX_TOOL_NAME_LEN: usize = 128;
 const MAX_SKILL_ID_LEN: usize = 128;
 /// 错误文案里回显名字时的上限：说得清「是哪一项」，又不至于让错误响应变成一面
 /// 把任意长的请求体原样弹回去的镜子（同 [`crate::http::json`] 的取舍）。
@@ -81,6 +85,9 @@ pub(in crate::http) enum CapabilityRejection {
     /// 140：这个 skill 的 `tools` 非空——v1 不支持，决策 27 把注入口砍了之后它
     /// 已经无处可去。
     SkillCarriesTools { id: String },
+    /// 156：`capabilities.prefix` 里一项违规——三条具体规则（前缀/重名/空 text）
+    /// 见 [`super::validate_prefix::PrefixRejection`]，这里只转发它的 `Display`。
+    Prefix(PrefixRejection),
 }
 
 impl fmt::Display for Origin {
@@ -120,6 +127,7 @@ impl fmt::Display for CapabilityRejection {
                 f,
                 "skill \"{id}\" 带了 tools——v1 不支持 skill 携带工具（决策 27 裁剪），工具请经 capabilities.tools 声明"
             ),
+            CapabilityRejection::Prefix(rejection) => write!(f, "{rejection}"),
         }
     }
 }
@@ -133,6 +141,10 @@ pub(in crate::http) fn validate(capabilities: &Capabilities) -> Result<(), Capab
     for tool in &capabilities.tools {
         check_tool(tool, &Origin::TopLevel, &mut tool_names)?;
     }
+    // 156：`capabilities.prefix`——name 前缀/重名（含跟上面这份 `tool_names` 撞）/
+    // 空 text 三条新规，具体逻辑在 `validate_prefix`（那个文件自己的模块文档解释
+    // 了为什么没有跟这里的工具校验挤在一个文件里）。
+    validate_prefix::check_prefix(capabilities, &tool_names).map_err(CapabilityRejection::Prefix)?;
     let mut skill_ids: BTreeSet<&str> = BTreeSet::new();
     for skill in &capabilities.skills {
         if !is_valid_skill_id(&skill.id) {
