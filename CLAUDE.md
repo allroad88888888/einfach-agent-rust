@@ -31,6 +31,7 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 | [docs/INTEGRATION.md](docs/INTEGRATION.md) | 给**企业宿主**看：chatid 身份 / 拉取式传输 / 进程生命周期 | M9 |
 | [docs/HOST-CAPABILITIES.md](docs/HOST-CAPABILITIES.md) | 宿主声明自己的 tool / skill / MCP | M10 |
 | [docs/IMAGES.md](docs/IMAGES.md) | 图片附件：怎么进 prompt、吃不下的家怎么降级 | M11 |
+| [docs/issues/119-browser-host-capability-decision.md](docs/issues/119-browser-host-capability-decision.md) | 浏览器宿主的通用工具回调与图片：JS/Rust 分工在哪切 | M14 |
 
 新会话先读 `ROADMAP.md`（知道在哪）、`docs/issues/`（知道下一步做什么）、
 `INVARIANTS.md`（知道什么不能碰）。
@@ -60,19 +61,23 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 ## 当前状态
 
-**M1–M9 全部完成**（2026-08-01 ~ 08-04），**M10 宿主能力注入进行中**。
+**M1–M15 全部完成**（2026-08-01 ~ 08-12）。每个里程碑都有真机 dogfood 收官
+（真 provider，不是 mock），逐条兑现记录在 `docs/ROADMAP.md` §二和各 issue 的实做记录里。
 
-同一个核心库的四种形态都真实验收过：CLI（undo/恢复/屏障）、浏览器（SSE/多 agent 并行/
-断开取消）、独立 server bin、桌面 app（内嵌同库同前端）。M5 skills 装载、M6 MCP、
-M7 子 agent 可观测、M8 模型侧异步编排、M9 企业集成**各有真机 dogfood 验收**（真 provider，
-不是 mock），逐条兑现记录在 `docs/ROADMAP.md` §二和各 issue 的实做记录里。
+同一个核心库的**五种**形态都真实验收过：CLI（undo/恢复/屏障）、浏览器前端（SSE/多 agent
+并行/断开取消）、独立 server bin、桌面 app（内嵌同库同前端），**以及跑在浏览器里的
+wasm 宿主**（M13/M14——没有任何服务端进程，页面自己声明并执行工具）。
 
-两条最容易过期的事实：**Java 参考网关已构建验证**（OpenJDK 21 + Maven 3.9.15，037 那句
-「本机无 JDK」已被 M9 推翻），M9 起它是**拉取式**——网关 poll Rust、自己产生 SSE 给浏览器，
-并用 `ProcessBuilder` + `--ready-file` 拉起 Rust 子进程（[docs/INTEGRATION.md](docs/INTEGRATION.md)）。
+三条最容易过期的事实：
 
-M10 在做「前端/网关声明自己的 tool、skill、MCP」，接缝见 `docs/HOST-CAPABILITIES.md`。
-核心判断：**不需要新机制，只缺一个声明入口**——注入的能力跟自有的走完全相同的路。
+1. **Java 参考网关已构建验证**（OpenJDK 21 + Maven 3.9.15，037 那句「本机无 JDK」已被
+   M9 推翻），M9 起它是**拉取式**——网关 poll Rust、自己产生 SSE 给浏览器，并用
+   `ProcessBuilder` + `--ready-file` 拉起 Rust 子进程（[docs/INTEGRATION.md](docs/INTEGRATION.md)）。
+2. **决策 10「砍掉 wasm 目标」已被 M13 推翻**——wasm 是第三种宿主形态，不替代任何一种。
+3. **skills 不再是 core/runtime 的概念**（M15 决策 27，取代决策 21）：索引是一个开局
+   工具、正文按需 `srv:skill/read` 以 tool result 进对话；老的激活子系统整条删掉
+   （141），`Slot::SkillsActive` 只留壳给老快照反序列化。看到任何提「激活 skill」
+   「`late_system` 注入」的文档，那是过期的。
 
 动手前仍然先 `ls crates/` + `cargo test` 确认现状，别信文档对「已完成」的描述——
 [docs/WORKFLOW.md](docs/WORKFLOW.md) §四第 0 步（这也是这段不写测试数的原因：它必然过期）。

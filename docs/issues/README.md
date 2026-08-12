@@ -606,6 +606,14 @@ core/runtime 的概念收敛为「**一张工具表 + 三个调用时机**」：
 | [142](142-skill-hidden-frontmatter.md) | 树形：frontmatter `hidden` 不进索引 | 138 | haiku | — |
 | [143](143-m15-dogfood.md) | 真机 dogfood ← **M15 终点** | 136+141+142 | **opus** | 本条即验收 |
 
+> ✅ **M15 完成**（2026-08-12）。十一条全部落地，终点 dogfood
+> [143](143-m15-dogfood.md) **七条全过**（CLI + server + 真 DeepSeek key）：
+> 模型**自己**走完「读索引 → read router → 顺正文引用 read hidden 子 skill → 说出口令」
+> 两跳；undo 撤回正文后同一个模型说「我的上下文里不存在任何口令信息」；
+> `kill -9` 恢复后前缀块逐字节原样、开局工具计数仍是 1；**十轮 13 跳缓存命中
+> 97.5%–99.8%（均值 98.5%），含 3 个 read 跳，零条低于 0.9**——决策 27 那个
+> 「正文走消息尾不破前缀」的赌注兑现了。
+
 **M15 验收**（可判定，[143](143-m15-dogfood.md) 逐条扛）：首轮 system 只有索引没有
 正文；模型两跳自主 read（router → hidden 子 skill）说出藏的口令；undo 撤 read 轮后
 正文字节从 body 消失；`kill -9` 恢复后前缀块逐字节原样、开局工具执行计数仍为 1；

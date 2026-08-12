@@ -56,6 +56,30 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M15 调用时机与 skills 工具化（2026-08-12，真机 dogfood 七条全过）
+
+决策 27 落地。core/runtime 收敛为「一张工具表 + 三个调用时机」，skills 从此不是
+core/runtime 的概念：索引是一个开局工具、正文按需 `srv:skill/read`、以 tool result
+进对话；树形靠正文引用 + frontmatter `hidden`。老的激活子系统（`skills_active`/
+activate/deactivate/`late_system` 注入）整条删掉（[141](issues/141-remove-activation-subsystem.md)），
+`Slot::SkillsActive` 只留壳给老快照反序列化用。
+
+**真机数字**（[143](issues/143-m15-dogfood.md)，CLI + server + DeepSeek）：
+十轮 13 跳缓存命中 **97.5%–99.8%，均值 98.5%，含 3 个 read 跳，零条低于 0.9**
+——决策 27 那个「正文走消息尾不破前缀」的赌注兑现。模型自主走完两跳 read
+（索引里根本没有那个 hidden 子 skill，它是顺着 router 正文的引用找过去的）；
+undo 撤回正文后同一个模型说「我的上下文里不存在任何口令信息」；`kill -9` 恢复后
+前缀块逐字节原样、开局工具计数仍是 1。
+
+### 已完成：M14 浏览器的宿主能力（2026-08-12，十四条每条真机验收）
+
+浏览器宿主补齐两件：**页面可以声明并执行自己的工具**（`onToolCall` 通用回调，
+真机实测回调里 `await` 了 504 毫秒——同步执行不可能报出 ≥500），**以及图片**
+（选图存 IndexedDB → 模型自己调 `web:source/vision` → 字节发 Kimi 3 → 拿回文字）。
+核心判断：这两个需求是同一条缝的两个投影，后者是前者的前提
+（[119](issues/119-browser-host-capability-decision.md)）。主模型从头到尾没见过图，
+图片字节不进 journal——跟 CLI/server 是同一套设计，不是浏览器的降级。
+
 ### 已完成：M7 子 agent 可观测（2026-08-03，插在 M6 中间；真机验收全过）
 
 「子 agent 不该是黑盒，界面要显示它在干啥」——真实使用反馈驱动的插入项。定性：可观测性
