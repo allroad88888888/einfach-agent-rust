@@ -35,9 +35,12 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agent_cli::{ext_stats, mcp, print, provider, repl, session_path, session_start, vision};
+use agent_cli::{
+    agent_limits, ext_stats, mcp, print, provider, repl, session_path, session_start, tool_table,
+    vision,
+};
 use agent_core::{AgentId, Session, SessionConfig, SystemChunk};
-use agent_runtime::{RunnerCtx, SkillRegistry, ToolTable};
+use agent_runtime::{RunnerCtx, SkillRegistry};
 use agent_tools::ToolExecutor;
 use agent_transport::{Client, config};
 
@@ -138,9 +141,15 @@ fn main() {
     });
     eprintln!("mcp={}", mcp.summary());
 
-    let store = agent_runtime::open_backend(session_file.clone(), |e| {
-        eprintln!("[会话文件] {e}")
-    });
+    let store = agent_runtime::open_backend(session_file.clone(), |e| eprintln!("[会话文件] {e}"));
+
+    // 162（决策 32）：两道结构性硬限从 `--max-agent-depth`/`--max-children`（env
+    // 兜底）来。配错了**拒绝启动**，不静默退默认档——理由见 `agent_limits` 模块
+    // 文档。**同一份值喂给两条路**：新建会话走下面的 `set_agent_limits`，恢复走
+    // `recover` 的 `limits` 入参（160），于是「新建的」和「恢复的」拿到同一组数。
+    let limits = agent_limits::from_args_and_environment(&args)
+        .unwrap_or_else(|message| fail(&format!("参数错误：{message}")));
+    eprintln!("子 agent 上限={}", agent_limits::banner(limits));
 
     // 135：新建会话才跑开局工具——记下这一支，装完工具表后据此决定要不要调。
     let mut is_new_session = false;
@@ -148,6 +157,7 @@ fn main() {
         store.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        limits,
         &mut |key| {
             eprintln!("[会话文件] 快照里有一个这一版不认识的键，已忽略：{key:?}");
         },
@@ -161,7 +171,12 @@ fn main() {
         }
         Ok(None) => {
             is_new_session = true;
-            Session::new(AgentId::root())
+            let mut session = Session::new(AgentId::root());
+            // 162：恢复那条路由上面的 `recover` 入参带进去，新建这条路在这里补，
+            // 两条拿到同一组数。顺序要紧——下面 `with_spawn(session.agent_limits())`
+            // 读的就是这一刻的值，颠倒过来模型会看到默认档的数字而闸是别的。
+            session.set_agent_limits(limits);
+            session
         }
         Err(e) => fail(&format!("{e}")),
     };
@@ -169,38 +184,19 @@ fn main() {
         agent_runtime::recovered_transient_source_needs_fail_close(&session);
 
     let mut printer = print::EventPrinter::new();
-    // 本地标准工具集含受版本保护、可显式撤回的文件事务；不会把浏览器/桌面
-    // 交互伪装成本地工具。随后保留既有 spawn 开关，上限传的是
-    // `session.agent_limits()`——工具描述里告诉模型的数字，必须跟真正拦它的
-    // 那两道闸是同一组（`ToolTable::with_spawn` 的文档记了这个耦合）。
-    // MCP 工具追加在最后（红线 11：builtin/shell/spawn/skills 的顺序是既有契约，
-    // 只加不改；server 之间按 id、server 内按 tools/list，已在 `mcp::bootstrap` 排好）。
-    // `with_status`（051）/ `with_collect`（053）紧跟在 `with_spawn` 之后、
-    // skills/MCP 之前：这样「静态的那一段工具表」在所有会话里逐字节相同，
-    // 不随装了几个 skill / 几个 MCP 工具而移位（红线 11）。
-    //
-    // 三个一起开：`background=true` 的 spawn 没有 collect 就是个陷阱——模型
-    // 看得见后台这条路，却没有任何办法把结果拿回来，发出去的子全部在轮末被
-    // 拆掉（`ToolTable::with_collect` 的文档记着这条）。
-    let mut tool_table = ToolTable::standard_local()
-        .with_spawn(session.agent_limits())
-        .with_status()
-        .with_collect()
-        .with_skills(skills)
-        .with_mcp(mcp.tools);
-    // s5：配了 kimi 段才声明识图工具，追加在最末（跟 `agent-server` 的
-    // actor 装配同一个语义）——不碰上面既有工具的顺序，红线 11 只加不改。
-    if vision_enabled {
-        tool_table = tool_table.with_vision_inspect();
-    }
-    // 149：`--ext-stats` 开了才装 `ext:stats` 扩展包，追加在**表尾**（红线 11：
-    // 前面那段所有会话共有的字节一个都不动）。不开 = `with_extension` 一次都不调，
-    // 工具表逐字节回到不装扩展的样子。`pending` 是 ctx 半边，下面 `RunnerCtx` 建好
-    // 之后必须 install——忘了 debug 构建会在它的 `Drop` 里当场炸（EXTENSIONS.md §防呆）。
-    let (tool_table, ext_pending) = ext_stats::install(
-        tool_table,
-        ext_stats::enabled(&args),
-        session_file.as_deref(),
+    // 工具表的组成与顺序（红线 11 的契约）整段住 `tool_table` 模块——`limits`
+    // 传的是 `session.agent_limits()` 而不是上面那个 `limits` 变量：两者此刻相等
+    // （恢复走 `recover` 入参、新建走 `set_agent_limits`），但**真正该跟工具描述
+    // 对齐的是会话手上那一份**，从会话读就不会有第二个真相。
+    let (tool_table, ext_pending) = tool_table::assemble(
+        tool_table::Parts {
+            limits: session.agent_limits(),
+            skills,
+            mcp_tools: mcp.tools,
+            vision: vision_enabled,
+            ext_stats: ext_stats::enabled(&args),
+            session_file: tool_table::owned(session_file.as_deref()),
+        },
         &mut |m| eprintln!("ext-stats={m}"),
     );
     let mut ctx = RunnerCtx::new(

@@ -70,6 +70,7 @@ fn a_restored_sessions_next_turn_body_carries_zero_bytes_of_the_old_activated_sk
         0,
         0,
         100,
+        agent_core::AgentLimits::default(),
         &mut |k| unknown.push(k.clone()),
     )
     .expect("含 SkillsActive + HostSkills 的老快照必须能被今天的代码重放，不 panic、不拒绝");
@@ -102,7 +103,12 @@ fn a_restored_sessions_next_turn_body_carries_zero_bytes_of_the_old_activated_sk
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let bodies = bodies.lock().unwrap();
-    assert_eq!(bodies.len(), 1, "该正好录到一条请求体，实际: {}", bodies.len());
+    assert_eq!(
+        bodies.len(),
+        1,
+        "该正好录到一条请求体，实际: {}",
+        bodies.len()
+    );
     assert!(
         !bodies[0].contains(SENTINEL),
         "恢复出来的老会话曾经激活过这个 skill，但 141 删了那条把激活集展开成注入料\

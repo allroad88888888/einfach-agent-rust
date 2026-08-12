@@ -54,6 +54,7 @@ fn a_session_written_through_jsonl_survives_dropping_and_reopening_the_backend()
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .unwrap()

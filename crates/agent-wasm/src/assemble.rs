@@ -88,6 +88,7 @@ pub(crate) async fn open(
         store.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         // 快照里有这一版不认识的键：忽略并继续，跟 CLI 同一条处理。
         &mut |_key| {},
     ) {

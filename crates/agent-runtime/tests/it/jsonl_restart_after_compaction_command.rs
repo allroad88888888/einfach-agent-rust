@@ -15,7 +15,7 @@
 //! 压缩命令写 entry → 落盘 → 新进程 → `recover` 成功且状态还在。
 //! 以后 M12 再加会落 entry 的命令，照这个形状加一条。
 
-use agent_core::{AgentId, Session, SendPlan, ToolCallId, TurnStatus};
+use agent_core::{AgentId, SendPlan, Session, ToolCallId, TurnStatus};
 
 use crate::support;
 use crate::support::ScriptedResponse;
@@ -64,6 +64,7 @@ fn a_session_that_advanced_its_boundary_still_recovers_after_a_restart() {
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .expect("recover 不该失败——失败十有八九是新 label 没进 KNOWN_LABELS")
@@ -113,6 +114,7 @@ fn a_session_that_cleared_tool_results_still_recovers_after_a_restart() {
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .expect("recover 不该失败——失败十有八九是新 label 没进 KNOWN_LABELS")
@@ -156,6 +158,7 @@ fn a_session_that_applied_a_summary_still_recovers_after_a_restart() {
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .expect("recover 不该失败——失败十有八九是新 label 没进 KNOWN_LABELS")
@@ -167,9 +170,7 @@ fn a_session_that_applied_a_summary_still_recovers_after_a_restart() {
     assert_eq!(plan.boundary(), 1, "边界要跟着恢复");
     assert_eq!(plan.summary(), Some(&id), "摘要引用要跟着恢复");
     assert_eq!(
-        recovered
-            .summary_text(&AgentId::root(), &id)
-            .as_deref(),
+        recovered.summary_text(&AgentId::root(), &id).as_deref(),
         Some("前一条的摘要"),
         "摘要正文要跟着恢复"
     );

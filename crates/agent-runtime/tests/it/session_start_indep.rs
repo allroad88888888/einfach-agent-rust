@@ -27,11 +27,11 @@
 //! 3. 失败工具 → 整体 `Err`（携带该工具名）、无前缀块、history 无 `prefix_init`。
 //! 4. 执行计数：新建 = 1 次；快照 → 恢复 → 不再调 `run_session_start` → 仍 1 次。
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use agent_core::{AgentId, Session, SystemChunk, ToolSpec, DEFAULT_HISTORY_CAP};
-use agent_runtime::{run_session_start, CallTiming, TimedRun, ToolTable};
+use agent_core::{AgentId, DEFAULT_HISTORY_CAP, Session, SystemChunk, ToolSpec};
+use agent_runtime::{CallTiming, TimedRun, ToolTable, run_session_start};
 use serde_json::json;
 
 fn spec(name: &str, description: &str) -> ToolSpec {
@@ -169,7 +169,10 @@ fn a_tool_returning_empty_text_produces_no_chunk_and_does_not_break_ordering() {
 
     assert_eq!(
         session.prefix_chunks(),
-        vec![chunk("init:alpha", "A 的内容"), chunk("init:beta", "B 的内容")],
+        vec![
+            chunk("init:alpha", "A 的内容"),
+            chunk("init:beta", "B 的内容")
+        ],
         "空文本的工具不产块，且前后两块仍按注册顺序相邻"
     );
 }
@@ -201,10 +204,7 @@ fn a_failing_tool_aborts_the_whole_batch_and_leaves_no_prefix_trace() {
     let err = run_session_start(&mut session, &table).expect_err("第二个工具失败，整体该是 Err");
 
     assert_eq!(&*err.tool, "boom", "错误必须携带失败的那个工具名");
-    assert_eq!(
-        &*err.message, "装不上",
-        "错误消息该是执行体返回的 Err 原文"
-    );
+    assert_eq!(&*err.message, "装不上", "错误消息该是执行体返回的 Err 原文");
 
     assert!(
         session.prefix_chunks().is_empty(),
@@ -257,6 +257,7 @@ fn restoring_from_a_snapshot_does_not_rerun_session_start_and_keeps_prefix_chunk
         0,
         0,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |key| panic!("恢复不该遇到不认识的键：{key:?}"),
     )
     .expect("从刚拿到的快照恢复不该失败");

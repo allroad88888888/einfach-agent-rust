@@ -11,12 +11,12 @@
 //! 上，钉住 144/145 落的槽位跟着整棵树一起复原，不是只有 root 那一份。
 //! 看门狗手法照抄 `session_start_indep.rs::counting_ok`。
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use agent_core::{AgentId, AgentLimits, Session, ToolSpec, TurnStatus, DEFAULT_HISTORY_CAP};
+use agent_core::{AgentId, AgentLimits, DEFAULT_HISTORY_CAP, Session, ToolSpec, TurnStatus};
 use agent_providers::wire_name;
-use agent_runtime::{run_session_start, run_turn, CallTiming, TimedRun, ToolTable};
+use agent_runtime::{CallTiming, TimedRun, ToolTable, run_session_start, run_turn};
 use serde_json::json;
 
 use crate::support;
@@ -94,7 +94,11 @@ fn prefix_allowed_of_survives_a_snapshot_restore_cycle_and_keeps_filtering_the_w
 
     let mut session = Session::new(AgentId::root());
     run_session_start(&mut session, &table(Arc::clone(&counter))).expect("唯一的开局工具该成功");
-    assert_eq!(counter.load(Ordering::SeqCst), 1, "会话创建这一次该恰好执行一次");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        1,
+        "会话创建这一次该恰好执行一次"
+    );
 
     let wire = spawn_wire();
     let port = support::spawn_scripted_server(vec![
@@ -107,8 +111,12 @@ fn prefix_allowed_of_survives_a_snapshot_restore_cycle_and_keeps_filtering_the_w
         support::sse_text("root received c1"),
     ]);
     let (mut ctx, _events) = support::build_ctx_with(port, &dir, table(Arc::clone(&counter)));
-    let status = run_turn(&mut session, &mut ctx, "spawn a child before taking a snapshot")
-        .expect("不该是 source failure");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "spawn a child before taking a snapshot",
+    )
+    .expect("不该是 source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let child = AgentId::root().child(1);
@@ -128,6 +136,7 @@ fn prefix_allowed_of_survives_a_snapshot_restore_cycle_and_keeps_filtering_the_w
         0,
         0,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |key| panic!("恢复不该遇到不认识的键：{key:?}"),
     )
     .expect("从刚拿到的快照恢复不该失败");
@@ -162,10 +171,13 @@ fn prefix_allowed_of_survives_a_snapshot_restore_cycle_and_keeps_filtering_the_w
         support::sse_text("child c2 reported"),
         support::sse_text("root received c2"),
     ]);
-    let (mut ctx2, _events2) =
-        support::build_ctx_with(port2, &dir, table(Arc::clone(&counter)));
-    let status = run_turn(&mut recovered, &mut ctx2, "spawn again after restoring the session")
-        .expect("恢复之后继续跑不该是 source failure");
+    let (mut ctx2, _events2) = support::build_ctx_with(port2, &dir, table(Arc::clone(&counter)));
+    let status = run_turn(
+        &mut recovered,
+        &mut ctx2,
+        "spawn again after restoring the session",
+    )
+    .expect("恢复之后继续跑不该是 source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     let bodies2 = bodies2.lock().unwrap();
@@ -190,7 +202,11 @@ fn spawning_two_children_in_one_turn_does_not_rerun_session_start() {
 
     let mut session = Session::new(AgentId::root());
     run_session_start(&mut session, &table(Arc::clone(&counter))).expect("唯一的开局工具该成功");
-    assert_eq!(counter.load(Ordering::SeqCst), 1, "会话创建这一次该恰好执行一次");
+    assert_eq!(
+        counter.load(Ordering::SeqCst),
+        1,
+        "会话创建这一次该恰好执行一次"
+    );
 
     let wire = spawn_wire();
     let port = support::spawn_scripted_server(vec![
@@ -210,8 +226,12 @@ fn spawning_two_children_in_one_turn_does_not_rerun_session_start() {
     ]);
     let (mut ctx, _events) = support::build_ctx_with(port, &dir, table(Arc::clone(&counter)));
 
-    let status = run_turn(&mut session, &mut ctx, "spawn two children one after another")
-        .expect("不该是 source failure");
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "spawn two children one after another",
+    )
+    .expect("不该是 source failure");
     assert_eq!(status, TurnStatus::Done { truncated: false });
 
     assert_eq!(

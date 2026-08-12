@@ -61,11 +61,17 @@ pub(super) fn run(
         );
     });
 
+    // 160：`limits` 与 `history_cap` 同类，恢复不出来、得由宿主再说一遍——两个都从
+    // 这一档的 `SessionTemplate` 取，恢复出来的会话于是和新建的拿到同一组数。
+    let limits = spec.tools.spawn_limits().unwrap_or_default();
     let mut unknown_keys: Vec<String> = Vec::new();
-    let recovered =
-        agent_runtime::recover(store.as_ref(), agent.clone(), history_cap, &mut |key| {
-            unknown_keys.push(format!("{key:?}"));
-        });
+    let recovered = agent_runtime::recover(
+        store.as_ref(),
+        agent.clone(),
+        history_cap,
+        limits,
+        &mut |key| unknown_keys.push(format!("{key:?}")),
+    );
 
     // `restored` = 这个会话是从日志里回放出来的（不是全新建的）。073 用它分辨
     // 「注入的声明从哪来」——**新建看这次请求，恢复看回放出来的状态**。
@@ -80,9 +86,11 @@ pub(super) fn run(
             // 034：`ToolTableSpec::Full` 带的 spawn 上限对齐进 `Session`——
             // `ToolTable::with_spawn` 只把这组数字写进给模型看的描述，真正拦
             // 人的两道闸在 `Session::spawn_child`，两边必须是同一组数
-            // （`ToolTableSpec::spawn_limits` 文档）。只在新建会话时对齐，跟
-            // `history_cap` 同一个既有取舍：恢复出来的会话带着它自己持久化过
-            // 的配置，不被这一刻的服务端配置悄悄改写。
+            // （`ToolTableSpec::spawn_limits` 文档）。
+            //
+            // 160 更正：这里曾经写着「恢复出来的会话带着它自己持久化过的配置」
+            // ——`limits` 和 `history_cap` **都不持久化**，那句话对两者都不成立。
+            // 两个都由宿主在上面的 `recover` 调用里再说一遍，新建与恢复同一组数。
             if let Some(limits) = spec.tools.spawn_limits() {
                 session.set_agent_limits(limits);
             }

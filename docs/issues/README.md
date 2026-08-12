@@ -722,9 +722,48 @@ TurnEnd 不进协议（宿主墙外 poll/SSE 天然观测，副作用在自己�
 开工勘查发现 HEAD 上的 `agent-wasm` 还没有 capabilities 声明路（那是另一会话
 未提交的在飞工作），在它合并前做 157 是在未合并的地基上盖楼。
 
- ---
- 
- ## 怎么做
+---
+
+## M18 · 子 agent 上限的配置面
+
+**结束时你能做什么**：`agent-server --max-children 2` 起进程，那两道闸和模型看到的
+工具描述**同时**变成 2；重启恢复会话之后**还是** 2。
+
+`AgentLimits { max_depth: 3, max_children: 8 }`（决策 20）在代码里一直可配
+（`Session::set_agent_limits` / `ToolTableSpec::Full { spawn_limits }` 都在，034 还
+把「工具描述那份」与「真正拦人那份」的对齐做成了一次函数调用），**缺的只是运行时
+入口**——四个生产装配点全部写死 `AgentLimits::default()`。
+
+开工勘查还挖出一个**今天被掩盖的静默失配**：`restore.rs:128` 恢复时硬写
+`default()`，而 `recover` 只给了 `history_cap` 入参、没给 `limits`——`actor/body.rs`
+那句「恢复出来的会话带着它自己持久化过的配置」对 limits 是假的。今天配置值恒等于
+default 所以不显形，**上限一可配，第一次重启就显形**（闸退回 8，描述里还写着 16）。
+所以 160 不等决策、先修。
+
+```
+159（决策：配置面开在哪一层）─┬→ 161（server-bin 两个 flag）─┐
+                              └→ 162（CLI 两个 flag）        ├→ 163（真机收官，M18 终点）
+160（recover 补 limits 入参）───────────────────────────────┘
+```
+
+| # | 任务 | 依赖 | 模型 | 独测 | 状态 |
+|---|---|---|---|---|---|
+| [159](159-agent-limits-config-decision.md) | **决策**：进程级 / per-session / 进 store 三选一 | — | **opus** | 决策类 | ✅ 决策 32 |
+| [160](160-recover-limits-param.md) | `recover` 补 `limits` 入参，堵恢复失配 | — | sonnet | ✅ | ✅ 完成 |
+| [161](161-server-bin-limits-flags.md) | `agent-server` 两个 flag + env 兜底 | 159 | sonnet | ✅ | ✅ 完成 |
+| [162](162-cli-limits-flags.md) | `agent-cli` 两个 flag | 159 | sonnet | ✅ | ✅ 完成 |
+| [163](163-m18-dogfood.md) | 真机收官 + 文档清账 ← **M18 终点** | 160+161 | 主会话前台 | 本条即验收 | 待跑（要真 key） |
+
+**排期注意**：159 与 160 无依赖可并行开工（160 不管决策怎么拍都要做）。
+**161/162 等 159 拍板**——159 若选了 B（per-session 进协议）或 C（进 store），
+这两条整个作废换形状。**wasm 与桌面不在范围内**：`agent-wasm` 里 `with_spawn`
+零命中（那个形态没开子 agent 能力），桌面是内嵌库走装配默认。
+
+**159–162 已完成**（2026-08-12）：决策 32 拍板 A + 取严；恢复失配堵上（6 条测试，
+含负向验证）；两个宿主的 flag 都通了（15 条测试 + 不花钱的启动 smoke）。
+`cargo test --workspace` **2040 passed / 0 failed**，红线告警比开工前**净减一条**
+（`restore.rs` 拆分后退出清单）。**只剩 163 的真机那一趟**——它要真 provider key，
+按 WORKFLOW §四第 -2 条单飞。
 
 ---
 

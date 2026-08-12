@@ -13,7 +13,7 @@
 //! 是宿主看到 `ToolsPending` 且未收敛就知道「上一个进程可能已经把这个工具跑了，
 //! 不能揣着 `ToolCallRequest` 假装它没发生过就重新 `ExecuteTool`」。
 
-use agent_core::{AgentId, Session, TurnStatus};
+use agent_core::{AgentId, AgentLimits, Session, TurnStatus};
 use agent_store::history::Entry as PersistedEntry;
 use agent_store::persist::LoadOutcome;
 
@@ -55,10 +55,17 @@ impl std::error::Error for RecoverError {}
 /// `store.load()` 为 `Absent`（全新会话，从没写过东西）→ `Ok(None)`；`Refused`
 /// （有会话但读不出来）→ `Err`，硬失败，不当成「没有会话」；`Loaded` 就翻译 +
 /// 重建，翻译/重建失败同样原样报告，**不吞、不猜、不给一个能跑但是错的会话**。
+///
+/// `history_cap` 与 `limits` 是**这个会话的两项配置**：都不进原子图、不进日志，
+/// 所以都恢复不出来，都必须由宿主把自己那一份再说一遍（`Session::restore` 的文档
+/// 「`limits` 为什么必须是入参」）。两个参数排在一起就是为了让这层意思读得出来
+/// ——160 之前只有 `history_cap` 有通道，`limits` 在 `restore` 里被硬写成默认值，
+/// 上限一可配就是一处静默失配。
 pub fn recover(
     store: &SessionBackend,
     agent: AgentId,
     history_cap: usize,
+    limits: AgentLimits,
     on_unknown_key: &mut impl FnMut(&agent_core::AtomKey),
 ) -> Result<Option<Session>, RecoverError> {
     let loaded = match store.load() {
@@ -85,6 +92,7 @@ pub fn recover(
         loaded.cursor,
         loaded.next_seq,
         history_cap,
+        limits,
         on_unknown_key,
     )
     .map_err(RecoverError::InvalidHistory)?;
@@ -149,6 +157,7 @@ mod tests {
             ctx.session_store.as_ref(),
             AgentId::root(),
             100,
+            agent_core::AgentLimits::default(),
             &mut |_| {},
         )
         .unwrap();
@@ -186,9 +195,13 @@ mod tests {
     #[test]
     fn a_refused_load_is_a_hard_error_not_an_empty_session() {
         let store = AlwaysRefuses;
-        let result = recover(&store, AgentId::root(), 100, &mut |_| {
-            panic!("不该有不认识的键")
-        });
+        let result = recover(
+            &store,
+            AgentId::root(),
+            100,
+            agent_core::AgentLimits::default(),
+            &mut |_| panic!("不该有不认识的键"),
+        );
         match result {
             Err(RecoverError::Refused(reason)) => {
                 assert!(reason.contains('1'), "理由该带行号：{reason}")
@@ -231,6 +244,7 @@ mod tests {
             ctx.session_store.as_ref(),
             AgentId::root(),
             100,
+            agent_core::AgentLimits::default(),
             &mut |_| panic!("不该有不认识的键"),
         )
         .unwrap()

@@ -217,4 +217,37 @@ mod tests {
             }
         }
     }
+
+    /// 161：`Full` 这一档配的上限，必须真的走进**模型看得见的那份描述**。
+    ///
+    /// 这是「两侧数字是同一组」那条耦合里最容易悄悄断掉的一半：`Session` 那侧
+    /// 由 `actor::body` 的 `set_agent_limits`/`recover` 保证（160 已钉），描述这侧
+    /// 全靠 `build()` 把 `spawn_limits` 递给 `ToolTable::with_spawn`。递丢了不会
+    /// 报错——模型只会看到默认档的 8，按 8 规划，然后撞上运维配的那道更紧的闸。
+    #[test]
+    fn the_configured_limits_reach_the_description_the_model_reads() {
+        let table = ToolTableSpec::Full {
+            spawn_limits: AgentLimits {
+                max_depth: 2,
+                max_children: 3,
+            },
+        }
+        .build();
+
+        let spec = table
+            .specs()
+            .iter()
+            .find(|s| &*s.name == agent_runtime::SPAWN_TOOL)
+            .expect("Full 档该有 spawn");
+        let description = &*spec.description;
+
+        assert!(
+            description.contains("最多 2") && description.contains("3 个"),
+            "配的 2/3 该出现在描述里，实际：{description}"
+        );
+        assert!(
+            !description.contains("8 个"),
+            "不该还留着默认档的 8——那说明 spawn_limits 没递到 with_spawn：{description}"
+        );
+    }
 }

@@ -81,9 +81,16 @@ fn a_snapshot_restores_prefix_chunks_byte_for_byte_in_write_order() {
     let snapshot = source.primitives();
 
     let mut unknown: Vec<AtomKey> = Vec::new();
-    let restored = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
-        unknown.push(k.clone())
-    })
+    let restored = Session::restore(
+        root(),
+        Some(snapshot),
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |k| unknown.push(k.clone()),
+    )
     .expect("合法快照该能恢复");
     assert!(
         unknown.is_empty(),
@@ -129,16 +136,34 @@ fn entry_level_undo_takes_it_back_and_redo_restores_it() {
     let next_seq = log.len() as u64;
 
     // undo：游标停在写入之前 → 前缀块该为空。
-    let undone = Session::restore(root(), None, log.clone(), 0, next_seq, 100, &mut |_| {})
-        .expect("游标为 0 的日志是合法的（全部可 redo）");
+    let undone = Session::restore(
+        root(),
+        None,
+        log.clone(),
+        0,
+        next_seq,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |_| {},
+    )
+    .expect("游标为 0 的日志是合法的（全部可 redo）");
     assert!(
         undone.prefix_chunks().is_empty(),
         "entry 级 undo 退掉之后，前缀块不该认得任何写入"
     );
 
     // redo（正对照）：游标推回写入之后 → 内容跟写入时一样。
-    let redone = Session::restore(root(), None, log.clone(), log.len(), next_seq, 100, &mut |_| {})
-        .expect("游标在末尾是最普通的那种恢复");
+    let redone = Session::restore(
+        root(),
+        None,
+        log.clone(),
+        log.len(),
+        next_seq,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |_| {},
+    )
+    .expect("游标在末尾是最普通的那种恢复");
     assert_eq!(
         redone.prefix_chunks(),
         chunks(),
@@ -181,14 +206,26 @@ fn a_restored_session_yields_prefix_chunks_directly_with_no_external_source() {
     let snapshot: Vec<(AtomKey, AgentValue)> =
         serde_json::from_str(&once).expect("自己写出来的快照必须读得回来");
     let twice = serde_json::to_string(&snapshot).expect("往返之后仍该可序列化");
-    assert_eq!(once, twice, "同一份前缀块两次序列化必须逐字节相同（红线 11）");
+    assert_eq!(
+        once, twice,
+        "同一份前缀块两次序列化必须逐字节相同（红线 11）"
+    );
 
     // 切断跟原对象的一切联系：后面只剩反序列化出来的 `snapshot`。
     drop(source);
     drop(primitives);
 
-    let restored = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |_| {})
-        .expect("合法快照该能恢复");
+    let restored = Session::restore(
+        root(),
+        Some(snapshot),
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |_| {},
+    )
+    .expect("合法快照该能恢复");
 
     assert_eq!(
         restored.prefix_chunks(),

@@ -68,9 +68,16 @@ fn host_tools_value() -> AgentValue {
 fn a_snapshot_with_host_tools_restores_every_field_of_every_declaration() {
     let snapshot = vec![(AtomKey::Agent(root(), Slot::HostTools), host_tools_value())];
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
-        unknown.push(k.clone())
-    })
+    let session = Session::restore(
+        root(),
+        Some(snapshot),
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |k| unknown.push(k.clone()),
+    )
     .expect("合法快照该能恢复");
 
     assert!(
@@ -139,8 +146,17 @@ fn the_declaration_survives_a_serde_roundtrip_byte_for_byte() {
 /// 当默认值塞进来。老会话就该继续没有注入的工具。
 #[test]
 fn an_old_session_without_the_key_falls_back_to_no_injection() {
-    let session = Session::restore(root(), None, Vec::new(), 0, 0, 100, &mut |_| {})
-        .expect("全新会话，没有任何快照/日志，该能正常建出来");
+    let session = Session::restore(
+        root(),
+        None,
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |_| {},
+    )
+    .expect("全新会话，没有任何快照/日志，该能正常建出来");
     assert!(
         session.host_tools().is_empty(),
         "默认值必须是「没有任何注入」"
@@ -167,6 +183,7 @@ fn restoring_a_real_sessions_log_reproduces_its_declaration() {
         cursor,
         entries.len() as u64,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .expect("原会话产出的日志必须能被自己重放");
@@ -195,6 +212,7 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
         0,
         entries.len() as u64,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .expect("游标为 0 的日志是合法的（全部可 redo）");
@@ -212,6 +230,7 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
         entries.len(),
         entries.len() as u64,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .expect("游标在末尾是最普通的那种恢复");

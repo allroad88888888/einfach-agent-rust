@@ -57,9 +57,16 @@ fn value_of(names: Vec<Arc<str>>) -> AgentValue {
 
 fn restore_with(snapshot: Vec<(AtomKey, AgentValue)>) -> Session {
     let mut unknown = Vec::new();
-    let session = Session::restore(root(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
-        unknown.push(k.clone())
-    })
+    let session = Session::restore(
+        root(),
+        Some(snapshot),
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |k| unknown.push(k.clone()),
+    )
     .expect("合法快照该能恢复");
     assert!(
         unknown.is_empty(),
@@ -163,6 +170,7 @@ fn a_log_whose_cursor_sits_before_the_switch_restores_without_it() {
         source.cursor(),
         len,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .expect("恢复该成功");
@@ -173,7 +181,17 @@ fn a_log_whose_cursor_sits_before_the_switch_restores_without_it() {
     );
 
     // 游标在开关之前 → 一个都没关。
-    let before = Session::restore(root(), None, log, 0, len, 100, &mut |_| {}).expect("恢复该成功");
+    let before = Session::restore(
+        root(),
+        None,
+        log,
+        0,
+        len,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |_| {},
+    )
+    .expect("恢复该成功");
     assert!(
         before.disabled_builtins().is_empty(),
         "游标停在开关之前，这个会话不该关着任何东西"

@@ -122,7 +122,11 @@ fn the_index_timed_tool_reads_this_tables_own_registry() {
 /// registry**：空 registry 是彻底的无操作（上面那条测试），不会撞出任何名字。
 #[test]
 fn with_skills_called_twice_does_not_duplicate_read_or_index() {
-    let build = || ToolTable::builtin().with_skills(a_registry()).with_skills(a_registry());
+    let build = || {
+        ToolTable::builtin()
+            .with_skills(a_registry())
+            .with_skills(a_registry())
+    };
     let result = std::panic::catch_unwind(build);
     if cfg!(debug_assertions) {
         assert!(
@@ -132,7 +136,11 @@ fn with_skills_called_twice_does_not_duplicate_read_or_index() {
     } else {
         let table = result.expect("release 构建下不该 panic");
         assert_eq!(
-            table.specs().iter().filter(|s| &*s.name == SKILL_READ).count(),
+            table
+                .specs()
+                .iter()
+                .filter(|s| &*s.name == SKILL_READ)
+                .count(),
             1,
             "read 不该被重复调用多留一条"
         );
@@ -178,9 +186,16 @@ fn a_restored_session_with_a_journaled_activation_no_longer_has_any_injection_pa
         AgentValue::Json(Arc::new(serde_json::json!(["crm-flow"]))),
     )];
     let mut unknown = Vec::new();
-    let restored = Session::restore(root.clone(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
-        unknown.push(k.clone())
-    })
+    let restored = Session::restore(
+        root.clone(),
+        Some(snapshot),
+        Vec::new(),
+        0,
+        0,
+        100,
+        agent_core::AgentLimits::default(),
+        &mut |k| unknown.push(k.clone()),
+    )
     .expect("含 SkillsActive 数据的快照必须能被今天的代码重放，不 panic、不拒绝");
     assert!(
         unknown.is_empty(),

@@ -142,6 +142,7 @@ fn snapshot_restore_preserves_profile_and_legacy_missing_slot_is_null() {
         cursor,
         next_seq,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |key| replay_unknown.push(key.clone()),
     )
     .expect("restore from spawn log");
@@ -157,6 +158,7 @@ fn snapshot_restore_preserves_profile_and_legacy_missing_slot_is_null() {
         0,
         0,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |key| unknown.push(key.clone()),
     )
     .expect("restore current snapshot");
@@ -176,6 +178,7 @@ fn snapshot_restore_preserves_profile_and_legacy_missing_slot_is_null() {
         0,
         0,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |key| legacy_unknown.push(key.clone()),
     )
     .expect("restore legacy snapshot without execution profile slot");

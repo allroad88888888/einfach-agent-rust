@@ -50,6 +50,7 @@ mod prefix_intent_reverse_lock;
 mod prefix_intent_single_compaction_round_is_not_chronic;
 mod prefix_intent_tier2_clear_tool_results;
 mod prefix_intent_tier4_boundary_advance;
+mod recover_limits_indep;
 mod remote_tool_deadline_countdown;
 mod remote_tool_deadline_epoch_writeback;
 mod remote_tool_deadline_fails_the_call;

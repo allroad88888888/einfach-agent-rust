@@ -124,6 +124,7 @@ fn prefix_allowed_survives_the_public_restore_surface() {
         cursor,
         next_seq,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| unknown_keys.push(k.clone()),
     )
     .expect("恢复不该拒绝一份自己刚生成的落盘件");

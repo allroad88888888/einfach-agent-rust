@@ -45,6 +45,7 @@ fn a_whole_tree_survives_a_snapshot_and_replay() {
         cursor,
         next_seq,
         100,
+        agent_core::AgentLimits::default(),
         &mut |k| unknown.push(k.clone()),
     )
     .unwrap();
@@ -88,6 +89,7 @@ fn the_restored_tree_keeps_stepping_and_undoing() {
         cursor,
         next_seq,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .unwrap();
@@ -145,6 +147,7 @@ fn a_tombstone_survives_and_still_reserves_its_seq() {
         cursor,
         next_seq,
         100,
+        agent_core::AgentLimits::default(),
         &mut |_| {},
     )
     .unwrap();

@@ -8,7 +8,7 @@
 use std::io::BufRead;
 use std::sync::Arc;
 
-use agent_core::{AgentLimits, SystemChunk};
+use agent_core::SystemChunk;
 use agent_server::{
     AgentServer, BootstrapError, BootstrapOptions, ServerConfig, ToolTableSpec, bootstrap,
     default_bind_addr,
@@ -16,7 +16,7 @@ use agent_server::{
 use agent_transport::Client;
 use tracing::{error, info};
 
-use crate::{cli::Cli, ready_file, remote_tool_timeout};
+use crate::{agent_limits, cli::Cli, ready_file, remote_tool_timeout};
 
 /// 跟 `agent-cli`/`examples/serve.rs` 一字不差——三个宿主对「一个简洁诚实的
 /// 助手」这句话的判断此前各写一遍，这不是巧合，是这个仓库目前唯一的默认
@@ -41,15 +41,26 @@ pub async fn run(cli: Cli) {
         .unwrap_or_else(|_| fail("working_directory", "agent-server startup failed"))
         .join(".agent-server-tools");
 
+    // 决策 32：上限配错了**拒绝启动**，不静默退默认档（`agent_limits::parse_count`
+    // 的文档记了这一取向跟的是 `AGENT_BIND` 而不是 `--port`）。跟
+    // `remote_tool_timeout` 同一个出口形状：`Result` 交给 `fail` 变非零退出。
+    let spawn_limits = agent_limits::from_cli_and_environment(&cli).unwrap_or_else(|message| {
+        eprintln!("{message}");
+        fail("agent_limits_config", "agent-server startup failed")
+    });
+
     let assembled = bootstrap(BootstrapOptions {
         tools_root,
         default_sessions_dir: cli.sessions_dir.clone(),
         // 开满档：内置只读集 + `srv:shell/exec` + `srv:agent/spawn`，跟
         // `examples/serve.rs`/`agent-cli` 同一个「开箱即跑」判断——决策 12
         // 说的「用它就是开箱即跑」，不该是一个功能缩水的默认档位。
-        tools: ToolTableSpec::Full {
-            spawn_limits: AgentLimits::default(),
-        },
+        //
+        // 161：上限从 `--max-agent-depth`/`--max-children`（env 兜底）来，不再写死
+        // 默认档。喂进这一档之后全链自动通：`ToolTableSpec::spawn_limits()` 读口把
+        // 「工具描述里给模型看的那份」和「`spawn_child` 真正拦人的那份」对齐（034），
+        // 恢复路径由 `actor::body` 转给 `recover` 的 `limits` 入参（160）。
+        tools: ToolTableSpec::Full { spawn_limits },
         system: vec![SystemChunk {
             label: Arc::from("base"),
             text: Arc::from(SYSTEM_PROMPT),

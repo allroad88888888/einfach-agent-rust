@@ -6,6 +6,7 @@
 //! `--sessions-dir`/`--port`/Ctrl-C 优雅退出这几件这个 bin 独有的事在
 //! [`run`] 模块，参数解析在 [`cli`] 模块——三十行以上的装配逻辑不堆在这里。
 
+mod agent_limits;
 mod cli;
 mod observability;
 mod ready_file;

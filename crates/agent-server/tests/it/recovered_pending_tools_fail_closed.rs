@@ -65,6 +65,7 @@ async fn restart_terminally_cancels_recovered_pending_tools_without_a_new_comman
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |_| panic!("不应出现未知持久化键"),
     )
     .unwrap()

@@ -141,6 +141,7 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
             backend.as_ref(),
             AgentId::root(),
             agent_core::DEFAULT_HISTORY_CAP,
+            agent_core::AgentLimits::default(),
             &mut |k| panic!("不该有不认识的键：{k:?}"),
         )
         .unwrap_or_else(|e| {
@@ -189,6 +190,7 @@ fn three_consecutive_restart_cycles_keep_the_session_file_healthy() {
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .expect("第三周期该能正常恢复，不该撞 SeqNotIncreasing 搁浅")

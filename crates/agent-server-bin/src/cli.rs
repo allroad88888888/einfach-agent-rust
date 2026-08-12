@@ -11,6 +11,8 @@
 
 use std::path::PathBuf;
 
+use crate::agent_limits;
+
 pub struct Cli {
     /// `--config <path>`：覆盖 providers.toml 的位置。`run::run` 把它写进
     /// `AGENT_PROVIDERS_CONFIG` 环境变量——`agent_transport::config::load`
@@ -31,6 +33,13 @@ pub struct Cli {
     pub ready_file: Option<PathBuf>,
     /// 从 stdin 单行读取 Java 为此子进程随机生成的 private API capability。
     pub private_capability_stdin: bool,
+    /// `--max-agent-depth <n>`：子 agent 树的深度上限（root = 0，默认 3）。
+    /// 没给就退 `AGENT_MAX_AGENT_DEPTH`（决策 32；解析与兜底都在
+    /// [`crate::agent_limits`]，这里只记「命令行上给没给」）。
+    pub max_agent_depth: Option<usize>,
+    /// `--max-children <n>`：每个 agent 活着的直接子 agent 数上限（默认 8）。
+    /// 没给就退 `AGENT_MAX_CHILDREN`。
+    pub max_children: Option<usize>,
 }
 
 pub enum ParsedArgs {
@@ -55,6 +64,8 @@ pub fn parse(args: &[String]) -> ParsedArgs {
         port: None,
         ready_file: None,
         private_capability_stdin: false,
+        max_agent_depth: None,
+        max_children: None,
     };
     let mut i = 0;
     while i < args.len() {
@@ -81,6 +92,30 @@ pub fn parse(args: &[String]) -> ParsedArgs {
             cli.ready_file = args.get(i).map(PathBuf::from);
         } else if arg == "--private-capability-stdin" {
             cli.private_capability_stdin = true;
+        } else if let Some(v) = arg.strip_prefix("--max-agent-depth=") {
+            // 上限**解析不出来就拒绝启动**，不跟 `--port` 那样静默退 `None`
+            // ——理由（有没有下游替它报错）在 `agent_limits::parse_count` 的文档。
+            match agent_limits::parse_count("--max-agent-depth", Some(v)) {
+                Ok(n) => cli.max_agent_depth = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
+        } else if arg == "--max-agent-depth" {
+            i += 1;
+            match agent_limits::parse_count("--max-agent-depth", args.get(i).map(String::as_str)) {
+                Ok(n) => cli.max_agent_depth = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
+        } else if let Some(v) = arg.strip_prefix("--max-children=") {
+            match agent_limits::parse_count("--max-children", Some(v)) {
+                Ok(n) => cli.max_children = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
+        } else if arg == "--max-children" {
+            i += 1;
+            match agent_limits::parse_count("--max-children", args.get(i).map(String::as_str)) {
+                Ok(n) => cli.max_children = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
         } else if arg.starts_with('-') {
             return ParsedArgs::Invalid(format!("unknown option: {arg}"));
         }
@@ -106,11 +141,18 @@ OPTIONS:
     --ready-file <path>       成功 bind 后原子发布 JSON 就绪文件；内容含
                               port、pid、version，供父进程读取实际端口
     --private-capability-stdin 从 stdin 读取一行私有 API capability；Java 托管时必需
+    --max-agent-depth <n>     子 agent 树的深度上限，root 是 0（默认 3）
+    --max-children <n>        每个 agent 活着的直接子 agent 数上限（默认 8）
+                              两者都要 ≥ 1；给了非法值直接拒绝启动，不退回默认值。
+                              要整个关掉子 agent 请用建会话时的
+                              capabilities.disable_builtin: [\"srv:agent/spawn\"]
     -h, --help                打印这条帮助然后退出
 
 ENV:
     AGENT_PROVIDERS_CONFIG    同 --config，命令行参数优先
     AGENT_SERVER_PORT         同 --port，命令行参数优先
+    AGENT_MAX_AGENT_DEPTH     同 --max-agent-depth，命令行参数优先
+    AGENT_MAX_CHILDREN        同 --max-children，命令行参数优先
     AGENT_REMOTE_TOOL_TIMEOUT_MS
                               远程工具领取后等待结果的正整数毫秒数；不给则使用
                               运行时默认值 600000（10 分钟）
@@ -120,102 +162,8 @@ ENV:
 Ctrl-C 或 Unix SIGTERM 优雅退出：收到信号后关闭全部会话（落盘快照），再退出进程。
 ";
 
+/// 解析单测拆去 `cli_tests.rs`——161 加两个上限 flag 之后这个文件顶破了
+/// 红线 9 的 300 行。同 `agent-core` 里 `spawn.rs`/`despawn.rs` 的先例。
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| s.to_string()).collect()
-    }
-
-    fn run_or_panic(parsed: ParsedArgs) -> Cli {
-        match parsed {
-            ParsedArgs::Run(cli) => cli,
-            ParsedArgs::Help => panic!("期望 Run，拿到 Help"),
-            ParsedArgs::Invalid(message) => panic!("期望 Run，参数错误：{message}"),
-        }
-    }
-
-    #[test]
-    fn no_flags_is_all_none() {
-        let cli = run_or_panic(parse(&args(&["agent-server"])));
-        assert!(cli.config.is_none());
-        assert!(cli.sessions_dir.is_none());
-        assert!(cli.port.is_none());
-        assert!(cli.ready_file.is_none());
-        assert!(!cli.private_capability_stdin);
-    }
-
-    #[test]
-    fn two_token_form_is_recognized_for_all_flags() {
-        let cli = run_or_panic(parse(&args(&[
-            "agent-server",
-            "--config",
-            "/tmp/providers.toml",
-            "--sessions-dir",
-            "/tmp/sessions",
-            "--port",
-            "8080",
-            "--ready-file",
-            "/tmp/agent-server.ready",
-            "--private-capability-stdin",
-        ])));
-        assert_eq!(cli.config, Some(PathBuf::from("/tmp/providers.toml")));
-        assert_eq!(cli.sessions_dir, Some(PathBuf::from("/tmp/sessions")));
-        assert_eq!(cli.port, Some(8080));
-        assert_eq!(
-            cli.ready_file,
-            Some(PathBuf::from("/tmp/agent-server.ready"))
-        );
-        assert!(cli.private_capability_stdin);
-    }
-
-    #[test]
-    fn equals_form_is_recognized() {
-        let cli = run_or_panic(parse(&args(&[
-            "agent-server",
-            "--config=/x.toml",
-            "--sessions-dir=/y",
-            "--port=9",
-            "--ready-file=/z/agent.ready",
-        ])));
-        assert_eq!(cli.config, Some(PathBuf::from("/x.toml")));
-        assert_eq!(cli.sessions_dir, Some(PathBuf::from("/y")));
-        assert_eq!(cli.port, Some(9));
-        assert_eq!(cli.ready_file, Some(PathBuf::from("/z/agent.ready")));
-    }
-
-    #[test]
-    fn help_flag_short_circuits_before_anything_else() {
-        assert!(matches!(
-            parse(&args(&["agent-server", "--help"])),
-            ParsedArgs::Help
-        ));
-        assert!(matches!(
-            parse(&args(&["agent-server", "-h"])),
-            ParsedArgs::Help
-        ));
-        // --help 出现在别的 flag 之后也一样识别——不要求它必须在最前面。
-        assert!(matches!(
-            parse(&args(&["agent-server", "--port", "1", "--help"])),
-            ParsedArgs::Help
-        ));
-    }
-
-    #[test]
-    fn unknown_options_fail_instead_of_being_ignored() {
-        assert!(matches!(
-            parse(&args(&["agent-server", "--misspelled-option"])),
-            ParsedArgs::Invalid(message) if message.contains("--misspelled-option")
-        ));
-    }
-
-    #[test]
-    fn unparseable_port_is_silently_none_not_a_panic() {
-        // 跟 `agent_cli::session_path` 同一个取向：命令行解析层不做验证性
-        // 报错，交给下游（这里是 `default_bind_addr`）在真正需要这个值时
-        // 报出「配置错了」——避免解析器和使用者各有一套错误文案。
-        let cli = run_or_panic(parse(&args(&["agent-server", "--port", "not-a-number"])));
-        assert_eq!(cli.port, None);
-    }
-}
+#[path = "cli_tests.rs"]
+mod tests;

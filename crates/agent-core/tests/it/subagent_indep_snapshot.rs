@@ -117,6 +117,7 @@ fn restore_from_the_public_surface_rebuilds_the_whole_tree() {
         cursor,
         next_seq,
         DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| unknown_keys.push(k.clone()),
     )
     .expect("恢复不该拒绝一份自己刚生成的落盘件");

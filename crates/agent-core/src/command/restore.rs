@@ -19,6 +19,7 @@ use crate::value::atom_value::AgentValue;
 
 use super::meta::AgentEntry;
 use super::session::Session;
+use super::spawn::AgentLimits;
 
 impl Session {
     /// 重建一个会话。
@@ -32,8 +33,22 @@ impl Session {
     ///   **不写回**（写回就是把一次已经放弃的 undo 悄悄恢复，不诚实）。
     /// - `history_cap`：载入后要重调的日志上限（011 的推给 027：`from_parts` 出来的
     ///   日志天生无 cap）。传 [`super::session::DEFAULT_HISTORY_CAP`] 就是默认档。
+    /// - `limits`：载入后要重调的结构性硬限（决策 20 的两道闸）。**和 `history_cap`
+    ///   同一类东西**——是这个会话的配置、不进原子图也不进日志，所以恢复不出来，
+    ///   必须由宿主把它这一侧的那一份**再说一遍**。传 [`AgentLimits::default`]
+    ///   就是决策 20 的默认档（深度 ≤3、子数 ≤8）。
     /// - `on_unknown_key`：快照里有、这一版 schema 已经不认识的键（010 的
     ///   schema 演进：删掉的槽位），报给宿主，不静默丢。
+    ///
+    /// # `limits` 为什么必须是入参（160）
+    ///
+    /// 它曾经在这里被硬写成 [`AgentLimits::default`]，注释还写着「宿主要非默认值，
+    /// 恢复后调 `set_agent_limits`」——**可那时候根本没有这个入参**，`recover` 也没
+    /// 转发通道，宿主想重调也无从下手。今天配置值恒等于默认值，两边永远相等，所以
+    /// 这个洞看不出来；上限一可配（161/162 的 flag），第一次重启就显形：闸退回 8，
+    /// 而工具描述里还写着部署方配的那个数，**模型按看到的数字规划，然后撞上一道它
+    /// 无法预见的墙**。两侧数字必须是同一组，这是 `ToolTable::with_spawn` 与
+    /// `registry::spec::ToolTableSpec` 反复记着的耦合，恢复路径也不例外。
     ///
     /// # 校验失败原样返回
     ///
@@ -63,6 +78,7 @@ impl Session {
         cursor: usize,
         next_seq: u64,
         history_cap: usize,
+        limits: AgentLimits,
         on_unknown_key: &mut impl FnMut(&AtomKey),
     ) -> Result<Session, InvalidHistory> {
         let max_epoch = entries.iter().map(|e| e.meta.epoch).max();
@@ -122,182 +138,17 @@ impl Session {
             // **当次进程**里，工具结果落地的那一刻，把 `mark_irreversible` 登记过的
             // call_id 翻译成 entry 的 `barrier` 位，翻译一旦发生就不再需要了。
             irreversible: Vec::new(),
-            // 结构性硬限是**配置**不是状态（`Session` 的字段表），落盘里没有它。
-            // 宿主要非默认值，恢复后调 `set_agent_limits` —— 和 `history_cap`
-            // 一样是「载入后重调」的东西。
-            limits: crate::command::spawn::AgentLimits::default(),
+            // 结构性硬限是**配置**不是状态（`Session` 的字段表），落盘里没有它——
+            // 所以它恢复不出来，只能由宿主经入参**再说一遍**（160；本函数文档
+            // 「`limits` 为什么必须是入参」记了它曾经硬写 default 埋下的静默失配）。
+            // 和 `history_cap` 同一类，两者在参数表里也排在一起。
+            limits,
         })
     }
 }
 
+/// 白盒单测拆去 `restore_tests.rs`（这个文件已经顶到红线 9 的 300 行，而 160
+/// 还要往 `Session::restore` 上加参数）——同 `spawn.rs`/`despawn.rs` 的先例。
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::command::meta::EntryMeta;
-    use crate::engine::state::TurnStatus;
-    use crate::graph::Slot;
-    use agent_store::Change;
-
-    fn agent() -> AgentId {
-        AgentId::root()
-    }
-
-    fn meta(turn_id: u64, epoch: u64, label: &'static str) -> EntryMeta {
-        EntryMeta {
-            turn_id,
-            epoch: Epoch(epoch),
-            label,
-            barrier: false,
-        }
-    }
-
-    fn status_change(prev: TurnStatus, next: TurnStatus) -> Change<AtomKey, AgentValue> {
-        Change {
-            key: AtomKey::Agent(agent(), Slot::Status),
-            prev: AgentValue::Status(prev),
-            next: AgentValue::Status(next),
-        }
-    }
-
-    /// 没有快照、entries 全部生效（cursor == len）：等价于「从头整份重放」。
-    #[test]
-    fn no_snapshot_replays_every_entry_up_to_cursor() {
-        let entries = vec![AgentEntry {
-            seq: 0,
-            meta: meta(1, 0, "user_input"),
-            changes: vec![status_change(TurnStatus::Idle, TurnStatus::Thinking)],
-        }];
-        let mut unknown = Vec::new();
-        let session = Session::restore(agent(), None, entries, 1, 1, 100, &mut |k| {
-            unknown.push(k.clone())
-        })
-        .unwrap();
-
-        assert_eq!(session.status(), TurnStatus::Thinking);
-        assert_eq!(session.turn_id(), 1);
-        assert_eq!(session.epoch(), Epoch(1));
-        assert!(unknown.is_empty());
-    }
-
-    /// 游标不在栈顶：`[cursor, len)` 是 redo 尾，**不写回** store，但仍然留在
-    /// `History` 里，`redo_turn` 应该能把它找回来。
-    #[test]
-    fn entries_past_the_cursor_are_not_replayed_but_stay_redoable() {
-        let entries = vec![
-            AgentEntry {
-                seq: 0,
-                meta: meta(1, 0, "user_input"),
-                changes: vec![status_change(TurnStatus::Idle, TurnStatus::Thinking)],
-            },
-            AgentEntry {
-                seq: 1,
-                meta: meta(1, 0, "cancel"),
-                changes: vec![status_change(
-                    TurnStatus::Thinking,
-                    TurnStatus::Failed(crate::engine::state::Failure::Cancelled),
-                )],
-            },
-        ];
-        let mut unknown = Vec::new();
-        let mut session = Session::restore(agent(), None, entries, 1, 2, 100, &mut |k| {
-            unknown.push(k.clone())
-        })
-        .unwrap();
-
-        // 只应用了第一条：状态是 Thinking，不是 Cancelled。
-        assert_eq!(session.status(), TurnStatus::Thinking);
-        assert_eq!(session.cursor(), 1);
-        assert_eq!(session.history_len(), 2);
-
-        // redo 能把第二条找回来——它没有丢，只是没被应用。
-        let report = session.redo_turn();
-        assert!(matches!(
-            report,
-            crate::command::UndoReport::Applied { entries: 1, .. }
-        ));
-        assert_eq!(
-            session.status(),
-            TurnStatus::Failed(crate::engine::state::Failure::Cancelled)
-        );
-    }
-
-    /// 快照 + 之后的日志：快照灌回 primitive，日志接着把状态推到快照点之后。
-    #[test]
-    fn a_snapshot_seeds_primitives_then_entries_advance_past_it() {
-        let snapshot = vec![(
-            AtomKey::Agent(agent(), Slot::Status),
-            AgentValue::Status(TurnStatus::Thinking),
-        )];
-        let entries = vec![AgentEntry {
-            seq: 5,
-            meta: meta(3, 2, "provider_failed"),
-            changes: vec![status_change(
-                TurnStatus::Thinking,
-                TurnStatus::Failed(crate::engine::state::Failure::Provider(
-                    crate::seam::ErrorClass::Unknown,
-                )),
-            )],
-        }];
-        let session = Session::restore(agent(), Some(snapshot), entries, 1, 6, 100, &mut |_| {
-            panic!("不该有不认识的键")
-        })
-        .unwrap();
-
-        assert_eq!(session.turn_id(), 3);
-        assert_eq!(session.epoch(), Epoch(3));
-        assert!(matches!(session.status(), TurnStatus::Failed(_)));
-    }
-
-    /// 快照里有一个这一版 schema 已经不认识的键——`on_unknown_key` 收到，不 panic，
-    /// 其余照常灌回。
-    #[test]
-    fn an_unknown_snapshot_key_is_reported_not_silently_dropped() {
-        let dropped_key = AtomKey::ToolCall(
-            agent(),
-            crate::ids::ToolCallId::new("gone"),
-            crate::graph::ToolCallSlot::Result,
-        );
-        let snapshot = vec![
-            (
-                AtomKey::Agent(agent(), Slot::Status),
-                AgentValue::Status(TurnStatus::Idle),
-            ),
-            (
-                dropped_key.clone(),
-                AgentValue::Text(std::sync::Arc::from("旧版本的东西")),
-            ),
-        ];
-        let mut unknown = Vec::new();
-        let session = Session::restore(agent(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
-            unknown.push(k.clone())
-        })
-        .unwrap();
-
-        assert_eq!(unknown, vec![dropped_key]);
-        assert_eq!(session.status(), TurnStatus::Idle);
-        assert_eq!(session.turn_id(), 1); // 没有 entry，退回起点
-        assert_eq!(session.epoch(), Epoch::START);
-    }
-
-    /// 破坏 `History::from_parts` 不变量的落盘件原样拒绝，不硬凑。
-    #[test]
-    fn invalid_persisted_history_is_rejected() {
-        let entries = vec![AgentEntry {
-            seq: 0,
-            meta: meta(1, 0, "user_input"),
-            changes: vec![status_change(TurnStatus::Idle, TurnStatus::Thinking)],
-        }];
-        let Err(err) = Session::restore(
-            agent(),
-            None,
-            entries,
-            5, /* 越界 */
-            1,
-            100,
-            &mut |_| {},
-        ) else {
-            panic!("越界游标该被拒绝");
-        };
-        assert_eq!(err, InvalidHistory::CursorOutOfRange);
-    }
-}
+#[path = "restore_tests.rs"]
+mod tests;

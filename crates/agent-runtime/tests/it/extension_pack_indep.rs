@@ -42,13 +42,13 @@
 //!    截获工具仍然能调通（手法照抄 `jsonl_restart_continues.rs` 的「进程 1／进程 2」
 //!    两段式重建）。
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use agent_core::{AgentId, ContentBlock, Reversibility, Session, ToolSpec, TurnStatus, UndoReport};
 use agent_providers::wire_name;
-use agent_runtime::{run_turn, CallTiming, ExtensionPack, SessionToolFn, TimedRun, ToolTable};
-use serde_json::{json, Value};
+use agent_runtime::{CallTiming, ExtensionPack, SessionToolFn, TimedRun, ToolTable, run_turn};
+use serde_json::{Value, json};
 
 use crate::support;
 
@@ -79,15 +79,18 @@ fn ok_session_fn() -> SessionToolFn {
 /// 忽略入参、原样回哨兵串的截获执行体——闭包每次调用都现造一个新 `Box`
 /// （`SessionToolFn` 不是 `Clone`）。
 fn sentinel_session_fn(sentinel: &'static str) -> SessionToolFn {
-    Box::new(move |_session: &mut Session, _agent: &AgentId, _input: &Value| {
-        Ok(Arc::from(sentinel))
-    })
+    Box::new(
+        move |_session: &mut Session, _agent: &AgentId, _input: &Value| Ok(Arc::from(sentinel)),
+    )
 }
 
 /// 每次调用给共享计数器 +1 的 timed 执行体。
 fn counting_turn_end_run(counter: Arc<AtomicUsize>) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &Value|
+              -> Result<Arc<str>, Arc<str>> {
             counter.fetch_add(1, Ordering::SeqCst);
             Ok(Arc::from("ok"))
         },
@@ -103,13 +106,18 @@ fn tool_result(session: &Session, agent: &AgentId, call_id: &str) -> (String, bo
         .iter()
         .flat_map(|m| m.blocks.iter())
         .find_map(|block| match block {
-            ContentBlock::ToolResult { id, content, is_error } if &*id.0 == call_id => {
-                Some((content.to_string(), *is_error))
-            }
+            ContentBlock::ToolResult {
+                id,
+                content,
+                is_error,
+            } if &*id.0 == call_id => Some((content.to_string(), *is_error)),
             _ => None,
         })
         .unwrap_or_else(|| {
-            panic!("{} 的历史里没有 call_id={call_id} 的 tool_result", agent.as_str())
+            panic!(
+                "{} 的历史里没有 call_id={call_id} 的 tool_result",
+                agent.as_str()
+            )
         })
 }
 
@@ -123,7 +131,8 @@ fn tools_array_bytes(body: &str) -> &[u8] {
         .find(KEY)
         .unwrap_or_else(|| panic!("请求体里没有 tools 段：{body}"));
     let start = at + KEY.len();
-    let mut stream = serde_json::Deserializer::from_slice(&body_bytes[start..]).into_iter::<Value>();
+    let mut stream =
+        serde_json::Deserializer::from_slice(&body_bytes[start..]).into_iter::<Value>();
     let value = stream
         .next()
         .expect("tools 后面该有一个值")
@@ -243,10 +252,16 @@ fn an_irreversible_ext_tool_leaves_a_barrier_that_stops_undo_until_forced() {
         .entries()
         .find(|e| e.seq == barrier_seq)
         .unwrap();
-    assert!(barrier_entry.meta.barrier, "撞停的这条 entry 该带 barrier 位");
+    assert!(
+        barrier_entry.meta.barrier,
+        "撞停的这条 entry 该带 barrier 位"
+    );
 
     let report = session.undo_turn_force();
-    assert!(matches!(report, UndoReport::Applied { .. }), "强制越过该成功：{report:?}");
+    assert!(
+        matches!(report, UndoReport::Applied { .. }),
+        "强制越过该成功：{report:?}"
+    );
     assert!(session.messages().is_empty(), "越过之后这一轮该整个退掉");
 }
 
@@ -414,6 +429,7 @@ fn extension_tool_still_works_after_snapshot_recovery_reinstalls_the_pack() {
         backend.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
+        agent_core::AgentLimits::default(),
         &mut |k| panic!("不该有不认识的键：{k:?}"),
     )
     .unwrap()
