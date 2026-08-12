@@ -663,9 +663,10 @@ M14 一份在飞未提交改动自身的编译错误，与本条无关（141 实
 | [147](147-migrate-intercepts.md) | 四条既有截获迁移进表，行为逐字节零变化 | 146 | sonnet | — |
 | [148](148-extension-pack-seam.md) | `ExtensionPack` 接缝定型 + `ext:` 前缀 + docs/EXTENSIONS.md | 146 | **opus** | ✅ |
 | [149](149-extension-dogfood.md) | 真机 dogfood：ext:stats 包全程（含 undo 活演示）← **前半终点** | 147+148 | **opus** | 本条即验收 |
-| [150](150-derived-extension-decision.md) | **决策**：扩展 derived + 谓词触发的形状 | 149 | **opus** | 决策类 |
-| [151](151-derived-registration.md) | 扩展 derived 注册面（红线 1 域） | 150 | **opus** | ✅ |
-| [152](152-predicate-hooks.md) | 状态谓词触发 hook（红线 6 + 决策 21 域）← **M16 终点** | 151 | **opus** | ✅ |
+| [150](150-derived-extension-decision.md) | **决策**：扩展观测「被问才算」，不做反应式层（= 决策 30） | 149 | **opus** | 已拍板 |
+| [151](151-derived-registration.md) | ~~扩展 derived 注册面~~ **撤销**（动机随决策 30 ③消失） | — | — | — |
+| [152](152-predicate-hooks.md) | ~~状态谓词触发 hook~~ **撤销**（动机随决策 30 ④消失） | — | — | — |
+| [153](153-timed-run-session.md) | `TimedRun` 加只读 `&Session`，ext:stats 删传话格 ← **M16 终点** | 150 | sonnet | — |
 
 **M16 前半验收**（149 逐条扛）：模型自主调 `ext:stats/report` 汇报会话状态；
 **undo 撤一轮后再调，数字跟着账本回退**（扩展视图与状态严格一致的活演示）；
@@ -679,6 +680,12 @@ TurnEnd 审计文件完成轮恰好一行、取消轮零行；不装包的会话
 **排期注意**：146/147 动 `dispatch.rs`——与另一会话在 `agent-wasm` 的在飞
 工作无文件交集，可随时开工；150–152 明确后置（决策要吃 149 的真实手感，
 提前定是在猜——本仓 021 的老教训）。
+
+**后半收口（2026-08-12，决策 30）**：「后置等手感」的钱花对了——149 交上来的
+手感把 150 从三个大问题削成一刀：hook 没有独立概念（= TurnEnd 工具）、
+`TimedRun` 加只读 `&Session`、扩展**不设** derived 注册面（截获工具被调时现算，
+工具体内自便）、谓词触发不做（讨论记档在决策 30，防半年后重开）。
+151/152 撤销，收尾只剩 [153](153-timed-run-session.md)。
 
  ---
  
