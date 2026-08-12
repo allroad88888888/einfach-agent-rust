@@ -20,16 +20,31 @@
 //! 循环为什么不会空转：每一圈**消费掉恰好一个**等待槽（`resolve_remote_tool_async`
 //! 内部 `take_remote_tool`），而新的槽只可能由模型再要一次工具产生——那需要一次
 //! 完整的 provider 往返。所以它既不需要计数上限，也不可能忙等。
+//!
+//! # 但「就地执行」把两件事挪进了这个函数（123）
+//!
+//! server 形态下宿主执行工具期间泵已经收工、控制权在命令队列上，所以「用户取消」
+//! 和「等待槽到点」都由那条队列驱动（`agent-server` 的 `handle_cancel` /
+//! `handle_remote_tool_timeout`）。浏览器形态下**没有那条队列**：整轮都在
+//! `AgentHost::send` 那一个 Promise 里，工具执行就是链上的一个 `await`。于是这两件
+//! 事必须在这里做，否则一条挂住的页面回调 = 整个宿主对页面失去响应（`send()` 握着
+//! `live.borrow_mut()`，见 [`crate::host_session`] 的借用纪律）。
+//!
+//! 打断的判定在 [`crate::interrupt`]（那里也写了「JS Promise 没法真 abort」这件事
+//! 选了哪条路），收尾在这里的 [`settle_interrupt`]：**两条出口各自对应一个既有的
+//! runtime 入口**，一个新的收尾语义都没有发明。
 
 use agent_core::{Failure, Session, TurnStatus, UndoReport};
 use agent_runtime::{
     RemoteToolClaimDecision, RemoteToolClaimRequest, RemoteToolFailure, RemoteToolOutput,
     RemoteToolSubmitOutcome, RemoteToolSubmitRequest, RemoteToolWaiting, ResolveRemoteToolError,
-    RunnerCtx, TransientSourceFailure, claim_remote_tool, is_transient_source,
-    resolve_remote_tool_async, run_turn_async, submit_remote_tool_result_async,
+    RunnerCtx, TransientSourceFailure, cancel_pending_remote_tools_async, claim_remote_tool,
+    is_transient_source, resolve_remote_tool_async, run_turn_async,
+    submit_remote_tool_result_async, sweep_remote_tool_deadlines_async,
 };
 
 use crate::host_tool;
+use crate::interrupt::{self, Interrupted};
 
 /// 一轮结束时页面要知道的东西。
 pub(crate) struct Outcome {
@@ -113,7 +128,17 @@ async fn drain_host_tools(
             };
             continue;
         }
-        let output = host_tool::execute(&waiting).await;
+        let output =
+            match interrupt::until_settled(ctx, &waiting, host_tool::execute(&waiting)).await {
+                Ok(output) => output,
+                Err(interrupted) => match settle_interrupt(session, ctx, interrupted).await? {
+                    Some(next) => {
+                        status = next;
+                        continue;
+                    }
+                    None => return Ok(status),
+                },
+            };
         match resolve_remote_tool_async(session, ctx, waiting.agent, waiting.call_id, output).await
         {
             Ok(next) => status = next,
@@ -143,6 +168,11 @@ async fn drain_host_tools(
 ///
 /// `Ok(None)` 表示这次回传没有让状态机往前走（认领失败，或提交本身被判定为
 /// 重放/冲突/未认领而没有新事件提交）；`Ok(Some(status))` 才是真的推进了一步。
+///
+/// 123：执行被打断时这里**不提交**，直接把 [`settle_interrupt`] 的结论当返回值
+/// ——它的两种取值跟上面这条约定逐字同款，调用方一行都不用改。认领过的槽由收尾
+/// 那两条路各自划掉，截止线因此是从**认领那一刻**起算的（`claim_remote_tool`
+/// 会按预算重新起表），不是派发那一刻。
 async fn drain_transient_source(
     session: &mut Session,
     ctx: &mut RunnerCtx,
@@ -172,7 +202,16 @@ async fn drain_transient_source(
         call_id: call_id.clone(),
         request: grant.request,
     };
-    let outcome = to_submit_outcome(host_tool::execute(&unredacted).await);
+    let executed =
+        interrupt::until_settled(ctx, &unredacted, host_tool::execute(&unredacted)).await;
+    let outcome = match executed {
+        Ok(output) => to_submit_outcome(output),
+        // 打断之后**不提交**：认领过的槽由收尾那两条路各自划掉（取消 →
+        // `discard_remote_tools`；到点 → `take_expired_remote_tools`，因为认领过所以
+        // 落的是 `OutcomeUnknown`，而正文被 transient-source 策略换成 `SAFE_ERROR`）。
+        // 这里补一次提交只会撞上那条已经收场的槽。
+        Err(interrupted) => return settle_interrupt(session, ctx, interrupted).await,
+    };
     submit_remote_tool_result_async(
         session,
         ctx,
@@ -189,6 +228,41 @@ async fn drain_transient_source(
         |_decision| {},
     )
     .await
+}
+
+/// 一次执行被打断之后，这一轮从哪继续（123）。
+///
+/// 返回值的约定跟 [`drain_transient_source`] 一致：`Some(status)` = 状态机往前走了
+/// 一步，drain 循环拿它当新的 `status` 接着转；`None` = 这一刻没什么可推进的，
+/// 调用方把手里的状态原样交回去，**不重试**。
+///
+/// 两条出口各自复用一个既有的 runtime 入口，一个新语义都没发明：
+///
+/// - **取消** → [`cancel_pending_remote_tools_async`]：斩断所有等待槽 + 把
+///   `Event::Cancel` 喂进转移表。轮次因此落 `Failed(Cancelled)`，[`run`] 那半段照旧
+///   走 `undo_turn`（取消轮丢弃），页面拿到 `cancelledTurn`。跟 `agent-server` 的
+///   `handle_cancel` 是同一句——浏览器只是没有那条命令队列替它调。
+///   槽全被斩断，所以 drain 循环下一圈必然退出。
+/// - **到点** → [`sweep_remote_tool_deadlines_async`]：把过期槽翻成一条 `is_error`
+///   的工具结果（**带登记那一刻的 epoch**，红线 6 的判据在 runtime 那边，这里不
+///   重抄）喂回模型，泵接着把这一轮跑完。模型看得见「这次调用超时了」并自纠，
+///   页面看得见一条 `ToolExecuted { is_error: true }`。
+///
+/// 到点那条的 `Ok(None)`（这一刻其实没有槽过期）结构上不可达——[`interrupt`] 只在
+/// **这一条槽**的剩余时间归零时才报 `Expired`，而两边判过期的判据是同一个。
+/// 仍然按 `None` 老老实实交回去：真出现了就说明表已经不是我们以为的样子，
+/// 那时**再执行一次同一条工具**（副作用做两遍）比停下来糟得多。
+async fn settle_interrupt(
+    session: &mut Session,
+    ctx: &mut RunnerCtx,
+    interrupted: Interrupted,
+) -> Result<Option<TurnStatus>, TransientSourceFailure> {
+    match interrupted {
+        Interrupted::Cancelled => cancel_pending_remote_tools_async(session, ctx)
+            .await
+            .map(Some),
+        Interrupted::Expired => sweep_remote_tool_deadlines_async(session, ctx).await,
+    }
 }
 
 /// [`host_tool::execute`] 的 [`RemoteToolOutput`] → [`RemoteToolSubmitOutcome`]。

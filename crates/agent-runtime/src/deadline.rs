@@ -24,8 +24,9 @@
 //! 不必等它收工。两半共用 [`expired`]，产出的事件逐字节同款。
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use agent_core::{Event, Session, TurnStatus};
+use agent_core::{AgentId, Event, Session, ToolCallId, TurnStatus};
 // 114b：`Instant::now()` panic 在 wasm32-unknown-unknown 上，垫 `web-time`
 // （native 目标下就是 `std::time::Instant` 本尊，行为不变）。
 use web_time::Instant;
@@ -104,6 +105,40 @@ pub async fn sweep_remote_tool_deadlines_async(
     Ok(status)
 }
 
+/// 指定等待槽**还剩多久到点**；`None` = 表里没有这条（已经收敛 / 已经被斩断）。
+///
+/// 123 加的，服务于一种 060 当时不存在的宿主形态：浏览器里执行一条 `web:` 工具是
+/// **就地 `await` 页面的一个 Promise**，没有「回去等命令」那一步可等，所以宿主要把
+/// 那次 await 本身变成可打断的等待——它需要的正是这个数。
+///
+/// # 为什么不能用 [`RunnerCtx::next_remote_deadline`] 顶替
+///
+/// 那个给的是**全表最早**的一条（server 形态下宿主空闲阻塞多久要的正是它）。同一
+/// 批派出的多个调用截止线只差微秒，但「全表最早的到点了」不等于「我手里正在执行的
+/// 这条到点了」：拿前者判后者，会在 B 到点而 A 还没到点时把 A 那次**正在正常执行**
+/// 的调用丢掉，槽还留在表里，下一圈又把同一条工具执行一遍。副作用执行两次不报错。
+///
+/// # 为什么返回 `Duration` 而不是 `Instant`
+///
+/// 把时钟读取留在这个 crate 里。114b/`dd23637` 已经把 `Instant`/`SystemTime` 统一垫
+/// 成 `web-time` 并加了 `tests/it/wasm_clock_source.rs` 那条守卫；调用方拿到的是一段
+/// **相对时长**，不必自己再取一次时间，也就不会在别处冒出第三种取时间的方式。
+///
+/// `Some(Duration::ZERO)` = 已经到点，且这一刻调 [`sweep_remote_tool_deadlines_async`]
+/// 必然扫得到它：两边判过期用的是同一条判据（`deadline <= now`），而时间只会往前走。
+pub fn remote_tool_deadline_in(
+    ctx: &RunnerCtx,
+    agent: &AgentId,
+    call_id: &ToolCallId,
+) -> Option<Duration> {
+    let now = Instant::now();
+    ctx.pending_remote_tools
+        .pending
+        .iter()
+        .find(|pending| &pending.agent == agent && &pending.call_id == call_id)
+        .map(|pending| pending.deadline.saturating_duration_since(now))
+}
+
 /// [`sweep_remote_tool_deadlines_async`] 的同步壳。理由与 `cfg` 的取舍见
 /// `crate::runner` 模块文档「但公开入口在 native 上仍然是同步的」。
 #[cfg(not(target_arch = "wasm32"))]
@@ -141,8 +176,17 @@ fn expired(ctx: &mut RunnerCtx, now: Instant) -> Vec<Event> {
                     budget.as_secs_f64(),
                 )
             } else {
+                // 措辞刻意**不说**「宿主没有领取」。领取（`claim_remote_tool`）只在
+                // 拉取式宿主那条路上是必经步骤；同进程宿主（浏览器，M14）执行普通
+                // `web:` 工具时根本不认领，于是 `claim_id` 恒为 `None`——**哪怕它
+                // 正在执行**。旧文案在浏览器形态下字面为假，而且 123 的真机验收里
+                // 模型照着它向用户复述了一遍「页面端宿主没有领取这次调用」。
+                //
+                // 现在这句在两种形态下都成立：拉取式宿主没来领 = 没回传；同进程宿主
+                // 挂住了 = 也没回传。**说「没回传」是可观测事实，说「没领取」是对
+                // 原因的猜测**，而这段文字是给模型看的。
                 format!(
-                    "[remote_tool_timeout][remote_tool_unclaimed_timeout] 远端工具领取超时：宿主在 {}s 内没有领取 {}，这次调用按失败收尾",
+                    "[remote_tool_timeout][remote_tool_unclaimed_timeout] 远端工具超时：{}s 内没有收到 {} 的结果，这次调用按失败收尾",
                     budget.as_secs_f64(),
                     pending.request.tool,
                 )

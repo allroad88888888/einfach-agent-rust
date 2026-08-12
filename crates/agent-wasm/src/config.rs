@@ -1,4 +1,5 @@
-//! 宿主页面给的那份 provider 配置（114d 的调用侧）。
+//! 页面在**建宿主那一刻**交给宿主、此后不再改变的外部输入：连哪个模型
+//! （114d 的调用侧），以及这个宿主有哪些页面声明的工具（122）。
 //!
 //! 浏览器里没有 `providers.toml`（113 明确不移植 `config.rs`），所以配置从页面
 //! 进来。**但类型不另起一套**：这里把页面给的 JSON 解成本模块的 [`HostConfig`]，
@@ -6,6 +7,19 @@
 //! 同一个类型、走同一个 `ExecutionBinding::from_provider_config`。两份配置结构
 //! 分叉之后「native 能跑 wasm 不能」的排查会变成噩梦（111 决策原话）。
 //!
+//! # 工具声明为什么也落在这个类型上（122）
+//!
+//! 两样东西共享同一条性质，而这条性质正是 122 最要紧的一条：**建宿主时定死、
+//! 会话期间不可变**。会话中途换工具表 = 前缀缓存全断，所以它必须跟 provider 配置
+//! 一样，只在构造 [`AgentHost`](crate::AgentHost) 的那一次被给定
+//! （[`HostConfig::with_declared_tools`] 是消费 `self` 的 builder，而
+//! `Inner::config` 之后再没有任何 `&mut` 的取法——「定死」因此是结构性的，
+//! 不靠运行时闸）。
+//!
+//! 顺带也是它落在这里的现实理由：[`crate::assemble::open`] 每开一次会话就要现造
+//! 一张工具表，而它拿到的宿主侧输入只有这一份 [`HostConfig`]。声明**怎么解析、
+//! 怎么校验**不在这里，在 `agent_runtime::host_tools_from_declaration`；
+//! **怎么装进表**在 [`crate::tools`]。这个类型只是那份料的载体。
 //! # key 只从使用者来，且不进任何输出
 //!
 //! 111 的契约第 4 条：**每个用户一把自己的 key**，不得内置任何默认值，也不得
@@ -16,6 +30,7 @@
 
 use std::sync::Arc;
 
+use agent_core::{Reversibility, ToolSpec};
 use agent_providers::Provider;
 use agent_providers::deepseek::DeepSeek;
 use agent_providers::glm::Glm;
@@ -23,8 +38,8 @@ use agent_providers::kimi::Kimi;
 use agent_transport::ProviderConfig;
 use serde::Deserialize;
 
-/// 页面传进来的一份配置。字段名与 `providers.toml` 的 `[providers.*]` 段一致，
-/// 好让「照着 native 配置抄一份到页面上」这件事不需要翻译表。
+/// 页面传进来的一份配置。前四个字段名与 `providers.toml` 的 `[providers.*]` 段
+/// 一致，好让「照着 native 配置抄一份到页面上」这件事不需要翻译表。
 #[derive(Deserialize)]
 pub(crate) struct HostConfig {
     /// 哪家 adapter：`deepseek` / `kimi` / `glm`。
@@ -33,6 +48,13 @@ pub(crate) struct HostConfig {
     pub(crate) model: String,
     /// 使用者自己的 key。见模块文档——它只活在内存里。
     api_key: String,
+    /// 122：页面声明的那一段工具，**已经解析校验完**的料。
+    ///
+    /// `#[serde(skip)]`：它不来自这份 provider 配置 JSON，而是构造 `AgentHost` 时
+    /// 另一个入参（页面把声明写成一个模块级常量原样传进来，见 [`crate::tools`]
+    /// 模块文档「红线 11」）。两样东西同住一个类型的理由见模块文档。
+    #[serde(skip)]
+    declared_tools: Vec<(ToolSpec, Reversibility)>,
 }
 
 impl HostConfig {
@@ -43,6 +65,21 @@ impl HostConfig {
              \"base_url\":\"…\", \"model\":\"…\", \"api_key\":\"…\"} 四个字符串字段"
                 .to_string()
         })
+    }
+
+    /// 122：把页面声明的那一段工具装上。**消费 `self`**，所以它只可能在建
+    /// `AgentHost` 的那一次被调用——之后 `Inner::config` 再没有 `&mut` 的取法，
+    /// 「第一次 `send()` 之前定死」因此是结构性成立的，不是一条运行时约定。
+    ///
+    /// 入参是 [`crate::tools::declare`] 的产出（已经解析、校验、撞名也挡过）。
+    pub(crate) fn with_declared_tools(mut self, tools: Vec<(ToolSpec, Reversibility)>) -> Self {
+        self.declared_tools = tools;
+        self
+    }
+
+    /// 页面声明的那一段，交给 [`crate::tools::browser_tool_table`] 装表。
+    pub(crate) fn declared_tools(&self) -> &[(ToolSpec, Reversibility)] {
+        &self.declared_tools
     }
 
     /// 翻成 114d 的那个共用类型。`api_key` 在这一步交出所有权的副本——之后这个

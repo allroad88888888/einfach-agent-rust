@@ -1,4 +1,10 @@
-//! 浏览器形态的工具表：**从空表起步，只声明宿主自己能执行的 `web:` 工具**。
+//! 浏览器形态的工具表**怎么装出来**：三条 Rust 自己实现的内建，加上页面声明的
+//! 那一段（122）。
+//!
+//! 「一段声明 JSON 怎么解析、什么样的声明当场拒掉」**不在这个文件里**，在
+//! `agent_runtime::host_tools_from_declaration`——那是纯逻辑、native 可测（119 §八
+//! 「native 可测优先」），这个 crate 是 wasm32 独立 workspace，`cargo test
+//! --workspace` 覆盖不到。这里只回答「这份料能不能装进**这张**表」。
 //!
 //! # 为什么是 `ToolTable::empty()` 而不是 `standard_local()` 减几件
 //!
@@ -9,25 +15,56 @@
 //! 黑名单回减错一个名字就是一件本不该出现的工具漏进了 prompt，而且**不报错**。
 //!
 //! 于是 114 验收第五条（「`srv:` 工具不出现在 prompt 里」）在这里是**结构性
-//! 成立**的，不靠过滤：这张表里从来没有过 `srv:` 前缀的东西。
+//! 成立**的，不靠过滤：这张表里从来没有过 `srv:` 前缀的东西。122 把外部输入接
+//! 进来之后这条第一次被真正考验——页面声明一条 `srv:` 前缀的工具会被当场拒掉
+//! （建宿主就失败），不是默默接受也不是默默丢掉。
 //!
-//! # 两个工具，为什么正好是这两个
+//! # 三条内建为什么保留为「总是存在」，而 121 的脚手架退场
 //!
-//! 验收第二条要「一个只有前端拿得到的能力」。页面标题与地址栏 URL 就是这类
-//! 东西的最小样本：服务端形态的 agent 无论如何都算不出来，只有跑在页面里的
-//! 宿主能读。执行在 [`crate::host_tool`]。
+//! 分界线是**谁实现它**，不是谁先写的：
 //!
-//! # 红线 11
+//! | | 实现在 | 声明在 |
+//! |---|---|---|
+//! | `web:page/title`、`web:page/url`、`web:source/echo` | Rust（[`crate::host_tool::execute`]） | 这里，**不可关闭** |
+//! | 别的一切 `web:`/`desk:` 工具 | 页面的工具回调（121） | 页面 |
 //!
-//! 工具表进 prompt 最前面，序列化必须逐字节确定。这里两条保证：
-//! 1. 表的内容是**编译期固定的常量**，不随会话、时间、随机 id 变化；
-//! 2. `ToolTable::with_host_tools` 自己会按名字排序再进表（062，见其模块
-//!    文档）——所以哪怕以后有人调乱了 [`host_tools`] 里的书写顺序，进 prompt
-//!    的字节也不变。
+//! 让页面去声明一条 **Rust 执行**的工具，等于把描述和实现拆到两个地方住：页面把
+//! 描述写歪了没有任何人会报错，模型照着错描述用工具，症状出现在离这里很远的地方。
+//! 这正是 121 定「内建优先于回调」时的同一条理由，只是这次落在声明侧。
 //!
-//! 「刷新页面后第一轮的工具表与关闭前最后一轮逐字节相同」这条验收，靠的就是
-//! 这两条；[`tool_table_json`] 把这张表原样吐出来，好让页面（和验收的人）能
-//! 直接做字节比对，不必去猜。
+//! 反过来 121 那条 `web:host/callback-probe` 就该退场：它的全部意义是「Rust 侧
+//! **不**实现它」，那么它的声明本来就属于页面。122 之后它由 `www/index.html` 的
+//! 那份常量声明，121 的四条真机验收原样仍然成立——同一条工具从「Rust 硬编码」
+//! 变成「页面声明」，是本条最好的自证。
+//!
+//! # 派发顺序不会被声明弄坏（两道闸）
+//!
+//! 1. [`crate::host_tool::execute`] 的 `match` 里三条内建名字排在最前，页面声明
+//!    只能进表，进不了那三个分支；
+//! 2. 页面声明的名字跟内建**撞名就拒**（[`declare`]）——不是「后来居上」，也不是
+//!    「先来的赢、后来的静默丢掉」。静默丢掉的话页面以为自己改写了那条工具的描述，
+//!    实际执行的还是 Rust 内建，又是一次「描述与实现对不上且不报错」。
+//!
+//! # 红线 11：这一段的责任在**页面**
+//!
+//! 工具表进 prompt 最前面，序列化必须逐字节确定。内建那一段由这个文件保证：
+//! 内容是编译期固定的常量，`ToolTable::with_host_tools` 自己会按名字排序再进表
+//! （062）。**页面声明那一段保证不了**——`with_host_tools` 只帮忙按名字排序，
+//! 帮不了字段顺序和描述文案。
+//!
+//! > 页面每次刷新交进来的声明 JSON 必须**逐字节一样**：描述文案改一个字、schema
+//! > 多一个键、少一条工具，前缀缓存当场全断（DeepSeek 上是 120 倍的差价）。
+//! > 正确的写法是把它写成一个**模块级常量**，不是每次现拼的字面量——
+//! > `www/index.html` 里的 `PAGE_TOOL_DECLARATION` 就是这么写的。
+//!
+//! 同一句话也写在 `AgentHost::new` 的文档注释里（那份会进生成的
+//! `agent_wasm.d.ts`，页面作者在编辑器里就看得见）。
+//!
+//! 两段的先后是**内建在前、声明在后**（分两次 `with_host_tools`）：页面声明了
+//! 什么都不会挪动内建那三条的字节，两个页面各声明各的，前面那一段仍然逐字节相同。
+//!
+//! [`tool_table_json`] 把整张表原样吐出来，好让页面（和验收的人）能直接做字节
+//! 比对，不必去猜。
 
 use agent_core::{Reversibility, ToolSpec};
 use agent_runtime::ToolTable;
@@ -45,15 +82,56 @@ pub(crate) const PAGE_URL_TOOL: &str = "web:page/url";
 /// 缝踩实。执行见 [`crate::host_tool::execute`]。
 pub(crate) const SOURCE_ECHO_TOOL: &str = "web:source/echo";
 
-/// 这个宿主给模型的全部工具。见模块文档——**没有 `srv:`，没有 `mcp:`**。
-pub(crate) fn browser_tool_table() -> ToolTable {
-    ToolTable::empty().with_host_tools(host_tools())
+/// Rust 自己实现的那三条。[`declare`] 拿它挡撞名，见模块文档「两道闸」。
+const BUILTIN_NAMES: [&str; 3] = [PAGE_TITLE_TOOL, PAGE_URL_TOOL, SOURCE_ECHO_TOOL];
+
+/// 页面交进来的一份声明 JSON → 能装进这张表的料。**页面没给（`None`）或者给了空
+/// 声明 → 空 `Vec`**，这个宿主退回到「只有三条内建」，跟 122 之前逐字节相同。
+///
+/// 两步，各管各的：
+///
+/// 1. `agent_runtime::host_tools_from_declaration`——这份声明**本身**合法吗
+///    （前缀白名单、字符集、长度、声明内部重名、可逆性缺省落 `Irreversible`）；
+/// 2. 这里——它能装进**这张**表吗（跟三条内建撞名就拒）。
+///
+/// 两步都是**整份拒**，不 sanitize、不跳过坏的那条：页面拿到的表要么就是它声明的
+/// 那份，要么建宿主当场失败并说清是哪一项。
+pub(crate) fn declare(json: Option<&str>) -> Result<Vec<(ToolSpec, Reversibility)>, String> {
+    let Some(json) = json else {
+        return Ok(Vec::new());
+    };
+    let declared =
+        agent_runtime::host_tools_from_declaration(json).map_err(|error| error.to_string())?;
+    for (spec, _) in &declared {
+        if BUILTIN_NAMES.contains(&&*spec.name) {
+            return Err(format!(
+                "工具名 \"{}\" 是这个宿主的内建工具（由 Rust 执行），不能由页面声明——页面声明它只会让描述和实现分居两处，而且不报错",
+                spec.name
+            ));
+        }
+    }
+    Ok(declared)
 }
 
-/// 三条声明 + 各自的可逆性。全是纯读/纯回显，所以 `Pure`——`/undo` 撞上它们不用
-/// 停下来问。宿主没说的一律该落保守的 `Irreversible`（HOST-CAPABILITIES §五：
-/// 「没说」不能推定为「安全」），这里是明确说了。
-fn host_tools() -> Vec<(ToolSpec, Reversibility)> {
+/// 这个宿主给模型的全部工具：**内建那一段在前，页面声明那一段在后**。见模块文档
+/// ——**没有 `srv:`，没有 `mcp:`**。
+///
+/// 分两次 `with_host_tools` 而不是拼成一个 `Vec` 排一次序：内建那一段的字节因此
+/// 不随页面声明了什么而挪动（红线 11）。入参已经过 [`declare`]，撞名在那里就拒掉
+/// 了，所以这里不会踩到 `push_spec` 的丢弃分支。
+pub(crate) fn browser_tool_table(declared: &[(ToolSpec, Reversibility)]) -> ToolTable {
+    ToolTable::empty()
+        .with_host_tools(builtin_tools())
+        .with_host_tools(declared.to_vec())
+}
+
+/// 三条内建 + 各自的可逆性。全是纯读/纯回显，所以 `Pure`——`/undo` 撞上它们不用
+/// 停下来问。**这不是对页面声明的工具的表态**：那些没说可逆性的一律落保守的
+/// `Irreversible`（HOST-CAPABILITIES §五：「没说」不能推定为「安全」），解释在
+/// `agent_runtime::host_tools_from_declaration`。
+///
+/// 书写顺序无所谓——`with_host_tools` 自己会按名字排序再进表（红线 11）。
+fn builtin_tools() -> Vec<(ToolSpec, Reversibility)> {
     vec![
         (
             ToolSpec {
