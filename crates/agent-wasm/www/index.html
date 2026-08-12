@@ -57,6 +57,10 @@
     <input type="text" id="model" value="deepseek-v4-pro">
   </div>
   <div class="row">
+    <label for="contextWindow">context_window</label>
+    <input type="text" id="contextWindow" placeholder="留空 = 不压缩；填小值（如 8000）可逼出 M12 的五档分级">
+  </div>
+  <div class="row">
     <label for="baseUrl">base_url</label>
     <input type="text" id="baseUrl" value="https://api.deepseek.com">
   </div>
@@ -180,6 +184,12 @@ $('connect').addEventListener('click', () => {
       base_url: $('baseUrl').value.trim(),
       model: $('model').value.trim(),
       api_key: $('apiKey').value,
+      // M12 的压缩靠「上一轮实测 prompt / context_window」判触发。留空 = 不填 =
+      // 压缩永远不开火（功能全在、状态全对、一次都不触发）。填一个小值可以在
+      // 几轮之内把五档分级逼出来，是 132 那条交界处的验收手段。
+      ...($('contextWindow').value.trim()
+        ? { context_window: Number($('contextWindow').value.trim()) }
+        : {}),
       // 127：识图写死 Kimi 3，配置是**独立的一段**，跟主对话 provider 无关——
       // 哪怕主 provider 也是 kimi 也不隐式复用它的 key（vision.rs 模块文档
       // 「key 从哪来」，照抄 native 那条「总是独立查 [providers.kimi]」）。

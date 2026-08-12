@@ -1,6 +1,6 @@
 # 132 M14 真机 dogfood（里程碑终点）
 
-**里程碑** M14 · **依赖** [123](123-host-tool-deadline.md) + [130](130-browser-vision-end-to-end.md) · **模型** opus · **独测** 本条即验收 · **状态** 待做
+**里程碑** M14 · **依赖** [123](123-host-tool-deadline.md) + [130](130-browser-vision-end-to-end.md) · **模型** opus · **独测** 本条即验收 · **状态** 完成（见文末）
 
 ## 目标
 
@@ -54,3 +54,95 @@
   只有 DeepSeek key 的话，第 2、3、4 步跑不了——**提前确认，别跑到一半才发现**。
 - 实测数字（token、耗时、缓存命中率）写进实做记录。M12 那次留下的
   「一次压缩 ≈120 轮」的修正就是这么来的——**没记下来的数字等于没测**。
+
+## 实做记录：M14 真机 dogfood（主会话，2026-08-12，Chrome + 真 Kimi key）
+
+一次连贯会话 `m14-dogfood`，provider = kimi/kimi-k3，工具表 6 条。
+探针图 canvas 现画：绿字「橙色灯塔」+ 黑字「5178」，23939 字节，**内容提示词里没提过**。
+
+### 七步
+
+| 步 | 结果 |
+|---|---|
+| 1 通用回调 | ✅ 模型调页面声明的 `web:page/viewport`，答出真实 1200×817 |
+| 2 图片 | ✅ 模型**自己决定**调 `web:source/vision`，答出图里两行内容 |
+| 3 追问 | ✅ 同一链接再调一次，答出 `5178` |
+| 4 刷新 | ✅ 已在 [130](130-browser-vision-end-to-end.md) 真机验收中单独跑过（重放、图还在、再识别成功） |
+| 5 取消 | ✅ 已在 [123](123-host-tool-deadline.md) 真机验收中单独跑过（**4 毫秒**收尾，晚到结果不改状态） |
+| 6 压缩 | ⛔ **本次不做**，见下 |
+| 7 删除 | ✅ 见交界处 4 |
+
+### 交界处逐条结论
+
+**① 压缩 × transient-source —— 本次不验，范围外。**
+追这条时先撞上一个真实缺口：**浏览器宿主的配置里没有 `context_window`**
+（`config.rs` 只搬了 provider/base_url/model/api_key 四个字段），而 M12 的触发判据是
+「上一轮实测 `prompt` / `context_window`」——窗口是 `None` 时整套五档分级**结构上
+不可达**。这跟 M12 收尾时在 native 侧踩的是同一个坑（当时五个宿主全是 `None`，
+见 [110](110-compaction-dogfood.md)），浏览器是第六个。
+
+**已把这个字段接上**（`config.rs` 解析 + 页面一个输入框 + `provider_config()` 透传），
+因为「宿主配置缺一个别的宿主都有的字段」是 wasm 宿主自己的完整性缺口。但
+**压缩与 transient-source 的交互不是 wasm 的事**，本轮到此为止——用户明确划了范围。
+留给真要动 M12 那条线的人：现在窗口能配了，填个小值几轮就能逼出来。
+
+**② 一轮里两条宿主工具（一条内建 + 一条页面的）—— 通过。**
+
+```
+→ 调用宿主工具 web:page/title  input={}
+→ 调用宿主工具 web:page/viewport  input={}
+← web:page/title 返回 42 字节
+← web:page/viewport 返回 51 字节
+assistant  - 页面标题：agent-wasm 浏览器宿主（issue 114c）
+           - 视口尺寸：1200 × 817 CSS 像素，devicePixelRatio = 1
+```
+
+**两条槽在同一轮里派发、都回传、模型合并作答。** 124 给 drain 循环加的按名字分流
+（内建走 `resolve_remote_tool_async`、`web:source/` 走 `submit_remote_tool_result_async`）
+在混合场景下没有互相踩到；121 的「内建优先、回调兜底」也同时生效——
+`web:page/title` 由 Rust 执行，`web:page/viewport` 由页面回调执行，同一轮。
+
+**③ 识图那一轮的前缀缓存 —— 有数，但比预想的好。**
+
+识图轮 `prompt=1042 cached=768`（73.7%）。one-shot 安全重编码确实让那一轮不是
+纯 `Reuse`，但**没有把缓存打到零**——原因跟 M12 那条反直觉实测同源：固定前缀
+（system + 6 条工具表）占比高时，中段变化伤不到前面那一段。
+
+⚠️ 这个数字**不能外推**：本次会话历史很短（几百到一千 token 量级），
+历史一长比例会变。要引用就连同这句一起引用。
+
+**④ `deleteSession` 删当前打开的会话 —— 通过。**
+`sessionId()` 从 `m14-dogfood` 变 `null`、库消失、同 id 重开是**空历史**。
+128 定的语义（允许删当前会话、代价是它当场被关掉）在真机上就是这个样子。
+
+**⑤ IndexedDB 被驱逐之后 —— 降级干净。**
+手动 `images.clear()` 模拟驱逐，再让模型看同一个链接：
+
+```
+← web:source/vision 返回 33 字节（错误）
+assistant  识图服务返回错误：上传的图片不存在
+           （[not_found] 上传的图片不存在：/uploads/up-5b6a…）。
+           可能是该文件已被删除、链接已过期…你可以重新上传一次图片，我再来读取。
+```
+
+**模型看到的是带码的真错误**（`[not_found] …`，one-shot 覆盖进 prompt），
+历史里留的是 `[transient_source_error_redacted]`。119 §五-4 那条「接受被驱逐，
+降级靠 `not_found`」在真机上兑现，而且模型**自己纠正**、让用户重传，没有反复重试。
+
+这一条同时验证了主会话补的错误码契约（`<码>：<细节>`，见 [130](130-browser-vision-end-to-end.md)
+文末）——模型引用的那个 `[not_found]` 就是它。
+
+**⑥ 刷新后识图对话读起来是占位符 —— 结论：机制没错，页面缺一块，本轮不改。**
+详见 [130](130-browser-vision-end-to-end.md) 文末。`transient_source_completion.rs:52`
+的设计：消费过 one-shot 素材的那一轮，模型自己的完成文本也不进持久历史。
+浏览器页面今天只是照着重放结果画，所以直播时看得见、刷新后看不见。
+**要判的是「页面该不该留一份带外副本」，那是页面的持久化策略，不是 M14 的接缝。**
+登记进 M14 遗留。
+
+### M14 遗留（都不阻塞）
+
+1. **刷新后识图对话不可重放**（交界处 ⑥）。机制如设计，页面缺带外副本。
+2. **压缩与 transient-source 的交互没验过**（交界处 ①）。`context_window` 现在能配了，
+   工具已就位，缺的只是有人去跑。
+3. **`web:host/callback-probe` 是验收脚手架**，留在页面声明里。真要发布给使用者，
+   把它从 `PAGE_TOOL_DECLARATION` 删掉即可——它不在 Rust 侧，删了不影响任何实现。

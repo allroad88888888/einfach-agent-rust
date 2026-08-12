@@ -48,6 +48,18 @@ pub(crate) struct HostConfig {
     pub(crate) model: String,
     /// 使用者自己的 key。见模块文档——它只活在内存里。
     api_key: String,
+    /// 这家的上下文窗口（token）。**不填 = M12 的压缩在浏览器里永远不开火。**
+    ///
+    /// 压缩的触发判据是「上一轮实测 `prompt` / `context_window` 是否过阈值」
+    /// （`agent-core` 的 096 决策），窗口是 `None` 时那个比较无从做起，于是整套
+    /// 五档分级结构上不可达——**功能全在、状态全对、一次都不会触发**。
+    ///
+    /// 这个坑在 M12 收尾时于 native 侧踩过一次（当时五个宿主全是 `None`，
+    /// 见 issue 110），浏览器宿主是第六个：114d 把配置搬过来时只搬了前四个字段。
+    /// 名字与 `providers.toml` 的 `[providers.*].context_window` 一致，
+    /// 「照着 native 配置抄一份到页面上」仍然不需要翻译表。
+    #[serde(default)]
+    context_window: Option<u32>,
     /// 122：页面声明的那一段工具，**已经解析校验完**的料。
     ///
     /// `#[serde(skip)]`：它不来自这份 provider 配置 JSON，而是构造 `AgentHost` 时
@@ -85,11 +97,16 @@ impl HostConfig {
     /// 翻成 114d 的那个共用类型。`api_key` 在这一步交出所有权的副本——之后这个
     /// 结构体自己那份不再被任何人读。
     pub(crate) fn provider_config(&self) -> ProviderConfig {
-        ProviderConfig::from_host(
+        let mut config = ProviderConfig::from_host(
             self.base_url.clone(),
             self.model.clone(),
             self.api_key.clone(),
-        )
+        );
+        // 不填就保持 `None`——跟 native 一样，「没配窗口 = 不压缩」，
+        // 而不是替使用者猜一个默认窗口。猜错的后果是压缩过早或过晚，
+        // 两头都只在账单和上下文丢失上浮出来。
+        config.context_window = self.context_window;
+        config
     }
 
     /// provider 名字 → 具体 adapter。跟 `agent_cli::provider::build_provider`
