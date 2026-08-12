@@ -15,13 +15,15 @@
 //! `send_plan_wiring_undo_restores_bytes.rs` 等已经在用），它跑得通、离
 //! 「真正发给 provider 的字节」最近，没有理由绕道自己拼 `Ingredients`。
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use agent_core::{AgentId, Session, ToolSpec};
+use agent_core::{AgentId, AgentLimits, Session, ToolSpec, TurnStatus};
 use agent_runtime::{run_session_start, run_turn, CallTiming, TimedRun, ToolTable};
 use serde_json::json;
 
 use crate::support;
+use crate::support::routed::{Route, RoutedServer};
 
 fn spec(name: &str, description: &str) -> ToolSpec {
     ToolSpec {
@@ -95,4 +97,132 @@ fn wire_system_text(body: &str) -> String {
         .as_str()
         .expect("system 消息该有文本正文")
         .to_string()
+}
+
+/// 145 §做什么 第 5 条的看门狗：spawn 两个子 agent、开局工具的执行计数仍
+/// 是 1。跟本文件上一条测试同一个假设（`run_session_start` 只在新建会话时
+/// 跑一次），这条把断言从「只 spawn 一个 agent」扩到「spawn 两个」——`system_for`
+/// 每一跳都要重新组一遍 system，如果谁把 145 的前缀过滤实现成了「按名单重新
+/// 跑一遍 timed 工具」而不是「过滤缓存值」，这里就会红（`subagent_tests.rs`
+/// 已经用纯单元测试盯过 `filter_prefix_chunks` 本身不重跑；这条从 wire 层面
+/// 再钉一次，覆盖真实 `run_turn` 循环）。
+///
+/// 计数器真正被算一次的时刻是 `run_session_start`（调用发生在 `run_turn` 之
+/// 前），之后两个子 agent 各跑一整轮、根 agent 收完两份结果再收尾——全程不该
+/// 再碰这个执行体。两个子按**顺序**（不是并行）spawn 出来就够用：这条盯的是
+/// 「组 system/发请求这条路会不会偷跑 timed 执行体」，跟两个子是不是同时在飞
+/// 无关（那是 `spawn_indep_sibling_prefix.rs`/`subagent_parallel.rs` 盯的另一
+/// 件事）。
+#[test]
+fn spawning_two_children_across_a_round_runs_session_start_exactly_once() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&calls);
+
+    let dir = support::temp_dir("session-start-watchdog-two-children");
+    let tools = ToolTable::builtin()
+        .with_spawn(AgentLimits::default())
+        .with_timed(
+            spec("alpha", "开局工具，执行会被计数"),
+            CallTiming::SessionStart,
+            Box::new(move |_table: &ToolTable, _input: &serde_json::Value| {
+                counted.fetch_add(1, Ordering::SeqCst);
+                Ok::<Arc<str>, Arc<str>>(Arc::from("INDEX-TEXT"))
+            }),
+        );
+
+    let mut session = Session::new(AgentId::root());
+    run_session_start(&mut session, &tools).expect("唯一的工具该成功");
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "新建会话该执行一次");
+
+    // 路由按「先查最晚才会出现的 needle」排序（`RoutedServer` 首次匹配即用，
+    // 越具体越要排在前面）：根的每一跳请求体都累积着此前全部历史，越新的
+    // call_id 是区分「这是第几跳」唯一可靠的东西——同 `spawn_indep_depth_chain.
+    // rs` 的手法。
+    let server = RoutedServer::start(vec![
+        text_call_route("call_b", "both children reported, chain complete"),
+        text_call_route("CHILDB-MARK", "child B finished successfully"),
+        spawn_call_route("call_a", "call_b", "CHILDB-MARK second child task"),
+        text_call_route("CHILDA-MARK", "child A finished successfully"),
+        spawn_call_route("startchain", "call_a", "CHILDA-MARK first child task"),
+    ]);
+    let (mut ctx, _events) = support::build_ctx_with(server.port, &dir, tools);
+
+    let status = run_turn(
+        &mut session,
+        &mut ctx,
+        "startchain please spawn two children, one after another",
+    )
+    .expect("spawning two children in sequence should not be a source failure");
+    assert_eq!(status, TurnStatus::Done { truncated: false });
+
+    let mut live = session.live_agents();
+    live.sort();
+    let root = AgentId::root();
+    let mut expected = vec![root.clone(), root.child(1), root.child(2)];
+    expected.sort();
+    assert_eq!(live, expected, "该恰好三个 agent：root + 两个子");
+
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "spawn 两个子 agent 并跑完一轮之后，开局工具执行计数该仍是 1"
+    );
+}
+
+/// DeepSeek wire：一条 `srv:agent/spawn` 工具调用响应（hop1）。手法照抄本文件
+/// 顶部 `ok_text`/`spec` 那一层的风格，只是这里要吐一个真的 tool_calls 帧，
+/// `support::sse_tool_call` 返回的是 `ScriptedResponse`（给 `spawn_scripted_
+/// server` 用，逐次连接对应逐条脚本），这里要的是 `Route::sse` 吃的
+/// `Vec<String>`，所以不复用它，直接拼——跟 `spawn_indep_support::sse_tool_
+/// call` 同一个形状。
+fn spawn_call_route(needle: &'static str, call_id: &str, task: &str) -> Route {
+    let arguments = json!({ "task": task }).to_string();
+    let chunk1 = json!({
+        "choices": [{
+            "index": 0,
+            "delta": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "index": 0,
+                    "id": call_id,
+                    "type": "function",
+                    "function": { "name": "srv_3Aagent_2Fspawn", "arguments": arguments }
+                }]
+            },
+            "finish_reason": null
+        }]
+    });
+    let chunk2 = json!({
+        "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "tool_calls"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 10}
+    });
+    Route::sse(
+        needle,
+        vec![
+            format!("data: {chunk1}"),
+            format!("data: {chunk2}"),
+            "data: [DONE]".to_string(),
+        ],
+    )
+}
+
+/// DeepSeek wire：一条 `EndTurn` 纯文本应答，`Route::sse` 版本（同上，`support::
+/// sse_text` 吐的是 `ScriptedResponse`，这里要 `Vec<String>`）。
+fn text_call_route(needle: &'static str, text: &str) -> Route {
+    let chunk1 = json!({
+        "choices": [{"index": 0, "delta": {"role": "assistant", "content": text}, "finish_reason": null}]
+    });
+    let chunk2 = json!({
+        "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 10}
+    });
+    Route::sse(
+        needle,
+        vec![
+            format!("data: {chunk1}"),
+            format!("data: {chunk2}"),
+            "data: [DONE]".to_string(),
+        ],
+    )
 }

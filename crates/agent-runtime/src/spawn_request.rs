@@ -44,6 +44,11 @@ pub fn spawn_spec(limits: AgentLimits) -> ToolSpec {
                 "background": {
                     "type": "boolean",
                     "description": "true = 不等它干完，这次调用立刻只返回它的 agent_id，它的回答不会自己回来，得用 srv:agent/collect 领（这一轮结束前没领的会被拆掉）；false（缺省）= 等它干完，它的回答就是这次调用的结果。"
+                },
+                "inherit_prefix": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "这个子 agent 带不带你这次会话开局时跑出来的那些材料（比如技能索引）。省略（缺省）= 跟你现在看到的一样，全带；[]（空数组）= 一点都不带；列出具体的开局工具名 = 只带这几个——子任务用不上那些开局材料时，用它省一点上下文。"
                 }
             },
             "required": ["task"]
@@ -60,6 +65,14 @@ pub(crate) struct SpawnRequest {
     /// **缺省 `false`**（决策 20 的阻塞语义一字不改），所以老模型、老脚本、老录制
     /// 帧走的还是原来那条路。
     pub(crate) background: bool,
+    /// 145：这个子带不带会话开局产物（144 落的 `Slot::PrefixAllowed`）。
+    /// `None` = 模型没提这个字段 = 不设限 = 全带——**逐字节等同 145 之前的行为**
+    /// （红线 11 向后兼容，143 的真机结论继续有效）；`Some(vec![])` = 显式给了
+    /// 空数组 = 一点都不带（跟 `None` 是两个不同的值，`Session::prefix_allowed_of`
+    /// 的文档也是这么分的）；`Some(names)` = 只带这几个。这里只管形状，
+    /// 每一项是不是真的一个开局工具名，校验在 `spawn_tool::check_prefix_allowed`
+    /// （表在截获处 `ctx` 手上，这个模块够不着）。
+    pub(crate) inherit_prefix: Option<Vec<Arc<str>>>,
 }
 
 /// 解析入参。**错误一律是给模型看的文本**（`is_error` 的 tool_result），不是
@@ -96,10 +109,31 @@ pub(crate) fn parse(input: &Value) -> Result<SpawnRequest, String> {
         Some(_) => return Err("spawn 失败：background 得是 true 或 false。".to_string()),
     };
 
+    // 跟 `tools` 同一套解析形状：缺省与显式 `null` 都是「不设限」，数组的每一项
+    // 必须是字符串。语义上两者不是一回事（`tools` 的 `None` 兜底成父的工具子集，
+    // 这里的 `None` 是「全带」），但入参的**形状校验**没有理由抄两遍。
+    let inherit_prefix = match input.get("inherit_prefix") {
+        None | Some(Value::Null) => None,
+        Some(Value::Array(items)) => {
+            let mut names = Vec::with_capacity(items.len());
+            for item in items {
+                let Some(name) = item.as_str() else {
+                    return Err(
+                        "spawn 失败：inherit_prefix 里每一项都得是开局工具全名字符串。".to_string(),
+                    );
+                };
+                names.push(Arc::from(name));
+            }
+            Some(names)
+        }
+        Some(_) => return Err("spawn 失败：inherit_prefix 得是字符串数组。".to_string()),
+    };
+
     Ok(SpawnRequest {
         task: Arc::from(task),
         tools,
         background,
+        inherit_prefix,
     })
 }
 

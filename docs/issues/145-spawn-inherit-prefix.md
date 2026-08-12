@@ -1,6 +1,6 @@
 # 145 spawn 入参 `inherit_prefix` + `system_for` 过滤
 
-**里程碑** M15 追加（决策 28） · **依赖** [144](144-prefix-allowed-slot.md) · **模型** sonnet · **独测** ✅ · **状态** 待做
+**里程碑** M15 追加（决策 28） · **依赖** [144](144-prefix-allowed-slot.md) · **模型** sonnet · **独测** ✅ · **状态** 完成（2026-08-12）
 
 ## 目标
 
@@ -56,3 +56,18 @@
   没有轮末），schema description 别把话说大。
 - 决策 28 的取舍记录（为什么否掉「混进 tools 名单」与「从工具子集推导」两案）
   在 ROADMAP §一，别在代码注释里重复整段，链接即可。
+
+## 实做记录（2026-08-12）
+
+- 落点：spawn_request（解析+schema 三档 description）、spawn_tool 的
+  `check_prefix_allowed`（从严：非 SessionStart timed 名 → is_error 整次不 spawn）、
+  subagent 的 `filter_prefix_chunks`（None 全带 / Some 按 `init:<name>` 匹配）；
+  subagent.rs 被推过 300 行 → 测试拆出 subagent_tests.rs（当次拆，规矩兑现）。
+- 看门狗三层钉死「子不重跑 SessionStart」：单元级、线级（真 run_turn 双子）、
+  独测（第三只眼）——此前只有结构性论证的空白补上了。
+- 独测 5 条盲写全过（三档线级、非法名拒绝、恢复后过滤不变、姊妹逐字节）。
+- 已知瑕疵：四 crate 并发跑全量时，独测的两条真 TCP 线级测试偶发
+  `Thinking`≠`Done`（4 跑 1 现，单跑 3 连稳绿）——负载型时序敏感，非 145 逻辑缺陷；
+  若再现频率上升，按 RoutedServer 测试设施的超时预算排查，别先怀疑过滤逻辑。
+- `cargo fmt -p crate -- <file>` 的文件限定**不生效**（又波及 79 文件，当场精确
+  还原）——这是工具行为不是操作失误，写进这里防第三次。

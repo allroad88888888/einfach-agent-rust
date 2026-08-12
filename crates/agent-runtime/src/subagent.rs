@@ -36,7 +36,17 @@ pub(crate) fn system_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) ->
     // 这个会话，不属于树上某一个 agent（同 `Session::set_prefix_chunks` 的
     // 落点），两者看到的必须是同一份，不因为「谁在问」而不同。空前缀（没开
     // timed 工具的会话）→ `extend` 一个空 `Vec`，逐字节回到 135 之前。
-    chunks.extend(session.prefix_chunks());
+    //
+    // 145：`prefix_allowed_of` 按 spawn 当时快照的名单过滤这份前缀——`None`
+    // （root、缺省 spawn、145 之前的所有旧状态）不过滤，`extend` 的还是
+    // `session.prefix_chunks()` 原样全部，逐字节回到 145 之前（红线 11 向后
+    // 兼容）。过滤只读缓存值，**不重跑任何 timed 工具**：会话只在创建期跑一次
+    // `run_session_start`（135 的契约），这里晚了、也没有 `ToolTable` 手上那份
+    // 执行体可调——`Session` 压根不认识 `TimedRun` 是什么。
+    chunks.extend(filter_prefix_chunks(
+        session.prefix_chunks(),
+        session.prefix_allowed_of(agent).as_deref(),
+    ));
     if session.tools_allowed_of(agent).is_some() {
         chunks.push(SystemChunk {
             label: Arc::from(SUBAGENT_LABEL),
@@ -44,6 +54,30 @@ pub(crate) fn system_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) ->
         });
     }
     chunks
+}
+
+/// 145：按 `allowed` 过滤一份前缀块。`None` = 不过滤，原样返回（缺省语义，
+/// 逐字节等同 145 之前）；`Some(set)` = 只留 label 形如 `init:<name>` 且
+/// `<name> ∈ set` 的那几块——`init:` 前缀是 135（`session_start.rs`）钉的契约，
+/// 这里只认它，不重新发明一套判定；不匹配这个形状的块（目前生产代码里没有，
+/// 防的是将来 `prefix_chunks` 多出别的写入点）在过滤生效时一并被拿掉，因为
+/// `prefix_allowed_of` 的语义就是「白名单」，不认识的东西不在白名单里。
+fn filter_prefix_chunks(
+    chunks: Vec<SystemChunk>,
+    allowed: Option<&[Arc<str>]>,
+) -> Vec<SystemChunk> {
+    let Some(allowed) = allowed else {
+        return chunks;
+    };
+    chunks
+        .into_iter()
+        .filter(|chunk| {
+            chunk
+                .label
+                .strip_prefix("init:")
+                .is_some_and(|name| allowed.iter().any(|a| &**a == name))
+        })
+        .collect()
 }
 
 /// 组这个 agent 看得见的工具表。
@@ -98,37 +132,5 @@ fn subagent_prompt(limits: AgentLimits) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 红线 11 的最小实检：同一份 limits 两次渲染逐字节相同，不同 limits 不同。
-    #[test]
-    fn the_fixed_template_is_byte_stable_for_a_given_limit_pair() {
-        let a = subagent_prompt(AgentLimits {
-            max_depth: 3,
-            max_children: 8,
-        });
-        let b = subagent_prompt(AgentLimits {
-            max_depth: 3,
-            max_children: 8,
-        });
-        assert_eq!(a, b);
-        assert_ne!(
-            a,
-            subagent_prompt(AgentLimits {
-                max_depth: 2,
-                max_children: 8
-            })
-        );
-    }
-
-    /// 模板里不许出现任务文本的位置——它是子 agent 的第一条 user 消息。
-    /// 这条断言钉的是模块文档那个前缀共享的理由：模板只依赖 limits，
-    /// 不依赖任何一次 spawn 的入参。
-    #[test]
-    fn the_template_depends_on_nothing_but_the_limits() {
-        let text = subagent_prompt(AgentLimits::default());
-        assert!(text.contains("子任务执行者"));
-        assert!(!text.contains("{}"), "格式串该被填满：{text}");
-    }
-}
+#[path = "subagent_tests.rs"]
+mod tests;

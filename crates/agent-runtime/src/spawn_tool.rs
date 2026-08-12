@@ -81,6 +81,38 @@ pub(crate) fn check_subset(
     ))
 }
 
+/// 145：模型点名的 `inherit_prefix` → 校验后的名单，或一句拒绝。**从严**——
+/// 每一项必须 ∈ 这张表 `SessionStart` 时机的 spec 名集，一个不在就整次拒绝
+/// （决策 20 兜底同款：让模型自纠，不静默丢弃它点名要的那一项，那样子 agent
+/// 会带着一份跟模型以为的不一样的开局材料干活）。
+///
+/// **不套 `tool_name::resolve` 的两种拼法**（跟 [`check_subset`] 的差别）：
+/// timed 工具从不进 `specs()`（`tool_table` 模块文档「timed 工具住独立区」），
+/// 因此从不出现在喂给模型的函数列表里，模型看不到它们的转义 wire 名——它唯一
+/// 能抄的是前缀块 label 里的明文（`init:<name>`，135 的契约），本来就是规范名。
+pub(crate) fn check_prefix_allowed(
+    wanted: Vec<Arc<str>>,
+    tools: &crate::tool_table::ToolTable,
+) -> Result<Vec<Arc<str>>, String> {
+    let known: Vec<Arc<str>> = tools
+        .timed(crate::tool_table::CallTiming::SessionStart)
+        .map(|t| Arc::clone(&t.spec().name))
+        .collect();
+    let missing: Vec<&str> = wanted
+        .iter()
+        .filter(|name| !known.iter().any(|k| k == *name))
+        .map(|name| &**name)
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "spawn 失败：inherit_prefix 里这些不是开局工具名：{}。开局工具现在有：{}。",
+            missing.join("、"),
+            known.iter().map(|n| &**n).collect::<Vec<_>>().join("、"),
+        ));
+    }
+    Ok(wanted)
+}
+
 /// [`SpawnRefused`] → 给模型看的一句话。**说清是哪一条闸、当前的数字是多少**，
 /// 模型才知道该怎么收敛（决策 20：让它自己收敛）。
 pub(crate) fn refusal_text(refused: &SpawnRefused) -> String {
@@ -152,6 +184,17 @@ pub(crate) fn intercept(
         },
         None => parent_tools,
     };
+    // 145：`inherit_prefix` 校验独立于 `tools`——两个字段管的是两件不同的事
+    // （能调哪些工具 vs 带不带开局材料），一个失败不该被另一个的错误文案盖过。
+    let prefix_allowed = match parsed.inherit_prefix {
+        Some(wanted) => match check_prefix_allowed(wanted, &ctx.tools) {
+            Ok(resolved) => Some(resolved),
+            Err(message) => {
+                return reply::refuse(ctx, parent, call_id, epoch, SPAWN_TOOL, message);
+            }
+        },
+        None => None,
+    };
 
     let child = match session.spawn_child(
         parent,
@@ -159,7 +202,7 @@ pub(crate) fn intercept(
             tools_allowed,
             ..ChildConfig::default()
         },
-        None,
+        prefix_allowed,
     ) {
         Ok(child) => child,
         Err(refused) => {

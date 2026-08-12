@@ -1,6 +1,6 @@
 # 144 `Slot::PrefixAllowed`：spawn 快照的前缀授予名单
 
-**里程碑** M15 追加（决策 28） · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 待做
+**里程碑** M15 追加（决策 28） · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 完成（2026-08-12）
 
 ## 目标
 
@@ -48,3 +48,14 @@ core 给「这个子 agent 被授予哪些开局产物」一个家：spawn 时�
   够（WORKFLOW §二的两步判据）。
 - 别在本条碰 spawn 的 schema/校验/`system_for`——145 的事，分开是为了这条
   能单独验证「加槽位不改行为」。
+
+## 实做记录（2026-08-12）
+
+- 接口零偏离；`spawn_child` 调用点 110 处（28 个文件）全传 `None`，行为零变化；
+  槽位计数断言 19→20 逐处更新（despawn 的 evicted 计数也 +1——PrefixAllowed 随
+  despawn 逐出，与 ToolsAllowed 的墓碑语义不同，已注明）。
+- visibility 归 `Downward`（与 ToolsAllowed 同桶但理由独立成文）。
+- 独测 `prefix_allowed_indep` 七条盲写全过：含 `Some([])` ≠ `None` 编码边界、
+  带正控的 undo 断言。
+- 事故与教训：开发中一次 `cargo fmt` 波及 101 个无关文件，按「worktree 内容 ==
+  rustfmt(HEAD)」判据逐个还原；后续 issue 的 agent 约束里已写死「禁对既有文件 fmt」。

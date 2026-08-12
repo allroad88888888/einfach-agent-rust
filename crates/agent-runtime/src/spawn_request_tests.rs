@@ -66,6 +66,62 @@ fn tools_must_be_an_array_of_strings() {
     assert!(parse(&json!({ "task": "t", "tools": [1] })).is_err());
 }
 
+/// 145：缺省与显式 `null` 都是「不设限」——跟 145 之前唯一的行为（全带）
+/// 逐字节等价，不是一个新分支。
+#[test]
+fn a_missing_inherit_prefix_field_means_no_limit() {
+    assert!(
+        parse(&json!({ "task": "t" }))
+            .unwrap()
+            .inherit_prefix
+            .is_none()
+    );
+    assert!(
+        parse(&json!({ "task": "t", "inherit_prefix": null }))
+            .unwrap()
+            .inherit_prefix
+            .is_none()
+    );
+}
+
+/// 145 三档语义的另两档：`[]`（显式一点都不带，跟 `None` 是两个不同的值）
+/// 与「列出具体名字」，两条路径解析结果都要保留模型写的原文，不做归一化
+/// （归一化只发生在校验那一步，见 `spawn_tool::check_prefix_allowed`）。
+#[test]
+fn inherit_prefix_accepts_an_empty_array_and_a_list_of_names() {
+    let empty = parse(&json!({ "task": "t", "inherit_prefix": [] }))
+        .unwrap()
+        .inherit_prefix;
+    assert_eq!(empty, Some(Vec::new()));
+
+    let named = parse(&json!({ "task": "t", "inherit_prefix": ["srv:skill/index"] }))
+        .unwrap()
+        .inherit_prefix
+        .unwrap();
+    assert_eq!(&*named[0], "srv:skill/index");
+}
+
+/// 跟 `tools` 同款的写错类型必须看得见——静默当真会让模型以为它点名生效了，
+/// 实际上子 agent 收到的是完全不同的一份材料。
+#[test]
+fn inherit_prefix_must_be_an_array_of_strings() {
+    assert!(parse(&json!({ "task": "t", "inherit_prefix": "srv:skill/index" })).is_err());
+    assert!(parse(&json!({ "task": "t", "inherit_prefix": [1] })).is_err());
+}
+
+/// spawn spec 的 description 得说清三档语义，模型才知道有这个口子、怎么用它
+/// 省上下文（145 验收：「spawn spec description 含 inherit_prefix 说明」）。
+#[test]
+fn the_inherit_prefix_param_describes_all_three_tiers() {
+    let spec = spawn_spec(AgentLimits::default());
+    let text = spec.schema["properties"]["inherit_prefix"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(text.contains("省略"), "{text}");
+    assert!(text.contains("全带"), "{text}");
+    assert!(text.contains("一点都不带"), "{text}");
+}
+
 /// 050 的另一半：描述里那句「照抄你工具列表里的那个名字」是这次的行为承诺，
 /// 掉了模型就没有任何线索该写哪种拼法。
 #[test]
