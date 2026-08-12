@@ -84,10 +84,20 @@
     <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="说一句话，比如：这个页面的标题是什么？"></textarea>
   </div>
   <div class="row">
+    <label for="imageFile">图片</label>
+    <input type="file" id="imageFile" accept="image/*" disabled>
+    <span id="imageStatus" class="sub" style="margin:0"></span>
+  </div>
+  <div class="row">
     <button id="send" disabled>发送</button>
     <button id="cancel" disabled>取消</button>
   </div>
 </fieldset>
+
+<details>
+  <summary>已上传的图片（本会话，129）</summary>
+  <div id="imageList" class="tool">（没有打开的会话）</div>
+</details>
 
 <details>
   <legend></legend>
@@ -102,10 +112,21 @@
 
 <script type="module">
 import init, { AgentHost } from './pkg/agent_wasm.js';
+import { mountImageManager } from './image-manager.js';
 
 const $ = (id) => document.getElementById(id);
 let host = null;
 let assistantNode = null;
+
+// 129：图片入口/出口——选图、存 IndexedDB 的 images store、发链接、按链接取回
+// 字节。跟 host 的会话生命周期对齐，见 image-manager.js 模块文档。
+const imageManager = mountImageManager({
+  fileInput: $('imageFile'),
+  list: $('imageList'),
+  status: $('imageStatus'),
+  textInput: $('input'),
+});
+window.__agentImages = imageManager;
 
 function log(line) {
   const pre = $('log');
@@ -198,6 +219,7 @@ $('open').addEventListener('click', async () => {
     renderHistory(JSON.parse(replayed));
     $('status').textContent = `会话 ${host.sessionId()} 已打开，从 IndexedDB 重放出 ${JSON.parse(replayed).length} 条消息`;
     $('send').disabled = false;
+    await imageManager.refresh(host.sessionId());
   } catch (e) {
     $('status').textContent = `打开会话失败：${e.message ?? e}`;
   } finally {

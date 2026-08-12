@@ -32,6 +32,7 @@
 //! | [`session_id`] | 会话 id 白名单（055 的规则，拒绝不 sanitize） |
 //! | [`events`] | `AgentEvent` → 页面收得到的一条 JSON |
 //! | [`history`] | 重放出来的会话历史 → 页面能重画的一份 JSON |
+//! | [`vision`] | `inspectImage` 的四步编排 + 独立于主 provider 的 Kimi 连接配置（127） |
 //!
 //! # key
 //!
@@ -50,5 +51,6 @@ mod host_tool;
 mod session_id;
 mod tools;
 mod turn;
+mod vision;
 
 pub use host::AgentHost;

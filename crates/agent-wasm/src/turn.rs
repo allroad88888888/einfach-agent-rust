@@ -113,7 +113,7 @@ async fn drain_host_tools(
             };
             continue;
         }
-        let output = host_tool::execute(&waiting);
+        let output = host_tool::execute(&waiting).await;
         match resolve_remote_tool_async(session, ctx, waiting.agent, waiting.call_id, output).await
         {
             Ok(next) => status = next,
@@ -172,7 +172,7 @@ async fn drain_transient_source(
         call_id: call_id.clone(),
         request: grant.request,
     };
-    let outcome = to_submit_outcome(host_tool::execute(&unredacted));
+    let outcome = to_submit_outcome(host_tool::execute(&unredacted).await);
     submit_remote_tool_result_async(
         session,
         ctx,

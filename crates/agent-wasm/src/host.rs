@@ -1,5 +1,5 @@
-//! [`AgentHost`]：暴露给页面 JS 的全部接口。**六件事**——建会话、发一句话、
-//! 拿流式增量、取消、切会话、删会话。
+//! [`AgentHost`]：暴露给页面 JS 的全部接口。**七件事**——建会话、发一句话、
+//! 拿流式增量、取消、切会话、删会话、识图。
 //!
 //! # 借用纪律（这个文件唯一真正微妙的地方）
 //!
@@ -15,7 +15,9 @@
 //! 2. 事件回调里不要回头调 `send()`/`open_session()`——回调正是在那轮借用之内被
 //!    调用的。回调里只读、只画。
 //!
-//! `cancel()`、`tool_table_json()`、`key_len()` 不在此列：它们都不碰 `live`。
+//! `cancel()`、`tool_table_json()`、`key_len()`、`inspect_image()` 不在此列：
+//! 它们都不碰 `live`——识图不依赖任何已开的会话，页面不用先 `openSession`
+//! 就能调（见 [`crate::vision`] 模块文档）。
 //!
 //! [`AgentHost::delete_session`] 碰 `live`，但它用 `try_borrow_mut` 把「撞上在飞的
 //! 一轮」变成一次 **reject 而不是 panic**——那是个破坏性操作，页面上那个按钮随时
@@ -35,6 +37,7 @@ use agent_runtime::AgentEvent;
 use wasm_bindgen::prelude::*;
 
 use crate::assemble::{self, Live};
+use crate::vision::KimiVisionConfig;
 use crate::{config::HostConfig, db, events, history, session_id, tools, turn};
 
 /// 页面手里的那个对象。
@@ -45,6 +48,11 @@ pub struct AgentHost {
 
 struct Inner {
     config: HostConfig,
+    /// 识图专用的 Kimi 连接配置，跟 `config` 那份主对话 provider 完全独立
+    /// ——即使两者恰好都是 `"kimi"` 也不互相借用。`None` = 页面没配，
+    /// `inspect_image()` 调用时才 reject（不是构造期硬错误）。见
+    /// [`crate::vision`] 模块文档「key 从哪来」。
+    vision: Option<KimiVisionConfig>,
     /// 建好就不变——`tool_table_json()` 因此不需要借 `live`（见模块文档的借用
     /// 纪律），页面在任何时刻都能取到它做字节比对。
     tool_table_json: String,
@@ -65,10 +73,12 @@ impl AgentHost {
         let config = HostConfig::parse(config_json).map_err(js_error)?;
         // 名字不认识就当场报，不要等第一次请求才发现 endpoint 和编码对不上。
         config.adapter().map_err(js_error)?;
+        let vision = KimiVisionConfig::parse(config_json);
         Ok(AgentHost {
             inner: Rc::new(Inner {
                 tool_table_json: tools::tool_table_json(&tools::browser_tool_table()),
                 config,
+                vision,
                 on_event: Rc::new(RefCell::new(None)),
                 live: RefCell::new(None),
                 cancel: RefCell::new(None),
@@ -210,6 +220,31 @@ impl AgentHost {
             Some(live) => history::to_json(&live.session),
             None => "[]".to_string(),
         }
+    }
+
+    /// 把一张图交给识图服务（Kimi 3），拿回文字描述——119 §四那张分工表里
+    /// 「Rust 那一格」的全部内容，接线细节见 [`crate::vision`] 模块文档。
+    /// **这条不接工具、不接模型**：页面直接调，不经会话/工具执行路径，也
+    /// 不需要先 `openSession`（见模块文档的借用纪律）。
+    ///
+    /// - `bytes` 上限是 [`crate::vision::MAX_BROWSER_IMAGE_BYTES`]
+    ///   （**不是** `agent_transport::MAX_IMAGE_BYTES` 那个 Moonshot 100 MiB
+    ///   传输上限——两者管的是不同的约束层，见 `vision.rs` 模块文档）；超限
+    ///   直接 reject，不建 `Client`、不发任何网络请求。
+    /// - Kimi 的 base_url/api_key 来自构造时配置 JSON 里一个独立的 `vision`
+    ///   段，跟主对话 provider 无关——没配就 reject，措辞含
+    ///   `not_configured`，对齐 `vision_inspect.rs` 同名错误，不 panic。
+    /// - reject 的 message 里不含任何 key：[`crate::vision::inspect`] 自己
+    ///   不拼 key 进消息，网络层错误则靠 125 的 redact。
+    #[wasm_bindgen(js_name = inspectImage)]
+    pub fn inspect_image(&self, bytes: Vec<u8>, mime: String, question: String) -> js_sys::Promise {
+        let inner = Rc::clone(&self.inner);
+        wasm_bindgen_futures::future_to_promise(async move {
+            let text = crate::vision::inspect(inner.vision.as_ref(), bytes, mime, question)
+                .await
+                .map_err(js_error)?;
+            Ok(JsValue::from_str(&text))
+        })
     }
 }
 

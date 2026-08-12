@@ -10,6 +10,19 @@
 
 ## 做什么
 
+### 0. ⚠️ 先把 `vision` 配置补进页面（127 真机验收时发现的接缝）
+
+`www/index.html` 的配置 JSON **没有 `vision` 段**，于是页面建出来的 `AgentHost`
+永远 `vision: None`，[127](127-agent-host-inspect-image.md) 的 `inspectImage`
+必然返回 `not_configured`。127 的改动范围排除 `index.html`、129 的 issue 没提这件事,
+**这一格今天没人认领**——归本条。
+
+加两个输入框：Kimi 的 `base_url` 与 `api_key`（后者 `type=password`，
+横幅只许显示长度，111 契约第 4 条），拼进 `new AgentHost(...)` 的配置 JSON 顶层
+`vision` 对象里。形状见 127 实做记录。
+
+**不做这一步，本条的所有验收都会稳定失败，而且看起来像识图坏了。**
+
 ### 1. 页面声明 `web:source/vision`
 
 走 [122](122-page-declared-tools.md) 的声明入口。名字前缀 `web:source/` 是**故意的**：

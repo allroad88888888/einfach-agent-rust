@@ -26,14 +26,18 @@ use agent_runtime::{RemoteToolOutput, RemoteToolWaiting};
 
 use crate::tools::{PAGE_TITLE_TOOL, PAGE_URL_TOOL, SOURCE_ECHO_TOOL};
 
-/// 执行一次宿主工具。**同步**——三个工具读/回显的都是当场就有的值，没有 IO 可等。
+/// 执行一次宿主工具。**签名是异步的**——`drain_host_tools`/`drain_transient_source`
+/// 那条 await 链上不该有同步点，下一条工具（浏览器识图，120 的后续）会真的要
+/// 等一个 JS Promise。今天这三个工具读/回显的都是当场就有的值，没有 IO 可等，
+/// 所以实现体仍是同步的，只是包在一个立刻就绪的 future 里——**不要为了「对称」
+/// 去 await 一个立刻 resolve 的 Promise**，那只是多一次微任务调度，没有任何好处。
 ///
 /// 124：调用方对 `SOURCE_ECHO_TOOL` 传进来的 `waiting.request.input` 必须是
 /// `claim_remote_tool` 认领之后拿到的**真入参**，不能是等待槽投影里那份已经被
 /// dispatch 脱敏成占位符的版本——脱敏只对历史/prompt 生效，执行这一步必须看见
 /// 真值，否则「原样返回入参」这条验收脚手架什么都验不出来。分流逻辑在
 /// [`crate::turn`]，这里只管执行，不管这份 `input` 是从哪条路径来的。
-pub(crate) fn execute(waiting: &RemoteToolWaiting) -> RemoteToolOutput {
+pub(crate) async fn execute(waiting: &RemoteToolWaiting) -> RemoteToolOutput {
     match &*waiting.request.tool {
         PAGE_TITLE_TOOL => match document_title() {
             Some(title) => RemoteToolOutput::Success(title),

@@ -1,6 +1,6 @@
 # 120 `host_tool::execute` 执行侧 async 化（工具表不动）
 
-**里程碑** M14 · **依赖** [119](119-browser-host-capability-decision.md) · **模型** sonnet · **独测** 否（无行为变化） · **状态** 待做
+**里程碑** M14 · **依赖** [119](119-browser-host-capability-decision.md) · **模型** sonnet · **独测** 否（无行为变化） · **状态** 完成（真机已验收，见文末）
 
 ## 目标
 
@@ -49,3 +49,49 @@ async fn drain_host_tools(...) -> TurnStatus {
   微任务调度。签名异步、实现同步，是这条 issue 的正确终态。
 - **不要在这条里动工具表**。页面声明工具表是 [122](122-page-declared-tools.md) 的事，
   在这里做会让「什么都没变」这条验收失去意义。
+
+## 实做记录（2026-08-12）
+
+- 动手前的现状核查：`host_tool::execute` 的调用点**不是 issue 描述的一处，是两处**。
+  124 已落地并改过 `turn.rs`（当前 210 行），除了 `drain_host_tools`（原 issue 引文
+  那一处，现第 116 行）之外，多了 `drain_transient_source`（第 175 行，`web:source/`
+  前缀那条走 `submit_remote_tool_result_async` 的分支）。两处都调了
+  `host_tool::execute`，函数签名一改 async，两处不加 `.await` 编译不过。这不算「顺手
+  多做」——是同一次签名改动的必然连带，issue 引文写的是 97 行时代的 `turn.rs`，代码
+  已经往前走了一版。
+- `crates/agent-wasm/src/host_tool.rs`：`execute` 从 `pub(crate) fn` 改
+  `pub(crate) async fn`；函数体一行未动（`document_title()`/`location_href()`/
+  `SOURCE_ECHO_TOOL` 的匹配分支原样）。模块文档那句「**同步**」改写成「签名是异步的，
+  今天三个工具的实现体仍是同步的，下一条（浏览器识图）不是」，并把「不要为了对称
+  await 一个立刻 resolve 的 Promise」的告诫写进文档，不只留在 issue 里。
+- `crates/agent-wasm/src/turn.rs`：两处调用点各加一个 `.await`（第 116、175 行），
+  没有别的改动。
+- 未改：`tools.rs`、`host.rs`、`www/`、`agent-runtime`、`agent-core`、工具表。
+  `git diff --stat` 只有 `host_tool.rs`（+8/-4）与 `turn.rs`（+2/-2）两个文件。
+- 验收结果（均前台跑完）：
+  - `bash scripts/build-wasm.sh --dev`：通过，`Finished dev profile`，wasm-bindgen
+    产物正常生成，无新增警告。
+  - `cargo test --workspace`：全绿，无 `FAILED`，各 crate `test result: ok`。
+  - `bash scripts/check-invariants.sh --all`：exit 0；报的 15 条行数超限提示均为
+    存量文件（`agent-cli/src/mcp.rs`、`agent-core/observe.rs` 等），跟本次改动的两个
+    文件无关。
+- **没做到的部分**：真机验收（浏览器里跑一轮、模型调 `web:page/title` 拿到真实标题）
+  没做——环境里没有可交互的浏览器 + 真 provider key，如实报「待真机」，交给下一步或
+  用户自己跑。
+
+## 真机验收（主会话，2026-08-12，Chrome via playwright MCP + 真 Kimi key）
+
+**过。** 会话 `m14b-1`，两个调用点各验一条路——这正是本条改动面的形状
+（124 之后 `execute` 有两个调用点，签名一改两处都得 `.await`）：
+
+| 路径 | 调用点 | 结果 |
+|---|---|---|
+| 普通 `web:` 工具 | `drain_host_tools` | `web:page/title` → 模型答出真实标题 |
+| transient-source | `drain_transient_source` | `web:source/echo` → 模型拿到真入参回显 |
+
+且脱敏纪律没被 async 化弄坏：journal 里 `web:page/title` 落真入参真结果、
+`web:source/echo` 落 `{"transient_source":"redacted"}` 与
+`[transient_source_result_redacted]`。
+
+**「行为一字不变」是可判定的**：`host_tool.rs` 的非注释 diff 只有 `async` 一个关键字，
+`turn.rs` 是 +2/-2 两个 `.await`。
