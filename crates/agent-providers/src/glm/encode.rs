@@ -39,14 +39,7 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
     let tool_choice = translate_intent(ing, &mut adjustments);
 
     let system = messages::system_text(ing.system);
-    let mut history = messages::history(ing.messages).messages;
-    // 中途激活的 skill 正文走消息级（跟 Kimi 一样，038：GLM 插新 system 消息也
-    // ~100% 保前缀）。GLM 没有消息级 tools（late_tools 仍并顶层），但**消息级
-    // system 它收**——这条差异正是「宁可分不可合」要保住的：late_tools 和
-    // late_system 分开传，各家各自摆。不报 Adjustment。
-    if let Some(msg) = messages::late_system_message(ing.late_system) {
-        history.push(msg);
-    }
+    let history = messages::history(ing.messages).messages;
     let seg = prefix::SegmentBytes {
         tools: canonical(&built.value),
         system: canonical(&system.as_ref().map_or(Value::Null, |s| json!(s))),

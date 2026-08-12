@@ -75,7 +75,6 @@ fn ingredients_for<'a>(
         messages,
         tools: &[],
         late_tools: &[],
-        late_system: &[],
         config,
         intent: RequestIntent::Free,
         prev_prefix: None,

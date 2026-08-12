@@ -48,8 +48,7 @@ pub use compaction::{
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, BoundaryRejected, ChildConfig, ClearOutcome,
     DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused,
-    DespawnReport, EntryMeta, ReadDenied, Session, SkillError, SpawnRefused, UndoReport,
-    known_label,
+    DespawnReport, EntryMeta, ReadDenied, Session, SpawnRefused, UndoReport, known_label,
 };
 pub use engine::{
     Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus,

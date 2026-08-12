@@ -4,17 +4,18 @@
 //!
 //! # 会话状态类工具的截获点就在这里，**但实现不在**
 //!
-//! `srv:agent/spawn` / `srv:agent/status` / `srv:agent/collect` / skill 激活走的
-//! 都是 `Effect::ExecuteTool`（它们对 core 而言就是普通的工具调用，这正是决策 20
+//! `srv:agent/spawn` / `srv:agent/status` / `srv:agent/collect` 走的都是
+//! `Effect::ExecuteTool`（它们对 core 而言就是普通的工具调用，这正是决策 20
 //! 想要的：spawn 天然进日志、天然有 undo 语义），但它们**不进 `ToolExecutor`**
 //! ——它们要碰的是会话状态或泵的记账，而 executor 够不着 `Session`、也够不着
 //! `Subtree`。所以在分派处按名字截下来。按工具名 match 在宿主侧是合法的：宿主
 //! 本来就持有工具表，这里没有任何模型相关判断（红线 12 管的是 core，且管的是
-//! provider 分支）。
+//! provider 分支）。`srv:skill/read`（137）同一个理由被截获，但它是纯读，不碰
+//! `Session`。
 //!
 //! 这个文件只回答「这个名字归谁执行」，**怎么执行跟着工具自己走**
 //! （`spawn_tool::intercept` / `status_tool::intercept` / `collect_tool::intercept`
-//! / `skill::intercept`）——051 立的规矩，053 的前置重构把 spawn 也搬了回去。
+//! / `skill::read_intercept`）——051 立的规矩，053 的前置重构把 spawn 也搬了回去。
 //!
 //! 截获**以工具表里有没有这个声明为准**：宿主没把 spawn 放进表，模型就看不见
 //! 这个名字，万一它凭空猜出来一个，那就该跟别的不存在的工具一样落
@@ -40,7 +41,7 @@ use crate::event::RunnerEvent;
 use crate::io_bus::IoBus;
 use crate::mcp_call::{self, McpCall};
 use crate::provider_call::{self, ProviderCall};
-use crate::skill::{self, SKILL_ACTIVATE, SKILL_DEACTIVATE, SKILL_READ};
+use crate::skill::{self, SKILL_READ};
 use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::status_tool::{self, STATUS_TOOL};
 use crate::subtree::Subtree;
@@ -131,18 +132,10 @@ pub(crate) fn run_effect(
             if &*tool == STATUS_TOOL && ctx.tools.declares(STATUS_TOOL) {
                 return status_tool::intercept(session, ctx, &agent, call_id, &input, epoch);
             }
-            // skill 激活/停用同款截获（039）：它们改会话状态（写 `SkillsActive`），
-            // executor 够不着 `Session`。宿主没声明（没开 skill）就不截获，模型凭空
-            // 猜出来的这个名字跟别的不存在的工具走同一条路（`unknown_tool`）。
-            if (&*tool == SKILL_ACTIVATE || &*tool == SKILL_DEACTIVATE) && ctx.tools.declares(&tool)
-            {
-                return skill::intercept(session, ctx, &agent, call_id, &tool, &input, epoch);
-            }
-            // skill 正文按需读（137，只实现不装配）：跟 activate/deactivate 同款
-            // dispatch 截获，但它不碰 `Session`——纯读 registry，甚至不需要拿到
-            // session 这个参数。**只有 139 把 `srv:skill/read` 放进
-            // `ToolTable::with_skills` 之后 `declares` 才会为真**，这条路由今天
-            // 是死代码，行为零变化。
+            // skill 正文按需读（137）：跟 status 同款 dispatch 截获，但它不碰
+            // `Session`——纯读 registry，甚至不需要拿到 session 这个参数。宿主没
+            // 声明（没开 skill）就不截获，模型凭空猜出来的这个名字跟别的不存在的
+            // 工具走同一条路（`unknown_tool`）。
             if &*tool == SKILL_READ && ctx.tools.declares(SKILL_READ) {
                 return skill::read_intercept(ctx, &agent, call_id, &input, epoch);
             }
@@ -151,20 +144,8 @@ pub(crate) fn run_effect(
             // 跑到一半崩溃时，恢复出来的日志里压根没有这次调用「不可逆」的痕迹
             // （`mark_irreversible` 本身不落日志，落的是它让随后那条 `tool_result`
             // entry 带上的 `barrier` 位——见 `Session::mark_irreversible` 文档）。
-            // 084：部署期 ToolTable 仍是第一优先级；只有表里没有这个名字时，才按
-            // **当前 agent** 的激活集解析 host skill 自带的远端工具。解析不到就继续
-            // 走既有 unknown_tool 路径，不能因为 `web:` / `desk:` 前缀凭空挂起。
             let table_declared = ctx.tools.declares(&tool);
-            let active_skill_request = if table_declared {
-                None
-            } else {
-                let active = session.active_skills_of(&agent);
-                ctx.tools
-                    .active_host_tool_request(&active, &tool, Arc::clone(&input))
-            };
-            let remotely_declared = table_declared || active_skill_request.is_some();
-            let request = active_skill_request
-                .unwrap_or_else(|| ctx.tools.snapshot(&tool, Arc::clone(&input)));
+            let request = ctx.tools.snapshot(&tool, Arc::clone(&input));
             if matches!(request.reversibility, Reversibility::Irreversible) {
                 session.mark_irreversible(call_id.clone());
             }
@@ -179,15 +160,17 @@ pub(crate) fn run_effect(
                 return start_mcp(ctx, bus, agent, call_id, request, epoch);
             }
             // 远端第五路（`web:` / `desk:`）：登记等待槽、把调用推给宿主，**挂起**
-            // 不产事件。部署期声明或当前 agent 已激活的 host skill 声明才放行；`location`
-            // 是**纯按名字**推的（`tool_table::location_of`：`web:` 前缀就是
-            // `Location::Web`），没有这道闸的话，模型只要吐一个工具表里根本没有的
-            // `web:whatever/x` 就能给自己开一个永远等不到回传的槽：泵撞「在飞表空」
-            // 收工返回 `ToolsPending`，宿主回命令队列等一个不会来的 `POST
-            // /tool_result`，会话**永久挂死且不报错**。没声明就落进下面那条既有的
-            // 未知工具路（`ctx.fs.execute` 的 `unknown_tool`），模型看到 `is_error`
-            // 自纠——跟同样被编造出来的 `srv:` 名字待遇一致（决策 20 的兜底）。
-            if request.location.is_remote() && remotely_declared {
+            // 不产事件。**只有部署期声明才放行**（141 删了「当前 agent 已激活的
+            // host skill 声明」那条备选路径——decision 27 之后 skill 不再携带可
+            // 执行的远端工具）；`location` 是**纯按名字**推的（`tool_table::location_of`：
+            // `web:` 前缀就是 `Location::Web`），没有这道闸的话，模型只要吐一个
+            // 工具表里根本没有的 `web:whatever/x` 就能给自己开一个永远等不到回传
+            // 的槽：泵撞「在飞表空」收工返回 `ToolsPending`，宿主回命令队列等一个
+            // 不会来的 `POST /tool_result`，会话**永久挂死且不报错**。没声明就落
+            // 进下面那条既有的未知工具路（`ctx.fs.execute` 的 `unknown_tool`），
+            // 模型看到 `is_error` 自纠——跟同样被编造出来的 `srv:` 名字待遇一致
+            // （决策 20 的兜底）。
+            if request.location.is_remote() && table_declared {
                 let public_request = if crate::transient_source_policy::is_transient_source(&tool) {
                     crate::transient_source_policy::sanitize_request(&request)
                 } else {

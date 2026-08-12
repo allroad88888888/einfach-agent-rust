@@ -84,7 +84,6 @@ fn pristine_send_plan_matches_encode_without_any_projection_across_three_provide
             messages: &projected,
             tools: &tools,
             late_tools: &late_tools,
-            late_system: &[],
             config: &config,
             intent: RequestIntent::Free,
             prev_prefix: None,

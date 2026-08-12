@@ -22,22 +22,8 @@ pub fn system_text(chunks: &[SystemChunk]) -> Option<String> {
     join_texts(chunks.iter().map(|c| &*c.text))
 }
 
-/// DeepSeek 的 `late_system` 落法：**base 段 + late 段拼进同一条 system 消息的正文**
-/// （不是插新消息——038 实测插新 system 消息 120x 归零，改现有段尾保 ~91%）。
-/// 拼法跟 [`system_text`] 一模一样，只是把 late 段接在 base 段后面。
-pub fn system_text_folded(base: &[SystemChunk], late: &[SystemChunk]) -> Option<String> {
-    join_texts(base.iter().chain(late).map(|c| &*c.text))
-}
-
-/// Kimi/GLM 的 `late_system` 落法：**一条独立的 `role:"system"` 消息**（消息级追加，
-/// 038 实测 ~100% 保前缀、免费）。正文是 late 段合并后的文本；late 段全空 → `None`
-/// （不发空消息）。调用方把它 push 到 history 末尾——对仅扩展匹配是一次严格延长。
-pub fn late_system_message(late: &[SystemChunk]) -> Option<Value> {
-    system_text(late).map(|text| json!({"role": "system", "content": text}))
-}
-
-/// 若干段文本用空行拼成一条，全空返回 `None`。[`system_text`] /
-/// [`system_text_folded`] 共用——「怎么把多段 system 拼成一条正文」只有一处。
+/// 若干段文本用空行拼成一条，全空返回 `None`。[`system_text`] 用它——
+/// 「怎么把多段 system 拼成一条正文」只有一处。
 fn join_texts<'a>(texts: impl Iterator<Item = &'a str>) -> Option<String> {
     let text = texts
         .filter(|t| !t.is_empty())

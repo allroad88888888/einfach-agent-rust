@@ -213,7 +213,7 @@ pub(crate) async fn resume_after_first_commit(
         // A. 排空待办。FIFO：一批 effect 产出的事件排在当前这批后面，
         //    顺序与 012 的「一代一代喂」完全一致。
         while let Some(event) = pending.pop_front() {
-            let event = crate::transient_source_ingress::prepare(session, ctx, event);
+            let event = crate::transient_source_ingress::prepare(ctx, event);
             let source = event.agent().clone();
             ladder.note(&event);
             let mut effects = session.step(event);

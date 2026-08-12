@@ -59,12 +59,14 @@ pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
 
 /// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的九个 +
 /// `Session` 会话级命令的四个（`begin_turn` / `set_max_turns` / `set_max_retries` /
-/// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）+ 039
-/// 的两条 skill 命令（`activate_skill` / `deactivate_skill`）+ 073 的宿主注入声明
-/// （`declare_host_tools`）+ 064/076 的两条同款声明（`declare_host_skills` /
-/// `disable_builtins`）+ 100 的 `SendPlan` 整体替换（`replace_send_plan`——104 的
-/// `advance_boundary` 生效时也是调它，复用同一个标签，不另开一格）+ 107 的摘要回写
-/// （`apply_summary`）+ 134 的会话开局前缀（`prefix_init`）。
+/// `clear_prev_prefix`）+ 028 的两条树形命令（`spawn_child` / `despawn_child`）+
+/// `activate_skill` / `deactivate_skill`（039 加、141 删了写入点——**标签留着**：
+/// 老 journal 里真有这两种 entry，`recover` 不认识的标签会硬失败，见下面「不变量」
+/// 那段）+ 073 的宿主注入声明（`declare_host_tools`）+ 064/076 的两条同款声明
+/// （`declare_host_skills` / `disable_builtins`）+ 100 的 `SendPlan` 整体替换
+/// （`replace_send_plan`——104 的 `advance_boundary` 生效时也是调它，复用同一个
+/// 标签，不另开一格）+ 107 的摘要回写（`apply_summary`）+ 134 的会话开局前缀
+/// （`prefix_init`）。
 ///
 /// **134 为什么不叫 `set_prefix_chunks`**：label 记的是「当时发生了什么」，而这一步
 /// 发生的事是「这个会话的开局前缀在这里定下来了」——它按设计只发生一次、在第一轮

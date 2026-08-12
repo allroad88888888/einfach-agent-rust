@@ -1,9 +1,8 @@
 //! `srv:skill/read`：正文按需读（137，决策 27）。
 //!
-//! 索引（138）只给模型 id + description，正文要靠这个工具按 id 现取。跟
-//! `tool.rs` 的 activate/deactivate 同一个理由——registry 归 `ToolTable` 拥有，
-//! `ToolExecutor` 够不着它，所以执行点是宿主侧 dispatch 的一次截获，不进
-//! `ToolExecutor`。
+//! 索引（138）只给模型 id + description，正文要靠这个工具按 id 现取。registry
+//! 归 `ToolTable` 拥有，`ToolExecutor` 够不着它，所以执行点是宿主侧 dispatch 的
+//! 一次截获，不进 `ToolExecutor`。
 //!
 //! # 139：`with_skills` 把它放进 specs
 //!
@@ -11,12 +10,11 @@
 //! 的 specs 区，`ctx.tools.declares(SKILL_READ)` 从此为真，`dispatch.rs` 里那条
 //! 截获路由不再是死代码。
 //!
-//! # 跟 activate/deactivate 的区别：不碰会话状态
+//! # 不碰会话状态
 //!
 //! 读正文不改 `Slot::SkillsActive`，甚至不需要 `Session`——`&SkillRegistry`
 //! 已经是它需要的全部输入。跟 `status_tool` 同款「纯读、当场回写、无
-//! Pending、无 entry 要同步」，比 activate/deactivate 还简单一层（那两个还要
-//! 碰 `Session`）。
+//! Pending、无 entry 要同步」。
 
 use std::sync::Arc;
 
@@ -119,7 +117,7 @@ mod tests {
     use agent_core::SkillId;
 
     use super::*;
-    use crate::skill::{Skill, SkillSource};
+    use crate::skill::Skill;
 
     /// 造一个装了若干 skill 的 registry，不落磁盘（跟 `load` 无关的测试）。
     fn registry(skills: Vec<(&str, &str, &str)>) -> SkillRegistry {
@@ -132,7 +130,6 @@ mod tests {
                     description: Arc::from(description),
                     body: Arc::from(body),
                     tools: Vec::new(),
-                    source: SkillSource::Disk,
                     hidden: false,
                 },
             );
@@ -182,7 +179,6 @@ mod tests {
                 description: Arc::from("藏起来的技能"),
                 body: Arc::from("藏起来的正文"),
                 tools: Vec::new(),
-                source: SkillSource::Disk,
                 hidden: true,
             },
         );

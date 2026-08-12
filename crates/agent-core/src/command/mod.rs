@@ -27,7 +27,7 @@
 //! | [`tree`] | 028：这棵树上现在有哪些 agent、谁是谁的孩子、谁还活着 |
 //! | [`spawn`] | 028：`spawn_child` + 结构性硬限（决策 20） |
 //! | [`despawn`] | 028：`despawn_child`——019 三条硬约束的第一次真实执行 |
-//! | [`skill`] | 039：`activate_skill` / `deactivate_skill` / `active_skills`——`SkillsActive` 槽位的 journaled 读写（决策 21） |
+//! | [`skill`] | `active_skills` / `active_skills_of`——`SkillsActive` 槽位的只读口（039 决策 21 开的、141 决策 27 删了写入点，槽位留壳） |
 //! | [`host_tools`] | 073：`declare_host_tools` / `host_tools`——`HostTools` 槽位的 journaled 读写（宿主注入的声明是会话状态，恢复时原样复刻） |
 //! | [`host_skills`] | 064：`declare_host_skills` / `host_skills`——`HostSkills` 槽位的同款读写（skill 的索引行也进 prompt，同一条理由） |
 //! | [`disabled_builtins`] | 076：`disable_builtins` / `disabled_builtins`——`DisabledBuiltins` 槽位的同款读写，方向相反（**减法**：这个会话把部署方给的哪几件藏起来不给模型看） |
@@ -81,6 +81,5 @@ pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};
-pub use skill::SkillError;
 pub use spawn::{AgentLimits, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused};
 pub use undo::UndoReport;

@@ -82,7 +82,6 @@ pub fn encode(provider: &dyn Provider, tools: &[ToolSpec], prev: Option<&PrefixI
         messages: &[],
         tools,
         late_tools: &[],
-        late_system: &[],
         config: config(),
         intent: RequestIntent::Free,
         prev_prefix: prev,

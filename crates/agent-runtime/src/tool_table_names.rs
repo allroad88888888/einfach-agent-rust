@@ -25,7 +25,7 @@
 use agent_core::{Location, Reversibility};
 
 use crate::collect_tool::COLLECT_TOOL;
-use crate::skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SKILL_READ};
+use crate::skill::SKILL_READ;
 use crate::spawn_tool::SPAWN_TOOL;
 use crate::status_tool::STATUS_TOOL;
 
@@ -79,11 +79,6 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // 在同一条日志、同一个 turn_id 上。undo 往回走先撞子那条屏障停下来问，
         // 轮不到 collect。跟 spawn 判 `Reversible` 是同一套账（见上一条注释）。
         COLLECT_TOOL => Reversibility::Pure,
-        // skill 激活/停用的补偿动作就是彼此（`srv:skill/deactivate` / re-activate），
-        // 而且激活走 command 层、journaled——**有明确且可靠的补偿动作** = `Reversible`
-        // 的定义。它们走 dispatch 截获、不进 `mark_irreversible`，所以不在日志上留
-        // 屏障位：`/undo` 连激活一起退掉是白拿的。
-        SKILL_ACTIVATE | SKILL_DEACTIVATE => Reversibility::Reversible,
         // read 同理是**纯读**（137）：按 id 查内存里装载期就位的正文，不写任何
         // primitive、不落 entry、没有需要补偿的动作——`Pure` 的定义本身。
         SKILL_READ => Reversibility::Pure,

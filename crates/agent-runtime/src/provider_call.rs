@@ -155,17 +155,17 @@ pub(crate) fn start(
     let prev_prefix = session.prev_prefix_of(&agent);
     let system = subagent::system_for(session, ctx, &agent);
     let tools = subagent::tools_for(session, ctx, &agent);
-    // 039：这个 agent 当前激活的 skill 展开成本轮注入——正文进 `late_system`、
-    // 携带的工具进 `late_tools`。空激活集 → 两个都空，`Ingredients` 逐字节回到
-    // 039 之前（向后兼容）。索引不在这里，它常驻在 `ctx.system`（宿主放进去的）。
-    let active = session.active_skills_of(&agent);
-    let (late_system, late_tools) = ctx.tools.skill_injection(&active);
+    // 141：这里曾经把「这个 agent 当前激活的 skill」展开成两份注入料，塞进料单的
+    // 正文段与中途工具段（039，决策 21）。决策 27 把 skill 正文改成按需
+    // `srv:skill/read`（进 tool_result，不进 system），常驻索引也换成开局工具
+    // （138/139，落进 `ctx.system`/`session.prefix_chunks()`）——那条展开方法与它
+    // 背后的激活机制随 141 一起删掉。`late_tools` 字段留着给别的、非 skill 的
+    // 中途加工具场景，这里恒传空（`Ingredients` 逐字节回到 039 之前）。
     let ing = Ingredients {
         system: &system,
         messages: &prepared.messages,
         tools: &tools,
-        late_tools: &late_tools,
-        late_system: &late_system,
+        late_tools: &[],
         config: &binding.session_config,
         intent: RequestIntent::Free,
         prev_prefix: prev_prefix.as_ref(),
@@ -185,8 +185,7 @@ pub(crate) fn start(
             system: &system,
             messages: &durable_messages,
             tools: &tools,
-            late_tools: &late_tools,
-            late_system: &late_system,
+            late_tools: &[],
             config: &binding.session_config,
             intent: RequestIntent::Free,
             prev_prefix: prev_prefix.as_ref(),

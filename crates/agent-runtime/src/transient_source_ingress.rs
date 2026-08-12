@@ -2,13 +2,16 @@
 
 use std::sync::Arc;
 
-use agent_core::{ContentBlock, ErrorClass, Event, Session, StopReason, ToolCallId};
+use agent_core::{ContentBlock, ErrorClass, Event, StopReason, ToolCallId};
 
 use crate::ctx::RunnerCtx;
 use crate::transient_source_policy::{SAFE_INGRESS_ERROR, is_transient_source, placeholder_input};
 use crate::transient_source_vault::CapturedSource;
 
-pub(crate) fn prepare(session: &Session, ctx: &mut RunnerCtx, event: Event) -> Event {
+/// 141：曾经拿 `&Session` 去解析「当前 agent 已激活的 host skill 携带的远端工具」
+/// （`declared` 那一行），随激活机制一起删了——`declared` 现在只看工具表，函数
+/// 不再需要 `Session`。
+pub(crate) fn prepare(ctx: &mut RunnerCtx, event: Event) -> Event {
     let Event::ProviderDone {
         agent,
         epoch,
@@ -33,7 +36,6 @@ pub(crate) fn prepare(session: &Session, ctx: &mut RunnerCtx, event: Event) -> E
         };
     }
 
-    let active = session.active_skills_of(&agent);
     let reasoning = reasoning_content(&blocks);
     let mut seen = Vec::<ToolCallId>::new();
     let mut captured = Vec::new();
@@ -47,11 +49,7 @@ pub(crate) fn prepare(session: &Session, ctx: &mut RunnerCtx, event: Event) -> E
                 }
                 seen.push(id.clone());
                 if is_transient_source(&name) {
-                    let declared = ctx.tools.declares(&name)
-                        || ctx
-                            .tools
-                            .active_host_tool_request(&active, &name, Arc::clone(&input))
-                            .is_some();
+                    let declared = ctx.tools.declares(&name);
                     valid &= declared;
                     captured.push(CapturedSource {
                         agent: agent.clone(),

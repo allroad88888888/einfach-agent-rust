@@ -63,7 +63,7 @@ fn skills(order: &[usize]) -> Vec<HostSkill> {
                 description: Arc::from(description),
                 // 正文与自带工具**不该进索引**——放进来是为了让「索引只有一行摘要」
                 // 这件事也被字节断言看住（正文漏进 System 段的话字节当场变）。
-                body: Arc::from(format!("{id} 的正文，激活之后才该出现。")),
+                body: Arc::from(format!("{id} 的正文，只该通过 srv:skill/read 才出现。")),
                 tools: Vec::new(),
                 tool_reversibility: Default::default(),
             }
@@ -85,10 +85,16 @@ fn rotated(n: usize) -> Vec<usize> {
     order
 }
 
-/// 一份声明 → 这个会话的常驻索引段（`agent-server` 的 `actor::capabilities` 就是
-/// 这么装的：`SkillRegistry::from_host_skills` → `skill_index_chunk` 追加进 system）。
+/// 一份声明 → 这个会话的常驻索引段（139 起的生产路径：`SkillRegistry::index_text`
+/// 挂在 `srv:skill/index` 的 `SessionStart` timed 执行体上，135 的开局驱动跑一次、
+/// 落进 `Session` 的前缀块；这里直接手搭同形状的 `SystemChunk` 省掉一整套驱动
+/// 基础设施，只钉 `index_text()` 本身的红线 11 性质）。
 fn index_chunk(order: &[usize]) -> SystemChunk {
-    SkillRegistry::from_host_skills(skills(order)).skill_index_chunk()
+    let text = SkillRegistry::from_host_skills(skills(order)).index_text();
+    SystemChunk {
+        label: Arc::from("skill-index"),
+        text,
+    }
 }
 
 fn providers() -> Vec<(&'static str, Box<dyn Provider>)> {
@@ -115,7 +121,6 @@ fn encode(provider: &dyn Provider, system: &[SystemChunk], prev: Option<&PrefixI
         messages: &[],
         tools: &[],
         late_tools: &[],
-        late_system: &[],
         config: config(),
         intent: RequestIntent::Free,
         prev_prefix: prev,
@@ -241,7 +246,7 @@ fn the_prefix_mirror_hashes_exactly_the_system_text_that_goes_on_the_wire() {
     }
 }
 
-/// 索引那几行**原样钉死**：按 id 字典序、一行一个 `id: 描述`、**正文一个字都没有**。
+/// 索引那几行**原样钉死**：按 id 字典序、一行一个 `id — 描述`、**正文一个字都没有**。
 ///
 /// 上面三条比的都是「两次相等」，一个「索引恒为空」的实现全都能过。这一条把内容
 /// 本身钉住，两边合起来才是完整的。
@@ -251,17 +256,17 @@ fn the_index_is_one_sorted_line_per_skill_and_carries_no_body() {
 
     let mut expected: Vec<String> = DECLARED
         .iter()
-        .map(|(id, d)| format!("{id}: {d}"))
+        .map(|(id, d)| format!("{id} — {d}"))
         .collect();
     expected.sort();
     let lines: Vec<&str> = text.lines().skip(1).collect();
     assert_eq!(
         lines, expected,
-        "索引该是按 id 排序、一行一个「id: 描述」（第一行是那句抬头）"
+        "索引该是按 id 排序、一行一个「id — 描述」（第一行是那句抬头，index_text() 的既有格式）"
     );
 
     assert!(
         !text.contains("的正文"),
-        "正文只在激活之后进 late_system，常驻索引里一个字都不该有：{text}"
+        "正文只在 srv:skill/read 的结果里才出现，常驻索引里一个字都不该有：{text}"
     );
 }

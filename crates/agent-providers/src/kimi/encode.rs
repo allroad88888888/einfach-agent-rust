@@ -32,12 +32,6 @@ pub(super) fn encode(ing: &Ingredients<'_>) -> Encoded {
 
     let system = messages::system_text(ing.system);
     let mut history = messages::history(ing.messages).messages;
-    // 中途激活的 skill 正文走消息级：一条独立的 `role:system` 消息追加到 history
-    // 末尾（038：~100% 保前缀、免费）。放在 late_tools 消息之前，顺序固定即可
-    // （红线 11）。不报 Adjustment——这不是妥协，就是把 skill 正文挂在末尾。
-    if let Some(msg) = messages::late_system_message(ing.late_system) {
-        history.push(msg);
-    }
     if !ing.late_tools.is_empty() {
         // 零缓存代价的通道：追加一条 role:system + tools（无 content）的消息，
         // 放在 history 的末尾——对仅扩展匹配的前缀比对而言这仍是一次严格延长。

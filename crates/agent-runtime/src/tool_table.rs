@@ -14,7 +14,7 @@
 //! | 本文件 | 五档装配 + `snapshot` 的三级判定 + `push_spec` 判重（075） |
 //! | [`names`]（`tool_table_names.rs`，076 拆出） | **名字规则**：全名怎么机械推出 `Location`/`Reversibility` |
 //! | [`host`]（`tool_table_host.rs`，062） | **宿主注入这件事**：那张可逆性映射怎么进表、为什么排序、为什么另挂一张表 |
-//! | [`skill_tools`]（`tool_table_skill.rs`，039/064） | **skill 这件事**：registry 归表拥有、每轮怎么展开成注入料、撞名怎么滤 |
+//! | [`skill_tools`]（`tool_table_skill.rs`，039/139） | **skill 这件事**：registry 归表拥有，`read`/`index` 怎么装配 |
 //! | [`disable`]（`tool_table_disable.rs`，076） | **关掉内置这件事**：会话建立时把部署方给的某几件整条剔掉（唯一往回减的一件） |
 //! | [`timed`]（`tool_table_timed.rs`，133） | **调用时机这件事**：timed 工具独立区，`specs`/`declares`/`snapshot` 一个字节看不见它 |
 //!
@@ -40,8 +40,7 @@ pub use timed::{CallTiming, TimedRun, TimedTool};
 pub struct ToolTable {
     specs: Vec<ToolSpec>,
     /// 这张表拥有的 skill registry（039）。为什么它住在表里而不是 `RunnerCtx` 的
-    /// 单独字段、每轮怎么展开成注入料、`late_tools` 撞上表里已有的名字怎么办，
-    /// 全在 [`skill_tools`]（`with_skills`）。空 = 这个会话没开 skill。
+    /// 单独字段，全在 [`skill_tools`]（`with_skills`）。空 = 这个会话没开 skill。
     registry: SkillRegistry,
     /// `mcp:<server>/<tool>` → 它的可逆性（042 握手时经 [`ToolTable::with_mcp`] 装进
     /// 来，041 从 `readOnlyHint` 翻译）。`snapshot` 撞 `mcp:` 前缀查这份映射，**查不到

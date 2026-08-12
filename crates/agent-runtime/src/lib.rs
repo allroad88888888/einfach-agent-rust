@@ -198,7 +198,7 @@ pub use remote_tool_submission::submit_remote_tool_result_async;
 pub use runner::run_turn;
 pub use runner::run_turn_async;
 pub use session_start::{SessionStartError, run_session_start};
-pub use skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SkillLoadError, SkillRegistry};
+pub use skill::{SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::{CallTiming, TimedRun, TimedTool, ToolTable};

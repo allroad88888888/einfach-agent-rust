@@ -9,13 +9,13 @@
 //! **全都不接 `.with_skills(..)`**，经 HTTP 起的会话里 skill 工具根本不在表里——
 //! M5 做的整套 skill 机制在 server 形态下等于不存在。
 //!
-//! # 139 更新：装配从 activate/deactivate 换成 read/index
+//! # 139/141 更新：装配从 activate/deactivate 换成 read/index，机制本身也删了
 //!
 //! `with_skills` 不再往表里塞 `srv:skill/activate`/`deactivate`，模型没有工具调用
-//! 能把正文/自带工具注入 `late_system`/`late_tools` 了（那条通路本身没删，141 之前
-//! 的兼容态，只是新会话走不到）。新机制是 `srv:skill/read`：正文回到的是**这一跳
-//! 的 tool_result**，不是常驻 system 段；read 不碰 `Slot::SkillsActive`，自带工具
-//! 因此永远不进表。
+//! 能把正文/自带工具注入料单的正文段/中途工具段了——141 把那条通路（连同
+//! `Ingredients` 那个正文段字段本身）整个删掉。新机制是 `srv:skill/read`：正文
+//! 回到的是**这一跳的 tool_result**，不是常驻 system 段；read 不碰
+//! `Slot::SkillsActive`，自带工具因此永远不进表。
 //!
 //! # 140 更新：skill 不再能声明自带工具
 //!
@@ -144,7 +144,7 @@ async fn reading_one_skill_returns_only_its_own_body() {
 
     let after_read = body_at(&upstream, before + 1);
 
-    // ── 读的那个：正文进这一跳的 tool_result（对话消息），不是 late_system。
+    // ── 读的那个：正文进这一跳的 tool_result（对话消息），不进 system 段。
     let tool_result = tool_result_text(&after_read, "call_a");
     assert!(
         tool_result.contains(CRM_BODY),
@@ -253,8 +253,8 @@ fn body_at(upstream: &FakeServer, index: usize) -> Value {
 }
 
 /// 请求体里那条 `role: "system"` 消息的正文——模型真正看到的那串字符。
-/// DeepSeek 把 `late_system` 折进**同一条** system 消息的尾部（038），所以激活前后
-/// 看的都是这一条。
+/// DeepSeek 只有一条常驻 system 消息（139 起没有激活式正文拼接这回事了），
+/// 全程看的都是这一条。
 fn system_text(body: &Value) -> String {
     body["messages"]
         .as_array()

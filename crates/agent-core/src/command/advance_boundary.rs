@@ -36,8 +36,8 @@ use crate::ids::{AgentId, SummaryId};
 use super::session::Session;
 
 /// [`Session::advance_boundary`] 被拒的理由。**都是可预期的拒绝，不是 bug**——
-/// 同 [`SkillError`](super::SkillError) / [`SpawnRefused`](super::SpawnRefused) 的
-/// 定位，调用方据此原样回报或静默重试，不是要修的运行时错误。
+/// 同 [`SpawnRefused`](super::SpawnRefused) 的定位，调用方据此原样回报或静默
+/// 重试，不是要修的运行时错误。
 #[derive(Clone, PartialEq, Debug)]
 pub enum BoundaryRejected {
     /// `next` 比当前边界小——边界只能前进（回退会让 History 段来回漂，每轮全价，

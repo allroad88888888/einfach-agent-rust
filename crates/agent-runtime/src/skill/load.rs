@@ -11,7 +11,7 @@
 //!     description: ...
 //!     schema: { ... }
 //! ---
-//! <正文，激活时整段进 late_system>
+//! <正文，`srv:skill/read` 按 id 现取>
 //! ```
 //!
 //! **宽容装载**：缺 frontmatter 就用目录名当 id、正文取全文；缺 `name` 用目录名；
@@ -25,7 +25,7 @@ use std::sync::Arc;
 use agent_core::{SkillId, ToolSpec};
 use serde_json::{Value, json};
 
-use super::{Skill, SkillSource, yaml};
+use super::{Skill, yaml};
 
 /// skill 装载失败。**只有真的 IO 错误**（列目录、读文件失败）会到这里——解析层面
 /// 的潦草一律宽容兜底，不升级成错误（一个坏 skill 不该让整个会话起不来）。
@@ -118,7 +118,6 @@ fn build_skill(fallback_id: &str, content: &str, path: &Path) -> Result<Skill, S
         description: Arc::from(description),
         body: Arc::from(body.trim()),
         tools: tools.unwrap_or_default(),
-        source: SkillSource::Disk,
         hidden,
     })
 }

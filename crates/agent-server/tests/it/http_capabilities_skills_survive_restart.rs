@@ -90,10 +90,10 @@ async fn a_recovered_session_brings_its_declared_skills_back_without_being_told_
     assert!(second_sessions.close_all().iter().all(|(_, r)| r.is_ok()));
 }
 
-/// 139 更新：这条原本验的是「模型调 `srv:skill/activate`，正文进 `late_system`，
+/// 139 更新：这条原本验的是「模型调 `srv:skill/activate`，正文拼进 system 段尾部，
 /// `/undo` 撤掉激活之后下一轮正文消失」——`with_skills` 换成 read/index 装配之后，
 /// `srv:skill/activate` 不在新会话的表里了，模型没有工具调用能激活。真正活着的
-/// 新机制是 `srv:skill/read`：正文经 tool_result **进对话消息**（不是 late_system），
+/// 新机制是 `srv:skill/read`：正文经 tool_result **进对话消息**（不进 system 段），
 /// 撤掉那一轮连读的调用带正文一起消失——跟原测试同一个关切（「undo 能把一次 skill
 /// 交互从 prompt 里干净地拿掉」），只是落点从 system 段换成了 messages。
 ///
@@ -118,7 +118,7 @@ async fn undoing_the_read_takes_the_body_out_of_the_next_round() {
     );
 
     // ── A：模型读 crm-flow，同一轮的下一跳请求体的 messages 里带上它的正文
-    //    （tool_result，不是 late_system）。
+    //    （tool_result，不进 system 段）。
     let before = upstream.request_count();
     input(addr);
     wait_for(&upstream, before + 2).await;

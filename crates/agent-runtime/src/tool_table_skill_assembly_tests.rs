@@ -1,17 +1,24 @@
 //! [`super`] 的单测：**139 本身——`with_skills` 的新装配形状**。
 //!
-//! 跟 `tool_table_skill_tests.rs`（跨路径撞名，069/064）是两件事：那份钉的是
-//! 「表里已经有的名字怎么滤」，这份钉的是「`with_skills` 现在往表里放什么」——
 //! specs 区有 read 没有 activate/deactivate、timed 区恰好一条 index、二次调用的
-//! 撞名判据换成了新的两个名字、以及老会话（journal 里有 M5 期的 activate entry）
-//! 恢复之后 `skill_injection` 照旧工作（141 之前的兼容态，139 §验收）。
+//! 撞名判据是这两个固定名字，以及**141 之后的老会话兼容**：journal 里有一条
+//! M5 期的 activate entry，恢复不 panic、`active_skills()` 原样读回，但**没有
+//! 任何生产代码再拿它去注入下一轮请求体**——那条曾经把激活集展开成注入料的
+//! 方法已经随 141 删掉。
 
-use agent_core::{AgentId, HostSkill, Session, SkillId};
-use serde_json::json;
+use std::sync::Arc;
 
-use crate::skill::{SKILL_ACTIVATE, SKILL_DEACTIVATE, SKILL_READ};
+use agent_core::{AgentId, AgentValue, AtomKey, HostSkill, Session, SkillId, Slot};
+
+use crate::skill::SKILL_READ;
 
 use super::*;
+
+/// activate 工具的全名——141 删了它对应的常量本身（连同声明/截获一起没了），
+/// 这里只是把它当一个**普通字符串**用来断言「表不认识这个名字」，不依赖已删
+/// 的常量。
+const ACTIVATE_TOOL_NAME: &str = "srv:skill/activate";
+const DEACTIVATE_TOOL_NAME: &str = "srv:skill/deactivate";
 
 /// index 的全名。**不从 `crate::skill` 拿一个专门的常量**：`SKILL_INDEX` 只在
 /// `skill/index.rs` 内部被 `index_spec()` 用到，生产代码从不需要单独引用这个
@@ -66,10 +73,11 @@ fn a_new_sessions_specs_have_read_but_not_activate_deactivate_or_index() {
 
     assert!(table.declares(SKILL_READ), "read 该进 specs（139）");
     assert!(
-        !table.declares(SKILL_ACTIVATE),
-        "activate 不该再进 specs——139 只切装配，机制还在，但 with_skills 不再注册它"
+        !table.declares(ACTIVATE_TOOL_NAME),
+        "activate 不该再进 specs——139 切装配、141 删了机制本身，with_skills 从来\
+         没有、也不会再注册这个名字"
     );
-    assert!(!table.declares(SKILL_DEACTIVATE), "deactivate 同理");
+    assert!(!table.declares(DEACTIVATE_TOOL_NAME), "deactivate 同理");
     assert!(
         !table.declares(&skill_index_name()),
         "index 不进 specs——它在 timed 区，declares() 只认 specs 那张表"
@@ -148,70 +156,60 @@ fn with_skills_names_the_offender_in_a_debug_build() {
         .with_skills(a_registry());
 }
 
-/// 139 §验收「老会话兼容」：journal 里有一条 M5 期的 activate entry（`with_skills`
-/// 改装配之前产出的那种）恢复不 panic，`skill_injection` 照旧按
-/// `Slot::SkillsActive` 展开——**跟表还认不认识 `srv:skill/activate` 这个名字
-/// 无关**：`skill_injection` 只读激活集 + registry，不查 `declares()`。141 删
-/// 激活子系统之前，这是必须护住的兼容态。
+/// **141 §验收「老会话兼容」**：一份带 `Slot::SkillsActive` 数据的老快照（模拟
+/// M5 期真被激活过、journal 里本来会有一条 `activate_skill` entry 的会话——写入
+/// 命令本身已经删了，所以这里跟 `host_skills_indep_restore.rs` 同一手法，直接在
+/// 快照里手搭这个槽位的值）恢复不 panic、`active_skills()` 原样读回；但**这张表
+/// 已经没有任何方法能把它变回注入料**——那个曾经把激活集展开成注入料的方法随
+/// 141 一起删了，装出来的表就算装了一个同 id 的 registry，也没有别的口子能让它的正文
+/// 进 `Ingredients`。这是「状态在、没人读」的类型层证据：不是运行时断言"body
+/// 里没有正文"（那条更完整的端到端证据在 `tests/it/` 的老数据兼容测试里，走
+/// `provider_call::start` 的真实请求体），是「根本没有能读它的方法可调」。
 #[test]
-fn a_restored_session_with_a_journaled_activation_still_gets_its_skill_injected() {
+fn a_restored_session_with_a_journaled_activation_no_longer_has_any_injection_path() {
     let root = AgentId::root();
 
-    // 一个「老」会话：真实走 command 层激活一个 skill，产出跟 M5 期一模一样形状
-    // 的 journal entry（`activate_skill` 本身没有变过，只有 `with_skills` 变了）。
-    let mut original = Session::new(root.clone());
-    original
-        .activate_skill(&root, SkillId::new("crm-flow"))
-        .expect("激活一个从没激活过的 skill 不该被拒");
-
-    let entries: Vec<_> = original.history().entries().cloned().collect();
-    let cursor = original.cursor();
-    let next_seq = entries.len() as u64;
-
-    // 恢复：新进程按今天的日志格式重放这份老历史（`Session::restore` 这条独立
-    // 路径不依赖 `ToolTable` 或 registry，纯 core 状态回放）。
-    let restored = Session::restore(root.clone(), None, entries, cursor, next_seq, 100, &mut |k| {
-        panic!("Slot::SkillsActive 是既有槽位，不该报进 on_unknown_key：{k:?}")
+    // 手搭一份「M5 期已激活 crm-flow」的快照——不经 `activate_skill`（已删），
+    // 直接构造 `Slot::SkillsActive` 该有的编码（`value::str_set`：排序去重的
+    // 字符串数组）。
+    let snapshot = vec![(
+        AtomKey::Agent(root.clone(), Slot::SkillsActive),
+        AgentValue::Json(Arc::new(serde_json::json!(["crm-flow"]))),
+    )];
+    let mut unknown = Vec::new();
+    let restored = Session::restore(root.clone(), Some(snapshot), Vec::new(), 0, 0, 100, &mut |k| {
+        unknown.push(k.clone())
     })
-    .expect("含一条 activate entry 的日志必须能被今天的代码重放，不 panic、不拒绝");
+    .expect("含 SkillsActive 数据的快照必须能被今天的代码重放，不 panic、不拒绝");
+    assert!(
+        unknown.is_empty(),
+        "SkillsActive 是留壳的既有槽位，不该报进 on_unknown_key：{unknown:?}"
+    );
 
     assert!(
         restored.active_skills().contains(&SkillId::new("crm-flow")),
-        "恢复出来的激活集必须原样带回这个 id，实际：{:?}",
+        "恢复出来的激活集必须原样带回这个 id（状态还在）：{:?}",
         restored.active_skills()
     );
 
-    // 这个进程今天装的表（139 之后：只有 read + timed index，没有 activate/
-    // deactivate）——用一份内容匹配的 registry 装配，模拟「新进程重新从磁盘/
-    // 声明装载同一个 skill」。
-    let body = "这是 crm-flow 的正文，激活后整段进 late_system。";
+    // 这个进程今天装的表（139 之后：只有 read + timed index）——用一份内容匹配
+    // 的 registry 装配，模拟「新进程重新从磁盘/声明装载同一个 skill」。
     let registry = SkillRegistry::from_host_skills(vec![HostSkill {
         id: SkillId::new("crm-flow"),
         description: Arc::from("处理客户工单"),
-        body: Arc::from(body),
-        tools: vec![ToolSpec {
-            name: Arc::from("web:crm/close"),
-            description: Arc::from("关闭工单"),
-            schema: Arc::new(json!({ "type": "object" })),
-        }],
+        body: Arc::from("这是 crm-flow 的正文，141 之后只能靠 srv:skill/read 取到。"),
+        tools: Vec::new(),
         tool_reversibility: Default::default(),
     }]);
     let table = ToolTable::builtin().with_skills(registry);
 
     assert!(
-        !table.declares(SKILL_ACTIVATE),
-        "这张新表不认识 activate 这个名字了（139）——下面这条断言要证的正是\
-         「即便如此，已经激活过的 skill 照样被注入」"
+        !table.declares(ACTIVATE_TOOL_NAME),
+        "这张新表不认识 activate 这个名字（139/141）"
     );
-
-    let active = restored.active_skills_of(&root);
-    let (late_system, late_tools) = table.skill_injection(&active);
-
-    assert_eq!(late_system.len(), 1, "老会话恢复出来的激活集该注入这一个 skill 的正文");
-    assert_eq!(&*late_system[0].text, body);
-    assert_eq!(
-        late_tools.iter().map(|t| &*t.name).collect::<Vec<_>>(),
-        vec!["web:crm/close"],
-        "它带的工具也该照旧展开"
-    );
+    // `ToolTable` 今天只剩 `skill_registry()`（read/index 用它查正文/索引文本）——
+    // 没有第二个方法能把 `restored.active_skills()` 变成一份 system/tools 注入。
+    // 这不是运行时断言，是类型层的事实：把这个「已经激活」的集合变成注入料的
+    // 那条方法根本不在 `ToolTable` 的公开/内部 API 里了。
+    let _ = table.skill_registry();
 }

@@ -35,7 +35,7 @@
 | `TurnsUsed` / `MaxTurns` | 本轮已发起的 `CallProvider` 次数与上限 |
 | `RetriesUsed` / `MaxRetries` | 当前失败-重试链的连续失败次数与上限 |
 | `ToolsAllowed` | **spawn 当时快照的工具子集**，兼**活名单**：`Null` = 这个 agent 不在活名单上 |
-| `SkillsActive` | 当前激活的 skill id 列表（排序去重的数组，红线 11） |
+| `SkillsActive` | 曾经激活过的 skill id 列表（排序去重的数组，红线 11）。**留壳只读**（决策 27／[141](issues/141-remove-activation-subsystem.md)）：写入点已删，没有任何生产代码再读它去组 prompt——变体本身不删是红线 4（老会话 journal 里真有写过这个槽位的 entry） |
 | `HostTools` | **宿主建会话时声明的工具**（073）：按名字排序的 `{name, description, schema, reversibility}` 数组。恢复时原样回来，宿主不必重连时再报一遍 |
 
 `ToolsAllowed` 一个槽位身兼两职不是省事：**「这个 agent 是被 spawn 出来的，带着这份工具
@@ -79,10 +79,16 @@ ui.token_estimate = f(prompt.payload)
 ui.timeline       = f(messages, 工具槽结果)
 ```
 
-现状：`Ingredients` 由宿主**每一轮现组**（`agent-runtime/src/provider_call.rs` 的 `start`），
-skill 正文与它自带的工具由 `ToolTable::skill_injection` 现算。结论（「换一个 skill 不碰
-消息序列化」「不要手写还剩几个没回来的计数器」）不变，只是 prompt 组装这一段今天不走
-依赖图——ARCHITECTURE 里「料单由引擎增量维护」的说服力目前只在 `messages` 上兑现。
+现状：`Ingredients` 由宿主**每一轮现组**（`agent-runtime/src/provider_call.rs` 的 `start`）。
+结论（「不要手写还剩几个没回来的计数器」）不变，只是 prompt 组装这一段今天不走依赖图
+——ARCHITECTURE 里「料单由引擎增量维护」的说服力目前只在 `messages` 上兑现。
+
+**`skills_active` 这个假想输入已经过时**：039 期这里曾经写「skill 正文与它自带的工具由
+一个每轮都跑的方法现算」，那条路随决策 27／[141](issues/141-remove-activation-subsystem.md)
+删掉——`Slot::SkillsActive` 至今**留壳**（变体保留、无写入点，见该 issue「注意」），但
+不再是任何 prompt 组装公式的输入。skill 正文今天是一个普通工具（`srv:skill/read`）
+按需读、结果进对话消息，跟这张表描述的「system/payload 由一组 primitive 派生」完全是
+另一条路——不需要也不该把它塞回这个公式。
 
 `turn.pending` 落地时值得单独说：三个 tool 在飞，两个前端一个桌面，`Pending` 沿依赖图
 自动汇聚上来。跨 agent 的那一半已经有地基了（`ToolsConverged` 就在这个位置汇聚）。

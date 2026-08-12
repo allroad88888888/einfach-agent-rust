@@ -56,7 +56,7 @@ M10 的宿主声明（`capabilities.tools[].reversibility`）是第二个真元�
 
 **但只有一族工具遵守这个约定**：
 
-- **遵守**：`srv:fs/read`、`srv:shell/exec`、`srv:skill/activate`、`srv:agent/spawn` 等
+- **遵守**：`srv:fs/read`、`srv:shell/exec`、`srv:skill/read`、`srv:agent/spawn` 等
   由 `ToolTable::builtin()`/`with_*()` 装的；MCP 翻译出来的 `mcp:<server>/<tool>`；
   M10 宿主注入的（前缀由校验**强制**，见下）。
 - **不遵守**：`ToolTable::standard()` / `standard_local()` 那一族——`read_file`、`list_files`、
@@ -147,19 +147,13 @@ insert），**不是 panic**——`with_mcp` 收的是第三方 server 的回包
 **实现排在 062 之后**（同一个文件正在被改），本次先落看门狗测试；已实测**当前五档 +
 CLI 链没有任何撞名**，所以这个改动不会让既有装配组合变红。
 
-**跨路径撞名（宿主注入的 `web:foo` × skill 激活时 `late_tools` 里的 `web:foo`）：表赢，
-多余那份在 `skill_injection` 就滤掉。** 赢家不是选出来的——`declares()` 为真是因为**表**
-里有它，远端第五路把调用派给宿主注册的那一份，skill 带的那份从来没有过自己的执行路径。
-滤掉它执行侧一个字节不变，只是不再给模型看一份它影响不了的 schema。**这里绝不能报错**：
-`skill_injection` 每轮都跑，作者早就不在场，轮中失败是「最早可报点」的反面。
-**已落地**（064）：`agent-runtime/src/tool_table_skill.rs` 的 `skill_injection` 在返回前
-`retain` 掉「表里已有的名字」；滤的是**工具**不是 skill——`late_system` 里那个 skill 的正文
-一个字节不少。两条测试钉住（单测 `tool_table_skill_tests.rs` + 端到端
-`tests/skill_late_tools_never_shadow_the_table.rs`，后者断在假上游收到的请求体上）。
-
-（`late_tools` 完全不进 `declares()`，所以 skill 自带的 `web:`/`desk:` 工具今天执行不了
-——那是**可执行性**的洞，不是撞名的洞；064 §范围 第 4 条明确「如实处理、别放大」，
-本仓至今没有修它。）
+**「跨路径撞名（宿主注入的 `web:foo` × skill 携带的同名 `web:foo`）」这个问题今天不
+存在**：064 期 skill 还能携带工具，需要一条过滤规则处理它跟工具表撞名；决策 27
+（M15）把「skill 携带可执行工具」整个砍了（`capabilities.skills[].tools` 非空声明即
+400，见 §Skills），那条过滤规则与它所属的整套激活时注入机制随
+[141](issues/141-remove-activation-subsystem.md) 一起删掉——**没有 skill 携带的工具，
+就没有跟工具表撞名这回事**。这条历史决策与它当时的理由留在 issue 064/069 与
+ROADMAP.md 决策 21/27 里。
 
 ### 第三个维度：调用时机（133）
 
@@ -232,22 +226,52 @@ epoch 已经 bump，而且取消/undo/会话终止都会 `discard_remote_tools()
 
 本质是「按需注入 context 的资产」——一段指令 + 若干文件，触发时进 prompt。
 
-状态与内容分两边放：
+**决策 27（M15）换过一次形状**：039 期是「模型经 `srv:skill/activate` 激活 →
+正文/自带工具经激活时注入塞进 system 段尾部/中途工具通道」，139/141 换成「索引
+常驻、正文按需读、不再携带可执行工具」。下面写的是**今天**这条路，039 期的老
+路径与它的理由留在 [ROADMAP.md](ROADMAP.md) 决策 21/27 与
+[issue 141](issues/141-remove-activation-subsystem.md) 里，不在这里重复。
+
+### 今天的形状：索引常驻 + 正文按需读
 
 ```
-skills_active (primitive atom, Slot::SkillsActive)   ← store 里只有「哪些被激活」
-SkillRegistry (store 外)                             ← 正文与它自带的工具
+srv:skill/index  (138，SessionStart 时机工具)  → 每 skill 一行「id — 描述」，
+                                                  135 的开局驱动在建会话那一刻
+                                                  跑一次，落进 Session::prefix_chunks()
+                                                  （134，会话创建期定死、之后不变）
+srv:skill/read   (137，普通工具，进 specs)      → 模型按 id 现取正文，正文经
+                                                  tool_result **进对话消息**，
+                                                  不进 system 段
 ```
 
-换一个 skill 只重算注入料，不碰消息序列化。**这一条成立，但路径不是 derived atom**：
-每一轮由 `ToolTable::skill_injection(active)` 现算出 `(late_system, late_tools)` 塞进
-`Ingredients`，`prompt.system` / `prompt.payload` 这两个 derived 槽位至今没有落地
-（见 [STATE-MODEL.md](STATE-MODEL.md) §「Derived atoms」）。结论不变，只是今天靠的是
-「每轮现组」而不是「依赖图自动重算」。
+**为什么这个形状能同时活过三家**（038 的实测数字是这条决策的依据）：索引是
+「調用时机 + 详情走工具结果」这个通用机制（决策 27 摘要，见 ROADMAP.md）在
+skills 上的第一个落地——工具表的名字前缀（`srv:skill/read` 本身）一个字节不变，
+正文永远走「消息尾部追加」这条本来就在做、缓存本就为之设计的路，不再有
+「中途插一段 system」这个各家代价不同、DeepSeek 上 120x 归零的动作。真机验收
+（139 实做记录）：DeepSeek 十轮 cached/prompt 全部 ≥ 97.8%（含 read 发生的轮）。
 
-Skill 携带的 tool 也是同一条路：激活时经 `skill_injection` 进这一轮的 `late_tools`，
-停用时不再出现——**不是往工具表里增删**（工具表是会话期不可变的，红线 11：中途改它，
-那一刻起前缀缓存全断）。`tools_registry_version` 那个槽位同理还没有写入点。
+**skill 不再携带可执行的工具**：`capabilities.skills[].tools` 非空在声明这一步
+就整份 400（140，决策 27）——工具想给某个 skill 用，走 `capabilities.tools` 顶层
+声明。`HostSkill.tools` 字段仍然存在（老 journal 反序列化兼容），但没有任何代码
+会读它去注入或执行。
+
+### 状态与内容分两边放（没变）
+
+```
+SkillRegistry (store 外)             ← 正文，`SkillRegistry::load`/`from_host_skills` 装
+Session::prefix_chunks (134)         ← 索引常驻块，会话创建期算一次、落盘、之后不变
+Slot::SkillsActive (留壳，141)        ← 只读、没有写入点；agent-cli 的 `/skills` 展示
+                                        用它回显老会话的历史激活状态，不影响 prompt
+```
+
+`Slot::SkillsActive` 是这条链路唯一留下的「激活」痕迹：039 期活着时它记录「哪些
+skill 被激活」，供每轮展开成注入料；141 删了写入点（`activate_skill`/`deactivate_skill`
+连同 `SkillError` 一起没了）和唯一的读者（那条每轮把激活集展开成注入料的方法）
+——变体本身不能删（红线 4：老会话 journal 里真有 `activate_skill` entry），所以它
+是一个**留壳的既有槽位**：老会话恢复时这项数据原样读得出来，但没有任何生产代码
+再拿它去组下一轮的请求体。这是**如实的行为变化**，不是半吊子兼容：恢复一个 M13
+期真激活过某个 skill 的老会话，继续对话不会再看到那个 skill 的正文。
 
 ### 多来源与合并
 

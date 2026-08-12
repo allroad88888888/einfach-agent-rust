@@ -4,15 +4,11 @@
 //! 135 的开局驱动在新建会话那一刻跑它一次，产出落进 `Session` 的前缀块，这个文件
 //! 只交付文本产出与 spec 两件东西，不管「谁在什么时候调它」。
 //!
-//! # 跟常驻索引（`skill_index_chunk`）的关系：139 起 index_text 是唯一活的路径
+//! # 141：这是唯一的索引路径
 //!
-//! `skill_index_chunk`（`mod.rs`）是 039 期的老索引路径，139 把 `agent-cli`/
-//! `agent-server` 装配那两处手动塞 system chunk 的调用摘掉，改用这个文件的
-//! [`SkillRegistry::index_text`]（格式几乎照抄：每 skill 一行、`BTreeMap` 迭代序
-//! 即字典序，红线 11；区别是措辞指向 `srv:skill/read` 而不是
-//! activate/deactivate，以及滤掉 [`Skill::hidden`] 的条目，142）。
-//! `skill_index_chunk` 本身没删（141 之前的兼容态、部分测试仍在用它钉红线 11 的
-//! 确定性），只是不再有生产装配路径调用它。
+//! 039 期的老索引路径（`skill_index_chunk`，激活/停用措辞、手动塞进
+//! `Ingredients::system`）已随 141 删掉，[`SkillRegistry::index_text`] 是常驻索引
+//! 唯一的产出口。
 
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -81,7 +77,7 @@ mod tests {
     use agent_core::SkillId;
 
     use super::*;
-    use crate::skill::{Skill, SkillSource};
+    use crate::skill::Skill;
 
     fn registry(skills: Vec<(&str, &str, bool)>) -> SkillRegistry {
         let mut map = BTreeMap::new();
@@ -93,7 +89,6 @@ mod tests {
                     description: Arc::from(description),
                     body: Arc::from("正文不该出现在索引里"),
                     tools: Vec::new(),
-                    source: SkillSource::Disk,
                     hidden,
                 },
             );

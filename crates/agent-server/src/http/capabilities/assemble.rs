@@ -32,16 +32,15 @@
 //! 定位置——排序是红线 11 的落点，该在最靠近 prompt 字节的那一层白拿
 //! （`ToolTable::with_host_tools` 排工具，`SkillRegistry` 的 `BTreeMap` 排 skill）。
 //!
-//! **skill 自带的工具不进工具表**：它们要等模型 `srv:skill/activate` 之后才作为
-//! `late_tools` 进这一轮（skill 的既有形状，HOST-CAPABILITIES §一），所以它们跟着
-//! [`HostSkill`] 走，不出现在 [`host_tools`] 的产物里。
+//! **skill 自带的工具不进工具表**：决策 27（M15）之后 v1 根本不支持它——校验层
+//! （`validate.rs`）已经把 `capabilities.skills[].tools` 非空整份 400，本函数这里
+//! 走到的 `skill.tools` 因此在实践中恒空。翻译逻辑留着只是为了 [`HostSkill`] 的
+//! 字段形状完整（老 journal 反序列化兼容），不代表这条路今天还有产出。
 //!
 //! # skill 自带工具的 `reversibility` 旁挂保存
 //!
-//! skill 工具仍不进常驻工具表；这一步只把执行元数据按名字写进
-//! [`HostSkill::tool_reversibility`]，供激活后的 dispatch 查询。它不进入 `ToolSpec`，
-//! 因而不改变 skill index、正文或 late tool schema 的 prompt 字节。跟顶层工具一样，
-//! 宿主省略可逆性时保守落 `Irreversible`。
+//! 这一步把（恒空的）执行元数据按名字写进 [`HostSkill::tool_reversibility`]。
+//! 它不进入 `ToolSpec`，因而不改变 skill index 或正文的 prompt 字节。
 
 use std::sync::Arc;
 
@@ -74,8 +73,9 @@ pub(in crate::http) fn host_tools(
 /// 没带 `capabilities` 或者一个 skill 都没声明 → 空 `Vec`，下游 registry 为空、
 /// 工具表不接 `.with_skills(..)`、常驻索引是空文本，这个会话跟 064 之前逐字节相同。
 ///
-/// `id`/`description`/`body` 直接进（前两个进常驻索引与 prompt，第三个等激活才进
-/// `late_system`）；自带工具的三个 prompt 字段仍原样搬，可逆性按名字旁挂保存。
+/// `id`/`description`/`body` 直接进（前两个进常驻索引，第三个按需经
+/// `srv:skill/read` 取，139/141）；自带工具的三个 prompt 字段仍原样搬（今天恒空，
+/// 见模块文档），可逆性按名字旁挂保存。
 pub(in crate::http) fn host_skills(capabilities: Option<&Capabilities>) -> Vec<HostSkill> {
     let Some(capabilities) = capabilities else {
         return Vec::new();
@@ -183,8 +183,9 @@ mod tests {
         assert!(host_tools(Some(&caps(json!({ "tools": [] })))).is_empty());
     }
 
-    /// skill 自带的工具**不进工具表**：它们等 `srv:skill/activate` 之后作为
-    /// `late_tools` 进那一轮，所以跟着 [`host_skills`] 走，不出现在这里。
+    /// skill 自带的工具**不进工具表**——它们跟着 [`host_skills`] 走（今天 v1 不
+    /// 支持非空的 skill tools，`validate.rs` 会在更早的校验层 400，这条只钉
+    /// `assemble.rs` 自身的翻译边界：即便喂给它，也不会串进顶层工具表）。
     #[test]
     fn tools_carried_by_a_skill_do_not_enter_the_tool_table() {
         let declared = caps(json!({
@@ -199,7 +200,8 @@ mod tests {
     }
 
     /// 064：四个字段原样搬进 [`HostSkill`]——`description` 会变成常驻索引那一行、
-    /// `body` 等激活才进 `late_system`、自带的工具等激活才进 `late_tools`。
+    /// `body` 按需经 `srv:skill/read` 取（139/141）、自带的工具字段原样搬但今天
+    /// 没有任何路径会执行或注入它们（见模块文档）。
     #[test]
     fn a_declared_skill_carries_its_index_line_body_and_tools() {
         let schema = json!({ "type": "object", "properties": { "ticket": { "type": "string" } } });

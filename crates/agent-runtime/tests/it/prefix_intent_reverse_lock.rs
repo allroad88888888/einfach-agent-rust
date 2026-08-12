@@ -11,14 +11,17 @@
 //!
 //! 103 的 `PrefixIntent` 只看 `send_plan_of` 跟 `prev_send_plan_of`——`drift.rs`
 //! 模块文档自己列了压缩之外**另一条**会改前缀、但本 issue 明确不接的来源：
-//! 「换 skill 集……都是后面才出现的 `Intentional` 来源」。039 的
-//! `Session::activate_skill` 是纯状态命令，不摸 `SendPlan`；`agent-runtime`
-//! 拿到激活集之后会把这个 skill 的正文并进下一跳的 `late_system`
-//! （`skill_indep_registry_and_activation_e2e.rs` 已经钉死这条链路）。
+//! 「换 skill 集……都是后面才出现的 `Intentional` 来源」。141 把「模型经工具中途
+//! 换 skill 集」这条路整个删了（决策 27）——`ctx.system` 现在是会话创建期定死、
+//! 全程不变的一份静态数据。要在**不碰 `SendPlan`** 的前提下制造真实的 System 段
+//! 漂移，改用一个更直接也更通用的手法：**同一个 `session` 换一个不同 `system`
+//! 的 `RunnerCtx` 继续跑**——这模拟的是「宿主在两轮之间重启/重新部署，system
+//! prompt 变了」，跟 skill 是不是活着完全无关，覆盖面反而更宽（任何会改
+//! `ctx.system` 的原因都走这条判读）。
 //!
-//! 于是：压缩轮之后，不碰 `SendPlan`、只直接激活一个 skill，下一轮 System 段
-//! 就会真的漂——而且是一次跟压缩完全无关的漂移，`send_plan_of` 与
-//! `prev_send_plan_of` 全程相等，intent 该读出 `Reuse`。这一轮如果被判成
+//! 于是：压缩轮之后，不碰 `SendPlan`、只换一个 `system` 内容不同的 `RunnerCtx`，
+//! 下一轮 System 段就会真的漂——而且是一次跟压缩完全无关的漂移，`send_plan_of`
+//! 与 `prev_send_plan_of` 全程相等，intent 该读出 `Reuse`。这一轮如果被判成
 //! `Expected`，只有一种解释：intent 卡在了压缩轮那次的 `Intentional` 没退回来。
 
 use std::cell::RefCell;
@@ -26,40 +29,21 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use agent_core::{AgentId, DriftVerdict, Segment, Session, SessionConfig, SkillId};
+use agent_core::{AgentId, DriftVerdict, Segment, Session, SessionConfig, SystemChunk};
 use agent_providers::deepseek::DeepSeek;
-use agent_runtime::{RunnerCtx, RunnerEvent, SkillRegistry, ToolTable, run_turn};
+use agent_runtime::{RunnerCtx, RunnerEvent, ToolTable, run_turn};
 use agent_tools::ToolExecutor;
 use agent_transport::{Backoff, Client};
 
 use crate::support;
 
-/// 落一份最小可用的 `skills/testskill/SKILL.md`——frontmatter 形状照抄
-/// `skill_indep_registry_and_activation_e2e.rs`（已验证过的已知格式），不带
-/// `tools:`（可选字段，本测试只关心 System 段，不需要 late_tools 掺进来把
-/// 断言变得两可）。
-fn write_test_skill(skills_root: &std::path::Path) {
-    let dir = skills_root.join("testskill");
-    std::fs::create_dir_all(&dir).unwrap();
-    let lines = [
-        "---".to_string(),
-        "name: testskill".to_string(),
-        "description: 反向锁测试用的技能，REVERSELOCK_INDEX_MARKER。".to_string(),
-        "---".to_string(),
-        "这是 testskill 的正文，激活后应该整段进 late_system。REVERSELOCK_BODY_MARKER。"
-            .to_string(),
-    ];
-    std::fs::write(dir.join("SKILL.md"), lines.join("\n") + "\n").unwrap();
-}
-
 /// 跟 `support::build_ctx` 一样返回一份事件收集器——这里不能复用那个共用
-/// 助手，因为它的 `system` 参数硬编码成空（跟
-/// `skill_indep_registry_and_activation_e2e.rs` 同样的理由：常驻索引要塞
-/// 进 `system`），所以按 `RunnerCtx::new` 的公开签名自己装一份。
+/// 助手，因为它的 `system` 参数硬编码成空（本测试需要在两次调用之间给出不同的
+/// `system`），所以按 `RunnerCtx::new` 的公开签名自己装一份。
 fn build_ctx(
     port: u16,
     fs_root: &std::path::Path,
-    registry: SkillRegistry,
+    system: Vec<SystemChunk>,
 ) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {
     let client = Client::with_config(
         Duration::from_secs(5),
@@ -76,8 +60,7 @@ fn build_ctx(
         max_tokens: None,
         context_window: None,
     };
-    let index = registry.skill_index_chunk();
-    let tools = ToolTable::builtin().with_skills(registry);
+    let tools = ToolTable::builtin();
 
     let events = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&events);
@@ -88,7 +71,7 @@ fn build_ctx(
         "fake-key".to_string(),
         fs,
         tools,
-        vec![index],
+        system,
         session_config,
         agent_runtime::open_backend(None, |_| {}),
         Box::new(move |ev| sink.borrow_mut().push(ev)),
@@ -96,19 +79,30 @@ fn build_ctx(
     (ctx, events)
 }
 
+fn base_system() -> Vec<SystemChunk> {
+    vec![SystemChunk {
+        label: Arc::from("base"),
+        text: Arc::from("你是一个称职的助手。REVERSELOCK_BASE_MARKER。"),
+    }]
+}
+
+fn changed_system() -> Vec<SystemChunk> {
+    vec![SystemChunk {
+        label: Arc::from("base"),
+        text: Arc::from("你是一个称职的助手，而且很谨慎。REVERSELOCK_CHANGED_MARKER。"),
+    }]
+}
+
 #[test]
 fn round_after_compaction_with_no_further_plan_change_flags_real_drift_as_unexpected() {
-    let skills_root = support::temp_dir("prefix-intent-reverse-lock-skills");
-    write_test_skill(&skills_root);
     let fs_root = support::temp_dir("prefix-intent-reverse-lock-fs");
-    let registry = SkillRegistry::load(&[skills_root]).expect("加载测试用 skill 目录不该失败");
 
     let port = support::spawn_scripted_server(vec![
         support::sse_text("第一轮回复"),
         support::sse_text("压缩轮回复"),
-        support::sse_text("激活 skill 之后的一轮"),
+        support::sse_text("system 变了之后的一轮"),
     ]);
-    let (mut ctx, events) = build_ctx(port, &fs_root, registry);
+    let (mut ctx, _events) = build_ctx(port, &fs_root, base_system());
     let (mut session, root) = (Session::new(AgentId::root()), AgentId::root());
 
     // 轮 1：建立一份 PrevPrefix 镜像。
@@ -124,13 +118,12 @@ fn round_after_compaction_with_no_further_plan_change_flags_real_drift_as_unexpe
         .expect("边界从 0 推到 history_len 该被接受");
     run_turn(&mut session, &mut ctx, "继续").expect("压缩轮不该是 source failure");
 
-    // 轮 3（反向锁那一轮）：**不碰 SendPlan**——直接激活一个 skill，制造一次跟
-    // 压缩无关的真实 System 段漂移。
+    // 轮 3（反向锁那一轮）：**不碰 SendPlan**——同一个 session 换一个 system 不同
+    // 的 ctx 继续跑，制造一次跟压缩无关的真实 System 段漂移。
+    let (mut ctx2, events) = build_ctx(port, &fs_root, changed_system());
     session.begin_turn();
-    session
-        .activate_skill(&root, SkillId::new("testskill"))
-        .expect("激活一个从没激活过的 skill 不该被拒");
-    run_turn(&mut session, &mut ctx, "激活之后的一轮").expect("第三轮不该是 source failure");
+    run_turn(&mut session, &mut ctx2, "system 变了之后的一轮")
+        .expect("第三轮不该是 source failure");
 
     let events = events.borrow();
     let last_guard = events
@@ -140,7 +133,7 @@ fn round_after_compaction_with_no_further_plan_change_flags_real_drift_as_unexpe
             _ => None,
         })
         .last()
-        .unwrap_or_else(|| panic!("激活 skill 之后那一轮该有一份 GuardReport：{events:#?}"));
+        .unwrap_or_else(|| panic!("system 变了之后那一轮该有一份 GuardReport：{events:#?}"));
 
     assert_eq!(
         last_guard.drift,
@@ -148,7 +141,7 @@ fn round_after_compaction_with_no_further_plan_change_flags_real_drift_as_unexpe
             segment: Segment::System
         },
         "这一轮 send_plan_of 跟 prev_send_plan_of 全程没变过（没有再压缩），intent \
-         该读出 Reuse；激活 skill 让 System 段真的漂了，Reuse + 漂移必须判 \
+         该读出 Reuse；system 真的变了导致 System 段真的漂了，Reuse + 漂移必须判 \
          Unexpected，不能因为上一轮刚压缩过就继续放行成 Expected：{events:#?}"
     );
 }

@@ -9,7 +9,7 @@
 //!
 //! 073 已经为注入的**工具**回答过一遍：历史对话是在那一份工具表下产生的、工具表在
 //! prompt 最前面（红线 11）、恢复是忠实重放而不是用今天的配置重建。skill 声明是
-//! 同一类东西——**它的索引行进 system 段**（`SkillRegistry::skill_index_chunk`），
+//! 同一类东西——**它的索引行进 system 段**（`SkillRegistry::index_text`，138/139），
 //! 同样是稳定前缀的一部分。
 //!
 //! 还有两条是 skill 特有的，比工具那边更硬：
@@ -58,14 +58,18 @@ pub struct HostSkill {
     pub id: SkillId,
     /// 进常驻索引的那一行描述（`<id>: <描述>`）。
     pub description: Arc<str>,
-    /// 激活后整段进 `late_system` 的正文。
+    /// skill 的正文。`srv:skill/read`（137/139）按 id 现取，进 tool_result，
+    /// 不再是「激活后整段进 system」（141 之前的老形状）。
     ///
     /// **今天没有长度上限**（HOST-CAPABILITIES §九「这一节还没定的」最后一条：
     /// 本机目录装载的 skill 没上限是因为那是本机文件，网络注入应该有——那条属于
-    /// 安全那一节，064 明确不做）。也就是说一份很长的 `body` 会让**激活之后的
-    /// 每一轮**都变贵，这是确定的成本、不是不确定的风险。
+    /// 安全那一节，064 明确不做）。也就是说一份很长的 `body` 会让**读它的那一轮**
+    /// 变贵，这是确定的成本、不是不确定的风险。
     pub body: Arc<str>,
-    /// 激活时进 `late_tools` 的工具。三个字段就是进 prompt 的那三个。
+    /// skill 自带的工具声明。**v1 不支持**：`capabilities.skills[].tools` 非空在
+    /// server 侧整份 400（140，决策 27）——这条路已经没有任何时机会把它塞进模型
+    /// 看到的工具表。字段留着只为老 journal 的反序列化兼容（缺字段时 `serde(default)`
+    /// 兜底空，见下）。
     #[serde(default)]
     pub tools: Vec<ToolSpec>,
     /// 按工具名保存的执行可逆性；不进 prompt。缺字段兼容旧 journal。

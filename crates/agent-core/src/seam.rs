@@ -45,12 +45,6 @@ pub enum Adjustment {
     LateToolsForcedIntoPrefix { count: u32, est_cost_multiple: f32 },
     /// 工具数超过这家上限，按料单给的优先级从尾部裁掉。
     ToolsTruncated { kept: u32, dropped: u32 },
-    /// **中途激活的 skill 正文（`late_system`）在这家只能拼进 system 段尾部**
-    /// （039）——不是并成一条新 system 消息。038 实测：这家插一条新的 role:system
-    /// 消息会把前缀命中**归零 120x**，改现有 system 段尾部保 ~91%，所以 adapter
-    /// 选了后者，代价约 `est_cost_multiple` 倍。消息级追加免费的家（前缀树/仅扩展
-    /// 对末尾新消息宽容）不报这条——那不是妥协，就是把 skill 正文放兄弟分支。
-    LateSystemReshapedPrefix { est_cost_multiple: f32 },
 }
 
 /// 错误分类。adapter 的 `classify` 产出，016 的错误分流按它转移——core 不自己
@@ -132,9 +126,6 @@ mod tests {
             Adjustment::LateToolsForcedIntoPrefix {
                 count: 3,
                 est_cost_multiple: 120.0,
-            },
-            Adjustment::LateSystemReshapedPrefix {
-                est_cost_multiple: 11.0,
             },
         ];
         let s = serde_json::to_string(&adj).unwrap();

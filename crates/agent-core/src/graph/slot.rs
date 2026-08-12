@@ -71,17 +71,22 @@ pub enum Slot {
     /// 排序去重后落盘（红线 11）：它会被渲染进子 agent 的 prompt，顺序一漂前缀
     /// 缓存就全价。写入点在 `Session::spawn_child`。
     ToolsAllowed,
-    /// **当前激活的 skill id 列表**（039）。值是 [`AgentValue::Json`] 里一个
-    /// **排序去重的字符串数组**，`Json([])` = 没有激活任何 skill（默认值）。
+    /// **`#[deprecated]` 精神，槽位留壳（141，决策 27）**：曾经的「当前激活的
+    /// skill id 列表」（039）。值仍是 [`AgentValue::Json`] 里一个**排序去重的
+    /// 字符串数组**，`Json([])` = 没有激活任何 skill（默认值）——**141 起没有任何
+    /// 写入点**：`Session::activate_skill` / `deactivate_skill` 已删，模型再也
+    /// 没有办法往这个槽位写东西。
     ///
-    /// store 里只存「哪些被激活」，skill 的正文/工具在 store 外的 registry 里
-    /// （TOOLS.md §Skills；也是 `AtomKey` 没有 `Skill` 变体的原因）——于是
-    /// undo 撤一次激活就退化成一次普通的值回滚（跟 `ToolsAllowed` 一视同仁），
-    /// 崩溃恢复靠这个 primitive 自动回来、正文从 registry 现取。
+    /// 变体本身**不能删**：红线 4（落盘用 `AtomKey`），老会话的 journal 里真有
+    /// `activate_skill` entry 写过这个槽位，删变体等于让那些快照反序列化直接断。
+    /// 读口（[`Session::active_skills`](crate::command::Session::active_skills) /
+    /// `active_skills_of`）也还在——老会话恢复回来，这个槽位里的值原样读得出来，
+    /// 但**没有任何生产代码再拿它去组下一轮的请求体**（`agent-runtime` 那个曾经
+    /// 把激活集展开成注入料的方法已随 141 删掉）。这是一处如实的行为变化，不是
+    /// 「兼容留一半」——恢复老会话之后继续对话，模型不会再看到那个 skill 的正文。
     ///
-    /// 为什么是排序去重的数组而不是 `HashSet`（红线 11）：它会被 registry 展开成
-    /// 注入进 system prompt 的正文，顺序一漂前缀缓存就全价。写入点在
-    /// `Session::activate_skill` / `deactivate_skill`，那两处落值前排序去重。
+    /// skill 的正文/工具从 039 起就不在这里（store 外的 registry，TOOLS.md
+    /// §Skills；也是 `AtomKey` 没有 `Skill` 变体的原因）——这条没变。
     SkillsActive,
     /// **宿主建会话时声明的工具**（073）。值是 [`AgentValue::Json`] 里一个
     /// **按名字排序的对象数组**（`value::host_tools` 那一处编解码），

@@ -97,7 +97,6 @@ fn switch_provider_encode_reflects_the_new_family_not_the_old() {
             messages: &[],
             tools: &[],
             late_tools: &[],
-            late_system: &[],
             config: &ctx.default_binding.session_config,
             intent: agent_core::RequestIntent::Free,
             prev_prefix: None,

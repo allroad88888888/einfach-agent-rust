@@ -201,20 +201,36 @@ fn a_log_whose_cursor_sits_before_the_declaration_restores_without_it() {
 
 /// **skill 这一路特有的那格**：激活集（`SkillsActive`）和声明（`HostSkills`）必须
 /// 一起回来。分开落盘/漏掉一半，就是一份指向空 registry 的悬空引用。
+///
+/// 141 删了 `Session::activate_skill`（决策 27：没有生产代码再写这个槽位），
+/// 这条测试因此**不再走那条命令**——直接在快照里手搭 `Slot::SkillsActive` 的值，
+/// 模拟一个 M5 期真被激活过、现在恢复回来的老会话（跟已删的
+/// `skill_indep_restore.rs` 当年的手法一致：不猜具体是哪个 `AgentValue` 变体，
+/// 但今天已知它是 `value::str_set` 的编码，即排序去重的字符串数组）。
 #[test]
 fn the_active_set_and_the_declaration_come_back_together() {
     let mut source = Session::new(root());
     source.declare_host_skills(declaration());
-    source
-        .activate_skill(&root(), SkillId::new("crm-flow"))
-        .expect("激活一个声明过的 skill");
-    let snapshot = source.primitives();
+    let snapshot: Vec<(AtomKey, AgentValue)> = source
+        .primitives()
+        .into_iter()
+        .map(|(key, value)| {
+            if key == AtomKey::Agent(root(), Slot::SkillsActive) {
+                (
+                    key,
+                    AgentValue::Json(Arc::new(serde_json::json!(["crm-flow"]))),
+                )
+            } else {
+                (key, value)
+            }
+        })
+        .collect();
 
     let session = restore_with(snapshot);
     assert_eq!(
         session.active_skills(),
         vec![SkillId::new("crm-flow")],
-        "激活集该回来（039 既有机制）"
+        "激活集该原样回来（留壳的只读口）"
     );
     assert!(
         session

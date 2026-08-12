@@ -13,7 +13,7 @@ use std::sync::Arc;
 use agent_core::{Adjustment, RequestIntent};
 use serde_json::{Map, Value, json};
 
-use super::{CACHE_BLOCK, LATE_SYSTEM_COST_MULTIPLE, LATE_TOOLS_COST_MULTIPLE, MAX_TOOLS};
+use super::{CACHE_BLOCK, LATE_TOOLS_COST_MULTIPLE, MAX_TOOLS};
 use crate::wire::{canonical, messages, names, numeric, prefix, tools};
 use crate::{Encoded, Ingredients};
 
@@ -44,16 +44,7 @@ pub(crate) fn encode(ing: &Ingredients<'_>) -> Encoded {
         adjustments.push(Adjustment::ThinkingDisabledForToolChoice);
     }
 
-    // 中途激活的 skill 正文拼进**同一条** system 消息的尾部（不插新消息，038）。
-    // 该段因此如实变长、如实报 System 漂移——改都改了，不谎报没变（兜底第 1 层要
-    // 抓的正是这个）。空 late_system → `system_text_folded` 等价于 `system_text`，
-    // 逐字节回到 039 之前。
-    let system = messages::system_text_folded(ing.system, ing.late_system);
-    if !ing.late_system.is_empty() {
-        adjustments.push(Adjustment::LateSystemReshapedPrefix {
-            est_cost_multiple: LATE_SYSTEM_COST_MULTIPLE,
-        });
-    }
+    let system = messages::system_text(ing.system);
     let history = messages::history_with_tool_reasoning(ing.messages).messages;
     let seg = prefix::SegmentBytes {
         tools: canonical(&built.value),

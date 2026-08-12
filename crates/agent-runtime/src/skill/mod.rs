@@ -1,74 +1,66 @@
-//! skill 装载（039，决策 21）：宿主侧的 `SkillRegistry`——从磁盘 `SKILL.md` 把
-//! skill 读进来，展开成「常驻索引」（进 system 前缀）和「激活时的注入」
-//! （正文进 `late_system`、携带的工具进 `late_tools`）。
+//! skill 装载：宿主侧的 `SkillRegistry`——从磁盘 `SKILL.md` 或宿主声明把 skill
+//! 读进来，展开成「常驻索引」（138/139，进 system 前缀）与「按需正文」
+//! （137，`srv:skill/read`）。
+//!
+//! # 141：激活式注入已删
+//!
+//! 039（决策 21）曾经的形状是「模型经 `srv:skill/activate` 激活 → 正文进料单的
+//! 正文段、携带的工具进料单的中途工具段」。决策 27（M15）把这条路整个换掉：
+//! 正文改成按需 `read`（137），常驻索引改成开局工具（138/139）。
+//! [141](../../../../docs/issues/141-remove-activation-subsystem.md) 删掉了
+//! 激活/停用工具、那条把激活集展开成两份注入料的方法、以及只为「解析一个已
+//! 激活 skill 携带的远端工具」而存在的执行授权机制（`SkillSource`）——
+//! `capabilities.skills[].tools` 非空已经在 server 侧整份 400（140），skill 携带
+//! 工具在 v1 没有任何时机能生效，那套授权代码留着只是死代码。
 //!
 //! # 边界：registry 是宿主的，不是 core 的
 //!
-//! `agent-core` 只认识「哪些 skill id 被激活」（`Slot::SkillsActive`，红线 12 的
-//! 精神：core 不认识「skill 内容」这个概念）。**内容活在这里**——store 之外、可以
-//! 做 IO（红线 7 只约束 core/store）。恢复一个会话时激活集这个 primitive 自动回来、
-//! 正文从这个 registry **现取**：registry 内容在两次运行之间漂移了（改了正文、删了
-//! 一个 skill），激活集里那个 id 要么取到新正文、要么取不到（[`injection`] 当它
-//! 没激活）。这个漂移是刻意的取舍，理由见 `agent-core` 的 `command/skill.rs`。
+//! `agent-core` 只认识「哪些 skill id 曾经被激活过」（`Slot::SkillsActive`，槽位
+//! 留壳、无写入点，见 `agent-core` 的 `command/skill.rs`）。**内容活在这里**——
+//! store 之外、可以做 IO（红线 7 只约束 core/store）。
 //!
 //! # 子模块
 //!
 //! - [`yaml`]：SKILL.md frontmatter 的缩进式 YAML 子集解析（无外部依赖）。
 //! - [`load`]：目录遍历 + frontmatter/正文切分 + 建 [`Skill`]。
-//! - [`tool`]：`srv:skill/activate` / `srv:skill/deactivate` 的声明、入参解析、
-//!   以及 dispatch 截获点。
-//! - [`read`]（137）/ [`index`]（138）：正文按需读 + 索引文本，只实现不装配。
+//! - [`read`]（137）/ [`index`]（138）：正文按需读 + 索引文本，装配见 `tool_table_skill.rs`。
 
 mod index;
 mod load;
 mod read;
-mod tool;
 mod yaml;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent_core::{Location, Reversibility, SkillId, SystemChunk, ToolCallRequest, ToolSpec};
-use serde_json::Value;
+use agent_core::SkillId;
 
 pub use index::index_spec;
 pub use load::SkillLoadError;
 pub(crate) use read::intercept as read_intercept;
 pub use read::{SKILL_READ, read_spec};
-pub(crate) use tool::intercept;
-// 139：`with_skills` 换成 read/index 之后不再引用 `activate_spec`/`deactivate_spec`，见 `tool.rs` 上的 `#[allow(dead_code)]`。
-pub use tool::{SKILL_ACTIVATE, SKILL_DEACTIVATE};
 
-/// 常驻索引那段 system 的标签（进日志，不进 prompt——见 `SystemChunk`）。
-const INDEX_LABEL: &str = "skill-index";
-
-/// 一个装载进来的 skill：id（= frontmatter 的 `name`）、进索引的那行描述、激活时
-/// 注入的正文、以及可选携带的工具。
+/// 一个装载进来的 skill：id（= frontmatter 的 `name`）、进索引的那行描述、正文、
+/// 以及历史遗留的可选携带工具（141 起没有任何路径会执行它，字段仅供数据往返）。
 struct Skill {
     id: SkillId,
     description: Arc<str>,
     body: Arc<str>,
-    tools: Vec<ToolSpec>,
-    source: SkillSource,
+    /// **141 之后是纯数据**：装载/声明时照旧解析进来，但没有任何执行路径会用
+    /// 到它——server 侧已经在声明这一步拒绝非空的 skill tools（140，决策 27），
+    /// 磁盘 skill 的这个字段也从未有过执行授权（139 之前就只影响 late_tools
+    /// 的可见性）。留着字段是为了 `load.rs`/`yaml.rs` 的 frontmatter 解析不用
+    /// 跟着砍一刀，且不改变 `agent_core::HostSkill` 的既有形状。
+    #[allow(dead_code, reason = "141 之后是纯数据，没有执行路径读它")]
+    tools: Vec<agent_core::ToolSpec>,
     /// frontmatter 可选的 `hidden`（142）：`true` 不进索引，但 `body_of`/
     /// `srv:skill/read` 照常可读——只挡「发现」，不挡「读」。
     hidden: bool,
 }
 
-/// skill 的来源同时也是执行授权边界：磁盘 skill 只能注入说明/schema，永远不能
-/// 借一个 `web:`/`desk:` 名字取得宿主远端执行权。
-enum SkillSource {
-    Disk,
-    Host {
-        tool_reversibility: BTreeMap<Arc<str>, Reversibility>,
-    },
-    /// 恢复数据绕过 HTTP 校验时，正文/schema 仍照旧展开，但任何工具都不执行。
-    InvalidHost,
-}
-
-/// 宿主持有的 skill 目录索引。**用 `BTreeMap` 不是 `HashMap`（红线 11）**：索引和
-/// 注入内容都会进 prompt，迭代顺序必须逐字节确定。
+/// 宿主持有的 skill 目录索引。**用 `BTreeMap` 不是 `HashMap`（红线 11）**：索引
+/// 内容会进 prompt，迭代顺序必须逐字节确定。
 ///
 /// 被 `ToolTable::with_skills` 拥有（跟工具表同寿命），供 dispatch 在整段
 /// `run_turn` 期间随时查——不是只在建表那一刻用一次。
@@ -118,33 +110,26 @@ impl SkillRegistry {
     /// `./skills/` 就能悄悄改写一段历史对话该长什么样，正好是 073 刚堵上的那个洞。
     ///
     /// 写成构造器而不是 `self` builder，是把这条决定钉进类型：想合流的人必须**显式**
-    /// 加一条合并路径，那时才轮得到 064 §6 那条闸（宿主声明的 id 撞上磁盘已装载的
-    /// id → 400，跟 061 同一处，那一刻客户端还在线）。**绝不能**让 `BTreeMap::insert`
-    /// 顺手把它变成静默的后来居上——那是本条最坏的结局。
+    /// 加一条合并路径（061 同一处闸：宿主声明的 id 撞上磁盘已装载的 id → 400）。
     ///
-    /// id 在一份声明内部的唯一性由 061 的校验保证（`DuplicateSkill` → 400），
-    /// 所以这里不会真的撞键。
+    /// **141**：同一份声明内部撞 id 已经在 061 这一层拒绝（`DuplicateSkill` →
+    /// 400），后到的整条覆盖前一条即可（跟 [`load`](SkillRegistry::load) 目录合并
+    /// 同一条「后来居上」语义）——不再需要专门标一个 `InvalidHost` 让撞名的 skill
+    /// 连工具都不能执行：那套授权判定本身随 `active_host_tool_request` 一起删了。
     pub fn from_host_skills(skills: Vec<agent_core::HostSkill>) -> Self {
         let mut registry = BTreeMap::new();
         for declared in skills {
-            let source = host_source(&declared.tools, declared.tool_reversibility);
-            let mut skill = Skill {
+            let skill = Skill {
                 id: declared.id,
                 description: declared.description,
                 body: declared.body,
                 tools: declared.tools,
-                source,
                 // 宿主声明没有 frontmatter，142 的 hidden 概念不适用（见字段文档）。
                 hidden: false,
             };
-            let key = Arc::clone(&skill.id.0);
-            if registry.contains_key(&key) {
-                skill.source = SkillSource::InvalidHost;
-            }
-            registry.insert(key, skill);
+            registry.insert(Arc::clone(&skill.id.0), skill);
         }
-        let skills = registry;
-        SkillRegistry { skills }
+        SkillRegistry { skills: registry }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -159,142 +144,9 @@ impl SkillRegistry {
             .collect()
     }
 
-    /// 常驻索引：每个 skill **一行**「id: 描述」，按 id 排序（红线 11）。它跟工具表
-    /// 一样是**随时都在**的稳定前缀的一部分（宿主把它放进 `Ingredients::system`），
-    /// 不是激活时才注入的——所以模型第一轮、激活之前就能发现有哪些 skill。
-    ///
-    /// 空 registry → **空文本**：`messages::system_text` 会把空段滤掉，于是「没装
-    /// 任何 skill 的会话」的前缀跟 039 之前逐字节一致（向后兼容）。
-    pub fn skill_index_chunk(&self) -> SystemChunk {
-        let text = if self.skills.is_empty() {
-            String::new()
-        } else {
-            let mut out = String::from(
-                "可用的 skill（用 srv:skill/activate 激活、srv:skill/deactivate 停用）：",
-            );
-            for skill in self.skills.values() {
-                out.push('\n');
-                out.push_str(&skill.id.0);
-                out.push_str(": ");
-                out.push_str(&skill.description);
-            }
-            out
-        };
-        SystemChunk {
-            label: Arc::from(INDEX_LABEL),
-            text: Arc::from(text),
-        }
-    }
-
-    /// 这个 skill 装载进来了吗（dispatch 截获激活时先查这个，没有就回 is_error）。
-    pub(crate) fn contains(&self, id: &str) -> bool {
-        self.skills.contains_key(id)
-    }
-
-    /// 「你有哪些 skill」的一行（激活一个不存在的 id 时回给模型，让它自己收敛）。
-    pub(crate) fn known_ids(&self) -> Vec<&str> {
-        self.skills.keys().map(|k| &**k).collect()
-    }
-
     /// 按 id 精确查正文（137，`srv:skill/read` 用它）。**不滤 hidden**（142）：
     /// hidden 只挡索引，不挡读——已装载的 id 永远能读到正文。
     pub fn body_of(&self, id: &str) -> Option<Arc<str>> {
         self.skills.get(id).map(|skill| Arc::clone(&skill.body))
-    }
-
-    /// 把一组激活的 skill id 展开成本轮的注入料：正文进 `late_system`（一个 skill
-    /// 一个 `SystemChunk`），携带的工具进 `late_tools`。顺序跟着 `active` 走
-    /// （`active_skills` 已经是排序的，红线 11）；registry 里查不到的 id **静默跳过**
-    /// ——那是「激活集里有、registry 却没有」的漂移（删了个 skill 又恢复了老会话），
-    /// 当它没激活是最不惊扰的选择。
-    pub(crate) fn injection(&self, active: &[SkillId]) -> (Vec<SystemChunk>, Vec<ToolSpec>) {
-        let mut late_system = Vec::new();
-        let mut late_tools = Vec::new();
-        for id in active {
-            let Some(skill) = self.skills.get(&id.0) else {
-                continue;
-            };
-            late_system.push(SystemChunk {
-                label: Arc::from(format!("skill:{}", skill.id.0)),
-                text: Arc::clone(&skill.body),
-            });
-            late_tools.extend(skill.tools.iter().cloned());
-        }
-        (late_system, late_tools)
-    }
-
-    /// 整个 registry 里恰好一个 host 来源声明、且它有效并已激活时才解析；损坏的
-    /// `InvalidHost` 也参与计数，歧义不能因 agent 只激活其中一个而变成执行授权。
-    pub(crate) fn active_host_tool_request(
-        &self,
-        active: &[SkillId],
-        name: &str,
-        input: Arc<Value>,
-    ) -> Option<ToolCallRequest> {
-        let location = host_tool_location(name)?;
-        let mut resolved = None;
-        for skill in self.skills.values() {
-            let reversibility = match &skill.source {
-                SkillSource::Disk => continue,
-                SkillSource::Host { tool_reversibility } => Some(
-                    tool_reversibility
-                        .get(name)
-                        .copied()
-                        .unwrap_or(Reversibility::Irreversible),
-                ),
-                SkillSource::InvalidHost => None,
-            };
-            for tool in &skill.tools {
-                if &*tool.name != name {
-                    continue;
-                }
-                if resolved.is_some() {
-                    return None;
-                }
-                resolved = Some((&skill.id, reversibility));
-            }
-        }
-        let (owner, reversibility) = resolved?;
-        let reversibility = reversibility?;
-        active.iter().any(|id| id == owner).then_some(())?;
-        Some(ToolCallRequest {
-            tool: Arc::from(name),
-            input,
-            location,
-            reversibility,
-        })
-    }
-}
-
-/// 跟 HTTP capabilities 边界相同的名字约束；这里再验一次以防旧 journal/损坏值。
-fn host_tool_location(name: &str) -> Option<Location> {
-    let (location, rest) = match name {
-        name if name.starts_with("web:") => (Location::Web, &name[4..]),
-        name if name.starts_with("desk:") => (Location::Desktop, &name[5..]),
-        _ => return None,
-    };
-    let shape_ok = !rest.is_empty()
-        && name.len() <= 128
-        && rest
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'/'));
-    shape_ok.then_some(location)
-}
-
-fn host_source(
-    tools: &[ToolSpec],
-    tool_reversibility: BTreeMap<Arc<str>, Reversibility>,
-) -> SkillSource {
-    let mut names = BTreeSet::new();
-    let tools_valid = tools
-        .iter()
-        .all(|tool| host_tool_location(&tool.name).is_some() && names.insert(&*tool.name));
-    let metadata_valid = tool_reversibility
-        .keys()
-        .all(|name| names.contains(&**name));
-    if tools_valid && metadata_valid {
-        SkillSource::Host { tool_reversibility }
-    } else {
-        SkillSource::InvalidHost
     }
 }

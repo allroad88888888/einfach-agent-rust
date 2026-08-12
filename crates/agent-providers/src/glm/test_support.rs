@@ -24,7 +24,6 @@ pub(crate) fn ing() -> Ingredients<'static> {
         messages: &[],
         tools: &[],
         late_tools: &[],
-        late_system: &[],
         config: config(),
         intent: RequestIntent::Free,
         prev_prefix: None,
