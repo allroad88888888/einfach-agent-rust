@@ -1,6 +1,6 @@
 # 154 `Slot::HostPrefix`：宿主声明的开局块进 store
 
-**里程碑** M17 · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 未开始
+**里程碑** M17 · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 完成（见文末，2026-08-12）
 
 ## 目标
 
@@ -37,3 +37,19 @@ store，恢复时从日志回放自动回来，宿主不用（也不许）恢复
 - 红线 3（可序列化）/ 红线 4（落盘用 `AtomKey`）/ 红线 11（禁无序容器）——
   照抄 073 的形状就不会踩，**别自创新编码**。
 - 只做状态位，不碰装配和协议——那是 155/156 的事。
+
+## 实做记录（2026-08-12）
+
+- 落点：`value/host_prefix.rs`（150 行，进店按 name 排序 + all-or-empty 反序列化）、
+  `command/host_prefix.rs`（140 行，`declare_host_prefix`/`host_prefix()`，label
+  `"declare_host_prefix"` 进 `KNOWN_LABELS`）、`Slot::HostPrefix`（`ALL` 20→21，
+  visibility `Upward`）。
+- **计划外拆分（合规）**：`HostPrefix` 的文档注释把 `slot.rs` 顶到 309 行——按
+  「本次改动顶破上限 → 拆分即本次改动的一部分」，`AtomKey`/`ToolCallSlot`/
+  `DerivedKey` 拆去新的 `graph/atom_key.rs`（58 行，**纯搬运**：derive 与
+  「刻意不 derive serde」注释逐字保留，主会话核过 diff 零序列化逻辑改动），
+  `slot.rs` 收窄到 270 行只答「槽叫什么」。
+- 9 个 it 顶层断言文件的槽数 20→21 机械跟随。
+- 独测（盲，`tests/it/host_prefix_indep.rs`，271 行，9 条）零实现问题：含
+  「全 20 槽老快照缺 `HostPrefix` 键恢复不炸读出空」「真实日志整条回放复现声明」
+  两条实现方没写的硬测试。`cargo test -p agent-core --test it` 410 过 0 挂。

@@ -1,17 +1,20 @@
-//! 原子图的**地址空间**：[`AtomKey`]（落盘的逻辑键，红线 4）与它的两级槽位枚举。
+//! 一个 agent 的**槽位**：[`Slot`]——「一个槽位怎么称呼」，这个文件只回答这一个
+//! 问题。
 //!
-//! 这个文件只回答一个问题：**「一个槽位怎么称呼」**。「它没有值的时候是什么」在
-//! 同目录的 [`slot_default`](super::slot_default)（107 加 `Slot::Summaries` 时拆出去
-//! 的——本文件原本同时答两个问题，那就是两件事），「谁来建它」在
-//! [`build`](super::build)，「谁来写它」在 `command/`。
+//! 「它没有值的时候是什么」在同目录的 [`slot_default`](super::slot_default)
+//! （107 加 `Slot::Summaries` 时拆出去的），「落盘的键长什么样」在
+//! [`atom_key`](super::atom_key)（154 加 `Slot::HostPrefix` 时从本文件拆出去
+//! 的——`AtomKey` 是「哪个 agent / 哪次工具调用」+ `Slot`，`Slot` 只是它的一部分，
+//! 两者天然是两件事），「谁来建它」在 [`build`](super::build)，「谁来写它」在
+//! `command/`。
 //!
 //! ## 为什么键是逻辑键
 //!
 //! `AtomId` 是自增 `u64`，完全依赖创建顺序：快照存 `(AtomId, Value)` 的话，只要有人
 //! 往构图函数中间插一行 `create_atom`，所有旧快照的值就整体错位——**而且不报错**
-//! （红线 4）。`AtomKey` 是「怎么还原」（`Slot`）+「还原哪一个」（`AgentId`），
-//! 与创建顺序无关，于是快照能跨进程、日志能跨版本、019 的按需重建才有依据
-//! （拿不到 `Slot` 就不知道该建什么）。
+//! （红线 4）。[`AtomKey`](super::AtomKey) 是「怎么还原」（`Slot`）+「还原哪一个」
+//! （`AgentId`），与创建顺序无关，于是快照能跨进程、日志能跨版本、019 的按需重建
+//! 才有依据（拿不到 `Slot` 就不知道该建什么）。
 //!
 //! 顺带白拿 schema 演进：新增槽位在旧快照里找不到键，用 [`Slot::default_value`]；
 //! 删掉的槽位在快照里是多余项，忽略即可。不需要迁移脚本。
@@ -25,15 +28,10 @@
 //! （`Session::spawn_child`）也有读者（029 的子 agent 工具表 + 活名单判定）。
 //!
 //! 每个槽位还要回答第三个问题「别的 agent 能不能读它」，那是隔壁
-//! [`visibility`](super::visibility) 的事（红线 10）。
-//!
-//! `AtomKey` 的**两个变体一个不少**，即使 M2 只构造 `Agent` 那一支：它是落盘键的
-//! 类型，改它的形状等于让所有旧日志/快照解不出来。`Slot` 可以往里加（旧快照缺键
-//! 用默认值），`AtomKey` 的变体集合不能事后改——两者的稳定性要求不是一个量级。
+//! [`visibility`](super::visibility) 的事（红线 10）。「`AtomKey` 的变体集合为什么
+//! 不能像 `Slot` 一样随便加」写在 [`atom_key`](super::atom_key) 的模块文档里。
 
 use serde::{Deserialize, Serialize};
-
-use crate::ids::{AgentId, ToolCallId};
 
 /// 一个 agent 的槽位。**只有 source（primitive）槽位**——derived 不进日志、不进
 /// 快照，它们的键是 [`DerivedKey`]，两套键分开正是为了让「快照只存 primitive」
@@ -214,38 +212,26 @@ pub enum Slot {
     /// `ToolsAllowed`/`SkillsActive`/`DisabledBuiltins` 是同一个「有序字符串集
     /// 当值」的形状，只有一处编解码。写入点只有一个：`Session::spawn_child`。
     PrefixAllowed,
-}
-
-/// 一次工具调用自己的槽位。
-///
-/// M2 只有 `Result` 一个：`Request`（发起当时的 `Location` / `Reversibility` 快照，
-/// STATE-MODEL §「落盘的键必须是 AtomKey」）要等**持有工具表的宿主**来记——core
-/// 没有工具表，现造一份占位快照是编造（002 合并时的裁决：假的 `Irreversible`
-/// 会让 undo 白拦一次 `fs/read`，正是静默错值）。
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
-pub enum ToolCallSlot {
-    /// 在飞时持 [`AgentValue::Pending`]，回来后持内容。
-    Result,
-}
-
-/// 落盘的逻辑键。`Snapshot` 与 `Entry.changes` 用它，`AtomId` 只在进程内有效。
-///
-/// **只有两个变体**。没有 `Skill(SkillId)`——skill 的内容在 store 外的 registry 里，
-/// store 里只有「哪些被激活」，那是某个 `Agent(_, _)` 槽位（STATE-MODEL）。
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
-pub enum AtomKey {
-    Agent(AgentId, Slot),
-    ToolCall(AgentId, ToolCallId, ToolCallSlot),
-}
-
-impl AtomKey {
-    /// 这个键属于哪个 agent。`undo` 不看它（一条扁平日志按时间排序），
-    /// 逐出与 UI 时间线看它。
-    pub fn agent(&self) -> &AgentId {
-        match self {
-            AtomKey::Agent(a, _) | AtomKey::ToolCall(a, _, _) => a,
-        }
-    }
+    /// **宿主经 `capabilities.prefix` 声明的开局块**（154，决策 31 的状态位）。
+    /// 值是 [`AgentValue::Json`] 里一个 **按 name 排序的 `[[name, text], …]` 数组**
+    /// （`value::host_prefix` 那一处编解码），`Json([])` = 这个会话没有声明任何
+    /// 开局块（默认值）。
+    ///
+    /// **这不是拼进 system 段的那份文本**——那是 [`Slot::PrefixChunks`]（134），
+    /// 由 155 把这份声明合成的常量文本 timed 工具、经 `run_session_start` 实际
+    /// 落块。这个槽位存的是**原始声明本身**：跟 [`Slot::HostTools`] 同构，
+    /// 声明是**会话状态**，建会话时 journaled 写进 store，恢复时从日志回放自动
+    /// 回来，宿主重连时不必也不该再声明一遍——155/156 的装配/HTTP 层拿它做
+    /// 恢复期判定（这个会话是不是已经声明过、声明的是不是这一份）。
+    ///
+    /// 跟 [`Slot::PrefixChunks`] 的差别不只是「这份是声明、那份是落块」，也在
+    /// 「顺序是否可信」：`PrefixChunks` 的输入是 core 内部一次写定的顺序，顺序
+    /// 本身是信息，不排序；这里的输入是宿主一次 HTTP 请求里的
+    /// `capabilities.prefix` 数组，跟 073 的工具声明同一个不可靠来源，所以照
+    /// `HostTools` 的先例**按 name 排序**再落盘。core 不知道这些文本是谁算出来
+    /// 的、也不知道它们会被怎么用（红线 12 的精神）——那是 155/156 装配期的事，
+    /// 这里只是一处「声明」的状态位。
+    HostPrefix,
 }
 
 impl Slot {
@@ -256,7 +242,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 20] = [
+    pub const ALL: [Slot; 21] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -278,14 +264,7 @@ impl Slot {
         Slot::PrefixChunks,
         // 144 追加 PrefixAllowed。
         Slot::PrefixAllowed,
+        // 154 追加 HostPrefix。
+        Slot::HostPrefix,
     ];
-}
-
-/// derived atom 的键。**刻意不 derive serde**：derived 不进日志也不进快照
-/// （它们全部可重算，这正是「完整状态 = 所有 primitive」成立的原因），给它一个
-/// `Serialize` 就是给「把算出来的值也存一份」开了口子。
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub enum DerivedKey {
-    /// 「本 agent 的工具槽全都不是 `Pending` 了吗」。003 预言的那个 derived。
-    ToolsConverged(AgentId),
 }

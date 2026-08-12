@@ -21,8 +21,9 @@ use agent_core::{AgentValue, AtomKey};
 /// 103 追加 `Slot::PrevSendPlan`（上一次请求实际用的那份 `SendPlan`）→ 17；
 /// 107 追加 `Slot::Summaries`（历次压缩产出的摘要正文）→ 18；
 /// 134 追加 `Slot::PrefixChunks`（会话创建期定下的 system 前缀块）→ 19；
-/// 144 追加 `Slot::PrefixAllowed`（spawn 时快照的「开局产物」授予名单）→ 20。
-/// 改这个数之前先问：新槽位是不是真的**必须**进快照。
+/// 144 追加 `Slot::PrefixAllowed`（spawn 时快照的「开局产物」授予名单）→ 20；
+/// 154 追加 `Slot::HostPrefix`（宿主经 `capabilities.prefix` 声明的开局块，
+/// 决策 31）→ 21。改这个数之前先问：新槽位是不是真的**必须**进快照。
 ///
 /// `HostTools` 的答案是必须：不进快照 = 一次落快照之后声明就丢了，恢复出来的
 /// 会话少几个工具且不报错——正是这个测试要拦的那种「顺手加一个槽位」。
@@ -40,8 +41,9 @@ use agent_core::{AgentValue, AtomKey};
 /// `PrefixAllowed`（144）跟 `ToolsAllowed` 同一条理由：不进快照 = undo 回到
 /// spawn 那一刻时，重建出来的子 agent 拿不到「当时被授予了什么」，只能落一个
 /// 猜出来的默认值——而 undo 的语义正是要精确回到 spawn 那一刻，不是回到一个
-/// 看起来差不多的状态。
-const EXPECTED_SLOT_COUNT: usize = 20;
+/// 看起来差不多的状态。`HostPrefix`（154）跟 `HostTools` 同一条理由：不进快照
+/// = 一次落快照之后声明就丢了，恢复出来的会话没有当初那份开局块且不报错。
+const EXPECTED_SLOT_COUNT: usize = 21;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

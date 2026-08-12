@@ -29,6 +29,7 @@
 //! | [`despawn`] | 028：`despawn_child`——019 三条硬约束的第一次真实执行 |
 //! | [`skill`] | `active_skills` / `active_skills_of`——`SkillsActive` 槽位的只读口（039 决策 21 开的、141 决策 27 删了写入点，槽位留壳） |
 //! | [`host_tools`] | 073：`declare_host_tools` / `host_tools`——`HostTools` 槽位的 journaled 读写（宿主注入的声明是会话状态，恢复时原样复刻） |
+//! | [`host_prefix`] | 154：`declare_host_prefix` / `host_prefix`——`HostPrefix` 槽位的同款读写（决策 31 的状态位，宿主经 `capabilities.prefix` 声明的开局块） |
 //! | [`host_skills`] | 064：`declare_host_skills` / `host_skills`——`HostSkills` 槽位的同款读写（skill 的索引行也进 prompt，同一条理由） |
 //! | [`disabled_builtins`] | 076：`disable_builtins` / `disabled_builtins`——`DisabledBuiltins` 槽位的同款读写，方向相反（**减法**：这个会话把部署方给的哪几件藏起来不给模型看） |
 //! | [`send_plan`] | 100：`send_plan_of` / `replace_send_plan`——`SendPlan` 槽位的读写口，M12 压缩主干「投影接进料单」的地基 |
@@ -57,6 +58,7 @@ pub mod compaction_record;
 pub mod cross_read;
 pub mod despawn;
 pub mod disabled_builtins;
+pub mod host_prefix;
 pub mod host_skills;
 pub mod host_tools;
 pub mod meta;

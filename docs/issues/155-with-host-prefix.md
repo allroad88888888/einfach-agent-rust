@@ -1,6 +1,6 @@
 # 155 `ToolTable::with_host_prefix`：声明合成常量文本 timed 工具
 
-**里程碑** M17 · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 未开始
+**里程碑** M17 · **依赖** — · **模型** sonnet · **独测** ✅ · **状态** 完成（见文末，2026-08-12）
 
 ## 目标
 
@@ -39,3 +39,17 @@
 - 红线 11：排序 + 注册序即前缀块序，别经任何无序容器中转。
 - 合成条目**不进** `specs()`/`declares()`（timed 区既有语义，133），断言钉一条。
 - 不碰协议/store——纯 runtime 机制，入参就是排好的对子。
+
+## 实做记录（2026-08-12）
+
+- 落点：`tool_table_host_prefix.rs`（90 行）+ 同名 `_tests.rs`（123 行，`#[path]`
+  挂进 `tool_table.rs`）。空切片直接返回 self（零分配零排序）；非空按 name 排序后
+  逐对走既有 `with_timed`（复用它的撞名闸——debug_assert + release 静默丢，
+  **没有第二套去重**），执行体 `move |_,_,_| Ok(text.clone())`。
+- spec 的 description/schema 是定值占位（timed 区永不进模型面）；`text` 是唯一
+  到达 prompt 的字段，逐字节原样。
+- 独测（盲，`tests/it/host_prefix_table_indep.rs`，297 行，5 条）零实现问题：
+  第 3 条专门用「字母序排在 `srv:skill/index` 前面的声明名」钉死「批间注册序、
+  批内名序」不被全局重排吃掉；第 4 条走真 `srv:agent/spawn` 验 `inherit_prefix`
+  收/拒两路（线级断言子的 system 段含声明文本）。`cargo test -p agent-runtime`
+  273+190 过 0 挂。

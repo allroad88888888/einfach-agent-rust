@@ -20,8 +20,12 @@
 //! 它跟 [`host_skills`] 摆在一起看正好——同样是「会进 prompt 最前面的一列东西」，
 //! 但**它不排序**：那边输入顺序不可靠（客户端给的数组），这边顺序本身是信息。
 //! 红线 11 要的是「确定」，排序只是让不确定的输入变确定的一种手段，不是目的。
+//! [`host_prefix`] 是 `Slot::HostPrefix` 的编解码（154，决策 31）：跟 `host_tools`
+//! 一样排序（同一个不可靠来源——宿主一次 HTTP 请求里的数组），但反序列化跟
+//! `prefix_chunks` 一样 all-or-empty（同一个理由——一次原子写入的整体，不是清单）。
 
 pub mod atom_value;
+pub mod host_prefix;
 pub mod host_skills;
 pub mod host_tools;
 pub mod message;
