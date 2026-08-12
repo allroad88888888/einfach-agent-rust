@@ -165,7 +165,10 @@ POST /sessions
         "body": "……（激活后才注入的正文）……",
         "tools": [ /* 同上形状，激活时才进 late_tools */ ] }
     ],
-    "disable_builtin": [ "srv:agent/spawn" ]      // 076，减法，见 §三之二
+    "disable_builtin": [ "srv:agent/spawn" ],     // 076，减法，见 §三之二
+    "prefix": [                                    // M17 决策 31，开局块，见 §八之三
+      { "name": "web:crm/briefing", "text": "今天的客户上下文：……" }
+    ]
   }
 }
 ```
@@ -313,6 +316,55 @@ skill 的正文，**进这一跳的 tool_result**，不是常驻 system 段。�
 （139 之前落盘的会话历史，其中的 activate entry 仍然带着自带工具）的恢复兼容——
 运行时容忍这条老数据的路径留到 141 才清。
 
+## 八之三、M17：宿主声明开局块（`capabilities.prefix`，决策 31）
+
+M15 给工具加了「调用时机」维度之后留了一条账：timed 工具带着**本地执行体**
+（Rust 闭包），HTTP 声明传不了代码，「企业宿主换掉默认索引工具」只有重新装配
+一条路。决策 31（2026-08-12）的解法是绕开死结而不是硬穿：
+
+> **声明的是内容，不是执行体。** `SessionStart` 工具的全部意义就是它的结果——
+> 一段进 prompt 前缀的文本，在哪跑不重要。宿主建会话**之前**自己跑完逻辑，
+> 把结果文本带进来。
+
+```jsonc
+"capabilities": {
+  "prefix": [ { "name": "web:crm/briefing", "text": "今天的客户上下文：……" } ]
+}
+```
+
+**装配期把每一对 `(name, text)` 合成一条「执行体 = 返回常量文本」的
+`SessionStart` timed 工具**（表尾追加、条目间按名排序）。这一合成是整个设计的
+支点——三处既有机制因此零改动认识它：
+
+| 机制 | 为什么白拿 |
+|---|---|
+| `run_session_start` | 合成条目就是 timed 条目，照常跑 → 文本落 `init:<name>` 前缀块（135 契约） |
+| 恢复 | 值走 134 的状态回放（不重跑）；声明本身落 `Slot::HostPrefix`（073 同构，journaled），恢复重建表时重新合成 → 重启后 spawn 校验行为一致 |
+| `inherit_prefix` | spawn 的校验读的就是 timed 区 spec 名 → 子 agent 能点名要/不要这个块 |
+
+**校验三条**（400 且点名）：name 必须 `web:`/`desk:` 前缀（与内置 `srv:` 结构性
+不撞名——这就是 ROADMAP §四欠的撞名判据）；声明内部、以及与 `capabilities.tools`
+之间重名拒；`text` 为空拒（声明常量空文本只能是笔误，069 判据）。长度上限不加，
+与 skill `body` 同一笔账（§九 待拍安全项）。
+
+**否决的路，记档防重开**：
+
+- **远程执行**（协议声明可执行 timed 工具、开局时 Rust 反调宿主）——135 已判
+  SSE 宿主创建时回传通道结构上不存在；拉取式网关虽可表达，但要把「建会话」改成
+  异步状态机（挂起等宿主执行、超时、半建会话清理），一整套新机器服务的只是
+  「拿一段文本」。
+- **TurnEnd 进协议**——不需要。宿主站在墙外，poll/SSE 天然看得见每轮结束，
+  想记审计、发通知，在自己家做。这就是宿主版的轮末 hook，是决策 30
+  「被问才算、hook 只读纯副作用」的宿主投影。真出现「必须在 Rust 进程内轮末
+  现读账本」的宿主需求再议。
+
+落地：[154](issues/154-host-prefix-slot.md)（状态位）→
+[155](issues/155-with-host-prefix.md)（合成）→
+[156](issues/156-server-prefix-declaration.md)（server 全链）→
+[158](issues/158-m17-dogfood.md)（真机收官）；
+[157](issues/157-wasm-prefix-declaration.md)（wasm 同路）**后置**——
+等另一会话的 agent-wasm capabilities 在飞工作合并后补做，不阻塞收口。
+
 ## 九、安全：**暂缓讨论**（用户 2026-08-04：「安全讨论再说」）
 
 ### 点 1：工具描述与 skill 正文直接进 prompt
@@ -393,6 +445,8 @@ skill 的 `body` 更甚——它是**整段自由文本**，激活后原样进 s
   变很贵」的口子（红线 11 的账：不是不确定，是**确定地很贵**）。工具结果有 32 KiB 上限
   （决策 19），skill 正文现在没有——**本地目录装载时没上限是因为那是本机文件，网络注入
   应该有**。这条我觉得该做，待拍。
+- **`capabilities.prefix[].text` 同此案**（M17 决策 31）：开局块比 skill `body` 更狠——
+  它进**每一轮**的前缀，不是按需读。定 skill `body` 上限时连它一起定。
 
 ## 十、issue 分解（M10）
 

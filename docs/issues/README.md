@@ -695,6 +695,33 @@ TurnEnd 审计文件完成轮恰好一行、取消轮零行；不装包的会话
 独立测试 fakes）跟着签名机械跟随，`cargo test --workspace` 全绿、
 `check-invariants.sh --all` 与 `build-wasm.sh` 均过。
 
+## M17 · 宿主声明开局块（`capabilities.prefix`）
+
+决策 31（2026-08-12 拍板，理由见 ROADMAP §一）：清掉 §四「宿主声明不了 timed
+工具」。要点一句话：**声明的是内容，不是执行体**——宿主建会话前自己跑完逻辑，
+把结果文本经 `capabilities.prefix` 带进来；装配期合成「执行体 = 返回常量文本」
+的 `SessionStart` timed 工具，`run_session_start` / 恢复回放 / `inherit_prefix`
+校验 / `session_has_history` 闸全部零改动认识它。远程执行否决（135 已判），
+TurnEnd 不进协议（宿主墙外 poll/SSE 天然观测，副作用在自己家做）。
+
+```
+154（core 状态位）─┬→ 156（server 全链）→ 158（真机收官，M17 终点）
+155（runtime 合成）─┘
+157（wasm 同路）——后置：等另一会话的 agent-wasm capabilities 在飞工作合并后补做
+```
+
+| # | 任务 | 依赖 | 模型 | 独测 |
+|---|---|---|---|---|
+| [154](154-host-prefix-slot.md) | `Slot::HostPrefix`：声明进 store（073 同构） | — | sonnet | ✅ |
+| [155](155-with-host-prefix.md) | `ToolTable::with_host_prefix`：合成常量文本 timed 工具 | — | sonnet | ✅ |
+| [156](156-server-prefix-declaration.md) | server 全链：协议 + 校验 + 落店 + 装配 | 154+155 | sonnet | ✅ |
+| [157](157-wasm-prefix-declaration.md) | wasm 宿主同路（**后置**，见文内「为什么后置」） | 155+156+在飞合并 | sonnet | — |
+| [158](158-m17-dogfood.md) | 真机收官 + 文档清账 ← **M17 终点** | 156 | 主会话前台 | 本条即验收 |
+
+**排期注意**：154 与 155 无依赖可并行开工。**157 明确后置不阻塞收口**——
+开工勘查发现 HEAD 上的 `agent-wasm` 还没有 capabilities 声明路（那是另一会话
+未提交的在飞工作），在它合并前做 157 是在未合并的地基上盖楼。
+
  ---
  
  ## 怎么做
