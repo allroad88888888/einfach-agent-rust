@@ -63,7 +63,7 @@ pub(super) fn test_pack(log: Arc<Mutex<Vec<&'static str>>>) -> ExtensionPack {
 
 /// 一条只记账的 `TurnEnd` 执行体。
 pub(super) fn recording_hook(log: Arc<Mutex<Vec<&'static str>>>) -> crate::tool_table::TimedRun {
-    Box::new(move |_table, _input: &Value| {
+    Box::new(move |_table, _session: &Session, _input: &Value| {
         log.lock().unwrap().push(HOOK_SENTINEL);
         Ok(Arc::from("pinged"))
     })

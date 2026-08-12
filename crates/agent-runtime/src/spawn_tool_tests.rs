@@ -57,9 +57,10 @@ fn refusal_text_carries_the_numbers() {
 /// 名集里」，不关心它跑出什么。
 fn empty_session_start_run() -> crate::tool_table::TimedRun {
     Box::new(
-        |_table: &crate::tool_table::ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
-            Ok(Arc::from(""))
-        },
+        |_table: &crate::tool_table::ToolTable,
+         _session: &agent_core::Session,
+         _input: &Value|
+         -> Result<Arc<str>, Arc<str>> { Ok(Arc::from("")) },
     )
 }
 

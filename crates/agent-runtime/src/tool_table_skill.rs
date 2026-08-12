@@ -67,7 +67,7 @@ impl ToolTable {
         self.with_timed(
             index_spec(),
             CallTiming::SessionStart,
-            Box::new(|table, _input| Ok(table.skill_registry().index_text())),
+            Box::new(|table, _session, _input| Ok(table.skill_registry().index_text())),
         )
     }
 

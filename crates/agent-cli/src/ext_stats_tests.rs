@@ -109,56 +109,51 @@ fn the_audit_file_sits_next_to_the_session_file() {
 
 /// 一次 hook 触发 = 恰好一行。三次触发三行，一行不多一行不少（验收 3 的
 /// 「每完成轮恰一行」在这一层的断言；「取消轮不触发」由 136 的驱动保证，
-/// `agent-runtime` 的 `turn_end_indep.rs` 已经钉死）。
+/// `agent-runtime` 的 `turn_end_indep.rs` 已经钉死）。153 起 `append_turn_line`
+/// 收 `&Session`——一个从没变过的空会话，三行该逐字节相同（只有 `turn=` 递增）。
 #[test]
 fn every_fire_appends_exactly_one_line() {
     let dir = tmp_dir("cadence");
     let path = dir.join("s.jsonl.audit.log");
     let ledger = Ledger::new(Some(path.clone()));
+    let session = Session::new(AgentId::root());
 
     for _ in 0..3 {
-        ledger.append_turn_line().expect("写审计行该成功");
+        ledger.append_turn_line(&session).expect("写审计行该成功");
     }
 
     let written = lines(&path);
     assert_eq!(written.len(), 3);
-    assert_eq!(
-        written[0],
-        "turn=1 entries=- turns=- agents=- tools=- seen_at=-"
-    );
-    assert_eq!(
-        written[2],
-        "turn=3 entries=- turns=- agents=- tools=- seen_at=-"
-    );
+    assert_eq!(written[0], "turn=1 entries=0/0 agents=1 tools=0");
+    assert_eq!(written[2], "turn=3 entries=0/0 agents=1 tools=0");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `report` 观测过之后，审计行带上数字并标明**是哪一轮观测的**——从没观测过写 `-`，
-/// 不拿零顶替（交界发现：`TurnEnd` 钩子看不见 `Session`，数字只能由截获那半边递过来）。
+/// 153（决策 30）：`audit` 不再靠 `report` 传话，每次触发都在轮末**现读**一次
+/// `&Session`——两次触发之间给会话添一条真实的 command log entry，第二行的
+/// `entries`（`X/Y` 的 `Y`，物理条数）必须等于**那一刻**的 `session.history_len()`，
+/// 不是第一行的老数字、也不是任何缓存值。
 #[test]
-fn an_audit_line_reports_which_turn_the_numbers_came_from() {
-    let dir = tmp_dir("seen");
+fn the_second_audit_line_reports_the_history_len_at_that_moment() {
+    let dir = tmp_dir("live-read");
     let path = dir.join("s.jsonl.audit.log");
     let ledger = Ledger::new(Some(path.clone()));
 
-    ledger.append_turn_line().unwrap(); // 第 1 轮：还没人调过 report
-    ledger.observe(Counts {
-        turns: 2,
-        effective: 7,
-        entries: 9,
-        agents: 2,
-        tool_calls: 3,
-    });
-    ledger.append_turn_line().unwrap(); // 第 2 轮：带上观测
+    let mut session = Session::new(AgentId::root());
+    ledger.append_turn_line(&session).unwrap(); // 第 1 轮：空会话
+
+    session.set_max_turns(7); // 造一条真实的 command log entry
+    let history_len = session.history_len();
+    assert!(history_len > 0, "夹具没有制造出任何 entry，这条测试测不出东西");
+    ledger.append_turn_line(&session).unwrap(); // 第 2 轮：账本已经多了这条 entry
 
     let written = lines(&path);
+    assert_eq!(written.len(), 2);
+    assert_eq!(written[0], "turn=1 entries=0/0 agents=1 tools=0");
     assert_eq!(
-        written[0],
-        "turn=1 entries=- turns=- agents=- tools=- seen_at=-"
-    );
-    assert_eq!(
-        written[1], "turn=2 entries=7/9 turns=2 agents=2 tools=3 seen_at=turn2",
-        "观测发生在第 2 轮**进行中**，不是第 1 轮"
+        written[1],
+        format!("turn=2 entries={history_len}/{history_len} agents=1 tools=0"),
+        "第二行的 entries 必须等于调用那一刻的 history_len——现读，不是传话"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -169,15 +164,16 @@ fn an_audit_line_reports_which_turn_the_numbers_came_from() {
 fn the_turn_ordinal_continues_after_a_restart() {
     let dir = tmp_dir("restart");
     let path = dir.join("s.jsonl.audit.log");
+    let session = Session::new(AgentId::root());
 
     let first = Ledger::new(Some(path.clone()));
-    first.append_turn_line().unwrap();
-    first.append_turn_line().unwrap();
+    first.append_turn_line(&session).unwrap();
+    first.append_turn_line(&session).unwrap();
     drop(first);
 
     let second = Ledger::new(Some(path.clone()));
     assert_eq!(second.turns(), 2, "新账本该知道前面已经跑过两轮");
-    second.append_turn_line().unwrap();
+    second.append_turn_line(&session).unwrap();
 
     let written = lines(&path);
     assert_eq!(written.len(), 3);
@@ -189,7 +185,8 @@ fn the_turn_ordinal_continues_after_a_restart() {
 #[test]
 fn a_memory_session_counts_turns_without_writing_anything() {
     let ledger = Ledger::new(None);
-    assert!(ledger.append_turn_line().is_ok());
+    let session = Session::new(AgentId::root());
+    assert!(ledger.append_turn_line(&session).is_ok());
     assert_eq!(ledger.turns(), 1);
 }
 
@@ -199,7 +196,8 @@ fn a_memory_session_counts_turns_without_writing_anything() {
 fn a_write_failure_comes_back_as_err_not_a_panic() {
     let dir = tmp_dir("unwritable");
     let ledger = Ledger::new(Some(dir.clone()));
-    let outcome = ledger.append_turn_line();
+    let session = Session::new(AgentId::root());
+    let outcome = ledger.append_turn_line(&session);
     assert!(outcome.is_err(), "往一个目录写行该失败");
     assert_eq!(ledger.turns(), 1, "失败也照样算这一轮跑过");
     let _ = std::fs::remove_dir_all(&dir);
@@ -220,13 +218,13 @@ fn both_names_live_in_the_packs_namespace() {
     assert_eq!(report_spec(), spec, "同一份声明两次调用逐字节相同");
 }
 
-/// 截获执行体真的能跑：拿一个空会话调一次，回的是报告正文，而且把数字记进了账。
+/// 截获执行体真的能跑：拿一个空会话调一次，回的是报告正文。153 起 `report_run`
+/// 不再收 `Ledger`——它没有任何副作用可记（见 `ext_stats.rs` 模块文档「`Pure` 的
+/// 举证」），这条测试因此不再断言账本状态。
 #[test]
-fn the_intercept_body_renders_and_records() {
-    let ledger = Ledger::new(None);
-    let run = report_run(std::sync::Arc::clone(&ledger));
+fn the_intercept_body_renders() {
+    let run = report_run();
     let mut session = Session::new(AgentId::root());
     let body = run(&mut session, &AgentId::root(), &Value::Null).expect("纯读不该失败");
     assert!(body.starts_with("本会话至今："));
-    assert!(ledger.seen().is_some(), "调用过之后账上该有一次观测");
 }

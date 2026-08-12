@@ -52,7 +52,7 @@ pub fn run_session_start(
     let mut chunks = Vec::new();
     for entry in tools.timed(CallTiming::SessionStart) {
         let name = Arc::clone(&entry.spec().name);
-        match entry.run(tools, &Value::Null) {
+        match entry.run(tools, session, &Value::Null) {
             Ok(text) if text.is_empty() => {
                 // 空文本不产块——不白占一段前缀（issue 135 §做什么 第 1 条）。
             }
@@ -88,15 +88,15 @@ mod tests {
     }
 
     fn echo_run(reply: &'static str) -> crate::TimedRun {
-        Box::new(move |_table, _input| Ok(Arc::from(reply)))
+        Box::new(move |_table, _session, _input| Ok(Arc::from(reply)))
     }
 
     fn empty_run() -> crate::TimedRun {
-        Box::new(|_table, _input| Ok(Arc::from("")))
+        Box::new(|_table, _session, _input| Ok(Arc::from("")))
     }
 
     fn fail_run(message: &'static str) -> crate::TimedRun {
-        Box::new(move |_table, _input| Err(Arc::from(message)))
+        Box::new(move |_table, _session, _input| Err(Arc::from(message)))
     }
 
     /// 两个 fake 工具按注册顺序进前缀块；交换注册顺序，前缀块的先后跟着换。

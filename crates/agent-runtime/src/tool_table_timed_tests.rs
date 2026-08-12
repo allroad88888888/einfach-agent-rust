@@ -3,7 +3,7 @@
 //! `tool_table_tests.rs`（见那边文件头注释）。
 
 use super::*;
-use agent_core::AgentLimits;
+use agent_core::{AgentId, AgentLimits};
 
 fn raw_spec(name: &str) -> ToolSpec {
     ToolSpec {
@@ -14,7 +14,7 @@ fn raw_spec(name: &str) -> ToolSpec {
 }
 
 fn echo_run(reply: &'static str) -> TimedRun {
-    Box::new(move |_table, _input| Ok(Arc::from(reply)))
+    Box::new(move |_table, _session, _input| Ok(Arc::from(reply)))
 }
 
 /// 验收第一条：timed 工具不进 `specs()`，`declares()` 也认不出它——
@@ -98,13 +98,14 @@ fn timed_tool_run_can_read_the_table_it_is_registered_on() {
     let table = ToolTable::builtin().with_timed(
         raw_spec("srv:index/refresh"),
         CallTiming::SessionStart,
-        Box::new(|table: &ToolTable, _input: &Value| {
+        Box::new(|table: &ToolTable, _session: &Session, _input: &Value| {
             Ok(Arc::from(table.specs().len().to_string()))
         }),
     );
 
+    let session = Session::new(AgentId::root());
     let tool = table.timed(CallTiming::SessionStart).next().unwrap();
-    let result = tool.run(&table, &Value::Null).unwrap();
+    let result = tool.run(&table, &session, &Value::Null).unwrap();
     assert_eq!(&*result, table.specs().len().to_string());
 }
 

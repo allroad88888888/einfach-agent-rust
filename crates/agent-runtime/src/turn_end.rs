@@ -79,6 +79,8 @@
 //! 的是「一份 subscriber 实现能不能在浏览器目标上编译」，而这个 crate 从不
 //! 引入 subscriber，那份验证需求根本不存在。
 
+use agent_core::Session;
+
 use crate::ctx::RunnerCtx;
 use crate::tool_table::CallTiming;
 
@@ -87,10 +89,12 @@ use crate::tool_table::CallTiming;
 ///
 /// 调用方必须已经确认 `session.status()` 落在 `TurnStatus::Done { .. }`——
 /// 这个函数本身不做状态判断（判断属于挂点的责任，见 [`crate::runner`] 里
-/// 调用它的那一行），传进来就无条件跑一遍这份 `TurnEnd` 区。
-pub(crate) fn fire(ctx: &RunnerCtx) {
+/// 调用它的那一行），传进来就无条件跑一遍这份 `TurnEnd` 区。`session` 是
+/// **只读**借用（153，决策 30）——调用方手里本来就攥着它，递进去而已；类型上
+/// 这里写不了状态，`ext:stats/audit` 那类钩子在轮末现读账本靠的就是这个参数。
+pub(crate) fn fire(ctx: &RunnerCtx, session: &Session) {
     for tool in ctx.tools.timed(CallTiming::TurnEnd) {
-        if let Err(message) = tool.run(&ctx.tools, &serde_json::Value::Null) {
+        if let Err(message) = tool.run(&ctx.tools, session, &serde_json::Value::Null) {
             tracing::warn!(
                 tool = %tool.spec().name,
                 error = %message,
@@ -104,7 +108,7 @@ pub(crate) fn fire(ctx: &RunnerCtx) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use agent_core::{SessionConfig, ToolSpec};
+    use agent_core::{AgentId, Session, SessionConfig, ToolSpec};
     use agent_providers::deepseek::DeepSeek;
     use agent_tools::ToolExecutor;
     use agent_transport::Client;
@@ -126,7 +130,7 @@ mod tests {
     /// `FnMut`），记账靠 `Arc<Mutex<..>>` 的内部可变性，同 133/135 测试里
     /// 需要跨调用留痕时的一贯写法。
     fn recording_run(log: Arc<Mutex<Vec<&'static str>>>, name: &'static str) -> TimedRun {
-        Box::new(move |_table, _input: &Value| {
+        Box::new(move |_table, _session, _input: &Value| {
             log.lock().unwrap().push(name);
             Ok(Arc::from("ok"))
         })
@@ -134,7 +138,7 @@ mod tests {
 
     /// 同上，但记完账之后回 `Err`——验证失败不挡后续同批工具继续跑。
     fn recording_fail_run(log: Arc<Mutex<Vec<&'static str>>>, name: &'static str) -> TimedRun {
-        Box::new(move |_table, _input: &Value| {
+        Box::new(move |_table, _session, _input: &Value| {
             log.lock().unwrap().push(name);
             Err(Arc::from("挂了"))
         })
@@ -167,6 +171,7 @@ mod tests {
     #[test]
     fn fire_runs_turn_end_tools_in_registration_order() {
         let log = Arc::new(Mutex::new(Vec::new()));
+        let session = Session::new(AgentId::root());
 
         let forward = ToolTable::builtin()
             .with_timed(
@@ -179,7 +184,7 @@ mod tests {
                 CallTiming::TurnEnd,
                 recording_run(Arc::clone(&log), "b"),
             );
-        fire(&build_ctx(forward));
+        fire(&build_ctx(forward), &session);
         assert_eq!(*log.lock().unwrap(), vec!["a", "b"]);
 
         log.lock().unwrap().clear();
@@ -194,7 +199,7 @@ mod tests {
                 CallTiming::TurnEnd,
                 recording_run(Arc::clone(&log), "a"),
             );
-        fire(&build_ctx(swapped));
+        fire(&build_ctx(swapped), &session);
         assert_eq!(*log.lock().unwrap(), vec!["b", "a"]);
     }
 
@@ -204,6 +209,7 @@ mod tests {
     #[test]
     fn fire_does_not_panic_on_err_and_keeps_running_the_rest() {
         let log = Arc::new(Mutex::new(Vec::new()));
+        let session = Session::new(AgentId::root());
 
         let table = ToolTable::builtin()
             .with_timed(
@@ -222,7 +228,7 @@ mod tests {
                 recording_run(Arc::clone(&log), "ok2"),
             );
 
-        fire(&build_ctx(table));
+        fire(&build_ctx(table), &session);
 
         assert_eq!(*log.lock().unwrap(), vec!["ok1", "boom", "ok2"]);
     }
@@ -233,13 +239,14 @@ mod tests {
     #[test]
     fn fire_is_a_no_op_when_turn_end_region_is_empty_and_ignores_session_start_entries() {
         let log = Arc::new(Mutex::new(Vec::new()));
+        let session = Session::new(AgentId::root());
         let table = ToolTable::builtin().with_timed(
             raw_spec("srv:init/only"),
             CallTiming::SessionStart,
             recording_run(Arc::clone(&log), "should-not-run"),
         );
 
-        fire(&build_ctx(table));
+        fire(&build_ctx(table), &session);
 
         assert!(log.lock().unwrap().is_empty());
     }

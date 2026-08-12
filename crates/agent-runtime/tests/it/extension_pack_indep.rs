@@ -86,10 +86,12 @@ fn sentinel_session_fn(sentinel: &'static str) -> SessionToolFn {
 
 /// 每次调用给共享计数器 +1 的 timed 执行体。
 fn counting_turn_end_run(counter: Arc<AtomicUsize>) -> TimedRun {
-    Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
-        counter.fetch_add(1, Ordering::SeqCst);
-        Ok(Arc::from("ok"))
-    })
+    Box::new(
+        move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+            counter.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::from("ok"))
+        },
+    )
 }
 
 /// 某个 agent 历史里 `call_id` 那一次调用的结果：`(正文, is_error)`——照

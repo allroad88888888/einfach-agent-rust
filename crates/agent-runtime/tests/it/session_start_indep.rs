@@ -52,9 +52,10 @@ fn chunk(label: &str, text: &str) -> SystemChunk {
 /// 总是成功、回一段固定文本的执行体。
 fn ok_text(text: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            Ok(Arc::from(text))
-        },
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> { Ok(Arc::from(text)) },
     )
 }
 
@@ -66,16 +67,20 @@ fn ok_empty() -> TimedRun {
 /// 总是失败，回一段固定错误消息。
 fn err_text(message: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            Err(Arc::from(message))
-        },
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> { Err(Arc::from(message)) },
     )
 }
 
 /// 成功执行体，每次真的被调都往 `counter` 上加一——验收第 4 条数「到底跑了几次」。
 fn counting_ok(counter: Arc<AtomicUsize>, text: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> {
             counter.fetch_add(1, Ordering::SeqCst);
             Ok(Arc::from(text))
         },

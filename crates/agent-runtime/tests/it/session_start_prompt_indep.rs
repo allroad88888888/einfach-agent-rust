@@ -36,9 +36,10 @@ fn spec(name: &str, description: &str) -> ToolSpec {
 /// 总是成功、回一段固定文本的执行体。
 fn ok_text(text: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            Ok(Arc::from(text))
-        },
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> { Ok(Arc::from(text)) },
     )
 }
 
@@ -124,10 +125,12 @@ fn spawning_two_children_across_a_round_runs_session_start_exactly_once() {
         .with_timed(
             spec("alpha", "开局工具，执行会被计数"),
             CallTiming::SessionStart,
-            Box::new(move |_table: &ToolTable, _input: &serde_json::Value| {
-                counted.fetch_add(1, Ordering::SeqCst);
-                Ok::<Arc<str>, Arc<str>>(Arc::from("INDEX-TEXT"))
-            }),
+            Box::new(
+                move |_table: &ToolTable, _session: &Session, _input: &serde_json::Value| {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                    Ok::<Arc<str>, Arc<str>>(Arc::from("INDEX-TEXT"))
+                },
+            ),
         );
 
     let mut session = Session::new(AgentId::root());

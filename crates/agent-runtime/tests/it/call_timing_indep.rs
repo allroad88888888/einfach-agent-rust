@@ -8,7 +8,7 @@
 //! ```ignore
 //! pub enum CallTiming { SessionStart, TurnEnd }  // Clone/Copy/PartialEq/Eq/Debug
 //! pub type TimedRun =
-//!     Box<dyn Fn(&ToolTable, &serde_json::Value) -> Result<Arc<str>, Arc<str>> + Send + Sync>;
+//!     Box<dyn Fn(&ToolTable, &Session, &serde_json::Value) -> Result<Arc<str>, Arc<str>> + Send + Sync>;
 //! impl ToolTable {
 //!     pub fn with_timed(self, spec: ToolSpec, timing: CallTiming, run: TimedRun) -> Self;
 //!     pub fn timed(&self, timing: CallTiming) -> impl Iterator<Item = &TimedTool>;
@@ -16,9 +16,13 @@
 //! pub struct TimedTool { .. }
 //! impl TimedTool {
 //!     pub fn spec(&self) -> &ToolSpec;
-//!     pub fn run(&self, table: &ToolTable, input: &serde_json::Value) -> Result<Arc<str>, Arc<str>>;
+//!     pub fn run(&self, table: &ToolTable, session: &Session, input: &serde_json::Value) -> Result<Arc<str>, Arc<str>>;
 //! }
 //! ```
+//!
+//! 签名注（153，决策 30）：`TimedRun`/`TimedTool::run` 加了只读 `&Session`——
+//! 本文件写成时（133）还没有这个参数，独立测试作为公开类型演进的机械跟随只补
+//! 参数列表，不改任何断言。
 //!
 //! 六条断言对应六条验收（逐条见各测试函数上的文档注释）：
 //! 1. timed 工具不出现在 `specs()`；`declares()` 为假。
@@ -38,7 +42,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use agent_core::ToolSpec;
+use agent_core::{AgentId, Session, ToolSpec};
 use agent_runtime::{CallTiming, TimedRun, TimedTool, ToolTable};
 use serde_json::json;
 
@@ -53,9 +57,12 @@ fn spec(name: &str, description: &str) -> ToolSpec {
 /// 什么都不做、总是 `Ok` 的执行体——用在只关心注册/查询行为、不关心执行结果
 /// 的测试里，每次调用现造一个新的 `Box`（`TimedRun` 不是 `Clone`）。
 fn ok_run() -> TimedRun {
-    Box::new(|_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-        Ok(Arc::from("ok"))
-    })
+    Box::new(
+        |_table: &ToolTable,
+         _session: &Session,
+         _input: &serde_json::Value|
+         -> Result<Arc<str>, Arc<str>> { Ok(Arc::from("ok")) },
+    )
 }
 
 /// 验收 1：timed 工具不出现在 `specs()`；`declares()` 为假——模型看不见它，
@@ -146,16 +153,22 @@ fn run_is_actually_invoked_reads_input_and_covers_both_ok_and_err_paths() {
     let ok_run: TimedRun = {
         let ok_calls = Arc::clone(&ok_calls);
         let seen_input = Arc::clone(&seen_input);
-        Box::new(move |_table: &ToolTable, input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            ok_calls.fetch_add(1, Ordering::SeqCst);
-            *seen_input.lock().unwrap() = Some(input.clone());
-            Ok(Arc::from("done"))
-        })
+        Box::new(
+            move |_table: &ToolTable,
+                  _session: &Session,
+                  input: &serde_json::Value|
+                  -> Result<Arc<str>, Arc<str>> {
+                ok_calls.fetch_add(1, Ordering::SeqCst);
+                *seen_input.lock().unwrap() = Some(input.clone());
+                Ok(Arc::from("done"))
+            },
+        )
     };
     let err_run: TimedRun = Box::new(
-        |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            Err(Arc::from("boom"))
-        },
+        |_table: &ToolTable,
+         _session: &Session,
+         _input: &serde_json::Value|
+         -> Result<Arc<str>, Arc<str>> { Err(Arc::from("boom")) },
     );
 
     let table = ToolTable::empty()
@@ -172,8 +185,9 @@ fn run_is_actually_invoked_reads_input_and_covers_both_ok_and_err_paths() {
         .find(|t| t.spec().name.as_ref() == "srv:timing/err")
         .expect("srv:timing/err 该在 SessionStart 区里");
 
+    let session = Session::new(AgentId::root());
     let input = json!({"probe": "value-x"});
-    let result = ok_entry.run(&table, &input);
+    let result = ok_entry.run(&table, &session, &input);
     assert_eq!(result, Ok(Arc::from("done")));
     assert_eq!(
         ok_calls.load(Ordering::SeqCst),
@@ -186,10 +200,10 @@ fn run_is_actually_invoked_reads_input_and_covers_both_ok_and_err_paths() {
         "闭包必须能读到调用方传入的 input，不是一份空的或者别的输入"
     );
 
-    let err_result = err_entry.run(&table, &json!({}));
+    let err_result = err_entry.run(&table, &session, &json!({}));
     assert_eq!(err_result, Err(Arc::from("boom")), "Err 路径必须原样透传");
     // 再调一次 ok_entry，确认计数是累加的而不是「第一次调用之后失效」。
-    let _ = ok_entry.run(&table, &json!({"probe": "again"}));
+    let _ = ok_entry.run(&table, &session, &json!({"probe": "again"}));
     assert_eq!(ok_calls.load(Ordering::SeqCst), 2);
 }
 

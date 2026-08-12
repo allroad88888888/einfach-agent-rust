@@ -290,7 +290,7 @@ pub(crate) async fn resume_after_first_commit(
                 // `Done` 时同样会触发，是刻意的，理由见 `crate::turn_end`
                 // 模块文档「挂点也是远端工具回传的续跑路」。
                 if matches!(status, TurnStatus::Done { .. }) {
-                    turn_end::fire(ctx);
+                    turn_end::fire(ctx, session);
                 }
             }
             return Ok(status);

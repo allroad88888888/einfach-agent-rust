@@ -20,29 +20,26 @@
 //! # `Pure` 的举证（EXTENSIONS.md §可逆性：给 `Pure` 的举证责任在包作者）
 //!
 //! `report` 三条都成立：**纯读**（[`crate::ext_stats_report::render`] 只收 `&Session`，
-//! 一条 command 都不发）、**不落 entry**、**没有需要补偿的动作**。它确实有一处副作用
-//! ——把这次读到的数字记进 [`Ledger`]，但那是**宿主进程内存里的一格**，既不进状态、
-//! 也不改模型看得见的世界；重放一次 `report`（`Reversibility::is_replayable`）算出的
-//! 是同一份数字，世界不变。
+//! 一条 command 都不发）、**不落 entry**、**没有需要补偿的动作**。153 之前它还有一处
+//! 副作用——把读到的数字记进 [`Ledger`] 给 `TurnEnd` 钩子传话；153 落地之后 `audit`
+//! 自己能在轮末现读账本，那格传话被整个删掉，`report` 从此**连这一处副作用都没有**：
+//! 重放一次算出的是同一份数字，世界一个字节都不变。
 //!
-//! # 交界发现（149 的主要产出之一，150 的输入）：**`TurnEnd` 钩子看不见 `Session`**
+//! # 153（决策 30）：`TurnEnd` 钩子现在拿只读 `&Session`，轮末现读
 //!
-//! `TimedRun` 的签名是 `Fn(&ToolTable, &Value) -> Result<Arc<str>, Arc<str>>`（133 的
-//! v1 边界，`crate::tool_table` 的 `timed` 子模块解释了为什么不给 async/effect/epoch）
-//! ——**它拿不到 `Session`**。于是「每轮把 entry 数写进审计文件」这句需求在今天的机制
-//! 上做不到「钩子自己去读账本」：钩子只知道**自己被调过几次**（轮序号），账本数字得
-//! 由这个包的另一半（截获式 `report`，它有 `&mut Session`）经 [`Ledger`] 递过来。
-//!
-//! 所以审计行如实标注这份数字**是哪一轮观测到的**（`seen_at=`）：模型没调 report 的
-//! 轮，行照出，数字标 `-` 或停在上一次观测——审计文件宁可承认自己不知道，也不能编一个
-//! 看起来很新的数字。这不是绕过机制的临时手法，是机制今天的形状；要让钩子直接读状态，
-//! 那是 [150](../../../docs/issues/150-derived-extension-decision.md) 要拍的事
-//! （「触发 hook 与 TurnEnd 的关系」正是它列的产出之一）。
+//! 149 dogfood 时 `TimedRun` 还是 `Fn(&ToolTable, &Value) -> Result<...>`——钩子拿不到
+//! `Session`，于是「每轮把 entry 数写进审计文件」只能靠 `report`（有 `&mut Session`）
+//! 把数字经 [`Ledger`] 递过来，审计行还得标注这份数字是哪一轮观测的（`seen_at=`）。
+//! 153 把 `&Session`（只读）加进 `TimedRun` 签名之后，那整套传话与标注都不再需要：
+//! `audit` 在轮末直接拿这个参数现读一次账本（[`ext_stats_report::count`]，与 `report`
+//! 共用同一份计数逻辑），审计行因此变成 `turn=N entries=X/Y agents=Z tools=W`——四个
+//! 数字都是**这一轮轮末那一刻**的真实状态，不再需要区分「有没有人观测过」。
+//! `Ledger` 因此收窄为只管两件事：轮序号（`kill -9` 后续号）与审计文件路径。
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use agent_core::{AgentId, Reversibility, Session, ToolSpec};
 use agent_runtime::{
@@ -50,7 +47,7 @@ use agent_runtime::{
 };
 use serde_json::{Value, json};
 
-use crate::ext_stats_report::{self, Counts};
+use crate::ext_stats_report;
 
 /// 包名。进每条工具的全名（`ext:<pack>/<tool>`），装配期硬闸按它逐字校验。
 pub const PACK: &str = "stats";
@@ -110,11 +107,7 @@ pub fn install(
 /// 组包本身。条目顺序 = 这里写死的 push 顺序（红线 11，包内不排序）。
 pub fn pack(ledger: Arc<Ledger>) -> ExtensionPack {
     ExtensionPack::new(PACK)
-        .with_tool(
-            report_spec(),
-            Reversibility::Pure,
-            report_run(Arc::clone(&ledger)),
-        )
+        .with_tool(report_spec(), Reversibility::Pure, report_run())
         .with_timed(audit_spec(), CallTiming::TurnEnd, audit_run(ledger))
 }
 
@@ -145,45 +138,43 @@ pub fn audit_spec() -> ToolSpec {
     }
 }
 
-/// 截获式执行体：渲染 + 把数字记进账。
+/// 截获式执行体：纯渲染，不再有任何副作用（153 之前还要往 [`Ledger`] 里记一笔
+/// 给 `audit` 传话，那格传话随 153 一起删除）。
 ///
 /// 读写纪律（后代收窄、只走 command 面）在 [`crate::ext_stats_report`] 那边落实——
 /// 这里连 `&mut Session` 都没用上，直接降成 `&Session` 交给纯函数。
-fn report_run(ledger: Arc<Ledger>) -> SessionToolFn {
-    Box::new(
-        move |session: &mut Session, agent: &AgentId, _input: &Value| {
-            let (body, counts) = ext_stats_report::render(session, agent);
-            ledger.observe(counts);
-            Ok(Arc::from(body))
-        },
-    )
+fn report_run() -> SessionToolFn {
+    Box::new(move |session: &mut Session, agent: &AgentId, _input: &Value| {
+        let (body, _counts) = ext_stats_report::render(session, agent);
+        Ok(Arc::from(body))
+    })
 }
 
-/// `TurnEnd` 执行体：轮序号 +1，追加一行。
+/// `TurnEnd` 执行体：轮序号 +1，轮末**现读**一次账本，追加一行。
+///
+/// 153 之前这里拿不到 `Session`，数字得靠 `report` 经 [`Ledger`] 传话；153 把
+/// `&Session`（只读）加进 `TimedRun` 签名之后，这个闭包直接用它——不再需要任何
+/// 跨调用的传话状态。
 ///
 /// 失败回 `Err`——136 的驱动会记一条 `tracing::warn!` 然后接着跑下一条钩子
 /// （结果丢弃、失败不影响这一轮）。不 `eprintln!`：CLI 的标准错误是给用户看对话的，
 /// 一次写盘失败不该插进对话流里。
 fn audit_run(ledger: Arc<Ledger>) -> TimedRun {
-    Box::new(move |_table: &ToolTable, _input: &Value| ledger.append_turn_line())
+    Box::new(move |_table: &ToolTable, session: &Session, _input: &Value| {
+        ledger.append_turn_line(session)
+    })
 }
 
-/// 这个包自己的账：轮序号（钩子自己数）+ 最近一次 `report` 观测到的数字。
+/// 这个包自己的账：只剩轮序号。**住在宿主进程内存里，不进状态**——它不是 agent 的
+/// 状态，undo 不该动它，恢复也不该从快照里长出来。跨重启的连续性靠一件事：轮序号
+/// **从既有审计文件的行数续号**（[`Ledger::new`]），于是 `kill -9` 之后审计文件不会
+/// 从 `turn=1` 重新数一遍。
 ///
-/// **住在宿主进程内存里，不进状态**——它不是 agent 的状态，undo 不该动它，恢复也不
-/// 该从快照里长出来。跨重启的连续性靠一件事：轮序号[**从既有审计文件的行数续号**]
-/// （[`Ledger::new`]），于是 `kill -9` 之后审计文件不会从 `turn=1` 重新数一遍。
+/// 153 之前这里还有一格 `seen`（`report` 观测到的数字，给 `audit` 传话用）——`audit`
+/// 现在直接现读 `&Session`，那格传话已经没有存在的理由，整个删除。
 pub struct Ledger {
     turns: AtomicU64,
-    seen: Mutex<Option<Seen>>,
     audit: Option<PathBuf>,
-}
-
-/// 一次观测：哪一轮观测的、观测到什么。
-#[derive(Clone, Copy)]
-struct Seen {
-    at_turn: u64,
-    counts: Counts,
 }
 
 impl Ledger {
@@ -193,30 +184,18 @@ impl Ledger {
         let seeded = audit.as_deref().map(existing_lines).unwrap_or(0);
         Arc::new(Ledger {
             turns: AtomicU64::new(seeded),
-            seen: Mutex::new(None),
             audit,
         })
     }
 
-    /// `report` 每次跑完记一笔。中毒（另一个线程持锁时 panic 了）也照用里面的值：
-    /// 这格数据只喂审计行，为它把 CLI 拖垮不划算。
-    ///
-    /// 记的是**正在进行的那一轮**的序号（已完成轮数 + 1）：钩子在轮末才 +1，
-    /// 拿它当时的值会把「第 2 轮里观测的」写成 `seen_at=turn1`——审计文件里差一位
-    /// 的行号比没有行号更坑人（真机第一次跑出来就是这个样子，当场改的）。
-    fn observe(&self, counts: Counts) {
-        let at_turn = self.turns.load(Ordering::Relaxed) + 1;
-        *self.seen() = Some(Seen { at_turn, counts });
-    }
-
-    fn seen(&self) -> MutexGuard<'_, Option<Seen>> {
-        self.seen.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// 轮序号 +1 并追加一行。没有审计路径（临时会话）时只数轮，不写盘。
-    fn append_turn_line(&self) -> Result<Arc<str>, Arc<str>> {
+    /// 轮序号 +1、现读一次 `session`、追加一行。没有审计路径（临时会话）时只数轮，
+    /// 不写盘。`agents` 不按调用者收窄（红线 10 管的是「喂给某个模型看到的东西」，
+    /// 这条钩子没有调用者，是运行时自己在轮末跑的）——取整棵树的节点数。
+    fn append_turn_line(&self, session: &Session) -> Result<Arc<str>, Arc<str>> {
         let turn = self.turns.fetch_add(1, Ordering::Relaxed) + 1;
-        let line = render_line(turn, *self.seen());
+        let agents = session.agent_tree().nodes.len();
+        let counts = ext_stats_report::count(session, agents);
+        let line = render_line(turn, counts);
         let Some(path) = &self.audit else {
             return Ok(Arc::from("（临时会话，无审计文件）"));
         };
@@ -232,16 +211,13 @@ impl Ledger {
 }
 
 /// 一行审计长什么样。**固定字段、固定顺序、没有时钟**——这个文件是拿来 `wc -l` 和
-/// `grep` 的，一行一轮；从没观测过就老实写 `-`，不拿零顶替（「这一轮 0 条 entry」
-/// 和「这一轮没人观测过」是两件事）。
-fn render_line(turn: u64, seen: Option<Seen>) -> String {
-    match seen {
-        None => format!("turn={turn} entries=- turns=- agents=- tools=- seen_at=-"),
-        Some(Seen { at_turn, counts }) => format!(
-            "turn={turn} entries={}/{} turns={} agents={} tools={} seen_at=turn{at_turn}",
-            counts.effective, counts.entries, counts.turns, counts.agents, counts.tool_calls,
-        ),
-    }
+/// `grep` 的，一行一轮。153 起四个数字都是轮末现读的真实状态，不再需要区分
+/// 「有没有人观测过」，也就不再需要 `seen_at=`。
+fn render_line(turn: u64, counts: ext_stats_report::Counts) -> String {
+    format!(
+        "turn={turn} entries={}/{} agents={} tools={}",
+        counts.effective, counts.entries, counts.agents, counts.tool_calls,
+    )
 }
 
 /// 追加一行（含换行）。`create(true).append(true)`：文件不在就建，多个进程先后写

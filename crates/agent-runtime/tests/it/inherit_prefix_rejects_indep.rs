@@ -37,9 +37,10 @@ fn spec(name: &str, description: &str) -> ToolSpec {
 /// 总是成功、回一段固定文本的执行体——照 `session_start_indep.rs::ok_text`。
 fn ok_text(text: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
-            Ok(Arc::from(text))
-        },
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> { Ok(Arc::from(text)) },
     )
 }
 

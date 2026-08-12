@@ -104,8 +104,9 @@ fn the_index_timed_tool_reads_this_tables_own_registry() {
         .timed(CallTiming::SessionStart)
         .next()
         .expect("index 该在 timed 区");
+    let session = Session::new(AgentId::root());
     let text = index_tool
-        .run(&table, &serde_json::Value::Null)
+        .run(&table, &session, &serde_json::Value::Null)
         .expect("index 不该失败");
 
     assert!(

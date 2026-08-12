@@ -65,7 +65,7 @@ fn a_pack_lands_its_specs_reversibility_timed_hooks_and_intercepts() {
     );
 
     // TurnEnd 钩子：走 136 的真实驱动，不是在这里手工调执行体。
-    turn_end::fire(&ctx);
+    turn_end::fire(&ctx, &Session::new(AgentId::root()));
     assert_eq!(*log.lock().unwrap(), vec![HOOK_SENTINEL]);
 }
 
@@ -113,7 +113,7 @@ fn a_session_without_the_pack_is_byte_for_byte_what_it_was() {
 
     let plain_ctx = build_ctx(plain);
     assert!(!plain_ctx.session_tool_registered(READ_TOOL));
-    turn_end::fire(&plain_ctx);
+    turn_end::fire(&plain_ctx, &Session::new(AgentId::root()));
     assert!(
         log.lock().unwrap().is_empty(),
         "没装包的会话不该有任何钩子被调到"

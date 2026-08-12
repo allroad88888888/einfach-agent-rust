@@ -109,8 +109,10 @@ pub fn render(session: &Session, caller: &AgentId) -> (String, Counts) {
 }
 
 /// 生效段（前 `cursor()` 条）上的一次性统计。`agents` 由调用方给——收窄是
-/// [`render`] 的事，这里只数账本。
-fn count(session: &Session, agents: usize) -> Counts {
+/// [`render`] 的事，这里只数账本。`pub(crate)`：153 起 [`crate::ext_stats`] 的
+/// `TurnEnd` 审计钩子也现读一次账本，复用同一份计数逻辑而不是另写一份
+/// （它不按调用者收窄——钩子没有「调用者」这个概念，见那边的模块文档）。
+pub(crate) fn count(session: &Session, agents: usize) -> Counts {
     let effective = session.cursor();
     let mut turns: Vec<u64> = Vec::new();
     let mut tool_calls = 0usize;

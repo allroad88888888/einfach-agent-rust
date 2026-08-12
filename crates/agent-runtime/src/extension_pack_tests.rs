@@ -25,7 +25,7 @@ fn nop_tool() -> SessionToolFn {
 }
 
 fn nop_timed() -> TimedRun {
-    Box::new(|_table, _input: &Value| Ok(Arc::from("ok")))
+    Box::new(|_table, _session: &Session, _input: &Value| Ok(Arc::from("ok")))
 }
 
 /// 判据表：一个名字属不属于这个包。四种被拒的形状各一行——裸名、冒用别人的位置

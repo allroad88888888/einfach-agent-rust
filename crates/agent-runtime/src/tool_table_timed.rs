@@ -25,12 +25,25 @@
 //! **不经过** `dispatch`/`ToolExecutor`/远端等待槽那一整套。这不是抄近路，是 v1 的
 //! 结构性事实：会话创建那一刻 SSE 还没接上，一个 `Web` 位置的开局工具永远等不到
 //! 回写；与其加一层「这个时机只允许哪些位置」的运行时校验，不如让远端执行体在
-//! **签名上**就不存在——`TimedRun` 只能是 `Fn(&ToolTable, &Value) -> Result<...>`，
-//! 没有 async、没有 effect、没有 epoch。要支持远端/MCP 时机工具是将来的显式扩展，
-//! 不是这条签名的隐藏能力。
+//! **签名上**就不存在——`TimedRun` 只能是
+//! `Fn(&ToolTable, &Session, &Value) -> Result<...>`，没有 async、没有 effect、
+//! 没有 epoch。要支持远端/MCP 时机工具是将来的显式扩展，不是这条签名的隐藏能力。
 //!
 //! 执行体拿 `&ToolTable` 自身（不是绑死某个驱动实例），这样它能读到表内数据
 //! （比如 138 要用的索引函数）而不必让 `ToolTable` 反过来认识调用它的是谁。
+//!
+//! # 153（决策 30）：`&Session` 只读，中间那个位置
+//!
+//! `TimedRun` 加了第二个参数——`&Session`，紧挨它要读的那个世界，排在 `&ToolTable`
+//! （表内数据）与 `&Value`（这次调用的入参）中间。**只读**：谁要写状态，走
+//! `docs/EXTENSIONS.md` §四 的正门（截获式工具，`&mut Session`），不是这条时机
+//! 签名——「hook 不写状态」这句 v1 边界从纪律变成了签名本身，编译期就顶死，不需要
+//! 测试去证明。`SessionStart`/`TurnEnd` 两个时机共用同一个签名：`SessionStart` 跑在
+//! 会话创建那一刻，读到的是一个刚 `Session::new` 出来的空会话（无害——没有哪个
+//! 开局执行体今天需要读会话状态，加这个参数只是让两个时机不必各开一套类型）。
+//! 149 的 `ext:stats/audit` 是这一刀唯一的真实驱动：`TurnEnd` 钩子曾经拿不到
+//! `Session`，被迫经宿主内存里一格 `Ledger` 传话、还要标注「这份数字是哪一轮观测
+//! 的」；153 落地之后钩子在轮末直接现读，那格传话与标注一起删除（`ext_stats.rs`）。
 //!
 //! # 撞名：双向查
 //!
@@ -43,7 +56,7 @@
 
 use std::sync::Arc;
 
-use agent_core::ToolSpec;
+use agent_core::{Session, ToolSpec};
 use serde_json::Value;
 
 use super::ToolTable;
@@ -58,9 +71,11 @@ pub enum CallTiming {
     TurnEnd,
 }
 
-/// timed 工具的执行体：拿 `&ToolTable`（读表内数据）和这次调用的 input，本地同步
-/// 跑完直接给结果——不产出 effect，不进 dispatch，理由见模块文档。
-pub type TimedRun = Box<dyn Fn(&ToolTable, &Value) -> Result<Arc<str>, Arc<str>> + Send + Sync>;
+/// timed 工具的执行体：拿 `&ToolTable`（读表内数据）、**只读**的 `&Session`（153，
+/// 决策 30）、这次调用的 input，本地同步跑完直接给结果——不产出 effect，不进
+/// dispatch，理由见模块文档。
+pub type TimedRun =
+    Box<dyn Fn(&ToolTable, &Session, &Value) -> Result<Arc<str>, Arc<str>> + Send + Sync>;
 
 /// 一条 timed 工具：模型看不见的 spec（留给驱动/索引读 name/description 用）、
 /// 它的调用时机、它的执行体。三个字段都私有——外部只能经 [`TimedTool::spec`] 和
@@ -81,9 +96,15 @@ impl TimedTool {
 
     /// 跑一次这条 timed 工具。`table` 是它注册所在的那张表本身——执行体因此能
     /// 读到表内数据（`&ToolTable` 是共享借用，改不了），不需要 `ToolTable` 反过来
-    /// 认识调用方是谁。
-    pub fn run(&self, table: &ToolTable, input: &Value) -> Result<Arc<str>, Arc<str>> {
-        (self.run)(table, input)
+    /// 认识调用方是谁。`session` 是只读借用（153）——执行体读得到当下的会话状态，
+    /// 但类型上写不了它。
+    pub fn run(
+        &self,
+        table: &ToolTable,
+        session: &Session,
+        input: &Value,
+    ) -> Result<Arc<str>, Arc<str>> {
+        (self.run)(table, session, input)
     }
 }
 

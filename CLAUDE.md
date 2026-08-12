@@ -62,11 +62,13 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 ## 当前状态
 
-**M1–M15 全部完成**（2026-08-01 ~ 08-12），**M16 Rust 扩展包前半完成**（146–149：
-截获注册表 / `ExtensionPack` 接缝 / 第一个真扩展包 `ext:stats` 六条真机全过，
-接缝见 [docs/EXTENSIONS.md](docs/EXTENSIONS.md)；后半 150–152 是 derived 公式与谓词触发）。
-每个里程碑都有真机 dogfood 收官（真 provider，不是 mock），逐条兑现记录在
-`docs/ROADMAP.md` §二和各 issue 的实做记录里。
+**M1–M16 全部完成**（2026-08-01 ~ 08-12）。M16 Rust 扩展包：146–149 前半（截获注册表 /
+`ExtensionPack` 接缝 / 第一个真扩展包 `ext:stats` 六条真机全过）+ 150 决策（决策 30：
+扩展观测「被问才算」，不建反应式层）+ 153 收口（`TimedRun` 加只读 `&Session`，
+`ext:stats/audit` 轮末现读，151/152 随决策 30 撤销）；接缝见
+[docs/EXTENSIONS.md](docs/EXTENSIONS.md)。每个里程碑都有真机 dogfood 收官（真 provider，
+不是 mock）或全绿的三门禁验证，逐条兑现记录在 `docs/ROADMAP.md` §二和各 issue 的实做
+记录里。
 
 同一个核心库的**五种**形态都真实验收过：CLI（undo/恢复/屏障）、浏览器前端（SSE/多 agent
 并行/断开取消）、独立 server bin、桌面 app（内嵌同库同前端），**以及跑在浏览器里的

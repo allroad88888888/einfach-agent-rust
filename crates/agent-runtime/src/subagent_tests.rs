@@ -114,7 +114,7 @@ fn system_for_honors_the_prefix_allowed_slot_of_each_child() {
             schema: Arc::new(serde_json::json!({ "type": "object" })),
         },
         CallTiming::SessionStart,
-        Box::new(|_table, _input| Ok(Arc::from("INDEX-TEXT"))),
+        Box::new(|_table, _session, _input| Ok(Arc::from("INDEX-TEXT"))),
     );
     let mut session = Session::new(AgentId::root());
     crate::session_start::run_session_start(&mut session, &table).expect("唯一工具该成功");
@@ -163,7 +163,7 @@ fn spawning_children_and_building_their_systems_does_not_rerun_session_start() {
             schema: Arc::new(serde_json::json!({ "type": "object" })),
         },
         CallTiming::SessionStart,
-        Box::new(move |_table, _input| {
+        Box::new(move |_table, _session, _input| {
             counted.fetch_add(1, Ordering::SeqCst);
             Ok(Arc::from("INDEX-TEXT"))
         }),

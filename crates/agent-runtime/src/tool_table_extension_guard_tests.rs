@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use agent_core::Reversibility;
+use agent_core::{AgentId, Reversibility, Session};
 use serde_json::Value;
 
 use super::fixtures::{
@@ -62,7 +62,7 @@ fn a_misnamed_entry_reaches_neither_the_prompt_nor_any_execution_path() {
     pending.install(&mut ctx);
     assert!(!ctx.session_tool_registered("tree_echo"));
     assert!(ctx.session_tool_registered(READ_TOOL));
-    turn_end::fire(&ctx);
+    turn_end::fire(&ctx, &Session::new(AgentId::root()));
     assert!(log.lock().unwrap().is_empty());
 }
 

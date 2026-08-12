@@ -654,7 +654,7 @@ M14 一份在飞未提交改动自身的编译错误，与本条无关（141 实
 
 ```
 146 ─┬→ 147 ─┐
-     └→ 148 ─┴→ 149（前半终点，真机）→ 150（决策）→ 151 → 152（M16 终点）
+     └→ 148 ─┴→ 149（前半终点，真机）→ 150（决策）→ 153（M16 终点）
 ```
 
 | # | 任务 | 依赖 | 模型 | 独测 |
@@ -686,6 +686,14 @@ TurnEnd 审计文件完成轮恰好一行、取消轮零行；不装包的会话
 `TimedRun` 加只读 `&Session`、扩展**不设** derived 注册面（截获工具被调时现算，
 工具体内自便）、谓词触发不做（讨论记档在决策 30，防半年后重开）。
 151/152 撤销，收尾只剩 [153](153-timed-run-session.md)。
+
+**153 完成 = M16 完成**（2026-08-12）：`TimedRun`/`TimedTool::run` 签名加只读 `&Session`
+（中间位置，`&ToolTable` 与 `&Value` 之间），两个驱动（`run_session_start`/
+`turn_end::fire`）递参，`ext:stats/audit` 从此在轮末现读 `&Session` 算
+`entries`/`agents`/`tools`，149 那格 `Ledger` 传话与 `seen_at=` 标注整个删除，
+审计行格式改为 `turn=N entries=X/Y agents=Z tools=W`。全仓 timed 执行体（生产代码 +
+独立测试 fakes）跟着签名机械跟随，`cargo test --workspace` 全绿、
+`check-invariants.sh --all` 与 `build-wasm.sh` 均过。
 
  ---
  

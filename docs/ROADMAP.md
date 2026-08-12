@@ -59,15 +59,15 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
-### 进行中：M16 Rust 扩展包（**前半完成**，2026-08-12，真机 dogfood 六条全过）
+### 已完成：M16 Rust 扩展包（2026-08-12，前半真机 dogfood 六条全过，153 收口）
 
-决策 29 的前半落地：截获注册表（[146](issues/146-intercept-registry.md)）、既有四条截获
+决策 29 落地：截获注册表（[146](issues/146-intercept-registry.md)）、既有四条截获
 迁进同一张表（[147](issues/147-migrate-intercepts.md)）、`ExtensionPack` 接缝
 （[148](issues/148-extension-pack-seam.md)），并由第一个**真扩展包**走完全程
 （[149](issues/149-extension-dogfood.md)）。接缝定义见 [EXTENSIONS.md](EXTENSIONS.md)，
 §五「写你的第一个扩展包」就是这次 dogfood 的教材化。
 
-**真机数字**（CLI + DeepSeek，`agent-cli` 里的 `ext:stats` 包，`--ext-stats` 开关默认关）：
+**真机数字**（149，CLI + DeepSeek，`agent-cli` 里的 `ext:stats` 包，`--ext-stats` 开关默认关）：
 
 - **undo 的活演示**（账本卖点的正面戏）：模型 spawn 一个子 agent 之后调扩展工具拿到
   「4 轮、19 条 entry、2 个 agent、工具调用 2 次」；两次 `/undo` 之后同一个工具报
@@ -81,11 +81,15 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 - `TurnEnd` 钩子每个完成轮恰一行审计、`Ctrl-C` 取消的那一轮 0 行；`kill -9` 恢复后再调，
   崩溃前的数字原样在。
 
-**交给后半的手感**：`TurnEnd` 钩子的 `TimedRun` 签名里**没有 `Session`**（133 的 v1
-边界），所以「每轮把账本数字写进审计文件」只能由截获那半边经宿主内存的一格传话，审计行
-得如实标注 `seen_at=` 哪一轮观测。[150](issues/150-derived-extension-decision.md) 要决的
-「触发 hook 与 TurnEnd 的关系」直接接手这条缝——本轮**不动 133 的签名**，dogfood 的职责是
-交手感，不是抢着定形状。
+**收口**（[150](issues/150-derived-extension-decision.md) 拍板决策 30、
+[153](issues/153-timed-run-session.md) 落地，151/152 随决策 30 撤销）：149 交上来的手感是
+「`TurnEnd` 钩子的 `TimedRun` 签名里没有 `Session`」，153 是这句话唯一的实现刀——签名加
+**只读** `&Session`（`&ToolTable` 与 `&Value` 中间），两个驱动
+（`run_session_start`/`turn_end::fire`）顺手递参，`ext:stats/audit` 从此在轮末**现读**
+一次账本，149 那格 `Ledger` 传话与 `seen_at=` 标注整个删除，审计行改为
+`turn=N entries=X/Y agents=Z tools=W`。全仓 timed 执行体（生产代码 + 独立测试 fakes）
+机械跟随新签名，`cargo test --workspace`／`check-invariants.sh --all`／`build-wasm.sh`
+三门禁全绿——**M16 到此收官**。
 
 ### 已完成：M15 调用时机与 skills 工具化（2026-08-12，真机 dogfood 七条全过）
 

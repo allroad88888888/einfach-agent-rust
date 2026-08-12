@@ -193,7 +193,7 @@ dogfood——下面每个数字都是那次跑出来的，不是设想。
 
 ```rust
 ExtensionPack::new("stats")
-    .with_tool(report_spec(), Reversibility::Pure, report_run(ledger.clone()))
+    .with_tool(report_spec(), Reversibility::Pure, report_run())
     .with_timed(audit_spec(), CallTiming::TurnEnd, audit_run(ledger))
 ```
 
@@ -238,27 +238,22 @@ if let Some(pending) = ext_pending { pending.install(&mut ctx); }
 **③ 自己截断**（决策 19，32 KiB）：agent 列表截 20 行、task 截 60 字符、整段兜底 8 KiB。
 长会话下自己收，别指望 core 兜底截得好看。
 
-### 今天的一条硬边界：**`TurnEnd` 钩子看不见 `Session`**
+### 153（决策 30）：`TurnEnd` 钩子拿只读 `Session` 现读
 
-`TimedRun` 是 `Fn(&ToolTable, &Value) -> Result<Arc<str>, Arc<str>>`（133 的 v1 边界，
-`tool_table_timed.rs` 解释了为什么不给 async/effect/epoch）——**参数里没有 `Session`**。
-所以「每轮把 entry 数写进审计文件」这句需求，钩子自己办不到：它只知道自己被调过几次。
-
-`ext:stats` 的处置，也是今天唯一的处置形状：包自己带一格**宿主进程内存里的**账
-（`Ledger`），截获那半边（有 `&mut Session`）每次跑完把数字记进去，钩子写行时**如实标注
-这份数字是哪一轮观测的**（`seen_at=turnN`）；没人观测过的轮写 `-`，不拿零顶替——
-「这一轮 0 条 entry」和「这一轮没人看过」是两件事，审计文件宁可承认自己不知道。
+hook 拿只读 `Session` 现读——`TimedRun` 自 153 起是 `Fn(&ToolTable, &Session, &Value) ->
+Result<Arc<str>, Arc<str>>`，`audit` 在轮末直接用这个参数现算 `entries`/`agents`/`tools`，
+不再需要经 `report` 传话、也不再需要标注「这份数字是哪一轮观测的」：
 
 ```
-turn=4 entries=19/19 turns=4 agents=2 tools=2 seen_at=turn4
-turn=5 entries=11/11 turns=3 agents=1 tools=1 seen_at=turn5
-turn=6 entries=11/11 turns=3 agents=1 tools=1 seen_at=turn5   ← 这轮没人调 report，数字停在上一次
+turn=4 entries=19/19 agents=2 tools=2
+turn=5 entries=11/11 agents=1 tools=1
+turn=6 entries=25/25 agents=1 tools=2
 ```
 
-要让钩子直接读状态是 [150](issues/150-derived-extension-decision.md) 要拍的事
-（它列的产出里就有「触发 hook 与 TurnEnd 的关系」）。**在那之前别自己想办法绕**：
-把状态塞进 `ToolTable`、或者让钩子去读会话文件，都是给自己造第二份真相，而落盘那条路
-还带一个竞态（写盘是 fire-and-forget 的 IO 线程）。
+`&Session` 是**只读**的——类型上写不了状态，「hook 不写状态」这句 v1 边界从纪律变成了
+签名本身。要给这条时机再加别的能力（回灌结果、续 loop、写状态）不是这一刀批的，见
+[150](issues/150-derived-extension-decision.md)（决策 30）：状态谓词触发的反应式层
+（「没人喊自己动」）连同「扩展 derived 公式」的完整讨论一起记档不建，151/152 随之撤销。
 
 ## 六、与 MCP / 宿主 capabilities 的分工
 
@@ -288,8 +283,11 @@ turn=6 entries=11/11 turns=3 agents=1 tools=1 seen_at=turn5   ← 这轮没人�
 - [148](issues/148-extension-pack-seam.md)：本文档描述的 `ExtensionPack` 接缝 ✅
 - [149](issues/149-extension-dogfood.md)：宿主接线（CLI `--ext-stats`）+ 第一个真扩展包
   `ext:stats`，**真机 dogfood 六条全过** ✅（§五就是它的教材化）
-- [150](issues/150-derived-extension-decision.md)+：扩展 derived 公式与状态谓词触发
-  （§五末尾那条「钩子看不见 `Session`」是它的直接输入）
+- [150](issues/150-derived-extension-decision.md)：扩展观测决策拍板（决策 30）——
+  「被问才算」，不建反应式层；`TimedRun` 加 `&Session` 是唯一批的实现刀 ✅
+- [153](issues/153-timed-run-session.md)：150 那把刀落地——`TimedRun`/`TimedTool::run`
+  加只读 `&Session`，`ext:stats/audit` 轮末现读、149 的 `Ledger` 传话格与 `seen_at`
+  整个删除 ✅（M16 终点；151/152 因决策 30 撤销，不再有产出）
 
 `agent-runtime` 侧的落点：`extension_pack.rs`（形状与名字规则）、
 `tool_table_extension.rs`（两阶段装配）、`intercept_registry.rs`（正门机制，146）。

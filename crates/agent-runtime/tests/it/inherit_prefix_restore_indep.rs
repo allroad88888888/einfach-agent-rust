@@ -35,7 +35,10 @@ fn spec(name: &str, description: &str) -> ToolSpec {
 /// `session_start_indep.rs::counting_ok`，看门狗数「到底跑了几次」。
 fn counting_ok(counter: Arc<AtomicUsize>, text: &'static str) -> TimedRun {
     Box::new(
-        move |_table: &ToolTable, _input: &serde_json::Value| -> Result<Arc<str>, Arc<str>> {
+        move |_table: &ToolTable,
+              _session: &Session,
+              _input: &serde_json::Value|
+              -> Result<Arc<str>, Arc<str>> {
             counter.fetch_add(1, Ordering::SeqCst);
             Ok(Arc::from(text))
         },

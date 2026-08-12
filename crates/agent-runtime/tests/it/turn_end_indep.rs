@@ -78,7 +78,7 @@ fn turn_end_hook_fires_exactly_once_per_completed_turn() {
 
     let count = Arc::new(AtomicUsize::new(0));
     let hook_count = Arc::clone(&count);
-    let run: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         hook_count.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::from("ok"))
     });
@@ -118,11 +118,11 @@ fn two_turn_end_hooks_fire_in_registration_order() {
     let order_a = Arc::clone(&order);
     let order_b = Arc::clone(&order);
 
-    let run_a: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run_a: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         order_a.lock().unwrap().push("a");
         Ok(Arc::from("a"))
     });
-    let run_b: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run_b: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         order_b.lock().unwrap().push("b");
         Ok(Arc::from("b"))
     });
@@ -157,7 +157,7 @@ fn cancelled_turn_does_not_fire_the_turn_end_hook() {
 
     let count = Arc::new(AtomicUsize::new(0));
     let hook_count = Arc::clone(&count);
-    let run: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         hook_count.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::from("ok"))
     });
@@ -202,7 +202,7 @@ fn turn_end_hook_returning_err_does_not_change_the_turn_status_or_panic() {
 
     let (mut ctx_baseline, _events_baseline) = support::build_ctx(port_baseline, &dir_baseline);
 
-    let run: TimedRun = Box::new(|_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run: TimedRun = Box::new(|_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         Err(Arc::from("boom"))
     });
     let tools = ToolTable::builtin().with_timed(
@@ -243,7 +243,7 @@ fn turn_end_hook_does_not_write_any_history_entry() {
 
     let hook_calls = Arc::new(AtomicUsize::new(0));
     let hook_calls_run = Arc::clone(&hook_calls);
-    let run: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         hook_calls_run.fetch_add(1, Ordering::SeqCst);
         Ok(Arc::from("ok"))
     });
@@ -310,7 +310,7 @@ fn turn_end_hook_name_and_output_never_appear_in_the_next_round_request_body() {
     ]);
 
     let hook_output_owned: Arc<str> = Arc::from(hook_output);
-    let run: TimedRun = Box::new(move |_table: &ToolTable, _input: &Value| -> Result<Arc<str>, Arc<str>> {
+    let run: TimedRun = Box::new(move |_table: &ToolTable, _session: &Session, _input: &Value| -> Result<Arc<str>, Arc<str>> {
         Ok(Arc::clone(&hook_output_owned))
     });
     let tools = ToolTable::builtin().with_timed(spec(hook_name, "不该进 prompt 的 hook"), CallTiming::TurnEnd, run);
