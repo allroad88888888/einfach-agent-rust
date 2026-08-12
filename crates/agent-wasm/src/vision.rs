@@ -112,6 +112,21 @@ fn non_empty_str(value: &serde_json::Value, key: &str) -> Option<String> {
 /// 顺序：先判断有没有配置（缺配置直接 `not_configured`），再判断大小（超限
 /// 直接 reject，**不建 `Client`、不发任何网络请求**），最后才是上传 + chat
 /// 两次真实网络往返。
+///
+/// # `Err` 的形状是契约：`<码>：<细节>`
+///
+/// **每一条失败路径都以错误码开头**，码取自 `agent_tools::vision_inspect` 那套
+/// （`not_configured` / `too_large` / `bad_input` / `upload_failed` /
+/// `provider_error` / `invalid_response`），后面跟一个全角冒号和人读的细节。
+///
+/// 这条契约是 130 的真机验收逼出来的：`www/vision-tool.js` 要把失败翻译成模型看到
+/// 的 `[码] 细节`，而在补这几个码之前它只能**按中文散文前缀认字符串**
+/// （「Kimi 图片上传失败：」之类）。那种耦合的症状极其隐蔽——改一句提示语，浏览器
+/// 侧就把 `upload_failed` 静默重分类成兜底的 `provider_error`：不报错、不断编译、
+/// 没有任何测试盯着，只有排查故障的人会觉得「这错怎么归错类了」。
+///
+/// **加错误路径时必须带码。** 没有码的那一条会被 JS 归进兜底类别，而兜底类别的存在
+/// 是为了应付未知，不是为了替这里偷懒。
 pub(crate) async fn inspect(
     vision: Option<&KimiVisionConfig>,
     bytes: Vec<u8>,
@@ -146,15 +161,16 @@ pub(crate) async fn inspect(
             },
         )
         .await
-        .map_err(|e| format!("Kimi 图片上传失败：{e}"))?;
+        .map_err(|e| format!("upload_failed：Kimi 图片上传失败：{e}"))?;
 
     let url = format!("{}/chat/completions", vision.base_url.trim_end_matches('/'));
     let body = agent_tools::chat_body(&vision.model, &file_ref, &question);
-    let payload = serde_json::to_vec(&body).map_err(|e| format!("请求体构造失败：{e}"))?;
+    let payload =
+        serde_json::to_vec(&body).map_err(|e| format!("bad_input：请求体构造失败：{e}"))?;
     let (_status, text) = client
         .post_json_async(&url, &vision.api_key, &payload)
         .await
-        .map_err(|e| format!("Kimi 识别请求失败：{e}"))?;
+        .map_err(|e| format!("provider_error：Kimi 识别请求失败：{e}"))?;
 
     agent_tools::parse_content(&text).map_err(|e| format!("{}：{}", e.code, e.message))
 }
