@@ -190,4 +190,7 @@ pub use spawn_request::{SPAWN_TOOL, spawn_spec};
 pub use status_tool::{STATUS_TOOL, status_spec};
 pub use tool_table::ToolTable;
 pub use transient_source_failure::TransientSourceFailure;
+/// 124：跨 crate 判定一个工具名是不是 transient-source（`web:source/`），
+/// 不带前缀常量本身——见 [`transient_source_policy::is_transient_source`] 文档。
+pub use transient_source_policy::is_transient_source;
 pub use transient_source_recovery::recovered_transient_source_needs_fail_close;

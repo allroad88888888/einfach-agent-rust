@@ -1,5 +1,5 @@
-//! [`AgentHost`]：暴露给页面 JS 的全部接口。**五件事**——建会话、发一句话、
-//! 拿流式增量、取消、切会话。
+//! [`AgentHost`]：暴露给页面 JS 的全部接口。**六件事**——建会话、发一句话、
+//! 拿流式增量、取消、切会话、删会话。
 //!
 //! # 借用纪律（这个文件唯一真正微妙的地方）
 //!
@@ -17,6 +17,10 @@
 //!
 //! `cancel()`、`tool_table_json()`、`key_len()` 不在此列：它们都不碰 `live`。
 //!
+//! [`AgentHost::delete_session`] 碰 `live`，但它用 `try_borrow_mut` 把「撞上在飞的
+//! 一轮」变成一次 **reject 而不是 panic**——那是个破坏性操作，页面上那个按钮随时
+//! 可能被按到，收一句「这一轮还在飞」比整个 wasm 实例 panic 掉强。
+//!
 //! # key 只从使用者来
 //!
 //! 构造这个类型的唯一入口收一份页面给的配置 JSON（[`crate::config`]），**代码里
@@ -31,7 +35,7 @@ use agent_runtime::AgentEvent;
 use wasm_bindgen::prelude::*;
 
 use crate::assemble::{self, Live};
-use crate::{config::HostConfig, events, history, session_id, tools, turn};
+use crate::{config::HostConfig, db, events, history, session_id, tools, turn};
 
 /// 页面手里的那个对象。
 #[wasm_bindgen]
@@ -123,6 +127,46 @@ impl AgentHost {
         })
     }
 
+    /// 删掉一个会话：**journal 与图片一起没**。
+    ///
+    /// 删的是整个库（`agent-session-<id>`），所以图片不需要单独清——这正是 119
+    /// §五-3 选「同一个库」换来的东西。schema 与连接管理的细节在 [`crate::db`]。
+    ///
+    /// 页面必须知道的三条：
+    ///
+    /// 1. **删当前打开的这个会话是允许的**，代价是它当场被关掉：`sessionId()`
+    ///    变回 `undefined`，`send()` 会开始报「还没打开会话」，接下来开哪个由页面
+    ///    决定。选「关掉」而不是「拒绝」的理由：这个宿主没有别的关会话的入口，
+    ///    拒绝就等于「你正在看的这个会话永远删不掉」。
+    /// 2. **页面自己那条 IndexedDB 连接要先 `db.close()`**（[`crate::db`] 模块文档
+    ///    第 3 条）。没关的话这次调用 **reject**，不是挂住；错误的含义是「现在没
+    ///    删成」，不是「什么都没发生」——见 [`crate::db::delete`]。
+    /// 3. 这一轮对话还在飞的时候调它会 reject（`live` 正被 `send()` 借着）。
+    ///    先 `cancel()`，等 `send()` 的 Promise settle 再删。
+    ///
+    /// 成功时 Promise 结果是 `undefined`。
+    #[wasm_bindgen(js_name = deleteSession)]
+    pub fn delete_session(&self, id: String) -> js_sys::Promise {
+        let inner = Rc::clone(&self.inner);
+        wasm_bindgen_futures::future_to_promise(async move {
+            let id = session_id::validate(&id).map_err(js_error)?.to_string();
+            // 先放掉 Rust 这边可能持有的那条连接，再去删。顺序反了就是自己把自己
+            // 挡住（`onblocked`）。借用在这个块里开始、在这个块里结束——**不跨
+            // `await`**，那正是模块文档那条借用纪律说的事。
+            {
+                let mut guard = inner.live.try_borrow_mut().map_err(|_| {
+                    js_error("这一轮还在飞：先 cancel()，等 send() 的 Promise settle 再删")
+                })?;
+                if guard.as_ref().is_some_and(|live| live.id == id) {
+                    *guard = None;
+                    *inner.cancel.borrow_mut() = None;
+                }
+            }
+            db::delete(&id).await.map_err(js_error)?;
+            Ok(JsValue::UNDEFINED)
+        })
+    }
+
     /// 说一句话，跑到这一轮结束。Promise 结果是一份 JSON：
     /// `{"status":"…","cancelledTurn":"…"|null}`；流式增量走事件回调，不走这个
     /// 返回值。`cancelledTurn` 只在这一轮被取消时非空，说的是「被丢弃的半轮
@@ -134,9 +178,12 @@ impl AgentHost {
             let live = guard
                 .as_mut()
                 .ok_or_else(|| js_error("还没打开会话：先调 openSession(id)"))?;
-            // `Err` 是 M12 的 transient-source 出口（见 `turn::run`：这个宿主的
-            // 工具表里结构上不可达）。真出现就是一条给页面的错误，不是一个假的
-            // 终态——`js_error` 会让那个 Promise reject。
+            // `Err` 是 M12 的 transient-source 出口。**124 之后它不再是不可达的**
+            // ——工具表里有了 `web:source/` 前缀的工具（见 `crate::tools`），
+            // 这条从没在浏览器里跑过的路第一次真的会亮。真出现就是一条给页面的
+            // 错误，不是一个假的终态——`js_error` 会让那个 Promise reject。
+            // （这里原本写着「这个宿主的工具表里结构上不可达」，那是 114 时的
+            // 事实，124 推翻了它。）
             let outcome = turn::run(&mut live.session, &mut live.ctx, &text)
                 .await
                 .map_err(|failure| js_error(&format!("{failure:?}")))?;

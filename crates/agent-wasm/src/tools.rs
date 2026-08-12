@@ -38,13 +38,19 @@ use std::sync::Arc;
 pub(crate) const PAGE_TITLE_TOOL: &str = "web:page/title";
 /// 读 `location.href`。
 pub(crate) const PAGE_URL_TOOL: &str = "web:page/url";
+/// 124 的验收脚手架，**不是产品能力**：`web:source/` 前缀让它天然走 transient-source
+/// 那整套机制（119 §三），回调原样返回入参，用来在真机验收时钉住两件事——真入参/
+/// 真结果确实流到了模型，同时历史里只留占位符。落地后可删可留（issue 原话），
+/// 留着是因为 130（浏览器识图端到端）要接的正是同一条 `web:source/` 缝，这条先把
+/// 缝踩实。执行见 [`crate::host_tool::execute`]。
+pub(crate) const SOURCE_ECHO_TOOL: &str = "web:source/echo";
 
 /// 这个宿主给模型的全部工具。见模块文档——**没有 `srv:`，没有 `mcp:`**。
 pub(crate) fn browser_tool_table() -> ToolTable {
     ToolTable::empty().with_host_tools(host_tools())
 }
 
-/// 两条声明 + 各自的可逆性。两个都是纯读，所以 `Pure`——`/undo` 撞上它们不用
+/// 三条声明 + 各自的可逆性。全是纯读/纯回显，所以 `Pure`——`/undo` 撞上它们不用
 /// 停下来问。宿主没说的一律该落保守的 `Irreversible`（HOST-CAPABILITIES §五：
 /// 「没说」不能推定为「安全」），这里是明确说了。
 fn host_tools() -> Vec<(ToolSpec, Reversibility)> {
@@ -69,6 +75,16 @@ fn host_tools() -> Vec<(ToolSpec, Reversibility)> {
             },
             Reversibility::Pure,
         ),
+        (
+            ToolSpec {
+                name: Arc::from(SOURCE_ECHO_TOOL),
+                description: Arc::from(
+                    "验收脚手架：原样返回调用时给的入参。不是给模型日常使用的能力。",
+                ),
+                schema: Arc::new(echo_schema()),
+            },
+            Reversibility::Pure,
+        ),
     ]
 }
 
@@ -79,6 +95,13 @@ fn empty_object_schema() -> serde_json::Value {
         "type": "object",
         "properties": {},
         "additionalProperties": false
+    })
+}
+
+/// [`SOURCE_ECHO_TOOL`] 的 schema：任意 JSON 对象都收，因为它只是原样吐回去。
+fn echo_schema() -> serde_json::Value {
+    json!({
+        "type": "object"
     })
 }
 

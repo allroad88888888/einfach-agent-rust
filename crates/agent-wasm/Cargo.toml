@@ -43,14 +43,17 @@ features = [
     "Document",
     "Location",
     "Window",
-    # 会话持久化：开库、建 object store。KV 那三个操作本身在
+    # 会话持久化：开库、建 object store、删库。KV 那三个操作本身在
     # `agent_runtime::persist::idb::IdbDatabaseKv` 里（114a）。
+    # `IdbObjectStoreParameters` 是 128 加的：`images` 那张表要 `keyPath: "id"`，
+    # 不带参数的 `create_object_store` 建不出 in-line key 的 store。
     "DomStringList",
     "Event",
     "EventTarget",
     "IdbDatabase",
     "IdbFactory",
     "IdbObjectStore",
+    "IdbObjectStoreParameters",
     "IdbOpenDbRequest",
     "IdbRequest",
     "IdbTransaction",

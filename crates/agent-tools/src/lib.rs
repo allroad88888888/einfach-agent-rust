@@ -35,6 +35,8 @@ mod search_specs;
 mod shell;
 mod specs;
 mod vision_inspect;
+mod vision_kimi_wire;
+mod vision_source;
 mod workspace;
 mod workspace_specs;
 mod workspace_standard_specs;
@@ -112,6 +114,27 @@ pub use vision_inspect::{VisionLinkSource, VisionRuntime};
 /// with_vision_inspect`）——不配置就不声明，模型根本不知道有这工具。
 pub fn vision_inspect_spec() -> ToolSpec {
     vision_inspect::vision_inspect_spec()
+}
+
+/// Kimi chat completions 的请求体（issue 126，跨 crate 契约，`agent-wasm`
+/// 也要用）。**纯函数**：无 IO、无时钟、无随机，相同入参逐字节产出相同
+/// JSON。`content[0]` 恒为 `image_url`、`content[1]` 恒为 `text`——顺序是
+/// 契约的一部分，不是实现细节，见 `vision_kimi_wire` 模块文档。
+pub fn chat_body(model: &str, file_ref: &str, question: &str) -> Value {
+    vision_kimi_wire::chat_body(model, file_ref, question)
+}
+
+/// 解析 Kimi chat completions 响应，取 `choices[0].message.content`（issue
+/// 126，跨 crate 契约）。**纯函数**。三类失败都落 `invalid_response`：响应
+/// 不是合法 JSON、缺 `choices`、缺 `message.content`。
+pub fn parse_content(text: &str) -> Result<String, ToolError> {
+    vision_kimi_wire::parse_content(text)
+}
+
+/// mime → 上传文件名用的扩展名（issue 126，跨 crate 契约）。**纯函数**。
+/// 已知四种图片 mime 精确匹配，其余一律落 `"bin"`。
+pub fn extension_for(mime: &str) -> &'static str {
+    vision_kimi_wire::extension_for(mime)
 }
 
 /// `srv:fs/inspect` 的声明。先读取它返回的 revision，才可以调用可撤回写入工具。

@@ -28,7 +28,7 @@
 //! | [`config`] | 页面给的配置 JSON → `agent_transport::ProviderConfig` + adapter |
 //! | [`tools`] | 浏览器形态的工具表（空表起步，只有 `web:`） |
 //! | [`host_tool`] | 那两条 `web:` 工具真正读 `document.title` / `location.href` 的地方 |
-//! | [`db`] | IndexedDB 开库：一个会话一个库，库里一张 `journal` 表 |
+//! | [`db`] | IndexedDB 库的 schema 与生死：一个会话一个库，`journal` + `images` 两张表，删会话 = 删整个库 |
 //! | [`session_id`] | 会话 id 白名单（055 的规则，拒绝不 sanitize） |
 //! | [`events`] | `AgentEvent` → 页面收得到的一条 JSON |
 //! | [`history`] | 重放出来的会话历史 → 页面能重画的一份 JSON |

@@ -1,12 +1,43 @@
 //! `srv:vision/inspect`（s5）：写死 Kimi 3（`kimi-k3`）的识图工具。
 //!
-//! # 安全模型：图片字节不进任何模型上下文
+//! 本文件只放**声明与编排**：`inspect()` 依次调用 [`parse_input`]，再委托给
+//! 两个兄弟模块——拆分是 issue 126 的产物（红线 9：本文件曾经 487 行，含
+//! 三段被同步 IO 包住的纯逻辑）：
+//!
+//! - `vision_kimi_wire`——Kimi 请求/响应的**线格式**：纯函数（无 IO、无时钟、
+//!   无随机），`chat_body` / `parse_content` / `extension_for` 是跨 crate 契约，
+//!   `agent-wasm` 也要用（issue 127）。
+//! - `vision_source`——**按链接取字节 + 发请求**：本模块独有的 `std::fs` 与
+//!   网络 IO，native-only，不进任何跨 crate 契约。
+//!
+//! # 安全模型：图片字节从不进任何模型上下文
 //!
 //! 主模型（对话/历史/prompt）永远只看到 `{ "image": "/uploads/<id>" }` 这样的
 //! **链接字符串**。工具执行时把字节从本地取回内存（仅在这一次执行里存在）、
 //! 经 Kimi files API 上传换成 `ms://` 引用，再带着引用进 chat completions——
-//! 识别结果（纯文本）才是回到主 agent 的东西。字节不落消息历史、不进 prompt、
-//! 不进任何持久化。
+//! 识别结果（纯文本）才是回到主 agent 的东西。
+//!
+//! **这条承诺的边界必须说清楚：它管的是「字节不进模型上下文」（不进会话历史
+//! /prompt/journal，模型永远只能通过 `image_url`/`ms://` 引用间接触碰图
+//! 片），不是「字节不落盘」。** 三种宿主形态本来就各自把字节落在别处，而且
+//! 落的方式相同——只是「落盘」和「不进模型上下文」是两件独立的事，前者是实
+//! 现细节，后者才是安全边界：
+//!
+//! | 形态 | 字节住哪（落盘/落库） |
+//! |---|---|
+//! | server | 上传目录 `<dir>/<id>`（`agent-server/src/http/uploads.rs`，进程退出即丢） |
+//! | CLI | 用户本机文件——`image` 本来就是本机相对路径，字节一直在磁盘上 |
+//! | 浏览器 | IndexedDB 的 `images` object store，会话级生命周期（docs/issues/119 §五） |
+//!
+//! 三种形态都在落盘/落库，这条安全承诺**从未被打破过**——它只承诺链接不落地
+//! 为字节进入 prompt，不承诺字节本身住在内存里。
+//!
+//! （这条边界曾经写得更绝对——把「不进模型上下文」和「字节不落地存在」两件
+//! 事混成一句话，不准确且过强：server 形态本来就把字节落盘了，那种写法字面
+//! 意思会让下一个人误以为「图片进 IndexedDB」违反了既有承诺。**别把它改回
+//! 去**——一个错的理由比没有理由更糟，`docs/issues/099-send-plan.md` §「主
+//! 会话复核修正的一处」为同一类问题付过一次学费；订正记录见
+//! docs/issues/131-vision-persistence-wording.md。）
 //!
 //! # 链接来源（[`VisionLinkSource`]）只有本地两种
 //!
@@ -21,15 +52,16 @@
 //! 工具未配置（`ToolExecutor` 没有 `VisionRuntime`）时报 `not_configured`，不
 //! panic。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_core::ToolSpec;
-use agent_transport::{Client, ImageUpload};
+use agent_transport::Client;
 use serde_json::{Value, json};
 
 use crate::ToolError;
-use crate::exec::{Resolved, tool_err};
+use crate::exec::tool_err;
+use crate::vision_source;
 
 /// 工具全名。`srv:` 前缀经名字规则落 `Location::Server`；可逆性不在已知 pure
 /// 名单里，保守落 `Irreversible`（调第三方 API 计费，undo 不该重放）。
@@ -142,9 +174,9 @@ pub(crate) fn inspect(
         ));
     };
     let (image, question) = parse_input(input)?;
-    let (bytes, mime) = resolve_bytes(vision, &image)?;
-    let file_ref = upload(vision, &mime, &bytes)?;
-    chat_completion(vision, &file_ref, &question)
+    let (bytes, mime) = vision_source::resolve_bytes(vision, &image)?;
+    let file_ref = vision_source::upload(vision, &mime, &bytes)?;
+    vision_source::chat_completion(vision, &file_ref, &question)
 }
 
 fn parse_input(input: &Value) -> Result<(String, String), ToolError> {
@@ -164,324 +196,6 @@ fn parse_input(input: &Value) -> Result<(String, String), ToolError> {
     Ok((image, question))
 }
 
-/// 按链接取字节：字节只在这一层进内存，随后立即上传换 `ms://` 引用。
-fn resolve_bytes(vision: &VisionRuntime, image: &str) -> Result<(Vec<u8>, String), ToolError> {
-    match &vision.link_source {
-        VisionLinkSource::UploadDir(dir) => {
-            let id = image
-                .strip_prefix("/uploads/")
-                .ok_or_else(|| {
-                    tool_err(
-                        "bad_input",
-                        format!("image 必须是本地上传链接（/uploads/<id>），收到：{image}"),
-                    )
-                })?
-                .to_owned();
-            // 上传端点只发这种 id；字符白名单挡住路径穿越。
-            if !id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-            {
-                return Err(tool_err("bad_input", format!("上传链接 id 非法：{id}")));
-            }
-            let bytes = read_uploaded(dir, &id)?;
-            let mime = read_uploaded_mime(dir, &id)?;
-            Ok((bytes, mime))
-        }
-        VisionLinkSource::LocalRoot(root) => {
-            // root 本身先 canonicalize：CLI 的启动目录可能带 symlink 组件
-            // （macOS /var → /private/var），不先解析会让「canonical 结果
-            // starts_with(root)」误判成越界。
-            let canonical_root = root.canonicalize().map_err(|e| {
-                tool_err("bad_config", format!("root 无法解析：{e}"))
-            })?;
-            match crate::exec::resolve_in_root(&canonical_root, image) {
-                Ok(Resolved::Existing(path)) => {
-                    let bytes = std::fs::read(&path).map_err(|e| {
-                        tool_err("read_failed", format!("读取图片失败：{e}"))
-                    })?;
-                    Ok((bytes, mime_from_path(&path)))
-                }
-                Ok(Resolved::Missing) => Err(tool_err(
-                    "not_found",
-                    format!("图片文件不存在：{image}"),
-                )),
-                Err(e) => Err(e),
-            }
-        }
-    }
-}
-
-/// 上传目录里的字节文件：canonicalize 之后再读，防 symlink 穿透（id 已过
-/// 字符白名单，这里是第二道闸）。
-fn read_uploaded(dir: &Path, id: &str) -> Result<Vec<u8>, ToolError> {
-    let canonical_dir = dir.canonicalize().map_err(|e| {
-        tool_err("not_configured", format!("上传目录不可用：{e}"))
-    })?;
-    let target = canonical_dir
-        .join(id)
-        .canonicalize()
-        .map_err(|_| tool_err("not_found", format!("上传的图片不存在：{id}")))?;
-    if !target.starts_with(&canonical_dir) {
-        return Err(tool_err("bad_input", "上传 id 越界"));
-    }
-    std::fs::read(&target).map_err(|e| tool_err("read_failed", format!("读取上传图片失败：{e}")))
-}
-
-fn read_uploaded_mime(dir: &Path, id: &str) -> Result<String, ToolError> {
-    let mime_path = dir.join(format!("{id}.mime"));
-    std::fs::read_to_string(&mime_path)
-        .map(|s| s.trim().to_owned())
-        .or_else(|_| Ok("application/octet-stream".to_string()))
-}
-
-fn mime_from_path(path: &Path) -> String {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("png") => "image/png".to_string(),
-        Some("jpg") | Some("jpeg") => "image/jpeg".to_string(),
-        Some("webp") => "image/webp".to_string(),
-        Some("gif") => "image/gif".to_string(),
-        _ => "application/octet-stream".to_string(),
-    }
-}
-
-/// 复用 transport 的 Kimi files 上传：`ms://<file_id>` 引用。
-fn upload(vision: &VisionRuntime, mime: &str, bytes: &[u8]) -> Result<String, ToolError> {
-    let extension = match mime {
-        "image/png" => "png",
-        "image/jpeg" => "jpg",
-        "image/webp" => "webp",
-        "image/gif" => "gif",
-        _ => "bin",
-    };
-    let file_name = format!("uploaded-image.{extension}");
-    vision
-        .client
-        .upload_image(
-            &vision.kimi_base_url,
-            &vision.kimi_api_key,
-            ImageUpload {
-                file_name: &file_name,
-                mime_type: mime,
-                bytes,
-            },
-        )
-        .map_err(|e| tool_err("upload_failed", format!("Kimi 图片上传失败：{e}")))
-}
-
-/// Kimi chat completions：`image_url` 带 `ms://` 引用 + 问题 → 识别文本。
-fn chat_completion(vision: &VisionRuntime, file_ref: &str, question: &str) -> Result<String, ToolError> {
-    let url = format!("{}/chat/completions", vision.kimi_base_url.trim_end_matches('/'));
-    let body = json!({
-        "model": vision.kimi_model,
-        "messages": [{
-            "role": "user",
-            "content": [
-                { "type": "image_url", "image_url": { "url": file_ref } },
-                { "type": "text", "text": question }
-            ]
-        }]
-    });
-    let payload = serde_json::to_vec(&body)
-        .map_err(|e| tool_err("bad_input", format!("请求体构造失败：{e}")))?;
-    let (_status, text) = vision
-        .client
-        .post_json(&url, &vision.kimi_api_key, &payload)
-        .map_err(|e| tool_err("provider_error", format!("Kimi 识别请求失败：{e}")))?;
-    parse_content(&text)
-}
-
-fn parse_content(text: &str) -> Result<String, ToolError> {
-    let value: Value = serde_json::from_str(text)
-        .map_err(|e| tool_err("invalid_response", format!("Kimi 识别响应不是合法 JSON：{e}")))?;
-    let content = value["choices"][0]["message"]["content"]
-        .as_str()
-        .ok_or_else(|| tool_err("invalid_response", "Kimi 识别响应缺少 choices[0].message.content"))?;
-    Ok(content.to_owned())
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::{BufRead, BufReader, Read, Write};
-    use std::net::{TcpListener, TcpStream};
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::thread;
-
-    const KIMI_VISION_MODEL: &str = "kimi-k3";
-
-    fn temp_dir(name: &str) -> PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "agent-tools-vision-{name}-{}-{n}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    fn runtime(link_source: VisionLinkSource) -> VisionRuntime {
-        VisionRuntime::new(
-            Arc::new(Client::new()),
-            "https://api.moonshot.cn/v1",
-            "sk-vision-test-key",
-            KIMI_VISION_MODEL,
-            link_source,
-        )
-    }
-
-    #[test]
-    fn spec_declares_image_and_question() {
-        let spec = vision_inspect_spec();
-        assert_eq!(&*spec.name, VISION_INSPECT_TOOL);
-        let schema = &spec.schema;
-        assert_eq!(schema["required"], json!(["image"]));
-        assert_eq!(schema["properties"]["image"]["type"], json!("string"));
-        assert_eq!(schema["properties"]["question"]["type"], json!("string"));
-        assert!(schema["properties"]["question"]["description"].is_string());
-    }
-
-    #[test]
-    fn missing_image_is_bad_input() {
-        let vision = runtime(VisionLinkSource::LocalRoot(temp_dir("missing")));
-        let err = inspect(Some(&vision), &json!({ "question": "有什么？" })).unwrap_err();
-        assert_eq!(&*err.code, "bad_input");
-    }
-
-    #[test]
-    fn not_configured_without_runtime() {
-        let err = inspect(None, &json!({ "image": "/uploads/up-1" })).unwrap_err();
-        assert_eq!(&*err.code, "not_configured");
-    }
-
-    #[test]
-    fn public_url_is_rejected_in_upload_dir_mode() {
-        let vision = runtime(VisionLinkSource::UploadDir(temp_dir("public-url")));
-        let err = inspect(
-            Some(&vision),
-            &json!({ "image": "https://example.com/cat.png" }),
-        )
-        .unwrap_err();
-        assert_eq!(&*err.code, "bad_input");
-    }
-
-    #[test]
-    fn missing_uploaded_file_is_not_found() {
-        let dir = temp_dir("missing-upload");
-        let vision = runtime(VisionLinkSource::UploadDir(dir));
-        let err = inspect(Some(&vision), &json!({ "image": "/uploads/up-999" })).unwrap_err();
-        assert_eq!(&*err.code, "not_found");
-    }
-
-    #[test]
-    fn local_root_resolves_relative_path_within_root() {
-        let root = temp_dir("local-root");
-        std::fs::write(root.join("cat.png"), b"\x89PNG-fake-bytes").unwrap();
-        let vision = runtime(VisionLinkSource::LocalRoot(root));
-        // 本地 root 形态：先走到 fake Kimi（这里只验证解析阶段成功取到字节并
-        // 开始上传——用不可能连通的 base_url 验证错误发生在 upload 阶段而不是
-        // 解析阶段）。
-        let mut vision = vision;
-        vision.kimi_base_url = format!("http://127.0.0.1:1/v1");
-        let err = inspect(Some(&vision), &json!({ "image": "cat.png" })).unwrap_err();
-        assert_eq!(
-            &*err.code,
-            "upload_failed",
-            "字节解析应成功、失败应发生在上传阶段：{}",
-            err.message
-        );
-    }
-
-    #[test]
-    fn local_root_rejects_dotdot_escape() {
-        let root = temp_dir("local-root-escape");
-        let vision = runtime(VisionLinkSource::LocalRoot(root));
-        let err = inspect(Some(&vision), &json!({ "image": "../secret.png" })).unwrap_err();
-        assert_eq!(&*err.code, "outside_root");
-    }
-
-    // ── 端到端：假 Kimi 上游（files 上传 → chat completions）────────────────
-
-    fn read_request(stream: &mut TcpStream) -> (String, Vec<u8>) {
-        let mut reader = BufReader::new(stream.try_clone().unwrap());
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line).unwrap();
-        let mut headers = Vec::new();
-        let mut content_length = None;
-        loop {
-            let mut line = String::new();
-            reader.read_line(&mut line).unwrap();
-            if line == "\r\n" {
-                break;
-            }
-            if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                content_length = Some(value.trim().parse::<usize>().unwrap());
-            }
-            headers.push(line.trim_end().to_owned());
-        }
-        let mut body = vec![0; content_length.unwrap_or(0)];
-        reader.read_exact(&mut body).unwrap();
-        (request_line.trim_end().to_owned(), body)
-    }
-
-    fn write_response(stream: &mut TcpStream, body: &str) {
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        );
-        stream.write_all(response.as_bytes()).unwrap();
-        stream.flush().unwrap();
-    }
-
-    #[test]
-    fn end_to_end_uploads_bytes_then_chats_with_ms_reference() {
-        let dir = temp_dir("e2e");
-        std::fs::write(dir.join("up-7"), b"\x89PNG-raw-pixels").unwrap();
-        std::fs::write(dir.join("up-7.mime"), "image/png").unwrap();
-
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let server = thread::spawn(move || {
-            // 1) files 上传
-            let (mut stream, _) = listener.accept().unwrap();
-            stream.set_nonblocking(false).unwrap();
-            let (request_line, body) = read_request(&mut stream);
-            assert_eq!(request_line, "POST /v1/files HTTP/1.1");
-            let text = String::from_utf8_lossy(&body);
-            assert!(text.contains("name=\"purpose\""), "multipart 缺 purpose 字段");
-            assert!(text.contains("name=\"file\""), "multipart 缺 file 字段");
-            assert!(text.contains("image/png"), "multipart 缺 mime");
-            assert!(body.windows(12).any(|w| w == b"\x89PNG-raw-pix"), "multipart 必须带原始字节");
-            write_response(&mut stream, r#"{"id":"file-e2e-1"}"#);
-
-            // 2) chat completions
-            let (mut stream, _) = listener.accept().unwrap();
-            stream.set_nonblocking(false).unwrap();
-            let (request_line, body) = read_request(&mut stream);
-            assert_eq!(request_line, "POST /v1/chat/completions HTTP/1.1");
-            let text: Value = serde_json::from_slice(&body).unwrap();
-            assert_eq!(text["model"], json!("kimi-k3"));
-            let content = &text["messages"][0]["content"];
-            assert_eq!(content[0]["type"], json!("image_url"));
-            assert_eq!(content[0]["image_url"]["url"], json!("ms://file-e2e-1"));
-            assert_eq!(content[1]["type"], json!("text"));
-            assert_eq!(content[1]["text"], json!("这是什么动物？"));
-            write_response(
-                &mut stream,
-                r#"{"choices":[{"message":{"content":"一只橘猫"}}]}"#,
-            );
-        });
-
-        let mut vision = runtime(VisionLinkSource::UploadDir(dir));
-        vision.kimi_base_url = format!("http://127.0.0.1:{port}/v1");
-        let result = inspect(
-            Some(&vision),
-            &json!({ "image": "/uploads/up-7", "question": "这是什么动物？" }),
-        )
-        .unwrap();
-
-        server.join().unwrap();
-        assert_eq!(result, "一只橘猫");
-    }
-}
+#[path = "vision_inspect_tests.rs"]
+mod tests;

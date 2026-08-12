@@ -90,6 +90,7 @@ mod transient_source_chain;
 mod transient_source_chain_rejections;
 mod transient_source_delta_stream;
 mod transient_source_output_gate;
+mod transient_source_resolve_rejection;
 mod tree_snapshot_background_children;
 mod tree_snapshot_emits_on_change;
 mod undo_after_turns;
