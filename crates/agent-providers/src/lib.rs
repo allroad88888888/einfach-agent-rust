@@ -14,6 +14,9 @@ use serde_json::Value;
 pub mod deepseek;
 pub mod glm;
 pub mod kimi;
+/// 通用 OpenAI 兼容适配（175）。**不对应任何一家 provider**，对应的是一类端点。
+/// 它跟上面三家的关系不是并列的第四家，而是「所有还没被单独适配的家」的兜底。
+pub mod openai;
 pub mod stream;
 pub(crate) mod wire;
 
