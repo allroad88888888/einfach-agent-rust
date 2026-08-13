@@ -148,16 +148,45 @@ GLM 只给 OpenAI 标准那条。→ 通用 adapter 用
 > 到 [178](178-openai-compat-dogfood.md) 真机时必须专门验——读成 0 就是让
 > [024](024-cache-guard.md) 的三层兜底拿到**假绿**。
 
+### F 组：裁决实验——**只发最小内核**
+
+E 组证明「发全套 OpenAI 字段」会在 Kimi 上 400。那么反过来问：**连 `temperature`
+都不发**（只留 `model` / `messages` / `max_tokens` / `stream` / `tools`）会怎样？
+
+| | DeepSeek | Kimi | GLM |
+|---|---|---|---|
+| 最小内核 | ✅ 200 `PONG` | ✅ **200 `PONG`** | ✅ 200 `PONG` |
+| 最小内核 + tools | ✅ 调 `get_weather` | ✅ **调 `get_weather`** | ✅ 调 `get_weather` |
+
+**三家全过，包括刚才 400 的 Kimi。**
+
+这一发把 175 定了：通用 adapter 的契约写成「**只发每个兼容实现都必须支持的字段，
+取值交给对面的默认**」，于是「合法 OpenAI 值被这家拒绝」**整类问题在结构上消失**
+——不需要任何 per-endpoint 怪癖表（那玩意就是 `match provider` 换个地方住，红线 12 的形状）。
+
+> 一处如实记：DeepSeek 与 Kimi 的 tools 那发 `finish_reason` 是 `length` 不是
+> `tool_calls`——是我把 `max_tokens` 设成 64 太紧，两家的 reasoning token 先吃掉了。
+> **三家都真的产出了 `get_weather` 调用**，工具这条通；`length` 是探针参数的问题，
+> 不是兼容性问题。
+
 ### 给 [175](175-openai-compat-decision.md) 的判据（已按实测修正）
 
 代码侧的结构分析仍然成立（`wire/` + `stream/` 是共享层、`Provider` 只有四个纯函数、
 真正的厂商差异是每家 2–4 个 `Adjustment` 点 + 一个常量路径），所以**方向仍是
 「加一个 `openai/` 目录，存量三家一字不动」**。
 
-但实测把「退化实现」这个说法**修正掉了**——它不是「什么都不做的那一版」：
+而 F 组把「退化实现」这个词**救回来了**，只是含义更准：它不是「什么都不做的那一版」，
+是「**只发最小内核的那一版**」。四条约束：
 
-1. **不许自己拼 `/v1`**（结论一）
-2. **必须能报 `Adjustment`**，因为它一定会撞上合法值被拒（结论二）
-3. **可选字段能不发就不发**，因为静默降级在真实兼容实现里存在（结论三）
+1. **不许自己拼 `/v1`**（结论一）——`base_url` 由用户带全路径
+2. **只发最小内核**（F 组）：`model`/`messages`/`max_tokens`/`stream`/`tools`。
+   `temperature`、`top_p`、`n` 这些**一律不发**，取值交给对面的默认。
+   结论二那个「必须能报 `Adjustment`」因此**降级成了「有能力但用不上」**——
+   不发就不会被拒，问题在结构上没了
+3. **可选字段能不发就不发**（结论三），理由是静默降级在真实兼容实现里存在（GLM 的 `n`）
 4. `CACHED_PATHS` 用 `prompt_tokens_details.cached_tokens`（结论四），
    但**「字段缺失」与「字段为 0」必须能分开**——这条留给 [178](178-openai-compat-dogfood.md) 钉死
+
+**代价也要说清**：不发 `temperature` 意味着这个 adapter **给不了确定性采样**。
+对「要可复现输出」的用户，答案是「用专门的那家 adapter，不要用通用的」——
+通用 adapter 的定位是**够得着更多端点**，不是替代已适配的三家。这条进 [175](175-openai-compat-decision.md)。

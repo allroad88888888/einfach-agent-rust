@@ -11,8 +11,7 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll, Wake, Waker};
+use std::task::{Context, Poll, Waker};
 
 use agent_core::AgentId;
 use agent_providers::{Provider, deepseek::DeepSeek};
@@ -27,17 +26,14 @@ fn text_line(text: &str) -> String {
     )
 }
 
-struct Noop;
-impl Wake for Noop {
-    fn wake(self: Arc<Self>) {}
-    fn wake_by_ref(self: &Arc<Self>) {}
-}
-
 /// 推一次 future。返回值只用来判断它有没有跑完——测试关心的是它**这一推**把
 /// 什么写进了 channel。
+///
+/// `Waker::noop()` 就是标准库版的「什么都不做的 waker」（1.85 稳定）。这里原本
+/// 手写了一个 `struct Noop` + `impl Wake`，clippy 1.97 的 `manual_noop_waker`
+/// 会指出来——**本地 1.95 没有这条 lint，CI 的 stable 有**，第一次跑 CI 就是它红的。
 fn poll_once<F: Future>(future: &mut Pin<Box<F>>) -> Poll<F::Output> {
-    let waker = Waker::from(Arc::new(Noop));
-    future.as_mut().poll(&mut Context::from_waker(&waker))
+    future.as_mut().poll(&mut Context::from_waker(Waker::noop()))
 }
 
 fn task_under_test(
