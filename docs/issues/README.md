@@ -883,17 +883,25 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | ✅ 完成 |
 | [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | ✅ 完成 |
 | [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | ✅ 完成 |
-| [191](191-launch-post.md) | ★ **首发帖**（只有一次机会） | 179+183 | **opus**+**你** | 20min | 待开始 |
-| [192](192-embed-example-scope.md) | 嵌入样例场景（**决策**） | 191 | **opus** | 20min | 待开始 |
-| [193](193-embed-example-build.md) | 嵌入样例实现 | 192 | sonnet | **待拆** | 占位 |
-| [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户 | 191 | **你** | 持续 | 待开始 |
+| [191](191-launch-post.md) | ★ **首发帖**（两套文案就绪） | 179+183 | **opus**+**你** | 20min | 文案✅，**等你发** |
+| [192](192-embed-example-scope.md) | 嵌入样例场景（**决策**：角色×工具 / 浏览器） | 191 | **opus** | 20min | ✅ 完成 |
+| [193](193-embed-example-build.md) | 嵌入样例实现 | 192 | sonnet | 60–90min | **刻意不动，等首发反馈** |
+| [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户（问法/记法已定） | 191 | **你** | 持续 | 材料✅，等首发 |
 | [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
 | [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（解锁一号钩子的 demo） | 169 | sonnet | 20min | ✅ 完成 |
 | [197](197-incremental-cache-bloat.md) | target 又胀回来了：清理脚本（首次释放 16G） | 187 | sonnet | 20min | ✅ 完成 |
 | [198](198-missing-cache-field-guard.md) | 缓存字段缺失不许被读成 0（静默失效看门狗） | 176 | sonnet | 20min | ✅ 完成 |
 
-**L0 已完成**（2026-08-13）：只碰 `Cargo.toml` / 两份 README / 两份 LICENSE，零 `.rs` 改动；
-`cargo metadata` 通过、`check-invariants.sh --all` 退出码 0。
+**L 波现状（2026-08-13 收工）：34 条里我能独立做的全部做完，剩 4 条卡在用户动作上。**
+
+| | |
+|---|---|
+| ✅ 已完成 | 30 条（含计划外的 195 CI 复活 / 196 wasm undo / 197 构建清理 / 198 看门狗） |
+| ⏳ 等你 | **182** crates.io（建号 + `cargo login`，我不代做身份动作）／**191** 发帖／**194** 找用户 |
+| 🅿️ 刻意不动 | **193** 嵌入样例实现——[192](192-embed-example-scope.md) 已拍板场景与形态，但首发反馈会改变选择，**先发再说** |
+
+**门面已经完整**：可点的 demo（含公网 CORS 真机验收）+ 会动的 GIF（77 KB）+ 绿 CI +
+双许可 + 英文 README + 三份英译文档 + 五篇文章初稿 + 两套首发文案。
 
 **三条关键路径上的提醒**：
 

@@ -62,7 +62,15 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 ## 当前状态
 
-**M1–M18 全部完成**（2026-08-01 ~ 08-13，无尾巴）。M18 子 agent 上限
+**M1–M18 全部完成**（2026-08-01 ~ 08-13，无尾巴）；**L 波（对外推广）2026-08-13
+推进到「只剩用户动作」**——见 [docs/issues/README.md](docs/issues/README.md) §L。
+L 波带出四条进主线的改动：`openai` 通用兼容 adapter（决策 33，ROADMAP §一/§二）、
+CI 门禁复活（`.github/workflows/ci.yml`，三个 job）、Pages 部署
+（`pages.yml` → https://allroad88888888.github.io/einfach-agent-rust/ ，
+**浏览器 demo 现已公开可点**）、以及 `scripts/clean-build-cache.sh` +
+`scripts/check-build-cache.sh`（构建缓存 35G→9G，见 §Workspace）。
+
+M18 子 agent 上限
 的配置面（决策 32）：决策 20 的两道闸从「代码可配、运行时无入口」变成进程级启动参数
 （`--max-agent-depth`/`--max-children`，env 兜底），协议面零改动；顺带堵掉恢复路径上
 一处静默失配（`recover` 补 `limits` 入参，160）。真机七条全过，最硬的一条是 `kill -9`
