@@ -1,6 +1,6 @@
 # 174 探针：OpenAI 兼容 endpoint 打一发
 
-**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **独测** — · **估时** 20min · **状态** 待开始
+**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **独测** — · **估时** 20min · **状态** 代码侧分析完成；**真实探针缺凭据，卡住**（2026-08-13）
 
 ## 目标
 
@@ -37,3 +37,81 @@ OpenAI / OpenRouter / 硅基流动 / Ollama / vLLM，**其中 Ollama 还是零�
 ## 不做
 
 不写 adapter，不动 `crates/`。这个 issue 的产出**只有观测和结论**。
+
+---
+
+## 实做记录（2026-08-13）
+
+### ⚠️ 先说卡在哪
+
+**本机没有任何可打的 OpenAI 兼容端点**：无 `ollama`（`11434` 端口也没别的服务）、
+环境里无 `OPENAI_API_KEY` / `OPENROUTER_*` / `SILICONFLOW_*`。
+所以「对至少两个兼容 endpoint 各打一发」**没做成**，`probes/results/` 没有新文件。
+
+**要解锁只需二选一**（任一即可，都不用改代码）：
+
+- `brew install ollama && ollama pull qwen3:4b`（零成本，且这正是 [177](177-openai-compat-config.md)
+  要主推的入口——**顺带就把那条路验了**）
+- 给一个 OpenAI 官方或 OpenRouter 的 key
+
+### 但代码侧的问题问出答案了
+
+174 真正要交给 [175](175-openai-compat-decision.md) 的判据是**「能不能复用现有 wire 层」**。
+这条不用外部凭据就能查清，查完的结论比预想的强：
+
+**一、`wire/` 与 `stream/` 本来就是共享层，不是三家各写一份。**
+
+```
+wire/     decode messages names numeric prefix tools errors   ← 三家共用
+stream/   mod tool_parts usage stop                            ← 三家共用
+deepseek/ kimi/ glm/   各自只有 encode + decode + errors + mod
+```
+
+`wire::names`（工具名 `srv:fs/list` ⇄ `srv_3Afs_2Flist` 的转义）的文档已经把这条
+写死了：*「它住在 `wire/` 而不是某一家的目录下，因为它不是厂商差异——三家的
+`function.name` 都受同一条 OpenAI 惯例字符集约束」*。
+
+**二、`Provider` trait 只有四个纯函数**（`encode` / `decode` / `accumulator` / `classify`），
+且它的文档就是判据本身：
+
+> 方法数 = 各家真的不一样的**动作**数。只差常量的适配是数据不是方法。
+
+`accumulator()` 已经返回**共享类型** `StreamAccumulator` 而不是 trait 方法群——
+流式那一半三家早就是同一份代码了。
+
+**三、真正的厂商差异，实测就这么多**（`grep Adjustment:: */encode.rs`）：
+
+| 家 | encode 里的妥协点 |
+|---|---|
+| deepseek | `LateToolsForcedIntoPrefix` / `ToolsTruncated` / `ThinkingDisabledForToolChoice` / `ToolChoiceDowngraded` |
+| glm | 同上去掉 thinking 那条 |
+| kimi | 只有 `ToolChoiceDowngraded` + `TemperatureOverridden{used:1.0}` |
+
+以及 usage 的缓存字段路径——**已经是常量而不是代码**：
+
+```rust
+deepseek: &[&["prompt_cache_hit_tokens"]]
+glm:      &[&["prompt_tokens_details", "cached_tokens"]]   // kimi 同款
+```
+
+**四、三家其实已经是三个不同厂商的 OpenAI 兼容端点。**
+`api.deepseek.com` / `api.moonshot.cn/v1` / `open.bigmodel.cn/api/paas/v4` ——
+本仓已经在跨三个厂商吃同一套 OpenAI 形状了，差异的量级见
+[PROVIDERS.md](../../probes/PROVIDERS.md)。**这是 [175](175-openai-compat-decision.md)
+最重要的输入**：不是「要不要支持一种新形状」，而是「已经支持三家的那套东西，
+退化到没有特殊处的情形」。
+
+### 给 [175](175-openai-compat-decision.md) 的判据
+
+代码结构强烈指向 **B 案的一个弱化版**：不需要「抽出共享基座」（**基座早就在了**），
+只需要**再加一个 `openai/` 目录，里面是三个文件的退化实现**——
+`encode` 不做任何妥协、`CACHED_PATHS` 走 `prompt_tokens_details.cached_tokens`
+（OpenAI 官方口径）、`classify` 按标准 `error.type`。**存量三家一个字节不用动。**
+
+但**这个判据是从代码读出来的，不是从真实响应读出来的**，[175](175-openai-compat-decision.md)
+拍板前应该等上面那个探针补上——尤其是两件事：
+
+1. **Ollama 这类本地实现的 `tool_calls` 分片**是否与云端一致（历来是各家最爱跑偏的地方）
+2. **没有缓存字段的家**（Ollama 大概率没有）会让 `CACHED_PATHS` 取到什么，
+   `stream/usage.rs` 会不会把「没有」读成 0 ——那会让 [024](024-cache-guard.md)
+   的三层兜底得到**假绿**，这是本 issue 列的第 4 条观测项，也是最有可能咬人的一条
