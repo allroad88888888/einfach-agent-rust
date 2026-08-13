@@ -88,8 +88,9 @@ core 里没有 `match provider`，**也没有能力位**——能力位只是把
 
 ```bash
 cp providers.example.toml providers.toml
-# 填 DeepSeek、Kimi 或 GLM 的 API key。任何 OpenAI 兼容端点也行，
-# 见那个文件里 adapter = "openai" 那一段。
+# 填 DeepSeek、Kimi 或 GLM 的 API key。任何 OpenAI 兼容端点也行：
+# 给那一节加 adapter = "openai"（见那个文件）。通用 adapter 在上面三家上都真机跑过
+# ——工具调用、流式、缓存计数、鉴权失败、undo。
 
 cargo run -p agent-cli
 ```

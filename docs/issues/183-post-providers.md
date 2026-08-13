@@ -95,9 +95,23 @@
 ### 待办
 
 - [ ] 中文版（L2 第二波）
-- [ ] 发之前**复查一遍数字是否还成立**——三家都在迭代，7-31 的实测到发文时可能已经过期。
-      至少把 `tool_choice` 那两条「文档与实际相反」重跑一次：**那是全文的地基，
-      塌了整篇就废了**
+- [x] ~~发之前复查 `tool_choice` 那两条~~ —— **重跑了（2026-08-13，距首测 13 天）：
+      七格全表 + 两条错误原文逐字复现，地基没塌。**
+
+      跑法留了下来：`PROBE_TOOL_CHOICE_ONLY=1 cargo run --bin wire_shape`
+      （三家各三个请求，比全套十几个便宜得多）。结果落在
+      **`probes/results/wire-shape-toolchoice-recheck.json`，不覆盖 07-31 那份**
+      ——这是这次做的一个有意的选择：覆盖掉就只剩「现在的样子」，
+      而要回答的问题是「变没变」，那需要两份带日期的观测并排放着。
+
+      复现的具体内容：DeepSeek 默认思考下 `required` 与指定函数都 400、显式关思考后
+      两者都 200；Kimi `required` 通、指定函数 400；GLM 六格全 200。
+      错误原文 `Thinking mode does not support this tool_choice` /
+      `tool_choice 'specified' is incompatible with thinking enabled` 一字未变——
+      **文章里是逐字引用，所以必须核到字符级，核到 HTTP 码相同是不够的。**
+
+      结论写进了 [PROVIDERS.md](../../probes/PROVIDERS.md) §二那张表下面，
+      带日期。**13 天零变化不代表以后不变**，那句提醒也一并写了。
 - [x] ~~确认 `probes/results/` 真的在版本控制里~~ —— **验过了**：五个 json 全部
       `git ls-files` 有、`git check-ignore` 无命中；探针代码 `probes/api/src/{bin,exp}/`
       也在。文章那句「Raw JSON is in the repo」站得住

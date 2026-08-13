@@ -106,6 +106,13 @@ agent 实际需要的工具子集精确裁剪就好。
 错误原文：DeepSeek `Thinking mode does not support this tool_choice`；
 Kimi `tool_choice 'specified' is incompatible with thinking enabled`。
 
+> **2026-08-13 复查：上表七格与两条错误原文逐字复现。** 三家都在迭代，而这一节是
+> 「文档与实际相反」那条结论的地基，所以对外发文前重跑了一次
+> （`PROBE_TOOL_CHOICE_ONLY=1 cargo run --bin wire_shape`，落在
+> `results/wire-shape-toolchoice-recheck.json`，**不覆盖 07-31 的全量观测**——
+> 两份带日期的文件才看得出漂没漂）。13 天零变化不等于以后不变，
+> 重跑成本是三家各三个请求，怀疑就跑。
+
 - **DeepSeek v4-pro 默认开着思考**。用 `required`/指定函数必须同请求显式
   `thinking.type=disabled`——adapter 自动做，但要记一笔 `Adjustment`，因为它改变了模型行为。
 - **Kimi K3 上「指定函数」永久不可用**：思考常开、API 里没有关闭字段（参数表没有

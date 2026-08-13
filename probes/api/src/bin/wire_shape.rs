@@ -11,6 +11,13 @@ use serde_json::{Value, json};
 
 const RESULT_PATH: &str = "../results/wire-shape.json";
 
+/// 只重跑 tool_choice 那两组时的落点（`PROBE_TOOL_CHOICE_ONLY=1`）。
+///
+/// **故意不覆盖上面那份。** 07-31 的全量观测要原样留着——三家都在迭代，
+/// 两份带日期的对照才回答得了「这几周里行为变没变」这个问题，而覆盖掉就只剩
+/// 一个「现在的样子」，看不出有没有漂。183 发文前的复查走这条路。
+const RECHECK_PATH: &str = "../results/wire-shape-toolchoice-recheck.json";
+
 /// 最小请求：够短就行，这些实验不测缓存。
 fn base(p: &Probe, tools: Vec<Value>, ask: &str) -> Value {
     let mut b = json!({
@@ -197,7 +204,10 @@ fn main() {
         std::env::args().nth(1).as_deref() == Some("--provider")
     });
 
-    let mut report: Value = std::fs::read_to_string(RESULT_PATH)
+    let recheck = std::env::var("PROBE_TOOL_CHOICE_ONLY").is_ok();
+    let result_path = if recheck { RECHECK_PATH } else { RESULT_PATH };
+
+    let mut report: Value = std::fs::read_to_string(result_path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .unwrap_or_else(|| json!({}));
@@ -212,6 +222,12 @@ fn main() {
             continue;
         };
         let mut p = Probe::new(name.clone(), cfg.model.clone(), caps::endpoint(&cfg.base_url), key);
+        if recheck {
+            probe_tool_choice(&mut p);
+            probe_forced_tool_with_thinking(&mut p);
+            report[name] = Value::Array(p.out);
+            continue;
+        }
         probe_stream(&mut p);
         // 只跑流式那组时跳过其余 —— 重跑一次全套要十几个请求。
         if std::env::var("PROBE_STREAM_ONLY").is_ok() {
@@ -227,11 +243,11 @@ fn main() {
         report[name] = Value::Array(p.out);
     }
 
-    if let Some(d) = std::path::Path::new(RESULT_PATH).parent() {
+    if let Some(d) = std::path::Path::new(result_path).parent() {
         let _ = std::fs::create_dir_all(d);
     }
-    let _ = std::fs::write(RESULT_PATH, serde_json::to_string_pretty(&report).unwrap());
-    println!("\n原始观测已写入 probes/results/wire-shape.json");
+    let _ = std::fs::write(result_path, serde_json::to_string_pretty(&report).unwrap());
+    println!("\n原始观测已写入 probes/results/{}", result_path.rsplit('/').next().unwrap());
 }
 
 // fixture 目前只被 cache_prefix 用到，这里显式引用一下避免未使用告警。

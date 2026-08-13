@@ -102,8 +102,10 @@ mistake would otherwise surface.
 
 ```bash
 cp providers.example.toml providers.toml
-# Add a DeepSeek, Kimi, or GLM API key. Any OpenAI-compatible endpoint also works —
-# see the `adapter = "openai"` section in that file.
+# Add a DeepSeek, Kimi, or GLM API key. Any OpenAI-compatible endpoint also works:
+# set `adapter = "openai"` on the section (see that file). The generic adapter is
+# run against all three endpoints above — tool calls, streaming, cache accounting,
+# auth failures, undo.
 
 cargo run -p agent-cli
 ```

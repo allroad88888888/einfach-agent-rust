@@ -1,8 +1,12 @@
 # Invariants
 
-> Translated from [INVARIANTS.md](INVARIANTS.md). **The Chinese version is authoritative** —
-> development happens in Chinese, so this file can lag. If the two disagree, the Chinese
-> one is right and this one is a bug.
+> Translated from [INVARIANTS.md](INVARIANTS.md) as of commit `9ae84d5`.
+> **The Chinese version is authoritative** — development happens in Chinese, so this file
+> can lag. If the two disagree, the Chinese one is right and this one is a bug.
+>
+> To find out whether it has lagged, and by how much:
+> `git log --oneline 9ae84d5..HEAD -- docs/INVARIANTS.md`. Empty output means this
+> translation is current. If you update the translation, move the hash.
 
 Break any of the rules below and undo / crash recovery will go wrong **silently** — no
 error, no panic, just a recovered state that isn't the one you had. This is the most

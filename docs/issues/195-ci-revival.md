@@ -136,9 +136,18 @@ CI 08-05 删掉之后没人再跑 `clippy -D warnings`，到今天累计 **24 �
 `crates/agent-server/src/actor/body.rs` **332 行，超红线 9 的 300**。本次只是路过小改
 （折一个 if + 加一条 allow 注释），按全局规矩指出但不擅自重构。要拆的话是另一个 issue。
 
-## 待推送后确认
+## 推送后确认（2026-08-13，三条全部验完）
 
-- [ ] Actions 三个 job 全绿（`rust` / `ts` / `wasm`）
-- [ ] README badge 显示 passing
-- [ ] `wasm` job 的 `jetli/wasm-pack-action@v0.4.0` 在 CI 上真的能装上
-      （本地用的是已装好的 wasm-pack 0.14.0，**CI 上这一步没验过**）
+- [x] **Actions 三个 job 全绿**（run `31680061584`，`fbc2240`）：
+      `rust (test + clippy + 红线)` / `typescript (协议 + web typecheck)` /
+      `wasm (浏览器宿主构建)`，三个 `conclusion: success`
+- [x] **README badge 返回 HTTP 200**（`actions/workflows/ci.yml/badge.svg`）
+- [x] **`jetli/wasm-pack-action@v0.4.0` 在 CI 上真能装**——装出来的是 **wasm-pack
+      v0.15.0**，比本地的 0.14.0 还新。这条是三条里唯一有真实风险的：
+      本地跑绿只证明「已装好的 0.14.0 能编」，证明不了「CI 上装得上」，
+      所以当时特意把它单列成一条待确认，而不是跟着另外两条一起打勾。
+
+**顺带一条判据（这次踩出来的）**：中途我用 `grep -c "test result: FAILED"` 判过一次
+「测试全绿」，报了「0 失败」——**但那个 grep 看不见编译失败**（`agent-store` 改名后
+33 个测试根本没编出来，一条 `test result:` 都不会打印）。后来全部门禁改成看**退出码**。
+`grep` 判绿的问题不是不准，是**它在最该报警的那种失败上恰好静音**。

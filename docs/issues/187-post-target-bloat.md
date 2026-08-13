@@ -95,7 +95,11 @@ target                     31G / 794,507 文件
 
 ### 待办
 
-- [ ] 文章里「builds got fast again」缺一个**构建时间**的真实数字（体积和文件数
-      都有了，时间没量）。发之前补一次 `cargo clean && time cargo build --workspace`
-      的对照，或者把那句话改成只讲体积/文件数——**不要写一个没量过的时间**
+- [x] ~~文章里「builds got fast again」缺构建时间的真实数字~~ —— **量了**：
+      `touch crates/agent-core/src/lib.rs && time cargo build --workspace` = **6 秒**
+      （改最底层 crate 的一个文件，全 workspace 重建）。初稿已补进那句话。
+      选这个口径而不是 `cargo clean` 后的全量重编，是因为**它才是日常迭代的体感**
+      ——当年变慢的痛点就是「改一行等好久」，不是「第一次编译要多久」。
+      同时量的 target 现状：**6.6G / deps 7,148 文件**（清理后又跑了几轮构建，
+      从 3,227 涨上来，符合 [197](197-incremental-cache-bloat.md) 说的「会不断长回来」）
 - [ ] 中文版（L2 第二波）

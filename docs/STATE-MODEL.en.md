@@ -1,9 +1,13 @@
 # State model
 
-> Translated from [STATE-MODEL.md](STATE-MODEL.md). **The Chinese version is
-> authoritative** — development happens in Chinese, so this file can lag. If the two
-> disagree, the Chinese one is right and this one is a bug. Terminology follows the table
-> at the bottom of [INVARIANTS.en.md](INVARIANTS.en.md).
+> Translated from [STATE-MODEL.md](STATE-MODEL.md) as of commit `064126a`.
+> **The Chinese version is authoritative** — development happens in Chinese, so this file
+> can lag. If the two disagree, the Chinese one is right and this one is a bug.
+> Terminology follows the table at the bottom of [INVARIANTS.en.md](INVARIANTS.en.md).
+>
+> To find out whether it has lagged, and by how much:
+> `git log --oneline 064126a..HEAD -- docs/STATE-MODEL.md`. Empty output means this
+> translation is current. If you update the translation, move the hash.
 
 The heart of this repository. Undo, redo, crash recovery, and audit replay are four
 projections of one mechanism.

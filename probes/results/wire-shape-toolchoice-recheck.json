@@ -1,0 +1,111 @@
+{
+  "deepseek": [
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[显式关思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": {
+        "code": "invalid_request_error",
+        "message": "Thinking mode does not support this tool_choice",
+        "param": null,
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400",
+      "probe": "forced_tool+thinking"
+    }
+  ],
+  "glm": [
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[显式关思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]=\"required\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[显式关思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    },
+    {
+      "data": "成功",
+      "note": "HTTP 200",
+      "probe": "forced_tool+thinking"
+    }
+  ],
+  "kimi": [
+    {
+      "data": "ok",
+      "note": "HTTP 200，0 个调用",
+      "probe": "tool_choice[默认思考]=\"none\""
+    },
+    {
+      "data": "ok",
+      "note": "HTTP 200，1 个调用",
+      "probe": "tool_choice[默认思考]=\"required\""
+    },
+    {
+      "data": {
+        "message": "tool_choice 'specified' is incompatible with thinking enabled",
+        "type": "invalid_request_error"
+      },
+      "note": "HTTP 400，0 个调用",
+      "probe": "tool_choice[默认思考]={\"function\":{\"name\":\"get_weather\"},\"type\":\"function\"}"
+    }
+  ]
+}
