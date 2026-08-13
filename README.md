@@ -1,5 +1,11 @@
 # einfach-agent
 
+### [▶ Try it in your browser](https://allroad88888888.github.io/einfach-agent-rust/) — no install, no server, bring your own key
+
+There is no backend. That page **is** the agent runtime, compiled to wasm and running in
+your tab. Your key goes straight from your browser to the provider — open DevTools →
+Network and check.
+
 [![CI](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 

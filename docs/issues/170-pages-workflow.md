@@ -1,6 +1,6 @@
 # 170 GitHub Pages 部署 workflow
 
-**里程碑** L · **依赖** [169](169-wasm-artifact-recheck.md) · **模型** sonnet · **独测** — · **状态** workflow 已写，**等你开 Pages 开关**（2026-08-13）· **估时** 20min
+**里程碑** L · **依赖** [169](169-wasm-artifact-recheck.md) · **模型** sonnet · **独测** — · **状态** 完成（2026-08-13，已上线）· **估时** 20min
 
 ## 目标
 
@@ -79,9 +79,49 @@ gitignore 的（产物不进版本控制），顺序反了传上去就是一个�
 - 本地起静态服务器跑通过完整对话 + 撤销（[169](169-wasm-artifact-recheck.md) /
   [196](196-wasm-expose-undo.md) 两轮真机），**部署的是同一份字节**
 
-### 你要做的两步
+### 上线了
 
-1. Settings → Pages → Source 选 **GitHub Actions**
-2. `git push` —— 首推会同时触发 `ci.yml` 与 `pages.yml`
+**URL：https://allroad88888888.github.io/einfach-agent-rust/**
 
-推完把 URL 给我，我接着做 [173](173-readme-demo-hero.md)（README 挂 demo + 填 homepage）。
+Pages 开关**不用点网页**——`gh api -X POST repos/{owner}/{repo}/pages -f build_type=workflow`
+一条命令就开（token 的 `repo` scope 够）。比在设置页里点像素可靠得多，也可复述。
+
+`gh workflow run pages.yml` 手动触发首次部署，`deploy` job 一次绿。
+
+### 验收（逐条真机）
+
+| # | 验的什么 | 结果 |
+|---|---|---|
+| 1 | 公开 URL 能打开 | ✅ HTTP 200，17,363 字节 |
+| 2 | 不是 404 / 空白 | ✅ 首屏文案（"Your key never leaves this tab" / "Undo one turn"）都在 |
+| 3 | **wasm 的 MIME** | ✅ `application/wasm`，956,342 字节——**这条错了页面会静默不工作** |
+| 4 | 子路径下相对导入 | ✅ 8 个请求全 200（`/einfach-agent-rust/pkg/…`），module 能 import、`init()` 能 resolve |
+| 5 | 页面真的就绪 | ✅ `__agentReady === true`，状态变「wasm 已加载」 |
+| 6 | **从 `github.io` 源直连 provider** | ✅ 见下 |
+
+### 第 6 条是线上独有的新风险，专门验了
+
+决策 26 当年验的 CORS 是从**本地源**（`http://127.0.0.1`）发的。线上换成
+`https://allroad88888888.github.io`，浏览器的同源策略面对的是完全不同的一组条件。
+
+用**占位 key** 打三家（拿到真实 401 就说明预检通过、响应可读，不需要真 key）：
+
+| | CORS | 状态 | 响应体 |
+|---|---|---|---|
+| DeepSeek | ✅ 通过 | 401 | `authentication_error` |
+| Kimi | ✅ 通过 | 401 | `invalid_authentication_error` |
+| GLM | ✅ 通过 | 401 | `{"code":"401","message":"令牌已过期或验证不正确"}` |
+
+**三家全部穿过 CORS。** 线上直连成立，「没有服务端」这句话在公网上也站得住。
+
+### 一个把我绕了几分钟的假象，记下来
+
+首次访问时我轮询 20 秒 `__agentReady` 仍是 `false`，而**控制台 0 error、8 个网络请求全 200**
+——典型的「静默不工作」形状，我一度以为是子路径把相对导入搞坏了。
+
+真相是**冷加载慢**：956K wasm 走 CDN 首次下载 + 编译，超过了我给的 20 秒窗口。
+手动 `import()` 验证模块本身完全正常，之后再查状态就已经 ready 了；热缓存下重测
+**0ms 就绪**。
+
+判据记一笔：**「没报错 + 资源全 200 + 状态没变」不等于坏了，也可能只是还没好。**
+判断前先把等待窗口拉到远大于「最坏的冷启动」，否则会把慢当成坏，然后去修一个不存在的 bug。

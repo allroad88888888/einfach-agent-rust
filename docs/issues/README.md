@@ -862,10 +862,10 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [167](167-readme-stale-mechanism.md) | 修 README 已删除的激活机制 | 165 | sonnet | 20min | ✅ 完成 |
 | [168](168-repo-metadata.md) | repo description + topics | 165 | haiku | 5min | ✅ 完成 |
 | [169](169-wasm-artifact-recheck.md) | wasm 产物本地复验（**刹车片**） | 165 | sonnet | 20min | ✅ 完成 |
-| [170](170-pages-workflow.md) | GitHub Pages 部署 workflow | 169 | sonnet | 20min | workflow 就位，**等开 Pages 开关** |
+| [170](170-pages-workflow.md) | GitHub Pages 部署 workflow（**已上线**） | 169 | sonnet | 20min | ✅ 完成 |
 | [171](171-demo-first-screen.md) | demo 首屏文案 + BYOK 引导 | 170 | sonnet | 20min | ✅ 完成 |
 | [172](172-demo-gif.md) | 录 demo GIF（口令实验） | 171 | claude+**你** | 20min | 待开始 |
-| [173](173-readme-demo-hero.md) | README 挂 demo + 填 homepage | 170+172 | sonnet | 15min | 待开始 |
+| [173](173-readme-demo-hero.md) | README 挂 demo + 填 homepage | 170+172 | sonnet | 15min | 链接✅，GIF 等 172 |
 | [174](174-openai-compat-probe.md) | 探针：裸 OpenAI 请求打三家 | 165 | sonnet | 20min | ✅ 完成 |
 | [175](175-openai-compat-decision.md) | 兼容层落在哪（**决策**：A 案 + 最小内核契约） | 174 | **opus** | 20min | ✅ 完成 |
 | [176](176-openai-compat-adapter.md) | adapter 实现（`openai/` 六文件，core 零改动） | 175 | sonnet | 20min | ✅ 完成 |
