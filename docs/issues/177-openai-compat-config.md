@@ -14,18 +14,17 @@
 
 1. `providers.toml` 的解析加新段，形状跟既有三家对齐（`api_key` / `base_url` / `model`）。
 2. `providers.example.toml` 加**注释充分**的示例段——现有三家那几段的注释密度就是标杆
-   （它们连 `beta_base_url` 为什么存在都写了）。至少给三个可直接复制的例子：
-   - OpenAI 官方
-   - **Ollama 本地**（`base_url = "http://localhost:11434/v1"`，`api_key` 随便填）
-     —— 这条对「先试试看」的人是零成本入口，**值得放在第一个**
-   - OpenRouter 或硅基流动（任选，代表「一把 key 打多家」）
+   （它们连 `beta_base_url` 为什么存在都写了）。例子给 OpenAI 官方 + OpenRouter
+   两个，并**显式标注「本仓未跑过真机」**：字段形状照规范写，但没验过就不能让它
+   看起来像验过的。
+   （原案第一个例子是 Ollama，2026-08-13 撤销——理由见下面实做记录 §example 里的例子。）
 3. 校验：`base_url` 缺失要**明确报错**，不要静默退默认。
    判据照决策 32 那条既有取舍：**有没有下游替它报错**——这里没有，所以硬失败。
 
 ## 验收
 
 - 单测：三种配置各能解析成预期结构；缺 `base_url` 报错且**点名是哪一段**
-- `providers.example.toml` 里的 Ollama 那段**可直接复制粘贴就能用**（不是伪代码）
+- `providers.example.toml` 的例子标注了「未跑过真机」，不冒充已验证
 - `cargo test --workspace` 绿
 
 ## 注意
@@ -67,16 +66,22 @@ base_url = "https://openrouter.ai/api/v1"
 3. `agent-server/provider_dispatch.rs`：同样加一条（三张分发表是 030 有意为之的
    重复，不是疏漏——见那两个文件的模块文档）
 4. `agent-cli/main.rs`：启动时走 `adapter_name` 而不是直接用段名
-5. `providers.example.toml`：新增一整段，**排在三家之前**——它是零成本入口
+5. `providers.example.toml`：新增一整段，排在三家之前
 
 两处错误文案同步改成「可选：deepseek / kimi / glm / openai …或段内的 adapter 字段」
 ——配错的人第一反应是去看段名，得告诉他还有第二个地方可能写错。
 
-### example 里的三个例子
+### example 里的例子
 
-**Ollama 排第一**（[165](165-launch-positioning-decision.md) L1 的推论：海外读者
-手里没有三家的 key，而 Ollama 零成本、不用申请任何东西）。另外两个是 OpenAI 官方
-和 OpenRouter。三个都可直接复制粘贴，不是伪代码。
+**曾经把 Ollama 写成第一个例子，2026-08-13 撤掉了**（用户拍板：这个项目跟 Ollama
+没关系）。原因值得记：我当时的理由是「海外读者手里没有三家的 key，Ollama 零成本」
+——但那是**把一个测试/上手需求变成了产品叙事**。einfach-agent 不是一个本地 LLM 项目，
+把一个外部运行时摆在 example 第一行，等于替读者选了一条我们既不维护、也没验过的路。
+
+现在留 OpenAI 官方 + OpenRouter 两个例子，并**显式标注「本仓未跑过真机」**——
+实测覆盖的是三家的兼容端点（[174](174-openai-compat-probe.md)）。
+写一条没验过的配置却让它看起来像验过的，跟 [167](167-readme-stale-mechanism.md)
+修掉的那个问题是同一类。
 
 注释里把 [174](174-openai-compat-probe.md)/[175](175-openai-compat-decision.md)
 的两条代价写明白了，别让人拿它当默认档：
@@ -109,15 +114,17 @@ base_url = "https://openrouter.ai/api/v1"
       `adapter` 生效且两个段可共存 / `endpoint()` 不补 `/v1`）；
       `agent-cli` 四条（回落段名 / `adapter` 压过段名且段名本身不是合法 adapter
       名 / 四个 adapter 全可解析 / 未知名字报错且文案提到 `adapter`）
-- [x] `providers.example.toml` 的 Ollama 段可直接复制粘贴
+- [x] `providers.example.toml` 的两个例子都标了「未跑过真机」，不冒充已验证
 - [x] 六道门全绿（红线 / clippy / test / ts feature / typecheck / build-wasm）
 - [x] **红线 12**：`git diff --stat crates/agent-core/` 空
 - [x] `grep` 过 example 无真 key
 
 ### 留给 [178](178-openai-compat-dogfood.md)
 
-配置面通了，但**一次真实请求都还没发过**。178 的七条里，最要紧的是第 5 条
-（[174](174-openai-compat-probe.md) 唯一没验到的隐患）：**一家什么缓存字段都不给时，
-`stream/usage.rs` 会读成 `None` 还是 `Some(0)`**。`decode.rs` 已经有单测钉住
-「缺失 ≠ 0」，但那是喂给解析函数的构造数据，不是真实端点的响应——Ollama 正是
-最可能不给这个字段的家，装上它就能验。
+配置面通了，但**一次真实请求都还没发过**。[178](178-openai-compat-dogfood.md)
+已按「用已有三家当被测端点」重写——同一个端点、特化 adapter vs 通用 adapter
+对着跑，差异全部归因于 adapter 本身。
+
+而「缓存字段缺失」那条隐患已经拆出去单独做掉了（[198](198-missing-cache-field-guard.md)）：
+它根本不需要真机，假响应就能钉死，**而且能进 CI 永久守着**——
+一次性真机验证证明的是「那天没坏」，单测证明的是「以后坏了会红」。

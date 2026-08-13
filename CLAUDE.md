@@ -119,6 +119,14 @@ TS 侧的协议类型由 Rust 用 **ts-rs** 生成，**不手写**——见 ARCH
 `mod`），**不要在 `tests/` 顶层建 `.rs`**——顶层每个文件都是独立链接的二进制，267 个
 测试文件曾两天把 target 堆到 58GB/88 万文件，2026-08-05 已合并为每 crate 一个 harness。
 
+**但那次只修掉了一个来源。** 2026-08-13 实测 target 又到 35G/79 万文件，最大的两块
+是 `incremental/`（20G）和 `deps/**/*.rcgu.o`（11.4G / 63 万文件——每个 codegen unit
+一个目标文件，按构建 hash 分开存，**cargo 从不回收旧 hash 的**；`agent_cli` 一个 crate
+就攒了 40 个 hash）。**定期跑 `scripts/clean-build-cache.sh`**（只清可再生的中间产物，
+不动 `.rlib`，清完六道门全绿）。首次执行 35G→9G，`deps/` 文件数 63 万→3,227。
+`wasm32-unknown-unknown` 目录**必须留**（`build-wasm.sh` 的产物，浏览器宿主靠它），
+其余非原生目标目录是一次性交叉编译的孤儿，脚本会清掉。细节见 [issues/197](docs/issues/197-incremental-cache-bloat.md)。
+
 ## 自动检查
 
 `scripts/check-invariants.sh` 挂在 Edit/Write 的 PostToolUse hook 上，检查能被 grep

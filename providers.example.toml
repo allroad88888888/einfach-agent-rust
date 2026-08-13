@@ -41,29 +41,23 @@
 #   缓存    对面的块粒度/门槛未知，所以【恒不预测】，也不按上限截断工具
 #           ——不知道就不猜，宁可让对面报一个可见的错，也不自己静默处理。
 #
-# 例一：Ollama 本地（零成本，不用申请任何 key，最适合先跑起来看看）
-#   装好后：ollama pull qwen3:4b && ollama serve
-# [providers.ollama]
-# adapter = "openai"
-# api_key = "ollama"                        # 本地不校验，随便填非空即可
-# base_url = "http://localhost:11434/v1"
-# model = "qwen3:4b"
-# context_window = 32768
+# ⚠ 下面两个例子的字段形状是照 OpenAI 规范写的，但**本仓没有对它们跑过真机**
+#   （实测覆盖的是 DeepSeek / Kimi / GLM 三家的兼容端点，见 issue 174）。
+#   base_url 与 model 以各家当时的官方文档为准，别当成验过的配置照抄。
 #
-# 例二：OpenAI 官方
+# 例一：OpenAI 官方
 # [providers.openai]
 # adapter = "openai"
 # api_key_env = "OPENAI_API_KEY"
 # base_url = "https://api.openai.com/v1"
-# model = "gpt-5.1"
-# context_window = 400000
+# model = "<按官方文档填>"
 #
-# 例三：OpenRouter（一把 key 打多家）
+# 例二：OpenRouter（一把 key 打多家）
 # [providers.openrouter]
 # adapter = "openai"
 # api_key_env = "OPENROUTER_API_KEY"
 # base_url = "https://openrouter.ai/api/v1"
-# model = "anthropic/claude-sonnet-5"
+# model = "<按官方文档填>"
 # ─────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────

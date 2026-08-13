@@ -31,7 +31,7 @@ Why this is not another agent framework   ← 直接回答那个唯一的问题
   · kill -9 之后接着聊                → M18
   · 整个核心跑在浏览器里，无服务端      → demo 链接
 ─────
-Quickstart（60 秒，Ollama 优先——零成本）
+Quickstart（60 秒）
 Runtime surfaces 表（保留，下移）
 架构细节 → 全部降成文档链接
 ```
@@ -41,7 +41,7 @@ Runtime surfaces 表（保留，下移）
 - **一个没读过任何文档的 Rust 开发者，读完第一屏能说出「这跟 rig 有什么不一样」**
   —— 这条是本 issue 的全部意义，其余都是手段
 - 三个钩子每条都有**可点的证据**（issue、文档或 demo），不是形容词
-- quickstart 在第一屏可见范围内，且默认路径是 Ollama（[177](177-openai-compat-config.md) 的零成本入口）
+- quickstart 在第一屏可见范围内。**默认路径用哪家要重定**——原案写的是 Ollama，已撤（[177](177-openai-compat-config.md)）
 - 保留现有的准确性——**不许为了好听夸大**。这个项目的全部可信度来自
   「文档和代码一致」，[167](167-readme-stale-mechanism.md) 刚修过一次因此塌掉的信任
 

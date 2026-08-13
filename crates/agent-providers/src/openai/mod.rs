@@ -53,6 +53,12 @@ mod errors;
 #[path = "test_support.rs"]
 mod test_support;
 
+/// 198：缓存字段缺失不许被读成 0 的看门狗。单独一个文件是因为它守的是一条
+/// **静默失效**（读成 0 会让 024 第 2 层永远「完美吻合」），值得让人一眼看见。
+#[cfg(test)]
+#[path = "usage_guard_tests.rs"]
+mod usage_guard_tests;
+
 use agent_core::ErrorClass;
 use serde_json::Value;
 

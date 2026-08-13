@@ -870,7 +870,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [175](175-openai-compat-decision.md) | 兼容层落在哪（**决策**：A 案 + 最小内核契约） | 174 | **opus** | 20min | ✅ 完成 |
 | [176](176-openai-compat-adapter.md) | adapter 实现（`openai/` 六文件，core 零改动） | 175 | sonnet | 20min | ✅ 完成 |
 | [177](177-openai-compat-config.md) | 配置面：`adapter` 字段解耦段名 + example | 176 | sonnet | 20min | ✅ 完成 |
-| [178](178-openai-compat-dogfood.md) | 真机收官七条 | 177 | sonnet | 20min | 待开始 |
+| [178](178-openai-compat-dogfood.md) | 真机收官八条（**改用已有三家**，撤 Ollama） | 177 | sonnet | 20min | 待开始 |
 | [179](179-readme-rewrite.md) | README 重写（英文定稿） | 173+178 | **opus** | 20min | 待开始 |
 | [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 → **`einfach-store`** | 165 | sonnet | 15min | ✅ 完成 |
 | [181](181-store-publish-prep.md) | 发布前置补全（→ `einfach-store`） | 180 | sonnet | 20min | ✅ 完成 |
@@ -889,7 +889,8 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户 | 191 | **你** | 持续 | 待开始 |
 | [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
 | [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（解锁一号钩子的 demo） | 169 | sonnet | 20min | ✅ 完成 |
-| [197](197-incremental-cache-bloat.md) | target 又胀回来了：这次是 incremental | 187 | sonnet | 20min | 待开始 |
+| [197](197-incremental-cache-bloat.md) | target 又胀回来了：清理脚本（首次释放 16G） | 187 | sonnet | 20min | ✅ 完成 |
+| [198](198-missing-cache-field-guard.md) | 缓存字段缺失不许被读成 0（静默失效看门狗） | 176 | sonnet | 20min | ✅ 完成 |
 
 **L0 已完成**（2026-08-13）：只碰 `Cargo.toml` / 两份 README / 两份 LICENSE，零 `.rs` 改动；
 `cargo metadata` 通过、`check-invariants.sh --all` 退出码 0。

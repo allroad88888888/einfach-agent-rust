@@ -13,7 +13,7 @@ Show HN 同一个项目再发一次效果会差很多。
 
 - [ ] demo 链接可用且**当天验过**（[170](170-pages-workflow.md)）
 - [ ] README 第一屏有 demo + GIF（[173](173-readme-demo-hero.md)）
-- [ ] 有一条零成本试用路径（[177](177-openai-compat-config.md) 的 Ollama）
+- [ ] **有一条陌生人能真的走通的试用路径**——demo 链接算一条（[170](170-pages-workflow.md)，自带 key）。原案写的「零成本本地路径」已撤，见 [177](177-openai-compat-config.md)
 - [ ] LICENSE 在（[166](166-license.md)）
 - [ ] 至少一篇独立价值的文章已发并有反响（[183](183-post-providers.md)）
 - [ ] **你有一整天能守在评论区**——这条最容易被低估。首发当天不回复评论，
