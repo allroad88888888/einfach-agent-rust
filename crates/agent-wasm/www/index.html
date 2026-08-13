@@ -1,5 +1,12 @@
 <!doctype html>
-<html lang="zh-CN">
+<!-- lang=en：171 留的尾巴之一（首屏英文而 lang 还是 zh-CN）。
+     这一页同时是 114c/119/122 的**人工**验收页——没有任何自动断言绑在文案上
+     （查过：全仓只有注释提到 index.html），所以「验收夹具」不构成英文化的障碍。
+     真正要保住的是那些带 issue 号的调试控件对验收人的语义，做法见下面
+     「Acceptance controls」那个折叠块：**原文一字不改，只是收起来**。
+     于是不必拆成两个页面——171 那个「验收页与对外 demo 要不要拆」的问题，
+     答案是不拆。 -->
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -39,11 +46,21 @@
   .hero li { margin: .25rem 0; }
   .hero code { background: rgba(128,128,128,.12); padding: .1rem .3rem; border-radius: .25rem; }
   .zh { opacity: .7; font-size: .92em; }
+  /* `.en` 是「次要语言」那一层的样式钩子，不是「英文」的意思——现在主语言是英文，
+     它装的是中文。名字留着是因为 roles.html 用的是同一个类同一个用法，
+     两个页面一致比名字准确更值钱（要改就两边一起改，那是另一件事）。 */
   .en { opacity: .6; font-size: .85em; font-weight: 400; }
   /* 很多人是从社交媒体在手机上点开的。窄屏下标签占一整行，别把输入框挤成一条缝。 */
   @media (max-width: 34rem) {
     label { min-width: 100%; }
     input[type=text], input[type=password] { flex: 1 1 100%; }
+    /* 390×844（iPhone）上实测：api_key 输入框顶边在 888px，**掉到折叠线以下**。
+       171 自己立的判据是「first screen 的成败看能操作的东西在不在屏幕里」，
+       而当时只验了零横向溢出，没验这个。
+       这里砍掉的是**中文摘要段**：页面已经是 lang=en、面向英文读者，
+       中文读者有 README.zh-CN；在手机上它挤掉的恰好是「我该点哪里」那个答案。
+       只在窄屏砍——桌面上它不占用任何要紧的位置，留着。 */
+    .zh { display: none; }
   }
 </style>
 </head>
@@ -75,12 +92,14 @@
 </div>
 
 <p class="warn zh">
-  <strong>中文：</strong>本页是 issue 114c 的真机验收页，也是对外 demo。整个 agent 核心编成 wasm
-  跑在这里，<strong>没有任何服务端进程</strong>；<strong>key 只来自你自己</strong>，不内置、不落盘，
-  刷新即失。
+  <strong>中文：</strong>整个 agent 核心编成 wasm 跑在这里，<strong>没有任何服务端进程</strong>；
+  <strong>key 只来自你自己</strong>，不内置、不落盘，刷新即失。
+  这一页同时是 114c / 119 / 122 的真机验收页，验收用的调试控件在下面
+  「Acceptance controls」里。
+</p>
 
 <fieldset>
-  <legend>1 · provider 配置（宿主注入，114d）</legend>
+  <legend>1 · Provider <span class="en">配置（宿主注入，114d）</span></legend>
   <div class="row">
     <label for="provider">provider</label>
     <select id="provider">
@@ -92,49 +111,58 @@
     <input type="text" id="model" value="deepseek-v4-pro">
   </div>
   <div class="row">
-    <label for="contextWindow">context_window</label>
-    <input type="text" id="contextWindow" placeholder="留空 = 不压缩；填小值（如 8000）可逼出 M12 的五档分级">
-  </div>
-  <div class="row">
     <label for="baseUrl">base_url</label>
     <input type="text" id="baseUrl" value="https://api.deepseek.com">
   </div>
   <div class="row">
     <label for="apiKey">api_key</label>
-    <input type="password" id="apiKey" placeholder="paste your own key / 粘你自己的 key" autocomplete="off">
-    <button id="connect">建宿主 <span class="en">Connect</span></button>
+    <input type="password" id="apiKey" placeholder="paste your own key — it stays in this tab" autocomplete="off">
+    <button id="connect">Connect <span class="en">建宿主</span></button>
   </div>
   <div class="row">
-    <label for="visionBaseUrl">识图 base_url</label>
+    <label for="visionBaseUrl">vision base_url</label>
     <input type="text" id="visionBaseUrl" value="https://api.moonshot.cn/v1">
   </div>
   <div class="row">
-    <label for="visionKey">识图 api_key</label>
-    <input type="password" id="visionKey" placeholder="Kimi 的 key，跟上面主对话那个各填各的（127）" autocomplete="off">
+    <label for="visionKey">vision api_key</label>
+    <input type="password" id="visionKey" placeholder="optional — only needed to describe an uploaded image (a Kimi key; separate from the one above)" autocomplete="off">
   </div>
-  <div class="row">
-    <label for="toolCallback">工具回调</label>
-    <label><input type="checkbox" id="toolCallback" checked> 建宿主时装上（121）</label>
-    <label><input type="checkbox" id="toolCallbackThrow"> 让它 throw new Error("boom")</label>
-  </div>
-  <div class="row">
-    <label for="badTools">工具声明</label>
-    <label><input type="checkbox" id="badTools"> 改声明一条 <code>srv:</code> 前缀的工具（122 反向锁：必须被拒）</label>
-  </div>
+
+  <!-- 171 的尾巴收在这里：这三个控件**只对做 114c/119/122 验收的人有意义**，
+       访客既不该看见也不该动。中文标签与 issue 号**逐字原样保留**——它们承载的
+       是验收语义，翻译或简化就等于把验收步骤改掉了。
+       收进 <details> 而不是搬到另一个页面：两个页面就是两份要同步维护的东西，
+       而这里真正的诉求只是「访客的视线里不要有它」。 -->
+  <details>
+    <summary>Acceptance controls <span class="en">（114c / 119 / 122 验收用，访客不用管）</span></summary>
+    <div class="row">
+      <label for="contextWindow">context_window</label>
+      <input type="text" id="contextWindow" placeholder="留空 = 不压缩；填小值（如 8000）可逼出 M12 的五档分级">
+    </div>
+    <div class="row">
+      <label for="toolCallback">工具回调</label>
+      <label><input type="checkbox" id="toolCallback" checked> 建宿主时装上（121）</label>
+      <label><input type="checkbox" id="toolCallbackThrow"> 让它 throw new Error("boom")</label>
+    </div>
+    <div class="row">
+      <label for="badTools">工具声明</label>
+      <label><input type="checkbox" id="badTools"> 改声明一条 <code>srv:</code> 前缀的工具（122 反向锁：必须被拒）</label>
+    </div>
+  </details>
 </fieldset>
 
 <fieldset>
-  <legend>2 · 会话（IndexedDB，114a）</legend>
+  <legend>2 · Session <span class="en">会话（IndexedDB，114a）</span></legend>
   <div class="row">
-    <label for="sessionId">会话 id <span class="en">session</span></label>
+    <label for="sessionId">session id</label>
     <input type="text" id="sessionId" value="demo-1">
-    <button id="open" disabled>打开 / 切换会话 <span class="en">Open session</span></button>
+    <button id="open" disabled>Open session <span class="en">打开 / 切换会话</span></button>
   </div>
-  <div class="row"><span id="status">未连接</span></div>
+  <div class="row"><span id="status">not connected</span></div>
 </fieldset>
 
 <fieldset>
-  <legend>3 · 对话 <span class="en">Chat</span></legend>
+  <legend>3 · Chat</legend>
 
   <!-- 171：把「怎么玩」放在真正用得着它的地方——对话框正上方，不是首屏顶部。
        顶上那一屏要留给「这是什么 / 我的 key 安不安全 / 我该点哪里」。 -->
@@ -148,7 +176,7 @@
     <ol>
       <li>Say: <code>Remember this passphrase: quokka-88. Just reply OK.</code></li>
       <li>Ask: <code>What is the passphrase? Reply with the passphrase only.</code> — it answers.</li>
-      <li>Click <strong>撤销一轮 / Undo one turn</strong> twice.</li>
+      <li>Click <strong>Undo one turn</strong> twice.</li>
       <li>Ask: <code>Without using any tools, and based only on our conversation: did I ever tell you a passphrase?</code></li>
     </ol>
     <p>
@@ -166,39 +194,39 @@
 
   <div id="transcript"></div>
   <div class="row">
-    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="Say something — e.g. Remember this passphrase: quokka-88 ／ 说一句话"></textarea>
+    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="Say something — e.g. Remember this passphrase: quokka-88"></textarea>
   </div>
   <div class="row">
-    <label for="imageFile">图片</label>
+    <label for="imageFile">image</label>
     <input type="file" id="imageFile" accept="image/*" disabled>
     <span id="imageStatus" class="sub" style="margin:0"></span>
   </div>
   <div class="row">
-    <button id="send" disabled>发送 <span class="en">Send</span></button>
-    <button id="cancel" disabled>取消</button>
+    <button id="send" disabled>Send <span class="en">发送</span></button>
+    <button id="cancel" disabled>Cancel <span class="en">取消</span></button>
   </div>
   <!-- 196：撤销/重做。一号钩子（「撤掉的那一轮在模型记忆里真的不存在」）
        在这三个按钮之前是演不了的——能力一直在 Session 里，只是没接出来。 -->
   <div class="row">
-    <button id="undo" disabled>撤销一轮 <span class="en">Undo one turn</span></button>
-    <button id="redo" disabled>重做 <span class="en">Redo</span></button>
+    <button id="undo" disabled>Undo one turn <span class="en">撤销一轮</span></button>
+    <button id="redo" disabled>Redo <span class="en">重做</span></button>
     <span id="undoStatus" class="sub" style="margin:0"></span>
   </div>
 </fieldset>
 
 <details>
-  <summary>已上传的图片（本会话，129）</summary>
-  <div id="imageList" class="tool">（没有打开的会话）</div>
+  <summary>Uploaded images <span class="en">（本会话，129）</span></summary>
+  <div id="imageList" class="tool">(no session open)</div>
 </details>
 
 <details>
   <legend></legend>
-  <summary>工具表（三条内建 + 本页声明的那一段；进 prompt 最前面，红线 11 的比对面）</summary>
-  <pre id="tools">（先建宿主）</pre>
+  <summary>Tool table <span class="en">（三条内建 + 本页声明的那一段；进 prompt 最前面，红线 11 的比对面）</span></summary>
+  <pre id="tools">(connect first)</pre>
 </details>
 
 <details open>
-  <summary>事件流</summary>
+  <summary>Event stream <span class="en">事件流</span></summary>
   <pre id="log"></pre>
 </details>
 
@@ -275,10 +303,10 @@ $('connect').addEventListener('click', () => {
     $('tools').textContent = host.toolTableJson();
     $('open').disabled = false;
     // 111 契约第 4 条：横幅只许显示 key 的**长度**，两个 key 都一样。
-    $('status').textContent = `宿主已建：provider=${$('provider').value} model=${$('model').value} key=${host.keyLen()} 字符，识图 key=${$('visionKey').value.length} 字符`;
+    $('status').textContent = `connected — provider=${$('provider').value} model=${$('model').value} key=${host.keyLen()} chars, vision key=${$('visionKey').value.length} chars`;
     window.__agentHost = host;
   } catch (e) {
-    $('status').textContent = `建宿主失败：${e.message ?? e}`;
+    $('status').textContent = `connect failed: ${e.message ?? e}`;
   }
 });
 
@@ -287,13 +315,13 @@ $('open').addEventListener('click', async () => {
   try {
     const replayed = await host.openSession($('sessionId').value.trim());
     renderHistory(JSON.parse(replayed));
-    $('status').textContent = `会话 ${host.sessionId()} 已打开，从 IndexedDB 重放出 ${JSON.parse(replayed).length} 条消息`;
+    $('status').textContent = `session ${host.sessionId()} open — replayed ${JSON.parse(replayed).length} message(s) from IndexedDB`;
     $('send').disabled = false;
     $('undo').disabled = false;
     $('redo').disabled = false;
     await imageManager.refresh(host.sessionId());
   } catch (e) {
-    $('status').textContent = `打开会话失败：${e.message ?? e}`;
+    $('status').textContent = `open session failed: ${e.message ?? e}`;
   } finally {
     $('open').disabled = false;
   }
@@ -308,10 +336,10 @@ $('send').addEventListener('click', async () => {
   $('cancel').disabled = false;
   try {
     const outcome = JSON.parse(await host.send(text));
-    $('status').textContent = `本轮结束：${outcome.status}` +
-      (outcome.cancelledTurn ? `（取消轮丢弃：${outcome.cancelledTurn}）` : '');
+    $('status').textContent = `turn done: ${outcome.status}` +
+      (outcome.cancelledTurn ? ` (cancelled turn discarded: ${outcome.cancelledTurn})` : '');
   } catch (e) {
-    $('status').textContent = `发送失败：${e.message ?? e}`;
+    $('status').textContent = `send failed: ${e.message ?? e}`;
   } finally {
     $('send').disabled = false;
     $('cancel').disabled = true;
@@ -329,17 +357,17 @@ function afterUndo(json) {
   const r = JSON.parse(json);
   renderHistory(JSON.parse(host.historyJson()));
   if (r.kind === 'Applied') {
-    $('undoStatus').textContent = `撤了 ${r.entries} 条（turn ${r.turnId}）`;
+    $('undoStatus').textContent = `undid ${r.entries} change(s) (turn ${r.turnId})`;
   } else if (r.kind === 'Nothing') {
-    $('undoStatus').textContent = '没有可撤的了（游标已在端点）';
+    $('undoStatus').textContent = 'nothing left to undo';
   } else if (r.kind === 'Blocked') {
     // 屏障：如实说被什么拦住的，再问要不要越过。**不默认越过**——越过意味着
     // 那次不可逆副作用不回滚，这是用户的决定。
     const what = r.barrier?.tool
       ? `${r.barrier.tool}${r.barrier.callId ? `（call ${r.barrier.callId}）` : ''}`
       : (r.barrier?.label ?? `seq ${r.barrierSeq}`);
-    $('undoStatus').textContent = `撞上不可逆屏障：${what}，已撤 ${r.entries} 条`;
-    if (confirm(`撤销撞上了不可逆操作：${what}\n\n越过它继续撤？那次操作的副作用不会被回滚。`)) {
+    $('undoStatus').textContent = `\u26d4 blocked by ${what} — that call is irreversible (undid ${r.entries} so far)`;
+    if (confirm(`Undo hit an irreversible call: ${what}\n\nCross it anyway? That call's side effect will NOT be rolled back.`)) {
       afterUndo(host.undoTurnForce());
     }
   }
@@ -347,16 +375,16 @@ function afterUndo(json) {
 
 $('undo').addEventListener('click', () => {
   try { afterUndo(host.undoTurn()); }
-  catch (e) { $('undoStatus').textContent = `撤销失败：${e.message ?? e}`; }
+  catch (e) { $('undoStatus').textContent = `undo failed: ${e.message ?? e}`; }
 });
 
 $('redo').addEventListener('click', () => {
   try { afterUndo(host.redoTurn()); }
-  catch (e) { $('undoStatus').textContent = `重做失败：${e.message ?? e}`; }
+  catch (e) { $('undoStatus').textContent = `redo failed: ${e.message ?? e}`; }
 });
 
 await init();
-$('status').textContent = 'wasm 已加载，填配置后点「建宿主」';
+$('status').textContent = 'wasm loaded — fill in the config above, then Connect';
 window.__agentReady = true;
 </script>
 
