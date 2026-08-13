@@ -114,6 +114,10 @@ cargo run -p agent-server-bin -- --sessions-dir ./sessions
 能端到端跑起来，但很年轻——首次提交是 2026-08-03。每个里程碑都以**真 provider**
 （不是 mock）的实跑收官，逐条记录在各 issue 里。
 
+**目前只有一个 crate 上了 crates.io**：[`einfach-store`](https://crates.io/crates/einfach-store)，
+即上面一切的地基——原子依赖图 + 命令日志，里面没有 agent、没有 provider、也没有 IO
+（红线 7 禁止它做任何 IO）。运行时那几个 crate 尚未发布，要用就直接依赖本仓。
+
 **没做的，并且在文档里都标了出来**：多副本部署、多租户、MCP 的 OAuth / resources /
 prompts。API 尚未稳定。
 

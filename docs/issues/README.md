@@ -874,7 +874,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [179](179-readme-rewrite.md) | README 重写（英文定稿） | 173+178 | **opus** | 20min | ✅ 完成 |
 | [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 → **`einfach-store`** | 165 | sonnet | 15min | ✅ 完成 |
 | [181](181-store-publish-prep.md) | 发布前置补全（→ `einfach-store`） | 180 | sonnet | 20min | ✅ 完成 |
-| [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | **你** | 10min | **流水线就绪（`release.yml`），等你填 secret + 打 tag** |
+| [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | 你 + 我 | 10min | ✅ 完成（`0.1.0` 已上 crates.io） |
 | [183](183-post-providers.md) | 文章：三家实测差异（**赌流量最高**） | 165 | **opus** | 20min | 初稿✅，数字已复查 |
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统（净减 1945 行） | 165 | **opus** | 20min | 初稿完成 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 初稿完成 |
@@ -892,13 +892,17 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [197](197-incremental-cache-bloat.md) | target 又胀回来了：清理脚本（首次释放 16G） | 187 | sonnet | 20min | ✅ 完成 |
 | [198](198-missing-cache-field-guard.md) | 缓存字段缺失不许被读成 0（静默失效看门狗） | 176 | sonnet | 20min | ✅ 完成 |
 
-**L 波现状（2026-08-13 收工）：34 条里我能独立做的全部做完，剩 4 条卡在用户动作上。**
+**L 波现状（2026-08-13 收工）：34 条里 32 条完成，剩 2 条卡在用户本人出面上。**
+
+182 原本也列在「等你」里，08-13 拆开做掉了：**发布不可逆 ≠ 每一步都得你亲手敲**。
+token 走 GitHub secret（`release.yml`），你按的那一下从 `cargo login` 变成推一个 tag，
+其余（流水线、门禁、干跑、验收、文档）我做。
 
 | | |
 |---|---|
-| ✅ 已完成 | **31 条**（含计划外的 195 CI 复活 / 196 wasm undo / 197 构建清理 / 198 看门狗） |
+| ✅ 已完成 | **32 条**（含计划外的 195 CI 复活 / 196 wasm undo / 197 构建清理 / 198 看门狗，以及 182 crates.io 首发） |
 | 📄 文章 | **五篇中英各一版**，全部落在 [`docs/posts/`](../posts/README.md)（**不在 scratchpad**——那儿会消失） |
-| ⏳ 等你 | **182** crates.io（填 `CARGO_REGISTRY_TOKEN` secret + 打 tag，流水线已就绪）／**191** 发帖／**194** 找用户 —— 三条都要你的账号或你本人出面，我不代做。**按顺序执行的单子在 [docs/posts/LAST-MILE.md](../posts/LAST-MILE.md)** |
+| ⏳ 等你 | **191** 发帖／**194** 找用户 —— 两条都要你本人出面（发布用你的身份、联系真人），我不代做。**按顺序执行的单子在 [docs/posts/LAST-MILE.md](../posts/LAST-MILE.md)**。182 已于 08-13 完成：你填 secret + 推 tag，其余走 `release.yml` |
 
 **193 我原本压着等首发反馈，用户说「全部执行完」，做了**——他的判断站得住：
 [192](192-embed-example-scope.md) 的场景是靠判据推出来的（「写死必须是结构上不可能的」），

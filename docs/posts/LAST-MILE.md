@@ -1,8 +1,14 @@
-# 最后一公里：只有你能做的四件事
+# 最后一公里：只有你能做的三件事
 
 L 波（对外推广，[issue 165–198](../issues/README.md#l--对外推广)）我这边能做的都做完了。
-剩下的四件都要你本人——**不是没做，是性质上要你按下去**：发布是外发动作、账号绑定你的身份、
+剩下的三件都要你本人——**不是没做，是性质上要你按下去**：发布是外发动作、账号绑定你的身份、
 联系真人要你出面。这份文件把散在三条 issue 里的东西按**执行顺序**合成一张单子。
+
+> **08-13 更新：原本的第 4 步（crates.io）已经完成，从四件变三件。**
+> 它教了一件事，对剩下三件也算数：「必须你本人」常常只覆盖**其中一下**，不是整件事。
+> 那一步真正不可代劳的是「token 绑定你的身份」，把 token 挪进 GitHub secret 之后，
+> 剩下的流水线、门禁、验收、文档都能交出来，你按的那一下缩到推一个 tag。
+> 下面三件里凡是写着「要你做」的，先问一句：**不可代劳的到底是哪一下。**
 
 每一步都标了「**为什么是这个顺序**」——顺序是这一波里少数几个不可逆的决定之一
 （Show HN 同一个项目发第二次，效果差很多）。
@@ -93,11 +99,18 @@ cd probes/api && PROBE_TOOL_CHOICE_ONLY=1 cargo run --bin wire_shape
 
 ---
 
-## 第 4 步 · crates.io（[182](../issues/182-store-publish.md)）
+## ~~第 4 步~~ · crates.io ✅ 已完成（[182](../issues/182-store-publish.md)）
 
-**可以晚于首发，但别太晚**——首发之后有人想试，`cargo add` 拿不到会流失。
+**2026-08-13 发布：`einfach-store 0.1.0` 已在 crates.io 上。** 这一步提前做掉了——
+它本来排在首发之后，但它不依赖首发反响，而首发之后有人想试却 `cargo add` 拿不到会流失。
 
-**这一步已经改成走 CI**（`.github/workflows/release.yml`，08-13）。原因有两条：
+下面留着是因为**升版本时照走一遍**：改 `Cargo.toml` 的 version → 打新 tag → 推。
+
+第一次真发布失败在「账号没验证邮箱」（400，token 是好的），验证后 `gh run rerun --failed`
+即通过，不用删 tag 也不用换版本号——干跑验得了打包和编译，验不了账号状态，它压根不发
+请求。细节在 [182](../issues/182-store-publish.md) 的实做记录。
+
+**走 CI 而不是本地 `cargo publish`**（`.github/workflows/release.yml`）。原因有两条：
 本机 `cargo login` 会把 token 长期写进 `~/.cargo/credentials.toml`；而且这台机器的
 cargo 配了 rsproxy 镜像，本地 `cargo publish` 会直接报错退出。走 CI 之后 token 只是
 一个 GitHub secret，你按下去的那一下从「敲命令」变成「打 tag」——一样是本人的显式

@@ -13,6 +13,8 @@ Network and check.
 ![Undo removing a turn from the model's memory](docs/assets/undo-demo.gif)
 
 [![CI](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/einfach-store.svg?label=einfach-store)](https://crates.io/crates/einfach-store)
+[![docs.rs](https://img.shields.io/docsrs/einfach-store?label=docs.rs)](https://docs.rs/einfach-store)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
 > English is the primary project language. [简体中文](README.zh-CN.md)
@@ -163,6 +165,11 @@ The state engine originated as a fork of the Rust atomic engine in
 Usable and exercised end to end, but young — the first commit landed 2026-08-03. Each
 milestone closed with a live-provider run rather than mocks, and those runs are recorded
 issue by issue.
+
+**One crate is on crates.io so far**: [`einfach-store`](https://crates.io/crates/einfach-store),
+the state engine underneath everything above — the atomic dependency graph plus the command
+log, with no agent, provider, or IO code in it (it is forbidden from doing IO at all). The
+runtime crates are not published yet; to use those, depend on this repository directly.
 
 Not built, and marked as such wherever it comes up: multi-replica deployment,
 multi-tenancy, and MCP's OAuth / resources / prompts. The API is not stable yet.
