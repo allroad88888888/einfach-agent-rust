@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>agent-wasm 浏览器宿主（issue 114c）</title>
+<title>einfach-agent — an agent runtime running entirely in your browser</title>
+<!-- 内联 SVG favicon：169 查出控制台唯一的 error 就是 favicon.ico 404。
+     用 data URI 而不是外链文件——这个页面的卖点之一是「除了 provider 不连任何东西」，
+     多一个外部请求就多一个能打脸的地方。↺ = undo，这个 demo 的一号钩子。 -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%E2%86%BA%3C/text%3E%3C/svg%3E">
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -27,22 +31,49 @@
   pre { overflow: auto; max-height: 20rem; background: rgba(128,128,128,.08); padding: .6rem; border-radius: .35rem; font-size: .8rem; }
   .warn { border-left: 3px solid #d08700; padding-left: .6rem; }
   #status { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; opacity: .8; }
+  /* 171：首屏。给陌生人看的三十秒。 */
+  .hero { border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+  .hero h2 { font-size: 1rem; margin: 1.1rem 0 .4rem; }
+  .hero h2:first-of-type { margin-top: .6rem; }
+  .hero ol, .hero ul { margin: .4rem 0; padding-left: 1.3rem; }
+  .hero li { margin: .25rem 0; }
+  .hero code { background: rgba(128,128,128,.12); padding: .1rem .3rem; border-radius: .25rem; }
+  .zh { opacity: .7; font-size: .92em; }
+  .en { opacity: .6; font-size: .85em; font-weight: 400; }
+  /* 很多人是从社交媒体在手机上点开的。窄屏下标签占一整行，别把输入框挤成一条缝。 */
+  @media (max-width: 34rem) {
+    label { min-width: 100%; }
+    input[type=text], input[type=password] { flex: 1 1 100%; }
+  }
 </style>
 </head>
 <body>
 
-<h1>agent-wasm 浏览器宿主</h1>
+<h1>einfach-agent <span class="en">— live demo</span></h1>
 <p class="sub">
-  issue 114c 的真机验收页。整个 agent 核心（事件泵、转移表、provider adapter、
-  IndexedDB 持久化）编成 wasm 跑在这个页面里，<strong>没有任何服务端进程</strong>——
-  这个页面本身由一个静态文件服务器托管，它只发送 <code>.html</code>/<code>.js</code>/<code>.wasm</code>
-  三种字节，不参与任何一次模型请求。请求由浏览器直接 <code>fetch</code> 到 provider。
+  There is no server. This page <strong>is</strong> the agent runtime, compiled to wasm.
+  <a href="https://github.com/allroad88888888/einfach-agent-rust">Source on GitHub →</a>
 </p>
 
-<p class="warn">
-  <strong>key 只来自你自己。</strong>这个页面不内置任何 key，也不把你填的 key 存进
-  localStorage / cookie / 任何地方——它只活在这个标签页的内存里，刷新即失。
-</p>
+<div class="hero">
+  <p style="margin:0 0 .5rem">
+    <strong>Your key never leaves this tab.</strong> Nothing is bundled in and nothing is stored —
+    not in <code>localStorage</code>, not in a cookie, not anywhere. This isn't a promise, it's an
+    architectural fact: <strong>there is no backend to leak it to.</strong> Open DevTools → Network
+    and check — the only requests you'll see are to your provider.
+  </p>
+  <p style="margin:0">
+    Bring a key from <a href="https://platform.deepseek.com/">DeepSeek</a>,
+    <a href="https://platform.moonshot.cn/">Kimi</a> or
+    <a href="https://open.bigmodel.cn/">GLM</a>, paste it below, open a session —
+    then <a href="#tryit">try the 4-step demo</a>.
+  </p>
+</div>
+
+<p class="warn zh">
+  <strong>中文：</strong>本页是 issue 114c 的真机验收页，也是对外 demo。整个 agent 核心编成 wasm
+  跑在这里，<strong>没有任何服务端进程</strong>；<strong>key 只来自你自己</strong>，不内置、不落盘，
+  刷新即失。
 
 <fieldset>
   <legend>1 · provider 配置（宿主注入，114d）</legend>
@@ -66,8 +97,8 @@
   </div>
   <div class="row">
     <label for="apiKey">api_key</label>
-    <input type="password" id="apiKey" placeholder="粘你自己的 key" autocomplete="off">
-    <button id="connect">建宿主</button>
+    <input type="password" id="apiKey" placeholder="paste your own key / 粘你自己的 key" autocomplete="off">
+    <button id="connect">建宿主 <span class="en">Connect</span></button>
   </div>
   <div class="row">
     <label for="visionBaseUrl">识图 base_url</label>
@@ -91,18 +122,47 @@
 <fieldset>
   <legend>2 · 会话（IndexedDB，114a）</legend>
   <div class="row">
-    <label for="sessionId">会话 id</label>
+    <label for="sessionId">会话 id <span class="en">session</span></label>
     <input type="text" id="sessionId" value="demo-1">
-    <button id="open" disabled>打开 / 切换会话</button>
+    <button id="open" disabled>打开 / 切换会话 <span class="en">Open session</span></button>
   </div>
   <div class="row"><span id="status">未连接</span></div>
 </fieldset>
 
 <fieldset>
-  <legend>3 · 对话</legend>
+  <legend>3 · 对话 <span class="en">Chat</span></legend>
+
+  <!-- 171：把「怎么玩」放在真正用得着它的地方——对话框正上方，不是首屏顶部。
+       顶上那一屏要留给「这是什么 / 我的 key 安不安全 / 我该点哪里」。 -->
+  <details class="hero" id="tryit" open>
+    <summary><strong>Try this — undo that actually removes the turn</strong></summary>
+    <p>
+      Every chat UI has an undo button that deletes a bubble. The model still remembers.
+      Here the whole agent state is one atomic graph with a command log, so undo, redo,
+      crash recovery and audit replay are the same mechanism — not four features.
+    </p>
+    <ol>
+      <li>Say: <code>Remember this passphrase: quokka-88. Just reply OK.</code></li>
+      <li>Ask: <code>What is the passphrase? Reply with the passphrase only.</code> — it answers.</li>
+      <li>Click <strong>撤销一轮 / Undo one turn</strong> twice.</li>
+      <li>Ask: <code>Without using any tools, and based only on our conversation: did I ever tell you a passphrase?</code></li>
+    </ol>
+    <p>
+      It says no. The turn is genuinely absent from the memory the prompt is rebuilt from —
+      and it stays gone after a refresh, because the undo went to IndexedDB too.
+    </p>
+    <p style="margin-bottom:0">
+      Two more things worth poking at: <strong>reversibility barriers</strong> — upload an image,
+      ask the agent to describe it (that calls an irreversible tool), then hit undo: it stops and
+      tells you <em>which</em> tool blocked it instead of silently rolling back work that cost money.
+      And <strong>the page teaches the agent its own tools</strong> — the <code>web:</code> tools
+      listed below are declared and executed by this page; the Rust core knows nothing about them.
+    </p>
+  </details>
+
   <div id="transcript"></div>
   <div class="row">
-    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="说一句话，比如：这个页面的标题是什么？"></textarea>
+    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="Say something — e.g. Remember this passphrase: quokka-88 ／ 说一句话"></textarea>
   </div>
   <div class="row">
     <label for="imageFile">图片</label>
@@ -110,14 +170,14 @@
     <span id="imageStatus" class="sub" style="margin:0"></span>
   </div>
   <div class="row">
-    <button id="send" disabled>发送</button>
+    <button id="send" disabled>发送 <span class="en">Send</span></button>
     <button id="cancel" disabled>取消</button>
   </div>
   <!-- 196：撤销/重做。一号钩子（「撤掉的那一轮在模型记忆里真的不存在」）
        在这三个按钮之前是演不了的——能力一直在 Session 里，只是没接出来。 -->
   <div class="row">
-    <button id="undo" disabled>撤销一轮</button>
-    <button id="redo" disabled>重做</button>
+    <button id="undo" disabled>撤销一轮 <span class="en">Undo one turn</span></button>
+    <button id="redo" disabled>重做 <span class="en">Redo</span></button>
     <span id="undoStatus" class="sub" style="margin:0"></span>
   </div>
 </fieldset>
