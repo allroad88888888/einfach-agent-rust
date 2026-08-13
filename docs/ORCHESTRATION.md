@@ -65,6 +65,15 @@ pump 的静止条件是 `calls.is_empty()`（043 后加上 `&& mcp_calls.is_empt
 **漂亮之处：前台 spawn ≡ spawn(bg) + 紧跟 collect 融进一个槽。** 后台把这俩拆开，中间塞进
 observe/react。决策 20 是这个模型的一个特例，不是被推翻。
 
+> **那两道闸的数字从哪来**（决策 32，M18）：`AgentLimits { max_depth, max_children }`
+> 默认 3/8，但**是部署方可配的参数**，不是硬编码——`agent-server`/`agent-cli` 的
+> `--max-agent-depth` / `--max-children`（`AGENT_MAX_*` 兜底）。写进工具描述给模型看的
+> 那份和 `Session::spawn_child` 真正拦人的那份**必须是同一组数**：新建会话由
+> `ToolTableSpec::spawn_limits()` 对齐，恢复由 `recover` 的 `limits` 入参对齐
+> （[issues/160](issues/160-recover-limits-param.md)——它不进原子图也不进日志，
+> 恢复不出来，只能由宿主再说一遍）。所以本文提到「上限」时指的都是这组**参数的当前值**，
+> 不是 3 和 8 这两个字面量。
+
 ## 四、映射到现有机械（Explore 勘查，file:line 为证）
 
 1. **bg spawn**（改 `spawn_tool.rs` schema + `dispatch.rs::spawn`）：`background=true` 时，除

@@ -761,18 +761,18 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [160](160-recover-limits-param.md) | `recover` 补 `limits` 入参，堵恢复失配 | — | sonnet | ✅ | ✅ 完成 |
 | [161](161-server-bin-limits-flags.md) | `agent-server` 两个 flag + env 兜底 | 159 | sonnet | ✅ | ✅ 完成 |
 | [162](162-cli-limits-flags.md) | `agent-cli` 两个 flag | 159 | sonnet | ✅ | ✅ 完成 |
-| [163](163-m18-dogfood.md) | 真机收官 + 文档清账 ← **M18 终点** | 160+161 | 主会话前台 | 本条即验收 | 待跑（要真 key） |
+| [163](163-m18-dogfood.md) | 真机收官 + 文档清账 ← **M18 终点** | 160+161 | 主会话前台 | 本条即验收 | ✅ 完成 |
 
 **排期注意**：159 与 160 无依赖可并行开工（160 不管决策怎么拍都要做）。
 **161/162 等 159 拍板**——159 若选了 B（per-session 进协议）或 C（进 store），
 这两条整个作废换形状。**wasm 与桌面不在范围内**：`agent-wasm` 里 `with_spawn`
 零命中（那个形态没开子 agent 能力），桌面是内嵌库走装配默认。
 
-**159–162 已完成**（2026-08-12）：决策 32 拍板 A + 取严；恢复失配堵上（6 条测试，
-含负向验证）；两个宿主的 flag 都通了（15 条测试 + 不花钱的启动 smoke）。
-`cargo test --workspace` **2040 passed / 0 failed**，红线告警比开工前**净减一条**
-（`restore.rs` 拆分后退出清单）。**只剩 163 的真机那一趟**——它要真 provider key，
-按 WORKFLOW §四第 -2 条单飞。
+**M18 全部完成**（159–162 于 2026-08-12，163 于 08-13）：决策 32 拍板 A + 取严；
+恢复失配堵上（6 条测试含负向验证）；两个宿主的 flag 都通了（15 条测试）。
+真机 dogfood 七条全过——最硬的一条是 **`kill -9` 恢复后三次 spawn 仍被「最多 2 个」拒**
+（160 之前必红），以及**不给 flag 时请求体与 `bb43c83` sha256 逐字节相同**。
+合并进 main 后 `cargo test --workspace` **2091 passed / 0 failed**。
 
 ---
 

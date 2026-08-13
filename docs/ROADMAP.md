@@ -61,6 +61,27 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M18 子 agent 上限的配置面（2026-08-13，真机 dogfood 七条全过）
+
+决策 32 落地：决策 20 的两道闸从「代码可配、运行时无入口」变成**进程级启动参数**
+——`agent-server`/`agent-cli` 各加 `--max-agent-depth`/`--max-children`
+（`AGENT_MAX_*` 兜底，命令行优先），协议面零改动
+（[161](issues/161-server-bin-limits-flags.md)/[162](issues/162-cli-limits-flags.md)）。
+取值非法**拒绝启动**而非静默退默认档（跟 `AGENT_BIND` 一类，不跟 `--port`），下限钉 1
+——要关掉子 agent 走 076 的 `disable_builtin`。
+
+**顺带堵掉一处静默失配**（[160](issues/160-recover-limits-param.md)）：`Session::restore`
+恢复时硬写 `AgentLimits::default()` 且 `agent_runtime::recover` 没有 `limits` 入参，
+「宿主载入后重调」这条路名存实亡；`actor/body.rs` 那句「恢复出来的会话带着它自己
+持久化过的配置」对 `limits` 和 `history_cap` **都**不成立（两者都不持久化）。配置值
+恒等于默认值时这个洞不显形——上限一可配，第一次重启就显形。
+
+真机（[163](issues/163-m18-dogfood.md)，DeepSeek v4-flash）七条：`--max-children 2`
+的数字进模型描述、部分覆盖不连坐、不给 flag 时请求体与 `bb43c83` **sha256 逐字节相同**
+（8131 字节，旧二进制 `strings` 验真）、模型撞闸后**重试 3 次再自纠**、**`kill -9`
+恢复后三次 spawn 仍全被「最多 2 个」拒**（160 之前必红）、恢复后描述也仍是 2、
+CLI 侧新建与恢复两条路同款。恢复那一跳缓存 96.4%，`drift=Clean`。
+
 ### 已完成：M17 宿主声明开局块（2026-08-12，真机 dogfood 六条全过，157 后置）
 
 决策 31 落地：`capabilities.prefix` 声明**内容**不声明执行体，装配期合成常量文本
