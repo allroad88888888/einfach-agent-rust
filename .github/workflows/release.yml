@@ -1,0 +1,110 @@
+# 发布 `einfach-store` 到 crates.io（issue 182）。
+#
+# **为什么走 CI 而不是本地 `cargo publish`**：本地那条要 `cargo login` 把 token
+# 写进 `~/.cargo/credentials.toml`，token 就在开发机上长期躺着；走这里，token 只作为
+# GitHub secret 存在，注入到一次运行的进程环境里，跑完就没了。顺带解决本机
+# `.cargo/config.toml` 把 crates-io 换成 rsproxy 镜像的问题——CI 环境没有这层替换，
+# 所以这里**不加** `--registry crates-io`（加了的话 cargo 会去找
+# `CARGO_REGISTRIES_CRATES_IO_TOKEN` 而不是下面设的 `CARGO_REGISTRY_TOKEN`）。
+#
+# **发布不可逆**：版本只能 yank 不能删，crate 名一旦占用不能转让。所以这个文件里
+# 每一道闸都是冲着「别把错的东西发出去」来的，不是冲着快来的。
+#
+# 与 ci.yml / pages.yml 是三个文件，别合并：门禁、部署、发布的触发条件与权限都不同。
+name: Release (crates.io)
+
+on:
+  # 真发布走打 tag：tag 是这次发布的持久记录，而点按钮不留痕。
+  # 前缀带 crate 名——将来若有第二个包要发，`v*` 这种裸 tag 会撞。
+  push:
+    tags: ["einfach-store-v*"]
+  # 手动跑默认是干跑，用来验这条流水线本身通不通，不用先赌一个 tag。
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "干跑（不真的上传）"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# 同时跑两次 = 两次上传竞争。发布不可逆，宁可排队。
+concurrency:
+  group: release-crates-io
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: einfach-store → crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # tag 能指向任何一个 commit，包括 main 的 CI 从没见过的那种。发布不可逆，
+      # 所以这里重跑门禁，不假设「它已经绿过了」。少的那条是 --features ts 的协议
+      # 一致性测试：那护的是 TS 侧的生成产物，跟这个包发出去的字节无关。
+      - name: 红线检查
+        run: bash scripts/check-invariants.sh --all
+      - name: clippy（-D warnings）
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test（workspace）
+        run: cargo test --workspace
+
+      # tag 写错版本号是这类流水线最经典的翻车：tag 是 v0.2.0、Cargo.toml 还是
+      # 0.1.0，于是发出去一个跟 tag 对不上的版本，而它删不掉。所以先对齐再谈发布。
+      - name: tag 与 Cargo.toml 版本必须一致
+        run: |
+          set -euo pipefail
+          manifest="$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "einfach-store") | .version')"
+          echo "Cargo.toml 版本：$manifest"
+          if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
+            echo "手动运行，跳过 tag 比对"
+            exit 0
+          fi
+          tagged="${GITHUB_REF_NAME#einfach-store-v}"
+          echo "tag 版本：$tagged"
+          if [ "$manifest" != "$tagged" ]; then
+            echo "::error::tag ($tagged) 与 Cargo.toml ($manifest) 版本不一致，拒绝发布"
+            exit 1
+          fi
+
+      # 干跑总是先跑一遍：它做真发布的全部前置——打包、进 target/package 重新编译
+      # 校验——只是最后不上传。真发布那步失败在这之后就基本只剩网络与鉴权。
+      - name: cargo publish --dry-run
+        run: cargo publish -p einfach-store --dry-run
+
+      # 打进包里的东西核对一次。crates.io 上传后删不掉，夹带的文件也删不掉。
+      - name: 打包清单（人工可核对）
+        run: cargo package -p einfach-store --list
+
+      - name: cargo publish
+        if: github.event_name == 'push' || inputs.dry_run == false
+        env:
+          # 这个 secret 由仓库所有者在 Settings → Secrets and variables → Actions
+          # 里填，值是 crates.io 上生成的 API token。它只在这一步的进程环境里存在。
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::缺少 secret CARGO_REGISTRY_TOKEN，见本文件注释"
+            exit 1
+          fi
+          cargo publish -p einfach-store
+
+      # docs.rs 的构建是异步的，而且环境跟本地 `cargo doc` 不一样——它是首发最常见
+      # 的翻车点，所以这里不假装验过，只把要点的地方打出来。
+      - name: 发布后要人工核对的三件
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          echo "1. https://crates.io/crates/einfach-store —— README 渲染 + license 显示 MIT OR Apache-2.0"
+          echo "2. https://docs.rs/einfach-store —— 构建成功且能打开（异步，等几分钟）"
+          echo "3. 空项目里 cargo add einfach-store 可用"

@@ -97,18 +97,26 @@ cd probes/api && PROBE_TOOL_CHOICE_ONLY=1 cargo run --bin wire_shape
 
 **可以晚于首发，但别太晚**——首发之后有人想试，`cargo add` 拿不到会流失。
 
-```bash
-# 1. 注册 crates.io（GitHub 登录）后
-cargo login
+**这一步已经改成走 CI**（`.github/workflows/release.yml`，08-13）。原因有两条：
+本机 `cargo login` 会把 token 长期写进 `~/.cargo/credentials.toml`；而且这台机器的
+cargo 配了 rsproxy 镜像，本地 `cargo publish` 会直接报错退出。走 CI 之后 token 只是
+一个 GitHub secret，你按下去的那一下从「敲命令」变成「打 tag」——一样是本人的显式
+动作，而且留痕。
 
-# 2. 先干跑，确认无误
-cargo publish -p einfach-store --dry-run
-
-# 3. 真发
-cargo publish -p einfach-store
+```
+1. crates.io 生成 API token（scope: publish-new + publish-update）
+2. 仓库 Settings → Secrets and variables → Actions → New repository secret
+   名字 CARGO_REGISTRY_TOKEN，值粘贴 token
+3. Actions → Release (crates.io) → Run workflow，dry_run 保持勾选，先跑通一遍
+4. 真发：
+   git tag einfach-store-v0.1.0 && git push origin einfach-store-v0.1.0
 ```
 
-版本号建议 **`0.1.0`** 而不是 `0.0.1`：`0.0.x` 传达「随时会崩」，
+流水线里三道闸都是冲着「别把错的东西发出去」来的：重跑红线 + clippy + workspace
+测试（tag 可以指向 main 的 CI 从没见过的 commit）、**tag 版本与 `Cargo.toml` 必须
+一致**、真上传前必先干跑一遍。
+
+版本号定 **`0.1.0`** 而不是 `0.0.1`：`0.0.x` 传达「随时会崩」，
 而这个 crate 的核心 fork 自已在生产使用的上游引擎、且本仓测试覆盖完整。
 但 README 里要诚实写明 API 尚未稳定（已经写了）。
 
@@ -117,6 +125,8 @@ cargo publish -p einfach-store
 发完核对四件：README 渲染正常、license 显示 `MIT OR Apache-2.0`、
 `cargo add einfach-store` 在空项目里可用、**docs.rs 构建成功**——
 最后这条是首发最常见的翻车点，docs.rs 的环境跟本地 `cargo doc` 不一样。
+本机预检已跑过（打包 66 文件无夹带、`cargo doc` 0 error），记录在
+[issue 182](../issues/182-store-publish.md)。
 
 ---
 

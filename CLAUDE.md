@@ -64,10 +64,12 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 **M1–M18 全部完成**（2026-08-01 ~ 08-13，无尾巴）；**L 波（对外推广）2026-08-13
 推进到「只剩用户动作」**——见 [docs/issues/README.md](docs/issues/README.md) §L。
-L 波带出四条进主线的改动：`openai` 通用兼容 adapter（决策 33，ROADMAP §一/§二）、
+L 波带出五条进主线的改动：`openai` 通用兼容 adapter（决策 33，ROADMAP §一/§二）、
 CI 门禁复活（`.github/workflows/ci.yml`，三个 job）、Pages 部署
 （`pages.yml` → https://allroad88888888.github.io/einfach-agent-rust/ ，
-**浏览器 demo 现已公开可点**）、以及 `scripts/clean-build-cache.sh` +
+**浏览器 demo 现已公开可点**）、crates.io 发布流水线（`release.yml`，打
+`einfach-store-v*` tag 触发，token 走 GitHub secret 不落本机；issue 182）、
+以及 `scripts/clean-build-cache.sh` +
 `scripts/check-build-cache.sh`（构建缓存 35G→9G，见 §Workspace）。
 
 M18 子 agent 上限

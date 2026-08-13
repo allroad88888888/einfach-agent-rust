@@ -874,7 +874,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [179](179-readme-rewrite.md) | README 重写（英文定稿） | 173+178 | **opus** | 20min | ✅ 完成 |
 | [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 → **`einfach-store`** | 165 | sonnet | 15min | ✅ 完成 |
 | [181](181-store-publish-prep.md) | 发布前置补全（→ `einfach-store`） | 180 | sonnet | 20min | ✅ 完成 |
-| [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | **你** | 15min | **就绪，等你 cargo login** |
+| [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | **你** | 10min | **流水线就绪（`release.yml`），等你填 secret + 打 tag** |
 | [183](183-post-providers.md) | 文章：三家实测差异（**赌流量最高**） | 165 | **opus** | 20min | 初稿✅，数字已复查 |
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统（净减 1945 行） | 165 | **opus** | 20min | 初稿完成 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 初稿完成 |
@@ -898,7 +898,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 |---|---|
 | ✅ 已完成 | **31 条**（含计划外的 195 CI 复活 / 196 wasm undo / 197 构建清理 / 198 看门狗） |
 | 📄 文章 | **五篇中英各一版**，全部落在 [`docs/posts/`](../posts/README.md)（**不在 scratchpad**——那儿会消失） |
-| ⏳ 等你 | **182** crates.io（建号 + `cargo login`）／**191** 发帖／**194** 找用户 —— 三条都要你的账号或你本人出面，我不代做。**按顺序执行的单子在 [docs/posts/LAST-MILE.md](../posts/LAST-MILE.md)** |
+| ⏳ 等你 | **182** crates.io（填 `CARGO_REGISTRY_TOKEN` secret + 打 tag，流水线已就绪）／**191** 发帖／**194** 找用户 —— 三条都要你的账号或你本人出面，我不代做。**按顺序执行的单子在 [docs/posts/LAST-MILE.md](../posts/LAST-MILE.md)** |
 
 **193 我原本压着等首发反馈，用户说「全部执行完」，做了**——他的判断站得住：
 [192](192-embed-example-scope.md) 的场景是靠判据推出来的（「写死必须是结构上不可能的」），
