@@ -60,10 +60,10 @@ export function mountTranscript({ transcript, logPre }) {
         scrollToBottom();
         break;
       case "tool_executing":
-        note(`→ 调用宿主工具 ${ev.tool}  input=${JSON.stringify(ev.input)}`);
+        note(`→ calling host tool ${ev.tool}  input=${JSON.stringify(ev.input)}`);
         break;
       case "tool_executed":
-        note(`← ${ev.tool} 返回 ${ev.output_len} 字节${ev.is_error ? "（错误）" : ""}`);
+        note(`← ${ev.tool} returned ${ev.output_len} bytes${ev.is_error ? " (error)" : ""}`);
         break;
       case "turn_guard":
         log(`[usage] prompt=${ev.prompt_tokens} completion=${ev.completion_tokens} cached=${ev.cached_tokens}`);

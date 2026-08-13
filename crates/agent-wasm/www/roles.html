@@ -149,7 +149,7 @@ let host = null;
 
 const onToolCall = createRolesToolCallback({
   log,
-  onRefund: (id) => log(`[page] ${id} 的钱已经打出去了。ledger 撤得掉这一轮对话，撤不掉这笔钱。`),
+  onRefund: (id) => log(`[page] ${id}: the money already left. The ledger can undo this turn — it cannot undo the payment.`),
 });
 
 $('role').addEventListener('change', () => {
@@ -217,7 +217,7 @@ function afterUndo(json) {
   } else if (r.kind === 'Blocked') {
     const what = r.barrier?.tool ?? r.barrier?.label ?? `seq ${r.barrierSeq}`;
     $('undoStatus').textContent = `⛔ blocked by ${what} — that call is irreversible`;
-    log(`[undo] blocked by ${what}. 强行越过要显式确认：钱不会因为 undo 回来。`);
+    log(`[undo] blocked by ${what}. Crossing it needs an explicit confirmation: undo will not bring the money back.`);
     if (confirm(
       `Undo hit an irreversible call: ${what}\n\n` +
       `Cross it anyway? The refund already happened — undoing the conversation ` +

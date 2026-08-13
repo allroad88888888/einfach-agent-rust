@@ -69,6 +69,12 @@ refund tool declared `irreversible`. Ask the viewer to refund something and it a
 "I only have a read-only order search tool." One deployment, one agent, capability surface
 per caller — there is no fixed tool list in a Rust core that expresses that.
 
+![Two roles, two tool tables, and an undo that stops at the irreversible call](docs/assets/roles-demo.gif)
+
+The last frame is the barrier from the previous section, seen from the other side: the
+refund already left the page's memory, so undo names the tool that blocked it instead of
+rolling back a payment the ledger cannot reach.
+
 A host declares session-scoped tools and skills when it creates a conversation, so the same
 runtime works inside a finance app, an admin console, or a desktop shell without any of
 those integrations reaching the core. `web:` tools execute in the browser, `desk:` in the

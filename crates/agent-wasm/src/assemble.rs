@@ -30,7 +30,15 @@ use crate::db;
 
 /// 常驻 system 前缀。**固定字面量**：红线 11 禁止把时间戳、请求 id、随机 id
 /// 写进 system prompt——那会让每一轮都是全新前缀、每一轮都全价。
-const BASE_SYSTEM: &str = "你是一个简洁、诚实的助手，跑在用户的浏览器里。需要页面本身的信息（标题、地址）时调对应的工具，不要猜。";
+///
+/// **写成英文是有原因的**（2026-08-13 改）：这一份 wasm 宿主同时是对外 demo，
+/// 而 demo 的受众是英文社区（决策 165 L1）。原来是中文，于是**英文提问会得到
+/// 中文回答**——录 GIF 时才发现。页面全英文而 agent 说中文，比任何一处标签
+/// 没译都更伤，因为它看起来不像「没顾上」，像「这东西不是给你用的」。
+///
+/// 最后一句是有意加的：模型答什么语言由用户那句话决定，而不是由这份提示词
+/// 的语言决定——这样中文用户提中文问题，仍然得到中文回答。
+const BASE_SYSTEM: &str = "You are a concise, honest assistant running inside the user's browser. When you need information about the page itself (title, address), call the matching tool instead of guessing. Reply in the language the user writes in.";
 
 /// 人工参与的页面工具（提问、上传、确认）可以等到 10 分钟；取消仍走既有即时
 /// 信号，不因这条预算变慢。直接使用 runtime 默认值，避免两个宿主的约定漂移。

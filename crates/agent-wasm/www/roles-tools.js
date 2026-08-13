@@ -16,16 +16,16 @@
 /** 两个角色都有的只读工具。**两份声明里逐字一样**——不是复制粘贴出来的两份，
  * 是同一个常量拼进去的，避免哪天改一处忘另一处。 */
 const SEARCH_TOOL = `{"name":"web:orders/search",
-   "description":"按订单号或客户名查订单，返回订单号、客户、金额、状态。只读。",
-   "schema":{"type":"object","properties":{"query":{"type":"string","description":"订单号或客户名"}},"required":["query"],"additionalProperties":false},
+   "description":"Look up orders by order id or customer name. Returns id, customer, amount, status. Read-only.",
+   "schema":{"type":"object","properties":{"query":{"type":"string","description":"order id or customer name"}},"required":["query"],"additionalProperties":false},
    "reversibility":"pure"}`;
 
 /** 只有 operator 有。**`irreversible` 是这条例子的第二个看点**：退款是花钱的动作，
  * undo 撞上它必须停下来问，而不是悄悄回滚一个「已经打出去的钱」。
  * 判据同 `vision_inspect.rs:66-68`（调第三方 API 计费，undo 不该重放）。 */
 const REFUND_TOOL = `{"name":"web:orders/refund",
-   "description":"给一笔订单退款。这个操作会真的打钱，不可撤销。order：订单号，必填。",
-   "schema":{"type":"object","properties":{"order":{"type":"string","description":"订单号"}},"required":["order"],"additionalProperties":false},
+   "description":"Refund an order. This actually moves money and cannot be undone. order: the order id, required.",
+   "schema":{"type":"object","properties":{"order":{"type":"string","description":"order id"}},"required":["order"],"additionalProperties":false},
    "reversibility":"irreversible"}`;
 
 /** viewer：只读。 */
@@ -45,9 +45,9 @@ export function toolsForRole(role) {
 
 /** 假订单库。故意小且固定——例子要可复现，不要随机数据。 */
 const ORDERS = [
-  { id: "A-1001", customer: "Acme Corp", amount: "¥ 1,280.00", status: "已付款" },
-  { id: "A-1002", customer: "Acme Corp", amount: "¥ 340.00", status: "已发货" },
-  { id: "B-2071", customer: "Wombat Ltd", amount: "¥ 9,900.00", status: "已付款" },
+  { id: "A-1001", customer: "Acme Corp", amount: "$1,280.00", status: "paid" },
+  { id: "A-1002", customer: "Acme Corp", amount: "$340.00", status: "shipped" },
+  { id: "B-2071", customer: "Wombat Ltd", amount: "$9,900.00", status: "paid" },
 ];
 
 /** 已退款的订单号。**只活在页面内存里**——它是「执行现场」，不是 agent 状态。
@@ -75,11 +75,11 @@ export function createRolesToolCallback({ log, onRefund }) {
         ? hits
             .map(
               (o) =>
-                `${o.id} | ${o.customer} | ${o.amount} | ${refunded.has(o.id) ? "已退款" : o.status}`,
+                `${o.id} | ${o.customer} | ${o.amount} | ${refunded.has(o.id) ? "refunded" : o.status}`,
             )
             .join("\n")
-        : "没有匹配的订单。";
-      log(`← ${name} 命中 ${hits.length} 条`);
+        : "No matching orders.";
+      log(`← ${name} → ${hits.length} match(es)`);
       return body;
     }
 
@@ -88,15 +88,15 @@ export function createRolesToolCallback({ log, onRefund }) {
       const known = ORDERS.some((o) => o.id === id);
       if (!known) {
         // 抛出 = 模型收到 is_error，自己纠正。不崩页面（121 的反向锁同款语义）。
-        throw new Error(`没有这笔订单：${id}`);
+        throw new Error(`No such order: ${id}`);
       }
       refunded.add(id);
       onRefund?.(id);
-      log(`← ${name} 已退款 ${id}（页面内存，undo 撤不回来——这正是屏障存在的理由）`);
-      return `订单 ${id} 已退款。`;
+      log(`← ${name} refunded ${id} — the money is gone; undo cannot bring it back. That is why the barrier exists.`);
+      return `Order ${id} has been refunded.`;
     }
 
     // viewer 角色下模型根本看不到 refund，走不到这里；真走到了说明工具表漏了。
-    throw new Error(`这个角色没有这条工具：${name}`);
+    throw new Error(`This role does not have that tool: ${name}`);
   };
 }
