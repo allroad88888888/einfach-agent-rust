@@ -305,7 +305,7 @@ Used consistently across the English translations of these documents.
 | 派生 / derived | derived atom | computed from other atoms by a pure read fn |
 | primitive atom | primitive atom | stored, not computed; must be serializable |
 | 命令层 | command layer | the only legal write path; produces undo-log entries |
-| 日志 / journal | journal | the command log; recovery replays it |
+| 日志 / journal | command log (as a verb: *journaled*) | the on-disk record of every command; recovery replays it. Note 日志 also means ordinary logging in [ARCHITECTURE.en.md](ARCHITECTURE.en.md) §deployment — that sense is *logs*, not this one |
 | 快照 | snapshot | serialized primitive atoms |
 | 可逆性屏障 | reversibility barrier | stops an undo at an irreversible operation |
 | 前缀块 | prefix chunk | a cache-aligned segment of the assembled prompt |

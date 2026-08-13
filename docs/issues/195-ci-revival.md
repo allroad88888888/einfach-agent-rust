@@ -1,6 +1,6 @@
 # 195 CI 复活（推翻 L3）
 
-**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **估时** 20min · **状态** 本地全绿，待推送验证（2026-08-13）
+**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **估时** 20min · **状态** ✅ 完成（2026-08-13，线上三 job 全绿）
 
 ## 目标
 

@@ -103,5 +103,16 @@ N 位就是 2^N 种组合，测过的可能只有四种。**能力位没有消�
 - [x] ~~确认 `docs/INVARIANTS.md` 与 `scripts/check-invariants.sh` 在公开仓库~~
       —— `git ls-files` 验过，连同 `scripts/check-build-cache.sh`（结尾那段的出处）
       三个都在
-- [ ] 标题 *The bugs that don't fail* 待定稿时再想一版更具体的——
-      现在这个够抓人但不够可搜索，长尾流量会吃亏
+- [x] ~~标题待定稿时再想一版更具体的~~ —— 定了，改成**钩子 + 冒号 + 搜索词**：
+
+      > **The bugs that don't fail: rules whose violations only surface during undo or
+      > crash recovery**
+
+      **不是把钩子换掉，是给它接一条尾巴。** 原标题的问题不是不好，是它**一个技术名词
+      都没有**——搜索引擎和站内搜索都拿不到抓手，而它又不是那种能靠品牌记住的短语。
+      冒号后面塞进 *undo* 与 *crash recovery* 两个词，是因为撞上这类 bug 的人
+      搜的正是这两个场景（「undo 之后值不对」「重启后状态错了」），
+      而不会搜「silent bug」。
+
+      79 字符，卡在 HN 标题截断线（约 80）以内——**再具体就要牺牲钩子了**，
+      到此为止。

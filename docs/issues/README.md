@@ -875,7 +875,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 → **`einfach-store`** | 165 | sonnet | 15min | ✅ 完成 |
 | [181](181-store-publish-prep.md) | 发布前置补全（→ `einfach-store`） | 180 | sonnet | 20min | ✅ 完成 |
 | [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | **你** | 15min | **就绪，等你 cargo login** |
-| [183](183-post-providers.md) | 文章：三家实测差异（**赌流量最高**） | 165 | **opus** | 20min | 初稿完成 |
+| [183](183-post-providers.md) | 文章：三家实测差异（**赌流量最高**） | 165 | **opus** | 20min | 初稿✅，数字已复查 |
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统（净减 1945 行） | 165 | **opus** | 20min | 初稿完成 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 初稿完成 |
 | [186](186-post-adapter-seam.md) | 文章：能力位是 `match provider` 换层皮 | 165 | **opus** | 20min | 初稿完成 |
@@ -883,11 +883,11 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | ✅ 完成 |
 | [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | ✅ 完成 |
 | [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | ✅ 完成 |
-| [191](191-launch-post.md) | ★ **首发帖**（两套文案就绪） | 179+183 | **opus**+**你** | 20min | 文案✅，**等你发** |
+| [191](191-launch-post.md) | ★ **首发帖**（文案 + 前置检查实测） | 179+183 | **opus**+**你** | 20min | 文案✅，六条前置差两条，**等你发** |
 | [192](192-embed-example-scope.md) | 嵌入样例场景（**决策**：角色×工具 / 浏览器） | 191 | **opus** | 20min | ✅ 完成 |
 | [193](193-embed-example-build.md) | 嵌入样例实现（角色×工具，四条真机） | 192 | sonnet | 60–90min | ✅ 完成 |
 | [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户（问法/记法已定） | 191 | **你** | 持续 | 材料✅，等首发 |
-| [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
+| [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | ✅ 完成（三 job 线上全绿） |
 | [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（解锁一号钩子的 demo） | 169 | sonnet | 20min | ✅ 完成 |
 | [197](197-incremental-cache-bloat.md) | target 又胀回来了：清理脚本（首次释放 16G） | 187 | sonnet | 20min | ✅ 完成 |
 | [198](198-missing-cache-field-guard.md) | 缓存字段缺失不许被读成 0（静默失效看门狗） | 176 | sonnet | 20min | ✅ 完成 |
