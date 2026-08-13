@@ -8,6 +8,8 @@
 那个页面**本身就是** agent 运行时，编成 wasm 跑在你的标签页里。没有后端，
 你的 key 直接从浏览器发给 provider——打开 DevTools 的 Network 面板就能核实。
 
+![undo 把那一轮从模型记忆里删掉](docs/assets/undo-demo.gif)
+
 > [English README](README.md) 是主文档；本文只提供中文摘要。
 
 ---

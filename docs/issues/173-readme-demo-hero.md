@@ -1,6 +1,6 @@
 # 173 README 第一屏挂 demo + 填 homepage
 
-**里程碑** L · **依赖** [170](170-pages-workflow.md) + [172](172-demo-gif.md) · **模型** sonnet · **估时** 15min · **状态** 链接与 homepage 完成，**GIF 待 [172](172-demo-gif.md)**（2026-08-13）
+**里程碑** L · **依赖** [170](170-pages-workflow.md) + [172](172-demo-gif.md) · **模型** sonnet · **估时** 15min · **状态** 完成（2026-08-13）
 
 ## 目标
 
@@ -51,14 +51,15 @@ demo 链接是给还没决定的人用的，后者更早流失。
    字段，现在填的是它该填的东西。它显示在仓库页右上角「About」区，是 star 之外点击率
    最高的位置。
 
-### 没做：GIF
+### GIF 当天也补上了
 
-依赖 [172](172-demo-gif.md)，那条要录屏，得你来。**链接先上是对的**——
-一个能点的链接已经比一张图值钱，图是锦上添花。
+原以为录屏得用户来，实际 playwright + ffmpeg 我自己就能录（见
+[172](172-demo-gif.md)）。链接先上仍然是对的判断——一个能点的链接已经比一张图值钱，
+只是这次图来得比预期快。
 
 ### 验收
 
 - [x] README 顶部链接可点（两份都挂了）
 - [x] `gh repo view --json homepageUrl` 回显 demo URL
-- [ ] GIF 正常渲染 —— 等 [172](172-demo-gif.md)
+- [x] GIF 正常渲染 —— [172](172-demo-gif.md) 当天完成，`docs/assets/undo-demo.gif`（77 KB / 13 秒）已挂在两份 README 的 demo 链接之下
 - [x] 从仓库首页「About」的链接点过去能打开（URL 与 [170](170-pages-workflow.md) 验过的是同一个）

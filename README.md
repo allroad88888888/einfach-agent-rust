@@ -10,6 +10,8 @@ There is no backend. That page **is** the agent runtime, compiled to wasm and ru
 your tab. Your key goes straight from your browser to the provider — open DevTools →
 Network and check.
 
+![Undo removing a turn from the model's memory](docs/assets/undo-demo.gif)
+
 [![CI](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 

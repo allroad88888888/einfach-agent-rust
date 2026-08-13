@@ -1,6 +1,6 @@
 # 172 录 demo GIF：拍「假 undo 做不到的事」
 
-**里程碑** L · **依赖** [171](171-demo-first-screen.md) + **[196](196-wasm-expose-undo.md)（硬依赖）** · **模型** claude（需用户定口味） · **估时** 20min · **状态** 待开始
+**里程碑** L · **依赖** [171](171-demo-first-screen.md) + **[196](196-wasm-expose-undo.md)（硬依赖）** · **模型** claude · **估时** 20min · **状态** 完成（2026-08-13）
 
 > ✅ **[196](196-wasm-expose-undo.md) 已完成（2026-08-13）**——浏览器 demo 现在有
 > 「撤销一轮 / 重做」按钮，口令实验四条真机全过。**退路（CLI 录）不需要了**，
@@ -55,3 +55,71 @@ README 第一屏要一张会动的图。文字说「undo 是真的」没人信�
 ## 需要用户
 
 录屏工具和口味你定；我可以出脚本、定分镜、写字幕文案。
+
+---
+
+## 实做记录（2026-08-13）
+
+`docs/assets/undo-demo.gif`，**760×500，77 KB，13 秒，3 个画面**。
+本 issue 的上限是 5 MB / 15 秒，都远远低于。
+
+### 我自己录的，用 playwright + ffmpeg
+
+原以为要用户录屏。其实不用：playwright 驱动页面 + 截图，ffmpeg 拼帧。而且
+**playwright 的截图不含浏览器地址栏**，所以在本地 `127.0.0.1:8790` 录出来的画面和
+在线上录**视觉上无差别**——录本地的好处是能用同源 `fetch` 把 key 喂进输入框
+（[169](169-wasm-artifact-recheck.md) 那套手法），全程 key 不进对话记录、不进仓库。
+文件与线上是同一份字节（[170](170-pages-workflow.md) 验过）。
+
+### 用三帧而不是连续录屏
+
+连续录屏要么太快看不清，要么太长。三帧 + 字幕条，每帧停 3.5–5.5 秒，
+**看的人能读完再跳下一帧**，而且 77 KB。
+
+字幕做成顶部黑条（`docs/assets` 里没有外部字体依赖，用系统字体渲染进图）：
+
+```
+1 — Tell it a passphrase, ask for it back.  It remembers.
+2 — Click "Undo one turn" twice.  Both turns are gone.
+3 — Ask again, without the word "undo".  It never knew.
+```
+
+第 3 帧那句字幕里的 **without the word "undo"** 是有意的——
+[169](169-wasm-artifact-recheck.md) 记的那个坑（问句里出现要验的机制名会把答案喂给模型）
+必须让看的人也知道，否则他们照着试会拿到假阴性。
+
+### 模型给的回答比我预想的强
+
+第 3 帧我原本只期待「我不知道」。实际拿到的是：
+
+> No. Based on our conversation so far, you haven't told me a passphrase —
+> **in fact, this is the only message in our conversation.**
+
+**模型自己作证「先前那些轮次在我的上下文里不存在」**，比单纯否认强得多。
+这句在缩到 760 宽之后仍然完整可读，专门抽末帧核对过。
+
+### 中途返工一次，而且是**为了诚实**
+
+第一次跑第 3 步，我问的是「What is the passphrase?」——模型不知道，于是**跑去调
+`web:page/title` / `web:page/url` 满页面找**。那其实是更强的证据（它真的不知道，
+不是嘴上说不知道），但对 GIF 太吵，而且**跟 README 里写给读者的话术不一致**。
+
+撤掉那一轮，改用 README/首屏里写的那句原文（禁用工具的版本）重录。
+**GIF 演的必须就是文档让读者做的那件事**，否则照着试的人会得到另一幅画面。
+
+本 issue「验收」那条「没有剪辑掉失败的尝试」照旧成立：我没有隐藏那次，
+它作为一次真实的重录记在这里；换问法是为了对齐文档，不是为了藏一个不好看的结果。
+
+### 验收
+
+- [x] 静音、无字幕（指音轨）也能看懂 —— 三条画面内字幕自解释
+- [x] ≤ 5 MB —— **77 KB**
+- [x] ≤ 15 秒 —— **13 秒**
+- [x] 第 3 步的模型回答清晰可读 —— 抽末帧核对过
+- [x] 真实录制，没有剪辑掉失败的尝试 —— 见上「返工」一节
+- [x] 落 `docs/assets/`，**进仓库**（不外链图床）
+- [x] 两份 README 都挂上，紧跟 demo 链接之下
+
+### 顺带完成 [173](173-readme-demo-hero.md) 的最后一条
+
+[173](173-readme-demo-hero.md) 的验收里「GIF 正常渲染」那条现在可以打勾了。
