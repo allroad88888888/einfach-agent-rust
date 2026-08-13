@@ -100,7 +100,7 @@ fn guard_histories_are_isolated_by_binding_scope() {
         .unwrap()
         .guard_scope;
 
-    ctx.guard_history_for(default_scope).push(hit.clone());
+    ctx.guard_history_for(default_scope).push(hit);
     ctx.guard_history_for(named_scope).push(hit);
 
     assert_eq!(ctx.guard_histories.get(&default_scope).unwrap().len(), 1);

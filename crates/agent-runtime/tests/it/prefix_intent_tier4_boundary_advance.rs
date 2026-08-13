@@ -49,7 +49,7 @@ fn tier4_advance_boundary_round_is_expected_drift_not_unexpected() {
             RunnerEvent::TurnGuard { report, .. } => Some(report),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or_else(|| panic!("压缩轮该有一份 GuardReport：{events:#?}"));
 
     assert_eq!(

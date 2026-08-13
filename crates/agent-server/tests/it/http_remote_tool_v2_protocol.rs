@@ -70,10 +70,10 @@ async fn v2_claim_submit_replay_conflict_and_status_are_actor_confirmed() {
 
     let (agent, call_id) = loop {
         let frame = next_frame(&mut sse);
-        if let SessionEvent::ToolExecuting { call_id, request } = frame.event {
-            if &*request.tool == "browser_action" {
-                break (frame.agent.0.to_string(), call_id.0.to_string());
-            }
+        if let SessionEvent::ToolExecuting { call_id, request } = frame.event
+            && &*request.tool == "browser_action"
+        {
+            break (frame.agent.0.to_string(), call_id.0.to_string());
         }
     };
     let claim = json!({ "agent": agent, "tool_call_id": call_id, "claim_id": CLAIM_ID });

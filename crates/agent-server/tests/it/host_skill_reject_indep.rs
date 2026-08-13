@@ -1,8 +1,8 @@
 //! 独立测试 agent 依据 140（docs/issues/140-host-skills-into-registry.md）「验收」/
 //! 「注意」两节写的规格测试——不看实现，139/140 未落地时红是预期。三条契约：
-//! 1) skill 带非空 `tools` → 整份 400，会话不创建（同 id 再建不带历史）；
-//! 2) 干净 skill → 首轮 system 含索引行，模型脚本化调 `srv:skill/read` → 正文逐
-//! 字节进 tool_result；3) 落盘重启恢复后索引行逐字节不变（红线 11）、read 仍可用。
+//! ①skill 带非空 `tools` → 整份 400，会话不创建（同 id 再建不带历史）；
+//! ②干净 skill → 首轮 system 含索引行，模型脚本化调 `srv:skill/read` → 正文逐
+//! 字节进 tool_result；③落盘重启恢复后索引行逐字节不变（红线 11）、read 仍可用。
 //!
 //! `srv:skill/read` 的参数名不在验收文字里，不臆测：从假上游收到的请求体里现读
 //! 它的 JSON Schema（`required` 或退到 `properties` 首个 key）现造参数。

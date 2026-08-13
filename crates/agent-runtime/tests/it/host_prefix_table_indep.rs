@@ -1,5 +1,5 @@
-//! 独立测试：只依据 `docs/issues/155-with-host-prefix.md`「验收」「注意」两节
-//! + `docs/INVARIANTS.md` 红线 11 + 公开签名
+//! 独立测试：只依据 `docs/issues/155-with-host-prefix.md`「验收」「注意」两节、
+//! `docs/INVARIANTS.md` 红线 11、以及公开签名
 //! `agent_runtime::ToolTable::with_host_prefix(pairs: &[(Arc<str>, Arc<str>)]) -> ToolTable`
 //! 写成，**不看** `crates/agent-runtime/src/tool_table_host_prefix.rs` /
 //! `tool_table_host_prefix_tests.rs` 里的实现体。实现由另一个 agent 并行写，

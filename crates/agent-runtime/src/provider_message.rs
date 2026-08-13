@@ -106,12 +106,9 @@ pub(crate) fn land(
         attempt,
         payload,
     } = message;
-    let Some(at) = calls
+    let at = calls
         .iter()
-        .position(|call| call.agent == agent && call.attempt == attempt)
-    else {
-        return None;
-    };
+        .position(|call| call.agent == agent && call.attempt == attempt)?;
 
     match payload {
         ProviderMessagePayload::Delta(event) => {

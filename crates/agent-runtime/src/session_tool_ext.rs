@@ -11,8 +11,8 @@
 //! 进来的 spawn/collect/status/skill-read）用得上——它们要读写 `Subtree`、
 //! spawn 后台模式还要一次产两个事件（`Dispatched::Events`）。
 //!
-//! 外部扩展/独测不该拿到这一整套：[`SessionToolFn`] 收窄到「拿 `Session` 手套
-//! + 这次调用的入参」——照 `status_tool::intercept` 的先例，纯读会话状态、算
+//! 外部扩展/独测不该拿到这一整套：[`SessionToolFn`] 收窄到「拿 `Session` 手套 +
+//! 这次调用的入参」——照 `status_tool::intercept` 的先例，纯读会话状态、算
 //! 一个结果就够绝大多数扩展工具用了。返回值 `Ok` 是给模型看的 tool_result 正文，
 //! `Err` 是拒绝文案（决策 20：不 panic、不卡这一轮，让模型自己收敛）。
 //!

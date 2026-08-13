@@ -37,6 +37,11 @@ fn emit_root(events_tx: &broadcast::Sender<Frame>, event: SessionEvent) {
     });
 }
 
+// 8 个入参。**不合并成 struct**：`rx`/`events_tx`/`ready_tx` 是三个方向不同的通道端，
+// 后三个 `Arc<Mutex<_>>` 是跟 HTTP 层共享的投影——它们的共同点只有「都要交给这个
+// actor」，装进一个结构体只会造出一个除了这次调用之外没人用的类型。actor 入口拿全
+// 部依赖是这个位置的正常形态。
+#[allow(clippy::too_many_arguments)]
 pub(super) fn run(
     spec: OpenSpec,
     execution_bindings: BTreeMap<ExecutionProfileId, ExecutionBinding>,
@@ -267,10 +272,9 @@ pub(super) fn run(
     if restored
         && (agent_runtime::has_unresolved_tool_calls(&session)
             || agent_runtime::recovered_transient_source_needs_fail_close(&session))
+        && let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx)
     {
-        if let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx) {
-            commands::emit_transient_source_failure(&events_tx, failure);
-        }
+        commands::emit_transient_source_failure(&events_tx, failure);
     }
 
     let cancel = ctx.cancel_flag();

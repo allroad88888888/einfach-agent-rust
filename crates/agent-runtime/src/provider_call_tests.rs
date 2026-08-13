@@ -35,7 +35,7 @@ impl Provider for ClassifiedProvider {
     }
 
     fn classify(&self, _: u16, _: &str) -> ErrorClass {
-        self.0.clone()
+        self.0
     }
 }
 

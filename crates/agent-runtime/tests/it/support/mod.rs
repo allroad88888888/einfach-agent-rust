@@ -184,7 +184,15 @@ pub fn temp_dir(name: &str) -> PathBuf {
 /// 所以这里不需要 `Arc<Mutex<_>>`。
 /// 029 之前的用例只认 `RunnerEvent`：走 `RunnerCtx::new` 那条不带归属的回调，
 /// 断言因此一个字不用改（单 agent 时「谁说的」只有一个答案）。
-pub fn build_ctx(port: u16, root: &std::path::Path) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {
+/// 上面那句「收集所有经回调发出的事件」的类型名。四个 `build_ctx*` 的返回值都是它，
+/// 写平了 clippy 的 `type_complexity` 会红。语义一个字节没变。
+pub type EventSink = Rc<RefCell<Vec<RunnerEvent>>>;
+
+/// 额外的事件旁观者（在事件进 [`EventSink`] 之外再看一眼）。理由同 [`EventSink`]：
+/// 只是给类型起个名字，语义没变。
+pub type EventObserver = Box<dyn Fn(&RunnerEvent)>;
+
+pub fn build_ctx(port: u16, root: &std::path::Path) -> (RunnerCtx, EventSink) {
     build_ctx_with(port, root, ToolTable::builtin())
 }
 
@@ -232,7 +240,7 @@ pub fn build_ctx_with(
     port: u16,
     root: &std::path::Path,
     tools: ToolTable,
-) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {
+) -> (RunnerCtx, EventSink) {
     build_ctx_with_store(port, root, tools, None)
 }
 
@@ -241,7 +249,7 @@ pub fn build_ctx_with_store(
     root: &std::path::Path,
     tools: ToolTable,
     store: Option<PathBuf>,
-) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {
+) -> (RunnerCtx, EventSink) {
     build_ctx_with_observer(port, root, tools, store, None)
 }
 
@@ -250,8 +258,8 @@ pub fn build_ctx_with_observer(
     root: &std::path::Path,
     tools: ToolTable,
     store: Option<PathBuf>,
-    observer: Option<Box<dyn Fn(&RunnerEvent)>>,
-) -> (RunnerCtx, Rc<RefCell<Vec<RunnerEvent>>>) {
+    observer: Option<EventObserver>,
+) -> (RunnerCtx, EventSink) {
     let events = Rc::new(RefCell::new(Vec::new()));
     let sink = Rc::clone(&events);
 

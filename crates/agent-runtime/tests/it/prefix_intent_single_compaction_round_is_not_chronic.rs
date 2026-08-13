@@ -70,7 +70,7 @@ fn a_single_compaction_round_does_not_trigger_chronic_miss() {
             RunnerEvent::TurnGuard { report, .. } => Some(report),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or_else(|| panic!("轮 B 该有一份 GuardReport：{events:#?}"));
 
     assert!(

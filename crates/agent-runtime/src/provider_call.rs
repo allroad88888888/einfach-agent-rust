@@ -95,6 +95,12 @@ impl ProviderCall {
 }
 
 /// 起飞：取料 → `encode` → 发前第 1 层 → 把 IO future 交给泵。**不等结果。**
+//
+// `StartFailure` 大是因为它内嵌 `Event`，而 `Event` 是 loop 的事件枚举、天然按最大
+// 变体算尺寸。**不 Box**：起飞失败要原样变成一个进 loop 的事件（调用方直接把它
+// 喂回泵），套一层 Box 只是把同一份数据挪到堆上、多一次解引用，换不到任何东西——
+// 这条路径每轮至多走一次，不在热路上。
+#[allow(clippy::result_large_err)]
 pub(crate) fn start(
     session: &Session,
     ctx: &mut RunnerCtx,

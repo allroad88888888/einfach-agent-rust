@@ -132,7 +132,7 @@ fn round_after_compaction_with_no_further_plan_change_flags_real_drift_as_unexpe
             RunnerEvent::TurnGuard { report, .. } => Some(report),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap_or_else(|| panic!("system 变了之后那一轮该有一份 GuardReport：{events:#?}"));
 
     assert_eq!(

@@ -212,6 +212,12 @@ impl RunnerCtx {
 ///
 /// `tool`/`input` 是**收窄之前**的原始形态（`&str` + `Arc<Value>`）；
 /// [`InterceptArgs::input`] 从这里的局部变量借出去。
+// 10 个入参。**不合并成 struct**：这些是 dispatch 那一刻从调用方各处借出来的
+// 引用（`&mut Session` / `&mut RunnerCtx` / `&mut Subtree` / `&mut CompactSlots`
+// 四个可变借用来自四个不同的所有者），装进一个结构体要么要求它们同源、要么给这个
+// 结构体加一堆生命周期参数，两种都比现在难读。参数多是这个函数「查表 + 调用、
+// 不做任何包装」定位的直接后果，不是设计漏了一层。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch(
     session: &mut Session,
     ctx: &mut RunnerCtx,

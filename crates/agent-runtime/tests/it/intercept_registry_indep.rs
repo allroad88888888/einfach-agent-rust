@@ -111,7 +111,9 @@ fn a_registered_tool_writes_through_the_command_surface_and_leaves_one_labeled_e
     )]);
     let (mut ctx, _events) = support::build_ctx_with(port, &dir, tools);
 
-    let probe: Arc<Mutex<Option<(usize, usize, &'static str)>>> = Arc::new(Mutex::new(None));
+    // 探针记的是「第几次调用 / 第几个参数 / 哪个工具名」三元组，只在这个测试里活着。
+    type Probe = Arc<Mutex<Option<(usize, usize, &'static str)>>>;
+    let probe: Probe = Arc::new(Mutex::new(None));
     let probe_captured = Arc::clone(&probe);
     install(
         &mut ctx,

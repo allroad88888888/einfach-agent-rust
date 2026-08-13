@@ -88,7 +88,7 @@ fn filter_prefix_chunks(
 pub(crate) fn tools_for(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> Vec<ToolSpec> {
     match session.tools_allowed_of(agent) {
         // root：宿主表。
-        None => ctx.tools.specs().iter().cloned().collect(),
+        None => ctx.tools.specs().to_vec(),
         Some(allowed) => ctx
             .tools
             .specs()

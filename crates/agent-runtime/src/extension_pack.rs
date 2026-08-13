@@ -77,11 +77,19 @@ pub struct ExtensionPack {
     name: Arc<str>,
     /// 截获式工具：声明、可逆性、执行体三元成对。`Vec` 而不是任何 map——
     /// 顺序就是进 prompt 的顺序，由作者的代码写死（红线 11）。
-    tools: Vec<(ToolSpec, Reversibility, SessionToolFn)>,
+    tools: InterceptEntries,
     /// timed 工具：声明、时机、执行体三元成对。**不进 prompt**（timed 区对
     /// `specs()`/`declares()` 不可见，133），但顺序仍然是执行顺序。
-    timed: Vec<(ToolSpec, CallTiming, TimedRun)>,
+    timed: TimedEntries,
 }
+
+/// 截获式工具的三元组序列。**只是给 [`ExtensionPack::into_parts`] 的返回类型起个名字**——
+/// 那个返回值是「名字 + 两条序列」的三元组，写平了 clippy 的 `type_complexity` 会红，
+/// 而拆成结构体又会给一个只在装配那一刻活着的中间物起名。语义一个字节没变。
+type InterceptEntries = Vec<(ToolSpec, Reversibility, SessionToolFn)>;
+
+/// timed 工具的三元组序列。理由同 [`InterceptEntries`]。
+type TimedEntries = Vec<(ToolSpec, CallTiming, TimedRun)>;
 
 impl ExtensionPack {
     /// 开一个空包。`name` 进每个工具的全名（`ext:<name>/<tool>`），也是日志和
@@ -165,13 +173,7 @@ impl ExtensionPack {
     /// `pub(crate)` 且**消费自身**——包一旦拆开就没有「原样再装一次」的形态，
     /// 两个阶段拿到的必然是同一个实例拆出来的两半（那边模块文档「同一个包实例」
     /// 这句承诺的机制就是这一行）。
-    pub(crate) fn into_parts(
-        self,
-    ) -> (
-        Arc<str>,
-        Vec<(ToolSpec, Reversibility, SessionToolFn)>,
-        Vec<(ToolSpec, CallTiming, TimedRun)>,
-    ) {
+    pub(crate) fn into_parts(self) -> (Arc<str>, InterceptEntries, TimedEntries) {
         (self.name, self.tools, self.timed)
     }
 }

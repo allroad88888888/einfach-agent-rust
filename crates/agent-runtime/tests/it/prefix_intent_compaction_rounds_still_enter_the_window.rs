@@ -49,7 +49,7 @@ fn last_window(events: &[RunnerEvent]) -> WindowVerdict {
             RunnerEvent::TurnGuard { report, .. } => Some(report.window),
             _ => None,
         })
-        .last()
+        .next_back()
         .expect("该有 GuardReport")
 }
 

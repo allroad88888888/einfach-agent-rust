@@ -134,7 +134,7 @@ fn assert_no_match_in(files: &[std::path::PathBuf], pattern: &str, case_insensit
         let offending: Vec<&str> = stdout
             .lines()
             .filter(|line| {
-                let content = line.splitn(2, ':').nth(1).unwrap_or(line).trim_start();
+                let content = line.split_once(':').map_or(*line, |(_, rest)| rest).trim_start();
                 !content.starts_with("//")
             })
             .collect();

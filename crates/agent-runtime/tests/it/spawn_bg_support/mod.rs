@@ -7,6 +7,11 @@
 //! 父的下一跳和子的第一跳真的同时到达）。
 #![allow(dead_code, unused_imports)]
 
+// clippy 会说这个文件被当模块加载了两次（`main.rs` 也有 `mod spawn_indep_support;`）
+// ——**是有意的**，理由就是上面模块文档那段。改成 `use crate::spawn_indep_support`
+// 能去重，但那会让两边的 `RoutedServer` 等类型合并成同一个，是夹具结构的改动，
+// 不该混在「让 CI 变绿」这件事里做。留给将来真要动这套夹具的时候。
+#[allow(clippy::duplicate_mod)]
 #[path = "../spawn_indep_support/mod.rs"]
 pub mod base;
 

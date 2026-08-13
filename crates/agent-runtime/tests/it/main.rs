@@ -2,6 +2,12 @@
 //! 为什么合并：267 个单文件测试 = 267 个链接产物 + 267 次进程启动，
 //! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
 //! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
+//!
+//! 几份夹具被 `#[path]` 复用（`spawn_bg_support` 复用 `spawn_indep_support`，
+//! 后者复用 `support/routed.rs`），于是同一个文件在这个 harness 里被加载两次
+//! ——**是有意的**，理由写在各自的模块文档里。去重要改夹具的类型身份，
+//! 是夹具结构的改动，不该混进「让 CI 变绿」（195）这件事。
+#![allow(clippy::duplicate_mod)]
 
 mod blocking_spawn_omits_child_turns;
 mod call_timing_indep;

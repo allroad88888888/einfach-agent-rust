@@ -253,10 +253,10 @@ fn main() {
     if let Err(msg) = session_start::maybe_run(is_new_session, &mut session, ctx.tools()) {
         fail(&msg);
     }
-    if recovered_source_needs_fail_close {
-        if let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx) {
-            eprintln!("{failure:?}");
-        }
+    if recovered_source_needs_fail_close
+        && let Err(failure) = agent_runtime::cancel_pending_remote_tools(&mut session, &mut ctx)
+    {
+        eprintln!("{failure:?}");
     }
 
     let cancel = ctx.cancel_flag();

@@ -15,6 +15,8 @@
 // 自己写了最小服务器，不需要这里的 `Route`/`RoutedServer` 重导出）。
 #![allow(dead_code, unused_imports)]
 
+// 同 `spawn_bg_support/mod.rs` 那条：有意的重复加载，不在这次 CI 复活里改夹具结构。
+#[allow(clippy::duplicate_mod)]
 #[path = "../support/routed.rs"]
 pub mod routed;
 
