@@ -35,8 +35,8 @@ use super::log::Change;
 /// `Change` 由**调用方**攒成一个 `Vec` 喂给 [`History::append`](super::History::append)：
 ///
 /// ```
-/// # use agent_store::{AtomValue, Store};
-/// # use agent_store::history::{record_set, Change, History};
+/// # use einfach_store::{AtomValue, Store};
+/// # use einfach_store::history::{record_set, Change, History};
 /// # #[derive(Clone, Debug, PartialEq)]
 /// # struct V(i64);
 /// # impl AtomValue for V { fn null() -> Self { V(0) } }

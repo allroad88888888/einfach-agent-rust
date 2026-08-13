@@ -1,7 +1,7 @@
 //! `Entry` / `Change` 可 serde 往返，且日志的键是逻辑键（`String`），不是 `AtomId`
 //! —— 红线 4「快照与日志落盘用 AtomKey 不用 AtomId」在 009 这里的形状：history 对
 //! `AtomId` 不可见，这个测试文件里也完全不出现它（编译期就证明了这一点：这里没有
-//! `use agent_store::AtomId`，也没有任何 `Store`）。
+//! `use einfach_store::AtomId`，也没有任何 `Store`）。
 //!
 //! 验收 4：整个 History 的 entries 序列化 -> 反序列化 -> 逐条相等。
 //!
@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use agent_store::{Change, Entry, History};
+use einfach_store::{Change, Entry, History};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Meta {

@@ -14,7 +14,9 @@ publish = false
 agent-core = { path = "../agent-core" }
 agent-mcp = { path = "../agent-mcp" }
 agent-providers = { path = "../agent-providers" }
-agent-store = { path = "../agent-store" }
+# 180：crates.io 上 `agent-store` 已被占用，包名改叫 `einfach-store`；
+# 这里重命名回来，`use agent_store::…` 因此一个字节不用改。
+agent_store = { package = "einfach-store", path = "../agent-store" }
 agent-tools = { path = "../agent-tools" }
 agent-transport = { path = "../agent-transport" }
 serde = { workspace = true }

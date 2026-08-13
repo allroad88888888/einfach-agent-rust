@@ -10,7 +10,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
+use einfach_store::{AtomFamily, AtomId, Entry, Store, apply_prev, record_set};
 use crate::common::{TestValue as V, num};
 
 #[test]

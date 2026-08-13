@@ -10,7 +10,9 @@ publish = false
 # 原子引擎 + command log。依赖方向是 agent-core → agent-store（ARCHITECTURE §包结构：
 # store 只认识 atom / 依赖图 / 日志，不认识 agent、消息、工具；值类型与逻辑键由 core 定）。
 # 反向依赖会让红线 4 的泛型 `K` 退化成具体类型，所以这条方向是结构性的，不是习惯。
-agent-store = { path = "../agent-store" }
+# 180：crates.io 上 `agent-store` 已被占用，包名改叫 `einfach-store`；
+# 这里重命名回来，`use agent_store::…` 因此一个字节不用改。
+agent_store = { package = "einfach-store", path = "../agent-store" }
 imbl.workspace = true
 serde.workspace = true
 serde_json.workspace = true

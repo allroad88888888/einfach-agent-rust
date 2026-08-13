@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
-use agent_store::{AtomFamily, AtomId, AtomValue, Snapshot, Store, capture, restore};
+use einfach_store::{AtomFamily, AtomId, AtomValue, Snapshot, Store, capture, restore};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Tv(i64);

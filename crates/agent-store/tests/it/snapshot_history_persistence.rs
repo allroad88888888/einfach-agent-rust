@@ -5,7 +5,7 @@
 //! 不接触 `Store` —— 这个文件测的是 `History<K,V,M>` 本身的持久化契约，和写入
 //! 路径无关（009 的 `history_serde.rs` 就是这个手法：K/V 用最简单的 String/i32）。
 
-use agent_store::{Change, Entry, History, UndoOutcome};
+use einfach_store::{Change, Entry, History, UndoOutcome};
 
 type Log = History<String, i32, String>;
 

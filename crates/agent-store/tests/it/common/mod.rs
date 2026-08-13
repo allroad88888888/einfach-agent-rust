@@ -3,7 +3,7 @@
 
 use std::fmt;
 
-use agent_store::AtomValue;
+use einfach_store::AtomValue;
 
 /// Test value covering `Number`, `Text`, and `Boolean` variants
 /// used in upstream behavior tests (store_twin, family_twin, depend_primitive).

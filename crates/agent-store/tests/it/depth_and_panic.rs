@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// Helper: build a chain of `depth` derived atoms, each incrementing by 1.
 /// The tail reads via args.get, and chains past the recursion budget will
@@ -15,7 +15,7 @@ use agent_store::Store;
 fn build_chain(
     store: &Store<TestValue>,
     depth: usize,
-) -> (agent_store::AtomId, agent_store::AtomId) {
+) -> (einfach_store::AtomId, einfach_store::AtomId) {
     let head = store.create_atom(num(0.0));
     let mut prev = head;
     for _ in 0..depth {

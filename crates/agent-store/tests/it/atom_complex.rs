@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// atom.complex.test.ts «应该正确处理复杂的依赖网络» (exact closed-form values)
 #[test]

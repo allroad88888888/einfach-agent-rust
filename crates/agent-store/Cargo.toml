@@ -1,7 +1,18 @@
 [package]
-name = "agent-store"
+# 包名 ≠ 目录名，这是有意的（180）：`agent-store` 在 crates.io 上已被别人占用，
+# 而改目录会把 git 历史打散、把全部文档里的 `crates/agent-store/` 路径引用弄断
+# ——包括 `scripts/check-invariants.sh` 里按**路径**匹配的红线 7 白名单
+# （`crates/agent-store/*`）。依赖方用 `package = "einfach-store"` 重命名回来，
+# 于是全仓 `use agent_store::…` 一个字节不用改。
+name = "einfach-store"
 version = "0.1.0"
 edition.workspace = true
+license.workspace = true
+description = "An atomic dependency graph with a command log: undo, redo, snapshot recovery and audit replay are one mechanism, not four features."
+repository = "https://github.com/allroad88888888/einfach-agent-rust"
+readme = "README.md"
+keywords = ["state", "atom", "undo", "reactive", "signals"]
+categories = ["data-structures", "rust-patterns"]
 
 # 红线 7：这个 crate 不得出现 reqwest / hyper / axum / tokio 及其生态。
 # serde 只做内存里的结构↔字节转换，不碰 IO —— 落盘由 agent-runtime 负责（010/011）。

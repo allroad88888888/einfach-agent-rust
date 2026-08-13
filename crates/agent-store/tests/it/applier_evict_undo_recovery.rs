@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{AtomFamily, AtomId, Entry, History, Store, UndoOutcome, apply_prev, record_set};
+use einfach_store::{AtomFamily, AtomId, Entry, History, Store, UndoOutcome, apply_prev, record_set};
 use crate::common::{TestValue as V, num};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// atom.test.ts «基本功能» (init / update / complex value)
 #[test]

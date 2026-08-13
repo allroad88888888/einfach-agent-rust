@@ -2,7 +2,7 @@
 //! 只违反一条不变量，避免检查顺序这类实现细节混进断言里；另加两个边界内的
 //! 「本该放行」对照，确认边界判定不是失之毫厘的另一套规则。
 
-use agent_store::{Change, Entry, History, InvalidHistory};
+use einfach_store::{Change, Entry, History, InvalidHistory};
 
 type Log = History<String, i32, String>;
 

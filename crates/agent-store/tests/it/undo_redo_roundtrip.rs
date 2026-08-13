@@ -25,9 +25,9 @@
 //! }
 //! ```
 //!
-//! `UndoOutcome` / `cursor` / `can_undo` / `can_redo` 假定从 `agent_store` crate 根
+//! `UndoOutcome` / `cursor` / `can_undo` / `can_redo` 假定从 `einfach_store` crate 根
 //! re-export（`Change`/`Entry`/`History`/`record_set` 已经是这样）。如果实现方选了
-//! 别的形状（比如 `Applied` 也是具名字段、或者只从 `agent_store::history::` 导出），
+//! 别的形状（比如 `Applied` 也是具名字段、或者只从 `einfach_store::history::` 导出），
 //! 这是本文件与实现的分歧点，见独测 agent 的最终报告。
 //!
 //! 值应用（把 `Change.prev`/`next` 写回 store）是调用方的事——`History` 不持有
@@ -37,7 +37,7 @@
 
 use crate::common::*;
 
-use agent_store::{AtomId, Change, Entry, History, Store, UndoOutcome, record_set};
+use einfach_store::{AtomId, Change, Entry, History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M {

@@ -5,7 +5,7 @@
 
 use crate::common::*;
 
-use agent_store::{History, Store, UndoOutcome, record_set};
+use einfach_store::{History, Store, UndoOutcome, record_set};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct M;

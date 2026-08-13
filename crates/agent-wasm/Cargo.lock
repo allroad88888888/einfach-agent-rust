@@ -12,7 +12,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "agent-core"
 version = "0.1.0"
 dependencies = [
- "agent-store",
+ "einfach-store",
  "imbl",
  "serde",
  "serde_json",
@@ -43,9 +43,9 @@ dependencies = [
  "agent-core",
  "agent-mcp",
  "agent-providers",
- "agent-store",
  "agent-tools",
  "agent-transport",
+ "einfach-store",
  "futures-channel",
  "futures-util",
  "js-sys",
@@ -56,13 +56,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
-]
-
-[[package]]
-name = "agent-store"
-version = "0.1.0"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -172,6 +165,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
+]
+
+[[package]]
+name = "einfach-store"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

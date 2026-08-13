@@ -16,7 +16,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// `depend` records a re-invalidating edge WITHOUT reading the dependency's
 /// value: the depender never calls `get(src)`, yet a later `set(src, ...)`
@@ -61,7 +61,7 @@ fn depend_records_reinvalidating_edge_without_reading() {
 fn depend_tolerates_computing_peer_without_panicking() {
     let store = Store::new();
 
-    let outer_holder: Rc<Cell<Option<agent_store::AtomId>>> = Rc::new(Cell::new(None));
+    let outer_holder: Rc<Cell<Option<einfach_store::AtomId>>> = Rc::new(Cell::new(None));
     let outer_for_inner = outer_holder.clone();
     let inner = store.create_derived_ctx(move |args| {
         // `outer` is on the read stack (computing) at this point.
@@ -85,7 +85,7 @@ fn depend_tolerates_computing_peer_without_panicking() {
 fn depend_on_self_records_no_edge() {
     let store = Store::new();
 
-    let id_holder: Rc<Cell<Option<agent_store::AtomId>>> = Rc::new(Cell::new(None));
+    let id_holder: Rc<Cell<Option<einfach_store::AtomId>>> = Rc::new(Cell::new(None));
     let id_for_fn = id_holder.clone();
     let selfish = store.create_derived_ctx(move |args| {
         if let Some(me) = id_for_fn.get() {

@@ -1,6 +1,6 @@
-# 182 `agent-store` 首发 crates.io
+# 182 `einfach-store` 首发 crates.io
 
-**里程碑** L · **依赖** [181](181-store-publish-prep.md) · **谁做** **用户**（我做不了） · **估时** 15min · **状态** 待开始
+**里程碑** L · **依赖** [181](181-store-publish-prep.md) · **谁做** **用户**（我做不了） · **估时** 15min · **状态** 前置全就绪，等你 `cargo login`
 
 ## 目标
 
@@ -15,15 +15,15 @@ crates.io 发布需要账号与 `cargo login` 的 token，且**发布不可逆**
 ## 做什么
 
 1. 注册 crates.io（GitHub 账号登录）+ `cargo login`。
-2. `cargo publish -p agent-store --dry-run` 先跑，确认无误。
-3. `cargo publish -p agent-store`。
+2. `cargo publish -p einfach-store --dry-run` 先跑，确认无误。
+3. `cargo publish -p einfach-store`。
 4. 发布后核对 crates.io 页面：README 渲染正常、license 显示 `MIT OR Apache-2.0`、
    docs.rs 构建成功（**docs.rs 构建失败是首发最常见的翻车点**，它跟本地
    `cargo doc` 的环境不一样）。
 
 ## 验收
 
-- `cargo add agent-store`（或 [180](180-crates-io-name-check.md) 定的名字）在一个空项目里可用
+- `cargo add einfach-store` 在一个空项目里可用
 - docs.rs 上文档构建成功且能打开
 - crates.io 页面的 license 显示正确
 

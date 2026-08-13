@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use agent_store::{AtomFamily, AtomId, Change, Entry, Store, apply_prev};
+use einfach_store::{AtomFamily, AtomId, Change, Entry, Store, apply_prev};
 use crate::common::{TestValue as V, num};
 
 #[test]

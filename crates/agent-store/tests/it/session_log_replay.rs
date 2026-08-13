@@ -6,8 +6,8 @@
 //! 「新后端接入这套引擎之前应该先读的」那份行为清单——`Memory`/`Jsonl` 的验收测试
 //! 断言的是端口的行为，这份测试断言的是端口行为**为什么**是这样。
 
-use agent_store::history::{Change, Entry, Snapshot};
-use agent_store::persist::SessionLog;
+use einfach_store::history::{Change, Entry, Snapshot};
+use einfach_store::persist::SessionLog;
 
 #[derive(Clone, Debug, PartialEq)]
 struct V(i64);

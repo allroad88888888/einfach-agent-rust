@@ -8,7 +8,7 @@
 
 use crate::common::*;
 
-use agent_store::{History, Store, record_set};
+use einfach_store::{History, Store, record_set};
 
 /// 验收 1：`record_set` 写 primitive A 产出正确的 `Change{prev, next}` 并真的写穿
 /// store；再写 B；两次各自 append 之后 History 有 2 条，seq 严格递增。

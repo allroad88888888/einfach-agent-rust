@@ -7,7 +7,7 @@
 
 use crate::common::*;
 
-use agent_store::{History, Store, record_set};
+use einfach_store::{History, Store, record_set};
 
 #[test]
 fn derived_recompute_does_not_grow_the_log() {

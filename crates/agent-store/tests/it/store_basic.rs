@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// store.test.ts «createStore: 应该创建一个新的store实例»
 /// TWIN-ADAPT: vanilla shares one atom object across stores; Rust AtomIds are

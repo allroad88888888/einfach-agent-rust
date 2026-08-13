@@ -1,7 +1,7 @@
 //! 010 验收 4：恢复 == redo 的字面钉。capture 于第 2 条 entry 之后；原 store
 //! 继续写第 3、4 条（`record_set` 记录进同一份 `History`）；新 store 上先
 //! `restore` 快照，再用 **`apply_next`**（undo/redo 共用的同一个 applier，从
-//! `agent_store` 顶层导入，不是本文件另写的重放逻辑）把第 3、4 条重放上去 ——
+//! `einfach_store` 顶层导入，不是本文件另写的重放逻辑）把第 3、4 条重放上去 ——
 //! 结果与原世界逐值相等。
 //!
 //! 这就是 `docs/STATE-MODEL.md` §「恢复 = redo」的字面意思：载入快照 + 把之后的
@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
-use agent_store::{
+use einfach_store::{
     AtomFamily, AtomId, AtomValue, History, Snapshot, Store, apply_next, capture, record_set,
     restore,
 };

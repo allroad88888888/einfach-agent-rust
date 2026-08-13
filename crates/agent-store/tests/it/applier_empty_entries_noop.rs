@@ -9,7 +9,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::{AtomFamily, AtomId, Entry, Store, apply_next, apply_prev};
+use einfach_store::{AtomFamily, AtomId, Entry, Store, apply_next, apply_prev};
 use crate::common::{TestValue as V, num};
 
 fn counting_resolve(

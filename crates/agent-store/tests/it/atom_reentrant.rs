@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::Store;
+use einfach_store::Store;
 
 /// atom.test.ts «在订阅回调中更新其他atom时，派生atom应该正常更新»
 /// Pins flushPending re-entrancy: a listener that synchronously sets another

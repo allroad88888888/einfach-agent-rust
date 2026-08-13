@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use crate::common::*;
 
-use agent_store::{AtomFamily, Store};
+use einfach_store::{AtomFamily, Store};
 
 #[test]
 fn get_or_create_caches_per_key() {

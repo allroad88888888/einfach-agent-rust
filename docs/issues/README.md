@@ -873,8 +873,8 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [178](178-openai-compat-dogfood.md) | 真机收官七条 | 177 | sonnet | 20min | 待开始 |
 | [179](179-readme-rewrite.md) | README 重写（英文定稿） | 173+178 | **opus** | 20min | 待开始 |
 | [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 → **`einfach-store`** | 165 | sonnet | 15min | ✅ 完成 |
-| [181](181-store-publish-prep.md) | `agent-store` 发布前置补全 | 180 | sonnet | 20min | 待开始 |
-| [182](182-store-publish.md) | `agent-store` 首发（**不可逆**） | 181 | **你** | 15min | 待开始 |
+| [181](181-store-publish-prep.md) | 发布前置补全（→ `einfach-store`） | 180 | sonnet | 20min | ✅ 完成 |
+| [182](182-store-publish.md) | `einfach-store` 首发（**不可逆**） | 181 | **你** | 15min | **就绪，等你 cargo login** |
 | [183](183-post-providers.md) | 文章：三家实测差异 | 165 | **opus** | 20min | 待开始 |
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统 | 165 | **opus** | 20min | 待开始 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 待开始 |

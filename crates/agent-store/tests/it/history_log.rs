@@ -9,7 +9,7 @@
 
 use crate::common::*;
 
-use agent_store::{Change, History};
+use einfach_store::{Change, History};
 
 fn change(key: &str, prev: TestValue, next: TestValue) -> Change<String, TestValue> {
     Change {

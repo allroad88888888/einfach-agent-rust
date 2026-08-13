@@ -6,7 +6,7 @@
 //! `apply_next`」重建出来的状态与原 world 逐值相等——手法照抄
 //! `history/snapshot_roundtrip.rs`。
 //!
-//! 这里还特意让 cap 驱逐和快照压实撞在一起（[`SessionLog`](agent_store::persist::SessionLog)
+//! 这里还特意让 cap 驱逐和快照压实撞在一起（[`SessionLog`](einfach_store::persist::SessionLog)
 //! 模块文档点名的那条推导），因为这正是「转发 `DropEvent` 给持久化端口」在真实调用点
 //! 会遇到的顺序，`session_log_replay.rs` 里手搓的场景只证明了公式本身对，这里证明
 //! **把公式接到真 `History` 上之后还对**。
@@ -14,12 +14,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use agent_store::history::{History, UndoOutcome, apply_next, capture, record_set, restore};
-use agent_store::{AtomFamily, AtomId, AtomValue, Memory, SessionStore, Snapshot, Store};
+use einfach_store::history::{History, UndoOutcome, apply_next, capture, record_set, restore};
+use einfach_store::{AtomFamily, AtomId, AtomValue, Memory, SessionStore, Snapshot, Store};
 
 /// 值类型包一层新类型——`AtomValue` 是外部 crate 的 trait，`i64` 是原生类型，
 /// `tests/` 下每个文件都是独立 crate，孤儿规则不让直接 `impl AtomValue for i64`
-/// （`history/snapshot_roundtrip.rs` 能这么写是因为它长在 `agent_store` 内部）。
+/// （`history/snapshot_roundtrip.rs` 能这么写是因为它长在 `einfach_store` 内部）。
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Val(i64);
 
@@ -85,8 +85,8 @@ fn command(w: &World, log: &mut Log, backend: &Backend, turn: u32, writes: &[(&s
     }
     for ev in log.take_drop_events() {
         match ev {
-            agent_store::DropEvent::Oldest { count } => backend.drop_oldest(count),
-            agent_store::DropEvent::RedoTail { first_seq, count } => {
+            einfach_store::DropEvent::Oldest { count } => backend.drop_oldest(count),
+            einfach_store::DropEvent::RedoTail { first_seq, count } => {
                 backend.drop_after(first_seq, count)
             }
         }
@@ -201,7 +201,7 @@ fn cap_eviction_crossing_a_snapshot_boundary_still_recovers_the_exact_live_state
         other => panic!("unexpected {other:?}"),
     };
     let mut resolve = |k: &String| slot(&fresh, k);
-    agent_store::apply_prev(&fresh.store, &mut resolve, &applied);
+    einfach_store::apply_prev(&fresh.store, &mut resolve, &applied);
     assert_eq!(fresh.store.get(slot(&fresh, "a")), Val(2)); // 退掉 seq3（a: 4→2）
 }
 
