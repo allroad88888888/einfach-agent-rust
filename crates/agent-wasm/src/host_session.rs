@@ -25,11 +25,13 @@
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 
+use agent_core::Session;
+use agent_runtime::RunnerCtx;
 use wasm_bindgen::prelude::*;
 
 use crate::callback;
 use crate::host::{AgentHost, js_error};
-use crate::{assemble, db, history, session_id, turn};
+use crate::{assemble, db, history, session_id, turn, undo};
 
 #[wasm_bindgen]
 impl AgentHost {
@@ -149,6 +151,40 @@ impl AgentHost {
             flag.store(true, Ordering::Relaxed);
             crate::interrupt::wake();
         }
+    }
+
+    /// 撤一整轮（196）。返回一份 JSON：`{"kind":"Applied","entries":n,"turnId":n}` /
+    /// `{"kind":"Blocked",…,"barrier":{…}}` / `{"kind":"Nothing"}`，形状与理由见
+    /// [`crate::undo`]。
+    ///
+    /// **同步方法**：`undo_turn` 不 await 任何东西，`borrow_mut()` 不跨 await 点，
+    /// 所以不像 [`Self::send`] 那样要背模块文档那节纪律。
+    #[wasm_bindgen(js_name = undoTurn)]
+    pub fn undo_turn(&self) -> Result<String, JsValue> {
+        self.with_live(undo::undo)
+    }
+
+    /// 越过第一条不可逆屏障再撤（196）。只在页面**拿到 `Blocked` 并让用户确认之后**
+    /// 才该调——越过屏障意味着那次不可逆副作用不会被回滚，这是用户的决定不是默认档。
+    #[wasm_bindgen(js_name = undoTurnForce)]
+    pub fn undo_turn_force(&self) -> Result<String, JsValue> {
+        self.with_live(undo::undo_force)
+    }
+
+    /// 反演一次撤销（196）。结果只会是 `Applied`/`Nothing`——redo 没有屏障。
+    #[wasm_bindgen(js_name = redoTurn)]
+    pub fn redo_turn(&self) -> Result<String, JsValue> {
+        self.with_live(undo::redo)
+    }
+
+    /// 三个撤销命令共用的一句：取出活会话、把 `&mut Session` + `&mut RunnerCtx`
+    /// 递进去。没打开会话时给一条跟 [`Self::send`] 一字不差的错误。
+    fn with_live(&self, f: fn(&mut Session, &mut RunnerCtx) -> String) -> Result<String, JsValue> {
+        let mut guard = self.inner.live.borrow_mut();
+        let live = guard
+            .as_mut()
+            .ok_or_else(|| js_error("还没打开会话：先调 openSession(id)"))?;
+        Ok(f(&mut live.session, &mut live.ctx))
     }
 
     /// 当前会话的历史，形状同 `openSession` 的结果。

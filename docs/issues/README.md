@@ -834,8 +834,8 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
  ├─ L0' 195 CI 复活（L3 被用户推翻 2026-08-13）
  │
  ├─ L1a demo 上线 ── 169 产物复验 ✅ → 170 Pages workflow → 171 首屏文案 ┐
- │                     └→ 196 wasm 暴露 undo ──→ 172 GIF ───────────────┼→ 173 README 挂 demo
- │                        （169 查出：今天演不了一号钩子）              ┘        │
+ │                     └→ 196 wasm 暴露 undo ✅ → 172 GIF ──────────────┼→ 173 README 挂 demo
+ │                        （169 查出的缺口，当天补掉，一号钩子可演）    ┘        │
  ├─ L1b 拉新前置 ── 174 探针 → 175 落点决策 → 176 adapter → 177 配置 → 178 真机 ┤
  │                                                                             │
  ├─ L1c 门面定稿 ── 179 README 重写 ←──────────────────────────────────────────┘
@@ -888,7 +888,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [193](193-embed-example-build.md) | 嵌入样例实现 | 192 | sonnet | **待拆** | 占位 |
 | [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户 | 191 | **你** | 持续 | 待开始 |
 | [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
-| [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（**[172](172-demo-gif.md) 的前置**） | 169 | sonnet | 20min | 待开始 |
+| [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（解锁一号钩子的 demo） | 169 | sonnet | 20min | ✅ 完成 |
 
 **L0 已完成**（2026-08-13）：只碰 `Cargo.toml` / 两份 README / 两份 LICENSE，零 `.rs` 改动；
 `cargo metadata` 通过、`check-invariants.sh --all` 退出码 0。

@@ -58,6 +58,7 @@ mod interrupt;
 mod session_id;
 mod tools;
 mod turn;
+mod undo;
 mod vision;
 
 pub use host::AgentHost;

@@ -113,6 +113,13 @@
     <button id="send" disabled>发送</button>
     <button id="cancel" disabled>取消</button>
   </div>
+  <!-- 196：撤销/重做。一号钩子（「撤掉的那一轮在模型记忆里真的不存在」）
+       在这三个按钮之前是演不了的——能力一直在 Session 里，只是没接出来。 -->
+  <div class="row">
+    <button id="undo" disabled>撤销一轮</button>
+    <button id="redo" disabled>重做</button>
+    <span id="undoStatus" class="sub" style="margin:0"></span>
+  </div>
 </fieldset>
 
 <details>
@@ -218,6 +225,8 @@ $('open').addEventListener('click', async () => {
     renderHistory(JSON.parse(replayed));
     $('status').textContent = `会话 ${host.sessionId()} 已打开，从 IndexedDB 重放出 ${JSON.parse(replayed).length} 条消息`;
     $('send').disabled = false;
+    $('undo').disabled = false;
+    $('redo').disabled = false;
     await imageManager.refresh(host.sessionId());
   } catch (e) {
     $('status').textContent = `打开会话失败：${e.message ?? e}`;
@@ -247,6 +256,40 @@ $('send').addEventListener('click', async () => {
 });
 
 $('cancel').addEventListener('click', () => host?.cancel());
+
+// ── 196：撤销 / 重做 ────────────────────────────────────────────────
+// 撤销之后**重画整份历史**（而不是在 DOM 上往回删）：真值在 Session 里，
+// 页面只做哑渲染。这跟 M7 定的「树由 core 权威算、UI 哑渲染」是同一条原则——
+// 让 UI 自己维护一份「现在应该有几轮」的影子状态，就是在造第二个真值源。
+function afterUndo(json) {
+  const r = JSON.parse(json);
+  renderHistory(JSON.parse(host.historyJson()));
+  if (r.kind === 'Applied') {
+    $('undoStatus').textContent = `撤了 ${r.entries} 条（turn ${r.turnId}）`;
+  } else if (r.kind === 'Nothing') {
+    $('undoStatus').textContent = '没有可撤的了（游标已在端点）';
+  } else if (r.kind === 'Blocked') {
+    // 屏障：如实说被什么拦住的，再问要不要越过。**不默认越过**——越过意味着
+    // 那次不可逆副作用不回滚，这是用户的决定。
+    const what = r.barrier?.tool
+      ? `${r.barrier.tool}${r.barrier.callId ? `（call ${r.barrier.callId}）` : ''}`
+      : (r.barrier?.label ?? `seq ${r.barrierSeq}`);
+    $('undoStatus').textContent = `撞上不可逆屏障：${what}，已撤 ${r.entries} 条`;
+    if (confirm(`撤销撞上了不可逆操作：${what}\n\n越过它继续撤？那次操作的副作用不会被回滚。`)) {
+      afterUndo(host.undoTurnForce());
+    }
+  }
+}
+
+$('undo').addEventListener('click', () => {
+  try { afterUndo(host.undoTurn()); }
+  catch (e) { $('undoStatus').textContent = `撤销失败：${e.message ?? e}`; }
+});
+
+$('redo').addEventListener('click', () => {
+  try { afterUndo(host.redoTurn()); }
+  catch (e) { $('undoStatus').textContent = `重做失败：${e.message ?? e}`; }
+});
 
 await init();
 $('status').textContent = 'wasm 已加载，填配置后点「建宿主」';
