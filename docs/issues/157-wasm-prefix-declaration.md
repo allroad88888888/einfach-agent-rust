@@ -1,4 +1,4 @@
-# 157 wasm 宿主同路：页面声明开局块（后置，等在飞工作落地）
+# 157 wasm 宿主同路：页面声明开局块
 
 **里程碑** M17 · **依赖** [155](155-with-host-prefix.md) + [156](156-server-prefix-declaration.md) + [164](164-wasm-skills-declaration.md)（地基） · **模型** 主会话前台（原计划 sonnet） · **独测** — · **状态** 完成（见文末，2026-08-13）
 

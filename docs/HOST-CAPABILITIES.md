@@ -365,8 +365,10 @@ M15 给工具加了「调用时机」维度之后留了一条账：timed 工具�
 [155](issues/155-with-host-prefix.md)（合成）→
 [156](issues/156-server-prefix-declaration.md)（server 全链）→
 [158](issues/158-m17-dogfood.md)（真机收官）；
-[157](issues/157-wasm-prefix-declaration.md)（wasm 同路）**后置**——
-等另一会话的 agent-wasm capabilities 在飞工作合并后补做，不阻塞收口。
+[157](issues/157-wasm-prefix-declaration.md)（wasm 同路）**曾后置**——当时在等另一
+会话未提交的 agent-wasm capabilities 在飞工作；那份工作由
+[164](issues/164-wasm-skills-declaration.md) 认领落地后，157 于 2026-08-13
+补做完成，**M17 无尾巴**。
 
 ## 九、安全：**暂缓讨论**（用户 2026-08-04：「安全讨论再说」）
 
