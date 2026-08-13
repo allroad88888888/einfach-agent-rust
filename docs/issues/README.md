@@ -879,7 +879,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统 | 165 | **opus** | 20min | 待开始 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 待开始 |
 | [186](186-post-adapter-seam.md) | 文章：别在 core 里 `match provider` | 165 | **opus** | 20min | 待开始 |
-| [187](187-post-target-bloat.md) | 文章：两天 58GB | 165 | sonnet | 20min | 待开始 |
+| [187](187-post-target-bloat.md) | 文章：两天 58GB（**量出了续集**） | 165 | sonnet | 20min | 初稿完成 |
 | [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | 待开始 |
 | [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | 待开始 |
 | [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | 待开始 |
@@ -889,6 +889,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户 | 191 | **你** | 持续 | 待开始 |
 | [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
 | [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（解锁一号钩子的 demo） | 169 | sonnet | 20min | ✅ 完成 |
+| [197](197-incremental-cache-bloat.md) | target 又胀回来了：这次是 incremental | 187 | sonnet | 20min | 待开始 |
 
 **L0 已完成**（2026-08-13）：只碰 `Cargo.toml` / 两份 README / 两份 LICENSE，零 `.rs` 改动；
 `cargo metadata` 通过、`check-invariants.sh --all` 退出码 0。
