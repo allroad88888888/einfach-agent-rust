@@ -44,7 +44,7 @@
 
 ## 实做记录（2026-08-13）
 
-**初稿在 `scratchpad/186-draft-en.md`。**
+**初稿在 [`docs/posts/186-capability-flags.en.md`](../posts/186-capability-flags.en.md)。**
 
 ### 标题就是论点
 
@@ -128,10 +128,13 @@ Kimi 不用）」。**没照做**，改用了 `tool_choice` × 思考模式那�
 
 ### 待办
 
-- [ ] 中文版（L2 第二波）
+- [x] ~~中文版（L2 第二波）~~ —— **提前做了**（2026-08-13），在 [`docs/posts/186-capability-flags.zh-CN.md`](../posts/186-capability-flags.zh-CN.md)。
+      L2 是我自己排的顺序，不是被什么挡着；「全部执行完」之下没有理由压着。
+      **不是逐句直译**：英文版是先写的，中文版按中文的节奏重写，
+      但**所有承重数字逐个核对过两版一致**（脚本比对，不靠眼看）。
 - [x] ~~跟 [185](185-post-invariants.md) 的重叠~~ —— 处理掉了，两件事：
 
-      **① 回链已加进初稿**（`scratchpad/186-draft-en.md` 开头的引用块）。写法上没有
+      **① 回链已加进初稿**（[`docs/posts/186-capability-flags.en.md`](../posts/186-capability-flags.en.md) 开头的引用块）。写法上没有
       写成客套的「延伸阅读」，而是**说清两篇的关系**：
 
       > This post is the long version of the last one in it, because it's the only one

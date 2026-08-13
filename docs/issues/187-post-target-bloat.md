@@ -45,7 +45,7 @@
 
 ## 实做记录（2026-08-13）
 
-**初稿在 `scratchpad/187-draft-en.md`**（英文，[165](165-launch-positioning-decision.md) L1）。
+**初稿在 [`docs/posts/187-target-bloat.en.md`](../posts/187-target-bloat.en.md)**（英文，[165](165-launch-positioning-decision.md) L1）。
 
 ### 那次「补测一下当前数字」把文章整个换了个形状
 
@@ -102,4 +102,7 @@ target                     31G / 794,507 文件
       ——当年变慢的痛点就是「改一行等好久」，不是「第一次编译要多久」。
       同时量的 target 现状：**6.6G / deps 7,148 文件**（清理后又跑了几轮构建，
       从 3,227 涨上来，符合 [197](197-incremental-cache-bloat.md) 说的「会不断长回来」）
-- [ ] 中文版（L2 第二波）
+- [x] ~~中文版（L2 第二波）~~ —— **提前做了**（2026-08-13），在 [`docs/posts/187-target-bloat.zh-CN.md`](../posts/187-target-bloat.zh-CN.md)。
+      L2 是我自己排的顺序，不是被什么挡着；「全部执行完」之下没有理由压着。
+      **不是逐句直译**：英文版是先写的，中文版按中文的节奏重写，
+      但**所有承重数字逐个核对过两版一致**（脚本比对，不靠眼看）。

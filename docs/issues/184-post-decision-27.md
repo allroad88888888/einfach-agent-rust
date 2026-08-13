@@ -43,7 +43,7 @@
 
 ## 实做记录（2026-08-13）
 
-**初稿在 `scratchpad/184-draft-en.md`。**
+**初稿在 [`docs/posts/184-deleted-my-own-subsystem.en.md`](../posts/184-deleted-my-own-subsystem.en.md)。**
 
 ### 标题里放了行数
 
@@ -101,7 +101,10 @@ skill-body reads"。**这类不准最伤这种文章**——读者核对时对�
 
 ### 待办
 
-- [ ] 中文版（L2 第二波）
+- [x] ~~中文版（L2 第二波）~~ —— **提前做了**（2026-08-13），在 [`docs/posts/184-deleted-my-own-subsystem.zh-CN.md`](../posts/184-deleted-my-own-subsystem.zh-CN.md)。
+      L2 是我自己排的顺序，不是被什么挡着；「全部执行完」之下没有理由压着。
+      **不是逐句直译**：英文版是先写的，中文版按中文的节奏重写，
+      但**所有承重数字逐个核对过两版一致**（脚本比对，不靠眼看）。
 - [x] ~~确认三份引用的 issue 在公开仓库可读~~ —— `git ls-files` 验过，
       [141](141-remove-activation-subsystem.md) / [143](143-m15-dogfood.md) /
       [038](038-skill-injection-probe.md) 全部在版本控制里，文章那几个出处链接站得住

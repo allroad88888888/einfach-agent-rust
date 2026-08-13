@@ -46,7 +46,7 @@ undo / 崩溃恢复 / 加第四家 provider 的那一刻显形。因为它们不
 
 ## 实做记录（2026-08-13）
 
-**初稿在 `scratchpad/185-draft-en.md`。**
+**初稿在 [`docs/posts/185-bugs-that-dont-fail.en.md`](../posts/185-bugs-that-dont-fail.en.md)。**
 
 ### 选了四条，每条对应一种不同的「静默」
 
@@ -99,7 +99,10 @@ N 位就是 2^N 种组合，测过的可能只有四种。**能力位没有消�
 
 ### 待办
 
-- [ ] 中文版（L2 第二波）
+- [x] ~~中文版（L2 第二波）~~ —— **提前做了**（2026-08-13），在 [`docs/posts/185-bugs-that-dont-fail.zh-CN.md`](../posts/185-bugs-that-dont-fail.zh-CN.md)。
+      L2 是我自己排的顺序，不是被什么挡着；「全部执行完」之下没有理由压着。
+      **不是逐句直译**：英文版是先写的，中文版按中文的节奏重写，
+      但**所有承重数字逐个核对过两版一致**（脚本比对，不靠眼看）。
 - [x] ~~确认 `docs/INVARIANTS.md` 与 `scripts/check-invariants.sh` 在公开仓库~~
       —— `git ls-files` 验过，连同 `scripts/check-build-cache.sh`（结尾那段的出处）
       三个都在
