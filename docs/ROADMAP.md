@@ -44,6 +44,7 @@
 | 30 | **扩展观测「被问才算」，不做反应式层**（2026-08-12，150 拍板，比原计划小一圈）：①hook 没有独立概念——就是 `TurnEnd` 时机的工具；②`TimedRun` 签名加**只读** `&Session`（轮末驱动手里本来就有，递进去而已；SessionStart 同签名统一，创建期读到空会话无害）；v1 边界不动：hook 不写状态（自此由签名保证而非纪律）、不回灌、不续 loop；③扩展**没有** derived 注册面——截获工具拿 Session 被调时现算，工具体内自便（core 自己的 derived 引擎照旧，只是不对扩展开注册口）；④状态谓词触发（「没人喊自己动」的反应式层）**不做**，连同「扩展 derived 公式」的完整讨论记档防重开；151/152 随之撤销，落地只剩 153 一刀 | ①149 的真实需求单上全部是「被问才算」：report 是模型喊的、审计是轮末驱动喊的——反应式层（注册面 + 纯度扫描扩面 + 去抖语义 + 防偷改 prompt 四件套）服务的是一个不存在的用户，正是 021「没被真实使用验证过的东西跟没写一样」②「被问才算」的工具体内已经能算任何东西（Session 手套读全开、轮间是稳定态），电子屏与服务员的差别只剩「没人喊自己动」，而那恰是决策 21 否决自动触发时警惕的形状 ③`TimedRun` 缺 `&Session` 是 149 实测出的唯一真墙（ext:stats 被迫内存传话 + `seen_at` 认账），一刀补齐后传话格整个删除 |
 | 31 | **宿主声明开局块：声明的是内容，不是执行体**（2026-08-12，M17，清掉 §四「宿主声明不了 timed 工具」）：`capabilities.prefix: [{name, text}]`——宿主建会话**之前**自己跑完逻辑，把结果文本带进来；装配期合成「执行体 = 返回常量文本」的 `SessionStart` timed 工具（表尾、按名排序），于是 `run_session_start`、恢复回放（134 状态 + `Slot::HostPrefix` 照 073 落店）、`inherit_prefix` 校验（读 timed 区 spec 名）、`session_has_history` 闸**全部零改动认识它**；撞名判据 = 名字强制 `web:`/`desk:` 前缀（与内置 `srv:` 结构性不撞）+ 声明内/与 `tools` 重名拒 + 空 text 400；**远程执行否决**——135 已判 SSE 宿主创建时回传通道结构上不存在，拉取式虽可表达但要把建会话改成异步状态机（挂起/超时/半建清理），服务的只是「拿一段文本」；**TurnEnd 不进协议**——宿主在墙外 poll/SSE 天然看得见每轮结束，副作用在自己家做，这就是宿主版轮末 hook（决策 30「被问才算」的宿主投影）。落地 M17（154–158） | ①`SessionStart` 工具的全部意义是它的**结果**——一段进前缀的文本，在哪跑不重要，让宿主在自己家跑完再声明就把「代码过不了网线」这个死结整个绕开 ②声明是会话状态（073 的既有拍板）：journaled → 恢复回放白拿、历史不可改写白拿 ③合成 timed 条目 = 字面上兑现「宿主声明 timed 工具」，且三处校验/过滤自动认识它，零新概念零新面 |
 | 32 | **子 agent 上限的配置面开在进程级**（2026-08-12，M18，159 拍板，清掉 §四「子 agent 上限的配置面」）：决策 20 的 `AgentLimits { max_depth, max_children }` 一直是代码可配、**运行时无入口**（四个生产装配点写死 `default()`）。定为**启动参数**——`agent-server`/`agent-cli` 各加 `--max-agent-depth`/`--max-children`（env 兜底，命令行优先），协议面**零改动**；**per-session 进协议否决**（它要求 per-session 的值跨恢复活下来，而 limits 进不了 store；且决策 20 的定位是部署方的成本兜底，让建会话的客户端自己填等于兜底由被兜的那一方决定；多租户今天无用户）；**进 store 当 `Slot` 否决**（073/154 那条路是为「要进 prompt、要能回放、要能 undo 的内容」设计的，limits 三条都不占，`spawn.rs:91` 早已拍过上限变更不可撤——会长出一个不进 undo 的半吊子 slot）。**校验取严**：解析失败/`0` 拒绝启动而非静默退默认——本仓两种取向都有先例，判据是**有没有下游替它报错**：`--port` 能静默退 `None` 是因为 `default_bind_addr` 会替它报，`AGENT_BIND` 配错则硬失败（`BindConfigError` 文档：「把打错的字符串当成没设，是那种配置错了却看起来在正常运行的坑」）；上限没有下游，故跟 `AGENT_BIND` 走。下限钉 1，要关 spawn 走 076 的 `disable_builtin`；上限不设死限。**附带修一处静默失配**（160）：`restore` 曾把 `limits` 硬写 `default()` 且 `recover` 无入参，「宿主载入后重调」这条路名存实亡——配置值恒等于默认值时不显形，上限一可配第一次重启就显形。落地 M18（159–163） | ①与「limits 是配置不是状态」的既有拍板一致（`spawn.rs` 字段文档 + `restore.rs`），不推翻任何东西 ②进程级配置天然跨恢复一致：同一份启动参数重启，恢复出来的会话拿到同一组数——前提是 `recover` 真有那个入参，这正是 160 补的 ③两侧数字（工具描述那份 + `spawn_child` 拦人那份）的对齐 034 已做成一次函数调用，配置面只要喂进 `ToolTableSpec::Full` 就全链自动通，不新增耦合点 |
+| 33 | **通用 OpenAI 兼容 adapter：只发最小内核**（2026-08-13，L 波 175）：新增 `openai/` 与三家并列（**不抽共享基座**——`wire/`+`stream/` 早就是共享层，`Provider` 只四个纯函数）；`encode` **只发每个兼容实现都必须支持的字段**（`model`/`messages`/`max_tokens`/`stream`/`tools`/`tool_choice`），`temperature`/`top_p`/`n` 一律不发；`base_url` 由用户带全路径，**adapter 不许自己拼 `/v1`**；三个「不知道就不猜」的常量：恒不预测缓存、从不截断工具、晚加代价填 1.0（表示未知）。**否决 per-endpoint 怪癖表**（`match provider` 换个地方住，红线 12 原样保留，且把「配错了静默降级」转嫁给使用者）；**否决 `beta_base_url` 一类字段**（特殊能力走专门 adapter） | 174 实测：发全套 OpenAI 字段时 Kimi 直接 400（`temperature: 0.0` 被拒，而 0.0 是 OpenAI 合法值，通用 adapter 没理由知道这家只收 1）；**只发最小内核则三家全过**——不发就不会被拒，整类「合法值被这家拒绝」在结构上消失。`/v1` 不通用（GLM 是 `/api/paas/v4/chat/completions`，硬加就整组 404）。代价照实记：**给不了确定性采样**，要可复现输出用专门那家的 adapter；通用 adapter 的定位是够得着更多端点，不是替代已适配的三家。178 真机八条全过，core 零改动 |
 
 ## 二、现状
 
@@ -60,6 +61,46 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 历史注脚：M1 开工前曾整仓清空过一次——那三个抢跑写的 crate 没有 issue、没有独测、
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
+
+### 已完成：L 波 · 通用 OpenAI 兼容 adapter（2026-08-13，真机八条全过）
+
+**这不是 M 序列的一环**，是对外推广（L 波，见 [issues/README.md](issues/README.md)
+§L）拉出来的一条实做链：[165](issues/165-launch-positioning-decision.md) 定了「主战场
+英文社区」，直接推论是海外读者手里没有三家的 key，于是通用 OpenAI 兼容从「锦上添花」
+升级成拉新前置。
+
+**决策 33**（[175](issues/175-openai-compat-decision.md)）：
+
+1. **新增 `openai/` 与三家并列，不抽共享基座**——基座早就在了（`wire/` 与 `stream/`
+   本来就是共享层，`Provider` 只有四个纯函数，`accumulator()` 已返回共享类型）。
+   B 案要做的事已经做完了，再提「抽基座」只会去动三家已真机验过的代码。
+2. **只发最小内核，一律不问「这家支不支持」**。实测两半：发全套 OpenAI 字段 →
+   Kimi **400**（`temperature: 0.0` 被拒，而 0.0 是 OpenAI 合法值）；只发
+   `model`/`messages`/`max_tokens`/`stream`/`tools`/`tool_choice` → **三家全过**。
+   于是「合法值被这家拒绝」整类问题在结构上消失。
+   **否决 per-endpoint 怪癖表**：那是 `match provider` 换个地方住，红线 12 的形状
+   原样保留，还把「配错了静默降级」的风险转嫁给不掌握细节的使用者。
+   **代价照实记**：通用 adapter 给不了确定性采样，要可复现输出就用专门那家的。
+3. **`base_url` 由用户带全路径，adapter 不许自己拼 `/v1`**——`/v1` 不是通用约定
+   （GLM 的兼容端点是 `/api/paas/v4/chat/completions`）。
+
+**探针先行**（[174](issues/174-openai-compat-probe.md)，`probes/results/openai-compat.json`
+28 条观测）：裸 OpenAI 请求打三家，测出四条会改变决策的事实——`/v1` 不通用、合法值会被
+硬拒、`n: 2` 在 GLM 上**静默按 1 处理**（比拒绝更糟）、DeepSeek 两条缓存路径数值一致。
+
+**落地**：`openai/` 六文件（[176](issues/176-openai-compat-adapter.md)）+ `adapter` 字段
+解耦段名与编解码（[177](issues/177-openai-compat-config.md)）+
+「缓存字段缺失不许读成 0」的静默失效看门狗（[198](issues/198-missing-cache-field-guard.md)）。
+
+**真机八条全过**（[178](issues/178-openai-compat-dogfood.md)）：三家各一轮、工具调用、
+流式、401 分类、undo。第一发就抓到一个真 bug——`/model <name>` 仍拿段名查 adapter 表
+（177 只改了启动路径），**单测测的是 `adapter_name()` 本身、测不到「调用方有没有用它」**，
+已修并补回归测试。
+
+`cached` 在真机上拿到三种形态：DeepSeek `6656`（真命中）/ GLM `0`（确定没命中）/
+Kimi `None`（这家字段整个缺失）——正是 198 守的那条区分的真实长相。
+
+**整条链下来 `agent-core` 一个字节没动**（红线 12 自查：`git diff --stat crates/agent-core/` 空）。
 
 ### 已完成：M18 子 agent 上限的配置面（2026-08-13，真机 dogfood 七条全过）
 

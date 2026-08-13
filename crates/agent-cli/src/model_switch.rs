@@ -33,7 +33,11 @@ pub fn switch(name: &str, ctx: &mut RunnerCtx, session: &mut Session, config: &R
         ));
         return;
     };
-    let adapter = match provider::build_provider(name) {
+    // 177：分发看段内 `adapter`，缺省才回落段名。**跟 `main.rs` 的启动路径同一条规则**
+    // ——178 真机时发现这里漏了：177 只改了启动那条，`/model <name>` 仍然拿段名去查表，
+    // 于是 `adapter = "openai"` 的段永远切不过去。单测测的是 `adapter_name()` 本身，
+    // 测不到「调用方有没有用它」，所以这个洞只有真机会显形。
+    let adapter = match provider::build_provider(provider::adapter_name(name, provider_cfg)) {
         Ok(p) => p,
         Err(e) => {
             print::model_switch_error(&e);
@@ -92,6 +96,14 @@ model = "kimi-k3"
 [providers.glm]
 base_url = "https://open.bigmodel.cn/api/paas/v4"
 model = "glm-5.2"
+
+# 177/178：段名**不是**任何合法 adapter 名，靠段内 `adapter` 指过去。
+# 这一段的存在本身就是回归防线——切换路径要是直接拿段名查表，它必然失败。
+[providers.my-gateway]
+adapter = "openai"
+api_key = "gateway-fixture-key"
+base_url = "https://gateway.internal.example/v1"
+model = "some-model"
 
 [default]
 provider = "deepseek"
@@ -210,5 +222,32 @@ provider = "deepseek"
             before,
             "没配 key 该报错保留原状态，不是切换到一半"
         );
+    }
+
+    /// **178 真机抓到的回归**：`/model <name>` 曾经直接拿**段名**去查 adapter 表，
+    /// 于是 `adapter = "openai"` 的段永远切不过去（真机报「没有对应的 adapter」）。
+    ///
+    /// 177 加 `adapter` 字段时只改了 `main.rs` 的启动路径，漏了这条；而 177 的单测
+    /// 测的是 `adapter_name()` **本身**，测不到「调用方有没有用它」——**这类洞只有
+    /// 端到端或真机会显形**。这条测试把调用方钉住。
+    #[test]
+    fn switching_to_a_section_whose_name_is_not_an_adapter_name_still_works() {
+        let config = fixture_config();
+        let mut ctx = build_ctx();
+        let mut session = session_with_history_and_prefix();
+
+        // 前提：段名本身不是合法 adapter 名，否则这条测试测了个寂寞。
+        assert!(
+            crate::provider::build_provider("my-gateway").is_err(),
+            "段名必须不是合法 adapter 名，这条测试才有意义"
+        );
+
+        switch("my-gateway", &mut ctx, &mut session, &config);
+
+        assert!(
+            session.prev_prefix().is_none(),
+            "切换成功的判据：跨家前缀镜像被清掉。没清掉说明 switch 在查表那一步就返回了"
+        );
+        assert_eq!(session.messages().len(), 2, "历史不该被切换动过");
     }
 }
