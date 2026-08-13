@@ -46,8 +46,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
 
+      # **故意不挂 Swatinem/rust-cache**，跟 ci.yml 不一样。它的 post 步骤会去清理
+      # `target/`，而 `cargo publish --dry-run` 在 `target/package/` 下建的校验目录
+      # 会让它踩空，刷出四条红色 `X Error: ENOENT ... tests/trybuild` 注解——
+      # 步骤全绿、结论 success，注解却是红的。
+      #
+      # 这在别的流水线是噪音，在这条是有害的：发布不可逆，「发没发成」要靠人读这份
+      # 日志判断，而红色 X 会让人怀疑一次其实成功了的发布。08-13 首跑冷缓存全程
+      # 2 分 35 秒，省下的那点时间不值这个歧义。
+      #
       # tag 能指向任何一个 commit，包括 main 的 CI 从没见过的那种。发布不可逆，
       # 所以这里重跑门禁，不假设「它已经绿过了」。少的那条是 --features ts 的协议
       # 一致性测试：那护的是 TS 侧的生成产物，跟这个包发出去的字节无关。
