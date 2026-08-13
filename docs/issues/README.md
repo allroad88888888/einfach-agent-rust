@@ -882,7 +882,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [187](187-post-target-bloat.md) | 文章：两天 58GB（**量出了续集**） | 165 | sonnet | 20min | 初稿完成 |
 | [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | ✅ 完成 |
 | [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | ✅ 完成 |
-| [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | 待开始 |
+| [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | ✅ 完成 |
 | [191](191-launch-post.md) | ★ **首发帖**（只有一次机会） | 179+183 | **opus**+**你** | 20min | 待开始 |
 | [192](192-embed-example-scope.md) | 嵌入样例场景（**决策**） | 191 | **opus** | 20min | 待开始 |
 | [193](193-embed-example-build.md) | 嵌入样例实现 | 192 | sonnet | **待拆** | 占位 |

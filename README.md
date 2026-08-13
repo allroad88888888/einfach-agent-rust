@@ -104,7 +104,7 @@ frontend typecheck, and a browser-host wasm build.
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.en.md) — packages, transport, deployment shapes, and what is *not* built yet
-- [State model](docs/STATE-MODEL.md)
+- [State model](docs/STATE-MODEL.en.md) — why undo, redo, crash recovery and audit replay are one mechanism
 - [Provider adapter contract](docs/ADAPTER.md)
 - [Hard invariants](docs/INVARIANTS.en.md) — the twelve rules whose violations produce no error
 - [Roadmap and decisions](docs/ROADMAP.md)
