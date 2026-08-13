@@ -85,6 +85,20 @@ pub struct ProviderConfig {
     api_key: String,
     #[serde(default)]
     api_key_env: Option<String>,
+    /// 用哪套编解码。**缺省 = 段名**（`[providers.deepseek]` → `deepseek`），
+    /// 所以既有的 `providers.toml` 一个字都不用改。
+    ///
+    /// 存在的理由是 175 的通用 OpenAI 兼容 adapter：**段名是「这个端点叫什么」，
+    /// adapter 是「用哪套编解码」，两件事必须解耦**——否则想同时配 Ollama 和
+    /// OpenRouter（都走通用 adapter）就只能有一个段叫 `openai`，第二个没处放。
+    ///
+    /// ```toml
+    /// [providers.ollama]
+    /// adapter = "openai"          # 段名随便叫，编解码走通用那套
+    /// base_url = "http://localhost:11434/v1"
+    /// ```
+    #[serde(default)]
+    pub adapter: Option<String>,
     pub base_url: String,
     /// `prefix`/`partial` 续写要换的 base_url（DeepSeek 是 `/beta`）。
     /// 022 的最小 CLI 不做续写，这个字段先留着给以后接。
@@ -112,6 +126,9 @@ impl ProviderConfig {
         ProviderConfig {
             api_key,
             api_key_env: None,
+            // 宿主注入这条路（114d）不经 toml，adapter 由宿主在别处显式选定
+            // （wasm 侧是 `assemble.rs` 的 provider 名），这里留 None = 跟段名走。
+            adapter: None,
             base_url,
             beta_base_url: None,
             model,

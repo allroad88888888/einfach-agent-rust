@@ -16,6 +16,7 @@ use agent_providers::Provider;
 use agent_providers::deepseek::DeepSeek;
 use agent_providers::glm::Glm;
 use agent_providers::kimi::Kimi;
+use agent_providers::openai::OpenAiCompat;
 
 /// `name` → 具体 adapter。未知名字报错列出可选值——跟 `agent_cli::provider::
 /// build_provider` 是同一份判据，字面错误信息也保持一致，方便运维一眼认出
@@ -25,8 +26,11 @@ pub fn resolve_provider(name: &str) -> Result<Arc<dyn Provider>, String> {
         "deepseek" => Ok(Arc::new(DeepSeek)),
         "kimi" => Ok(Arc::new(Kimi)),
         "glm" => Ok(Arc::new(Glm)),
+        // 175：通用 OpenAI 兼容，由段内 `adapter = "openai"` 指过来。见
+        // `agent_cli::provider::build_provider` 同一处注释。
+        "openai" => Ok(Arc::new(OpenAiCompat)),
         other => Err(format!(
-            "\"{other}\" 没有对应的 adapter。可选：deepseek / kimi / glm（检查拼写，或 providers.toml 里 [providers.*] 的段名）"
+            "\"{other}\" 没有对应的 adapter。可选：deepseek / kimi / glm / openai（通用 OpenAI 兼容）。检查拼写，或 providers.toml 里 [providers.*] 的段名 / 段内的 adapter 字段"
         )),
     }
 }

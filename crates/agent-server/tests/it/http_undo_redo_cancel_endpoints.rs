@@ -132,10 +132,24 @@ async fn cancel_endpoint_stops_the_flying_turn() {
     );
     assert_eq!(cancel.status, 202, "{}", cancel.body);
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    // 上游是 `Script::HangAfterHeaders`——**它永远不返回**。所以「在任何有限时间内
+    // 收到 Cancelled」就已经证明了这条性质：取消不等 provider。
+    //
+    // 预算给得宽是**有意的**。窄预算不会让这条测试测得更严（对面永远不返回，
+    // 没有「差一点就自己结束了」这种情形可以混淆），只会让它在负载高的 CI runner
+    // 上变 flaky——2026-08-13 实测：3 秒预算下同一个 commit 在 CI 上一红一绿。
+    // flaky 测试比红测试更毒，它训练人忽略红色。
+    //
+    // 每次读取拿「剩下多少」而不是各自一份完整预算：否则一次慢读就能吃掉整个
+    // 窗口，实际生效的总时长跟写的数字对不上。
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
     let mut cancelled = false;
-    while std::time::Instant::now() < deadline {
-        let frame = next_typed(&mut sse, Duration::from_secs(3));
+    loop {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        let frame = next_typed(&mut sse, remaining);
         if matches!(
             frame.event,
             SessionEvent::Notice(Notice::TurnStatusChanged {
@@ -148,6 +162,7 @@ async fn cancel_endpoint_stops_the_flying_turn() {
     }
     assert!(
         cancelled,
-        "POST /cancel 该让在飞的轮次几百毫秒内 Failed(Cancelled)，不用等 provider 超时"
+        "POST /cancel 该让在飞的轮次收敛到 Failed(Cancelled)，不用等 provider —— \
+         上游是 HangAfterHeaders，不取消的话它永远不会结束"
     );
 }

@@ -116,3 +116,83 @@ fn root_config_from_host_leaves_execution_profiles_empty_for_backward_compat() {
     assert!(root.execution_profiles.is_empty());
     assert!(root.execution_profile("vision").unwrap().is_none());
 }
+
+/// 177：`adapter` 字段缺省 ⇒ 既有配置一个字不用改。
+///
+/// 这条钉的是**向后兼容**：三家的段里都没有 `adapter`，反序列化必须给 `None`，
+/// 调用方才能回落到段名。少了 `#[serde(default)]` 这里会直接解析失败。
+#[test]
+fn a_config_without_an_adapter_field_still_parses_and_leaves_it_none() {
+    let cfg: ProviderConfig = toml::from_str(
+        r#"
+            api_key = "sk-whatever"
+            base_url = "https://api.deepseek.com"
+            model = "deepseek-v4-pro"
+        "#,
+    )
+    .expect("没有 adapter 字段的旧配置必须照常解析");
+    assert_eq!(cfg.adapter, None);
+}
+
+/// 177：写了 `adapter` 就按它走——**段名与编解码解耦**。
+///
+/// 这是这个字段存在的全部理由：想同时配 Ollama 和 OpenRouter（都走通用
+/// OpenAI 兼容编解码），没有这个字段就只能有一个段叫 `openai`，第二个没处放。
+#[test]
+fn an_explicit_adapter_decouples_the_section_name_from_the_codec() {
+    let ollama: ProviderConfig = toml::from_str(
+        r#"
+            adapter = "openai"
+            api_key = "ollama"
+            base_url = "http://localhost:11434/v1"
+            model = "qwen3:4b"
+        "#,
+    )
+    .unwrap();
+    assert_eq!(ollama.adapter.as_deref(), Some("openai"));
+
+    let openrouter: ProviderConfig = toml::from_str(
+        r#"
+            adapter = "openai"
+            api_key = "sk-or-whatever"
+            base_url = "https://openrouter.ai/api/v1"
+            model = "anthropic/claude-sonnet-5"
+        "#,
+    )
+    .unwrap();
+    assert_eq!(openrouter.adapter.as_deref(), Some("openai"));
+
+    // 两个段名不同、编解码相同——这正是没有这个字段时表达不出来的东西。
+    assert_ne!(ollama.base_url, openrouter.base_url);
+}
+
+/// 177：`endpoint()` **不补 `/v1`**，`base_url` 填什么就是什么。
+///
+/// 174 实测：`/v1` 不是通用约定——GLM 的兼容端点是
+/// `/api/paas/v4/chat/completions`，硬加 `/v1` 整组 404。
+#[test]
+fn endpoint_never_invents_a_version_segment() {
+    let glm: ProviderConfig = toml::from_str(
+        r#"
+            api_key = "k"
+            base_url = "https://open.bigmodel.cn/api/paas/v4"
+            model = "glm-5.2"
+        "#,
+    )
+    .unwrap();
+    assert_eq!(
+        glm.endpoint(),
+        "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    );
+
+    let ollama: ProviderConfig = toml::from_str(
+        r#"
+            api_key = "k"
+            base_url = "http://localhost:11434/v1/"
+            model = "qwen3:4b"
+        "#,
+    )
+    .unwrap();
+    // 尾斜杠不该产生双斜杠。
+    assert_eq!(ollama.endpoint(), "http://localhost:11434/v1/chat/completions");
+}

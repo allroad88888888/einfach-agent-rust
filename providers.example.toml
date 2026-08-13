@@ -19,6 +19,54 @@
 # 不触发任何一档压缩——旧的 providers.toml 不会因为没有这个键而加载失败。
 
 # ─────────────────────────────────────────────────────────────
+# 通用 OpenAI 兼容（adapter = "openai"）—— 想最快跑起来就用这个
+#
+# 段名随便叫（ollama / openrouter / vllm / 公司内网网关…），靠段内的
+# `adapter = "openai"` 指向通用编解码。**段名是「这个端点叫什么」，adapter 是
+# 「用哪套编解码」，两件事解耦**——否则想同时配 Ollama 和 OpenRouter 就只能
+# 有一个段叫 openai，第二个没处放。
+#
+#   契约    只发【每个 OpenAI 兼容实现都必须支持】的字段：
+#           model / messages / max_tokens / stream / tools / tool_choice。
+#           temperature、top_p、n 一律不发，取值交给对面的默认。
+#   为什么  实测（issue 174）：发全套 OpenAI 字段时 Kimi 直接 400
+#           （"invalid temperature: only 1 is allowed"——而 0.0 是 OpenAI 的
+#           合法值，通用 adapter 没理由知道这家的规矩）；只发最小内核则三家全过。
+#           不发就不会被拒，整类「合法值被这家拒绝」在结构上消失。
+#   ⚠ 代价  【给不了确定性采样】。要可复现输出，用下面三家专门的 adapter。
+#           这一段的定位是【够得着更多端点】，不是替代已适配的三家。
+#   ⚠ 路径  base_url 要带全，adapter 不会自己补 /v1 ——因为 /v1 不是通用约定
+#           （GLM 的兼容端点就是 /api/paas/v4/chat/completions，没有 /v1；
+#            硬加就整组 404，issue 174 里就是这么撞出来的）。
+#   缓存    对面的块粒度/门槛未知，所以【恒不预测】，也不按上限截断工具
+#           ——不知道就不猜，宁可让对面报一个可见的错，也不自己静默处理。
+#
+# 例一：Ollama 本地（零成本，不用申请任何 key，最适合先跑起来看看）
+#   装好后：ollama pull qwen3:4b && ollama serve
+# [providers.ollama]
+# adapter = "openai"
+# api_key = "ollama"                        # 本地不校验，随便填非空即可
+# base_url = "http://localhost:11434/v1"
+# model = "qwen3:4b"
+# context_window = 32768
+#
+# 例二：OpenAI 官方
+# [providers.openai]
+# adapter = "openai"
+# api_key_env = "OPENAI_API_KEY"
+# base_url = "https://api.openai.com/v1"
+# model = "gpt-5.1"
+# context_window = 400000
+#
+# 例三：OpenRouter（一把 key 打多家）
+# [providers.openrouter]
+# adapter = "openai"
+# api_key_env = "OPENROUTER_API_KEY"
+# base_url = "https://openrouter.ai/api/v1"
+# model = "anthropic/claude-sonnet-5"
+# ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
 # DeepSeek —— 缓存折扣最狠，但工具表最僵
 #
 #   缓存    全自动硬盘缓存，默认开启，无需改代码

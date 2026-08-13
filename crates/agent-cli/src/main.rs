@@ -54,7 +54,9 @@ fn main() {
         Err(e) => fail(&format!("{e}")),
     };
     let provider_name = root.default.provider.as_str();
-    let adapter = match provider::build_provider(provider_name) {
+    // 177：分发看段内 `adapter`，缺省才回落段名。
+    let adapter_name = provider::adapter_name(provider_name, provider_cfg);
+    let adapter = match provider::build_provider(adapter_name) {
         Ok(p) => p,
         Err(e) => fail(&e),
     };
