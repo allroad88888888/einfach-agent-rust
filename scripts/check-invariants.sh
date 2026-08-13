@@ -265,6 +265,9 @@ case "${1-}" in
         git ls-files --others --exclude-standard '*.rs' '*Cargo.toml' 2>/dev/null
       } | sort -u | sed "s|^|$REPO/|"
     )
+    # 197：顺带看一眼构建缓存有没有胀。**独立脚本**——磁盘胀不是架构红线，
+    # 只是搭这趟已经在跑的车（收工 / CI），不进 hook 那条高频路径。
+    bash "$REPO/scripts/check-build-cache.sh" --quiet
     emit_human
     ;;
   "")
