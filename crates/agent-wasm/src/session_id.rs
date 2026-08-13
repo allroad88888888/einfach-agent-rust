@@ -26,7 +26,10 @@ pub(crate) fn validate(id: &str) -> Result<&str, String> {
         return Err("会话 id 不能为空".to_string());
     }
     if id.len() > MAX_LEN {
-        return Err(format!("会话 id 最长 {MAX_LEN} 字节，这个有 {} 字节", id.len()));
+        return Err(format!(
+            "会话 id 最长 {MAX_LEN} 字节，这个有 {} 字节",
+            id.len()
+        ));
     }
     if !id
         .bytes()

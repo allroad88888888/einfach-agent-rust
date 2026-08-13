@@ -14,10 +14,10 @@
 //! 不可信输出路径必须从空表开始，不能先装部署期工具再靠名称黑名单回减」。
 //! 黑名单回减错一个名字就是一件本不该出现的工具漏进了 prompt，而且**不报错**。
 //!
-//! 于是 114 验收第五条（「`srv:` 工具不出现在 prompt 里」）在这里是**结构性
-//! 成立**的，不靠过滤：这张表里从来没有过 `srv:` 前缀的东西。122 把外部输入接
-//! 进来之后这条第一次被真正考验——页面声明一条 `srv:` 前缀的工具会被当场拒掉
-//! （建宿主就失败），不是默默接受也不是默默丢掉。
+//! 于是业务 `srv:` 工具不出现在 prompt 里是**结构性成立**的，不靠过滤：这张表
+//! 从来没有过它们。声明 skill 是明确的唯一例外：`SkillRegistry` 只加入 runtime
+//! 实现的 `srv:skill/read`，由模型读取已持久化的 skill 正文；页面声明一条 `srv:`
+//! 工具仍会被当场拒掉（建宿主就失败），不是默默接受也不是默默丢掉。
 //!
 //! # 三条内建为什么保留为「总是存在」，而 121 的脚手架退场
 //!
@@ -66,8 +66,8 @@
 //! [`tool_table_json`] 把整张表原样吐出来，好让页面（和验收的人）能直接做字节
 //! 比对，不必去猜。
 
-use agent_core::{Reversibility, ToolSpec};
-use agent_runtime::ToolTable;
+use agent_core::{HostSkill, Reversibility, ToolSpec};
+use agent_runtime::{SkillRegistry, ToolTable};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -114,14 +114,18 @@ pub(crate) fn declare(json: Option<&str>) -> Result<Vec<(ToolSpec, Reversibility
 }
 
 /// 这个宿主给模型的全部工具：**内建那一段在前，页面声明那一段在后**。见模块文档
-/// ——**没有 `srv:`，没有 `mcp:`**。
+/// ——除非声明了 skill，否则没有 `srv:`，绝不装 `mcp:`。
 ///
 /// 分两次 `with_host_tools` 而不是拼成一个 `Vec` 排一次序：内建那一段的字节因此
 /// 不随页面声明了什么而挪动（红线 11）。入参已经过 [`declare`]，撞名在那里就拒掉
 /// 了，所以这里不会踩到 `push_spec` 的丢弃分支。
-pub(crate) fn browser_tool_table(declared: &[(ToolSpec, Reversibility)]) -> ToolTable {
+pub(crate) fn browser_tool_table(
+    declared: &[(ToolSpec, Reversibility)],
+    skills: Vec<HostSkill>,
+) -> ToolTable {
     ToolTable::empty()
         .with_host_tools(builtin_tools())
+        .with_skills(SkillRegistry::from_host_skills(skills))
         .with_host_tools(declared.to_vec())
 }
 
@@ -183,8 +187,8 @@ fn echo_schema() -> serde_json::Value {
     })
 }
 
-/// 把工具表原样序列化成 JSON——**验收第三/第五条的证据面**：页面可以在关闭前
-/// 和重开后各取一次做字节比对，也可以一眼看清里面没有 `srv:` 前缀的东西。
+/// 把工具表原样序列化成 JSON：页面可以在关闭前和重开后各取一次做字节比对，且可
+/// 检查声明 skill 时只出现 runtime 的 `srv:skill/read`，没有 MCP 或其他业务 `srv:`。
 ///
 /// 这不是「进 prompt 的那份字节」本身（那由各家 adapter 的 `encode` 决定），
 /// 但它是 `Ingredients::tools` 的输入，两次相同则那份字节必然相同。

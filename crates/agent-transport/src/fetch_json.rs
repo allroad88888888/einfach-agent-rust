@@ -10,7 +10,7 @@
 
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Headers, Request, RequestInit};
+use web_sys::RequestInit;
 
 use crate::web_stream_source::describe_js_error;
 
@@ -23,25 +23,16 @@ pub(crate) async fn attempt_json_fetch(
     api_key: &str,
     body: &[u8],
 ) -> Result<web_sys::Response, String> {
-    let headers = Headers::new().map_err(|e| describe_js_error(&e))?;
-    headers
-        .set("Authorization", &format!("Bearer {api_key}"))
-        .map_err(|e| describe_js_error(&e))?;
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| describe_js_error(&e))?;
-    headers
-        .set("Accept", "application/json")
-        .map_err(|e| describe_js_error(&e))?;
+    let headers = js_sys::Object::new();
+    set_header(&headers, "Authorization", &format!("Bearer {api_key}"))?;
+    set_header(&headers, "Content-Type", "application/json")?;
+    set_header(&headers, "Accept", "application/json")?;
 
     let body_array = js_sys::Uint8Array::from(body);
     let init = RequestInit::new();
     init.set_method("POST");
-    init.set_headers(&headers);
+    init.set_headers(headers.as_ref());
     init.set_body(&body_array);
-
-    let request =
-        Request::new_with_str_and_init(url, &init).map_err(|e| describe_js_error(&e))?;
 
     let global = js_sys::global();
     let fetch_fn: js_sys::Function = js_sys::Reflect::get(&global, &JsValue::from_str("fetch"))
@@ -49,7 +40,7 @@ pub(crate) async fn attempt_json_fetch(
         .dyn_into()
         .map_err(|_| "全局作用域上没有 fetch 函数".to_string())?;
     let promise: js_sys::Promise = fetch_fn
-        .call1(&global, &request)
+        .call2(&global, &JsValue::from_str(url), &init)
         .map_err(|e| describe_js_error(&e))?
         .dyn_into()
         .map_err(|_| "fetch 没有返回 Promise".to_string())?;
@@ -59,6 +50,16 @@ pub(crate) async fn attempt_json_fetch(
     response_value
         .dyn_into::<web_sys::Response>()
         .map_err(|_| "fetch 返回了非 Response 对象".to_string())
+}
+
+fn set_header(headers: &js_sys::Object, name: &str, value: &str) -> Result<(), String> {
+    js_sys::Reflect::set(
+        headers.as_ref(),
+        &JsValue::from_str(name),
+        &JsValue::from_str(value),
+    )
+    .map(|_| ())
+    .map_err(|e| describe_js_error(&e))
 }
 
 /// 把响应体整段读成字符串——`post_json` 是一次性 JSON 响应（不是流），没有

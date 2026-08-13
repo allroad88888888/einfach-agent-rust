@@ -33,6 +33,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::assemble::Live;
 use crate::callback::{self, Slot};
+use crate::capabilities;
 use crate::config::HostConfig;
 use crate::tools;
 use crate::vision::KimiVisionConfig;
@@ -73,15 +74,17 @@ impl AgentHost {
     /// 1. `config_json`：
     ///    `{"provider":"deepseek|kimi|glm","base_url":"…","model":"…","api_key":"…"}`
     ///    （识图另有一个可选的 `vision` 段，见 [`AgentHost::inspect_image`]）；
-    /// 2. `tool_declaration_json`（**可选**，122）：这个页面自己实现、要交给模型用的
-    ///    工具表，形状是
+    /// 2. `capabilities_json`（**可选**）：这个页面自己实现、要交给模型用的能力表。
+    ///    旧的只带工具形状仍兼容：
     ///    ```json
     ///    {"tools":[{"name":"web:crm/lookup","description":"按客户 ID 查 CRM 档案。无参数。",
     ///               "schema":{"type":"object","properties":{},"additionalProperties":false},
     ///               "reversibility":"pure"}]}
     ///    ```
-    ///    执行由 [`AgentHost::on_tool_call`] 装的回调负责。不给（或给 `null`）=
-    ///    只有三条内建工具。
+    ///    也可追加 skill：`{"skills":[{"id":"crm-flow","description":"…","body":"…"}]}`。
+    ///    skill 正文由 `srv:skill/read` 按需读，开局只写入索引；v1 不接受 skill
+    ///    自带 `tools`。直接 `web:`/`desk:` 工具仍由 [`AgentHost::on_tool_call`] 的
+    ///    回调执行。不给（或给 `null`）= 只有三条内建工具。
     ///
     /// # 声明的规则
     ///
@@ -103,7 +106,9 @@ impl AgentHost {
     /// 文案**——描述改一个字、schema 多一个键、少一条工具，刷新之后前缀缓存全断
     /// （DeepSeek 上是 120 倍的差价，而且功能完全正常，没有任何报错）。
     ///
-    /// 所以：**把它写成一个模块级常量字符串，不要每次现拼**。
+    /// 所以：**把它写成一个模块级常量字符串，不要每次现拼**。新会话会把解析后的
+    /// 直接工具与 skill 写进自己的 journal；恢复时只重放 journal 中那一份，不用当前
+    /// 宿主配置覆盖历史。
     ///
     /// ```js
     /// const PAGE_TOOL_DECLARATION = '{"tools":[{"name":"web:host/callback-probe", … }]}';
@@ -112,27 +117,26 @@ impl AgentHost {
     ///
     /// 拿 [`AgentHost::tool_table_json`] 在刷新前后各取一次做字节比对，就能自己验。
     ///
-    /// # 表在这一刻定死
+    /// # 新会话的表在这一刻定死
     ///
     /// 没有「中途改表」的入口，这是**故意的**：会话中途换表就是前缀缓存全断，而且
     /// 已经发生过的那几轮对话是在旧表下答的。想换表 = 重新 `new AgentHost(...)`，
-    /// 那本来就是一个全新的宿主。
+    /// 那本来就是一个全新的宿主。已存在会话是唯一的例外：它只重放自己的 journal，
+    /// 不受新宿主的配置影响。
     #[wasm_bindgen(constructor)]
-    pub fn new(
-        config_json: &str,
-        tool_declaration_json: Option<String>,
-    ) -> Result<AgentHost, JsValue> {
+    pub fn new(config_json: &str, capabilities_json: Option<String>) -> Result<AgentHost, JsValue> {
         let config = HostConfig::parse(config_json).map_err(js_error)?;
         // 名字不认识就当场报，不要等第一次请求才发现 endpoint 和编码对不上。
         config.adapter().map_err(js_error)?;
         // 同理：声明写错了当场报，不要等模型第一次调它才发现表里没有。
-        let declared = tools::declare(tool_declaration_json.as_deref()).map_err(js_error)?;
-        let config = config.with_declared_tools(declared);
+        let declared = capabilities::parse(capabilities_json.as_deref()).map_err(js_error)?;
+        let config = config.with_declared_capabilities(declared.tools, declared.skills);
         let vision = KimiVisionConfig::parse(config_json);
         Ok(AgentHost {
             inner: Rc::new(Inner {
                 tool_table_json: tools::tool_table_json(&tools::browser_tool_table(
                     config.declared_tools(),
+                    config.declared_skills().to_vec(),
                 )),
                 config,
                 vision,
@@ -156,7 +160,7 @@ impl AgentHost {
     /// 装一条**工具执行回调**：`handler(name, inputJson) -> Promise<string>`。
     ///
     /// 模型调了一条这个宿主**内建不认识**的 `web:` 工具时，交给它执行，`await`
-    /// 它返回的 Promise。那些工具正是构造时用 `tool_declaration_json` 声明进来的
+    /// 它返回的 Promise。那些工具正是构造时用 `capabilities_json` 声明进来的
     /// 那一段（122）——**声明是它们能被调到的前提**：没声明的名字连等待槽都不会
     /// 开，模型编一个也调不到这里。
     ///
@@ -202,8 +206,8 @@ impl AgentHost {
         callback::install_tool(&self.inner.on_tool_call, handler);
     }
 
-    /// 这个宿主给模型的工具表，原样序列化。验收第三条（刷新前后逐字节相同）与
-    /// 第五条（没有 `srv:`）的证据面，见 [`crate::tools`] 模块文档。
+    /// 这个宿主给新会话的工具表，原样序列化。它是刷新前后逐字节比对，以及检查
+    /// skill 仅追加 `srv:skill/read`（不含 MCP）的证据面，见 [`crate::tools`] 模块文档。
     #[wasm_bindgen(js_name = toolTableJson)]
     pub fn tool_table_json(&self) -> String {
         self.inner.tool_table_json.clone()

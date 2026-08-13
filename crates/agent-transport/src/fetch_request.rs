@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{AbortController, Headers, ReadableStreamDefaultReader, Request, RequestInit};
+use web_sys::{AbortController, ReadableStreamDefaultReader, RequestInit};
 
 use crate::web_stream_source::{WebStreamSource, describe_js_error};
 
@@ -29,9 +29,8 @@ pub(crate) async fn attempt_fetch(
     body: &[u8],
     controller: &AbortController,
 ) -> Result<web_sys::Response, String> {
-    let request =
-        build_request(url, api_key, body, controller).map_err(|e| describe_js_error(&e))?;
-    let response_value = call_global_fetch(&request)
+    let init = build_request_init(api_key, body, controller).map_err(|e| describe_js_error(&e))?;
+    let response_value = call_global_fetch(url, &init)
         .await
         .map_err(|e| describe_js_error(&e))?;
     response_value
@@ -39,37 +38,47 @@ pub(crate) async fn attempt_fetch(
         .map_err(|_| "fetch 返回了非 Response 对象".to_string())
 }
 
-fn build_request(
-    url: &str,
+fn build_request_init(
     api_key: &str,
     body: &[u8],
     controller: &AbortController,
-) -> Result<Request, JsValue> {
-    let headers = Headers::new()?;
-    headers.set("Authorization", &format!("Bearer {api_key}"))?;
-    headers.set("Content-Type", "application/json")?;
-    headers.set("Accept", "text/event-stream")?;
+) -> Result<RequestInit, JsValue> {
+    let headers = js_sys::Object::new();
+    set_header(&headers, "Authorization", &format!("Bearer {api_key}"))?;
+    set_header(&headers, "Content-Type", "application/json")?;
+    set_header(&headers, "Accept", "text/event-stream")?;
 
     let body_array = js_sys::Uint8Array::from(body);
     let init = RequestInit::new();
     init.set_method("POST");
-    init.set_headers(&headers);
+    init.set_headers(headers.as_ref());
     init.set_body(&body_array);
     init.set_signal(Some(&controller.signal()));
 
-    Request::new_with_str_and_init(url, &init)
+    Ok(init)
+}
+
+fn set_header(headers: &js_sys::Object, name: &str, value: &str) -> Result<(), JsValue> {
+    js_sys::Reflect::set(
+        headers.as_ref(),
+        &JsValue::from_str(name),
+        &JsValue::from_str(value),
+    )
+    .map(|_| ())
 }
 
 /// 全局 `fetch`，不经 `web_sys::window()`——同一份代码要能在主线程、
 /// Worker（114 大概率会用的形态，见 `fetch_client.rs` 顶部关于同步阻塞的
 /// 讨论）、以及本 crate 自己用 Node 跑的 wasm 测试里都拿到 `fetch`，三者
 /// 共同点只有「全局作用域上有一个 `fetch` 函数」，所以直接反射取。
-async fn call_global_fetch(request: &Request) -> Result<JsValue, JsValue> {
+async fn call_global_fetch(url: &str, init: &RequestInit) -> Result<JsValue, JsValue> {
     let global = js_sys::global();
     let fetch_fn: js_sys::Function = js_sys::Reflect::get(&global, &JsValue::from_str("fetch"))?
         .dyn_into()
         .map_err(|_| JsValue::from_str("全局作用域上没有 fetch 函数"))?;
-    let promise: js_sys::Promise = fetch_fn.call1(&global, request)?.dyn_into()?;
+    let promise: js_sys::Promise = fetch_fn
+        .call2(&global, &JsValue::from_str(url), init)?
+        .dyn_into()?;
     JsFuture::from(promise).await
 }
 

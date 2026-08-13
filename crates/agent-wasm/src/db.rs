@@ -128,8 +128,7 @@ pub(crate) async fn delete(session_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-const BLOCKED_BY_DELETE: &str =
-    "删不掉：这个会话的库还有别的连接开着（页面自己那条要先 db.close()，别的标签页要先关掉）。\
+const BLOCKED_BY_DELETE: &str = "删不掉：这个会话的库还有别的连接开着（页面自己那条要先 db.close()，别的标签页要先关掉）。\
      注意删除请求还挂在浏览器里，等最后一条连接关掉它仍会生效。";
 
 const BLOCKED_BY_OPEN: &str =
@@ -212,7 +211,10 @@ async fn await_open_request(
     let promise = js_sys::Promise::new(&mut |resolve, reject| {
         let ok_request = request.clone();
         let on_success = Closure::once(move |_event: web_sys::Event| {
-            let _ = resolve.call1(&JsValue::NULL, &ok_request.result().unwrap_or(JsValue::NULL));
+            let _ = resolve.call1(
+                &JsValue::NULL,
+                &ok_request.result().unwrap_or(JsValue::NULL),
+            );
         });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
         on_success.forget();

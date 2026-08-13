@@ -11,7 +11,8 @@
 //! | 工具 executor | `ToolExecutor`（真文件系统） | `NullToolExecutor`（112 的注入接缝） |
 //!
 //! 工具表见 [`crate::tools`]：空表起步 + 三条内建 `web:` 声明 + 页面自己声明的
-//! 那一段（122），没有 `srv:`、没有 `mcp:`、不开 spawn/status/collect/skill。
+//! 那一段，以及声明 skill 时的 `srv:skill/read`/session-start 索引；没有 `mcp:`、
+//! 不开 spawn/status/collect。
 //! **每一档 `with_*` 都是一次独立授权**——浏览器宿主目前一档都不开，所以 prompt
 //! 最前面那段字节就是那几条声明。
 
@@ -29,31 +30,11 @@ use crate::db;
 
 /// 常驻 system 前缀。**固定字面量**：红线 11 禁止把时间戳、请求 id、随机 id
 /// 写进 system prompt——那会让每一轮都是全新前缀、每一轮都全价。
-const BASE_SYSTEM: &str =
-    "你是一个简洁、诚实的助手，跑在用户的浏览器里。需要页面本身的信息（标题、地址）时调对应的工具，不要猜。";
+const BASE_SYSTEM: &str = "你是一个简洁、诚实的助手，跑在用户的浏览器里。需要页面本身的信息（标题、地址）时调对应的工具，不要猜。";
 
-/// 一条 `web:` 工具等页面回调的截止线（123）。**比 native 默认短一个数量级**
-/// （`agent_runtime::ctx::DEFAULT_REMOTE_TOOL_TIMEOUT` = 10 分钟），因为那个数是
-/// 按「另一头是个真人：读完问题、切个标签页、回来作答」定的，而这一头是同一个
-/// 标签页里的一个 JS 回调——机器干活。
-///
-/// 60 秒的两个边：
-///
-/// - **下边界**由这个里程碑里最慢的一条合法回调定：一张浏览器侧上限 2 MB 的图
-///   （119 §五-1）走 multipart 上传 + 一次识图往返，弱网上几十秒是可能的。60s ≈ 那个
-///   量级的两倍，留了余量。
-/// - **上边界**由「挂住的代价」定，而浏览器这边的代价比 server 大得多：`send()`
-///   在整轮期间握着 `live.borrow_mut()`，所以一条挂住的回调不是「一次调用慢」，
-///   是整个 `AgentHost` 对页面失去响应（[`crate::host_session`] 的借用纪律）。
-///   server 形态下 actor 只是空闲着，代价小，所以它能忍 10 分钟。
-///
-/// 取消是更快的那条逃生舱（用户一按立刻生效，见 `AgentHost::cancel`），所以这条线
-/// 只需要兜住**没人看着**的那种挂死。
-///
-/// 不做成页面可配：那是宿主声明自己能力时该一起带进来的东西
-/// （HOST-CAPABILITIES.md §四），122 之前没有那个入口，现在给的是一个固定默认
-/// 加 `RunnerCtx::with_remote_tool_timeout` 这个既有的口。
-const HOST_TOOL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+/// 人工参与的页面工具（提问、上传、确认）可以等到 10 分钟；取消仍走既有即时
+/// 信号，不因这条预算变慢。直接使用 runtime 默认值，避免两个宿主的约定漂移。
+const HOST_TOOL_TIMEOUT: std::time::Duration = agent_runtime::ctx::DEFAULT_REMOTE_TOOL_TIMEOUT;
 
 /// 装配好的一个活会话。`Session` 与 `RunnerCtx` 一起活、一起换——「切会话」就是
 /// 整个换掉这个结构体。
@@ -84,7 +65,7 @@ pub(crate) async fn open(
         WebIdbStore::open(kv, move |error| on_store_error(error.to_string())).await;
     let store: Box<SessionBackend> = Box::new(store);
 
-    let mut session = match agent_runtime::recover(
+    let (mut session, restored) = match agent_runtime::recover(
         store.as_ref(),
         AgentId::root(),
         agent_core::DEFAULT_HISTORY_CAP,
@@ -92,8 +73,8 @@ pub(crate) async fn open(
         // 快照里有这一版不认识的键：忽略并继续，跟 CLI 同一条处理。
         &mut |_key| {},
     ) {
-        Ok(Some(recovered)) => recovered,
-        Ok(None) => Session::new(AgentId::root()),
+        Ok(Some(recovered)) => (recovered, true),
+        Ok(None) => (Session::new(AgentId::root()), false),
         // `Refused` = journal 读不回来。**硬失败**，不静默当成新会话——下一张
         // 快照就会把现场覆盖掉（`LoadOutcome` 文档里那条真 bug）。
         Err(error) => return Err(format!("会话恢复失败：{error}")),
@@ -104,6 +85,9 @@ pub(crate) async fn open(
     let api_key = provider_config
         .resolve_key()
         .ok_or_else(|| "没填 key：key 只能由使用者自己提供，这个页面不内置任何 key".to_string())?;
+    // 恢复时能力只认 journal：当前宿主传入的能力不参与，不会把历史会话的声明
+    // 覆盖掉。全新会话则使用本次 `AgentHost` 构造期解析出的能力，随后持久化。
+    let (host_tools, host_skills) = capabilities_for_session(config, &session, restored);
     let mut ctx = RunnerCtx::new(
         config.adapter()?,
         Arc::new(Client::new()),
@@ -112,9 +96,9 @@ pub(crate) async fn open(
         // 112 的注入接缝：浏览器没有文件系统，本地工具一件都执行不了。表里
         // 本来也没有声明任何本地工具，所以这个 executor 永远不会被查到。
         NullToolExecutor,
-        // 122：三条内建 + 页面在建宿主时声明的那一段（料在 `config` 上，它建宿主
-        // 那一刻就定死了——同一个 `AgentHost` 开多少次会话都是同一份字节）。
-        crate::tools::browser_tool_table(config.declared_tools()),
+        // 122：三条内建、直接 host tool，及 skill 的 read/index。恢复走上面的
+        // journal 快照；新会话才走构造 `AgentHost` 时给定的页面能力。
+        crate::tools::browser_tool_table(&host_tools, host_skills),
         vec![SystemChunk {
             label: Arc::from("base"),
             text: Arc::from(BASE_SYSTEM),
@@ -137,6 +121,15 @@ pub(crate) async fn open(
     // `Session::restore` 灌回来的旧条目当新条目重新 append 一遍（CLI 那边抓到过
     // 的真 bug，见 `persist::seed_after_recover` 文档）。对全新会话是无害空操作。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
+    if !restored {
+        agent_runtime::run_session_start(&mut session, ctx.tools()).map_err(|error| {
+            format!(
+                "会话开局能力初始化失败（{}）：{}",
+                error.tool, error.message
+            )
+        })?;
+        record_capabilities(&mut ctx, &mut session, config);
+    }
     if needs_fail_close {
         // `Err` 与 `agent-cli::main` 同一条：报一次就够，装配继续——恢复期的
         // fail-close 本来就是「把旧轮收成终态」，它自己失败不该让会话开不起来。
@@ -149,4 +142,94 @@ pub(crate) async fn open(
     }
 
     Ok(Live { id, session, ctx })
+}
+
+/// 新会话只写一次宿主能力；恢复路径已从 journal 取料，绝不覆盖或重复追加。
+fn record_capabilities(ctx: &mut RunnerCtx, session: &mut Session, config: &HostConfig) {
+    if !config.has_declared_capabilities() {
+        return;
+    }
+    if !config.declared_tools().is_empty() {
+        session.declare_host_tools(config.declared_tools().to_vec());
+    }
+    if !config.declared_skills().is_empty() {
+        session.declare_host_skills(config.declared_skills().to_vec());
+    }
+    session.begin_turn();
+    agent_runtime::persist::sync(ctx, session);
+}
+
+/// 恢复会话的声明只从 journal 重放；构造当前 `AgentHost` 时传入的配置只可用于新会话。
+fn capabilities_for_session(
+    config: &HostConfig,
+    session: &Session,
+    restored: bool,
+) -> (
+    Vec<(agent_core::ToolSpec, agent_core::Reversibility)>,
+    Vec<agent_core::HostSkill>,
+) {
+    if restored {
+        (session.host_tools(), session.host_skills())
+    } else {
+        (
+            config.declared_tools().to_vec(),
+            config.declared_skills().to_vec(),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_core::{HostSkill, Reversibility, SkillId, ToolSpec};
+
+    fn tool(name: &str) -> (ToolSpec, Reversibility) {
+        (
+            ToolSpec {
+                name: Arc::from(name),
+                description: Arc::from("测试工具"),
+                schema: Arc::new(serde_json::json!({"type":"object"})),
+            },
+            Reversibility::Pure,
+        )
+    }
+
+    fn skill(id: &str) -> HostSkill {
+        HostSkill {
+            id: SkillId::new(id),
+            description: Arc::from("测试 skill"),
+            body: Arc::from("journal 正文"),
+            tools: Vec::new(),
+            tool_reversibility: Default::default(),
+        }
+    }
+
+    fn config() -> HostConfig {
+        HostConfig::parse(
+            r#"{"provider":"deepseek","base_url":"https://example.invalid","model":"test","api_key":"test"}"#,
+        )
+        .expect("测试配置应有效")
+        .with_declared_capabilities(vec![tool("web:current/tool")], vec![skill("current")])
+    }
+
+    #[test]
+    fn recovery_uses_journal_capabilities_instead_of_current_host_configuration() {
+        let mut session = Session::new(AgentId::root());
+        session.declare_host_tools(vec![tool("web:journal/tool")]);
+        session.declare_host_skills(vec![skill("journal")]);
+
+        let (tools, skills) = capabilities_for_session(&config(), &session, true);
+
+        assert_eq!(&*tools[0].0.name, "web:journal/tool");
+        assert_eq!(skills[0].id.as_str(), "journal");
+        let table = crate::tools::browser_tool_table(&tools, skills);
+        assert!(table.declares("web:journal/tool"));
+        assert!(table.declares("srv:skill/read"));
+        assert!(!table.declares("web:current/tool"));
+    }
+
+    #[test]
+    fn human_host_tool_wait_budget_is_ten_minutes() {
+        assert_eq!(HOST_TOOL_TIMEOUT, std::time::Duration::from_secs(600));
+    }
 }
