@@ -1,0 +1,65 @@
+# 把浏览器宿主（crates/agent-wasm/www）部署成 GitHub Pages（issue 170）。
+#
+# 这是**部署**，不是门禁——门禁在 ci.yml，两个文件不合并（触发条件与权限都不一样）。
+# ci.yml 里的 `wasm` job 保证「编得出来」，这里只负责「把编出来的东西挂上去」。
+#
+# 为什么值得做：demo 本身就是技术宣言——别人的 agent 框架 demo 都要起服务，这个不用。
+# 页面是纯静态，静态托管只发 .html/.js/.wasm 三种字节，不参与任何一次模型请求；
+# 访问者自带 key，浏览器直接 fetch 到 provider（决策 26 实测三家 CORS 放行任意 origin）。
+# 那个「没有任何服务端进程」的说法在这里仍然成立——静态托管不在此列
+# （build-wasm.sh 的注释里把这条边界写清楚了，114 验收第一条同款口径）。
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/agent-wasm/**'
+      - 'scripts/build-wasm.sh'
+      - '.github/workflows/pages.yml'
+  # 手动触发：改了别处但想重新部署时用（比如 Pages 设置刚打开）。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时刻只跑一个部署。`cancel-in-progress: false`——部署跑到一半被砍掉会留下
+# 半个站点，宁可排队。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # crates/agent-wasm 是独立 workspace（自带 Cargo.lock / target），
+      # 要显式列出来，否则每次全量编 128k 行。
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/agent-wasm
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: build-wasm.sh
+        run: bash scripts/build-wasm.sh
+      - uses: actions/configure-pages@v5
+      # 传整个 www/：index.html + 四个 js + 刚构建出的 pkg/。
+      # pkg/ 在仓库里是 gitignore 的（产物不进版本控制），所以这一步**必须**
+      # 在 build-wasm.sh 之后——不然传上去的是一个没有 wasm 的空壳页面。
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: crates/agent-wasm/www
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,6 @@
 # 170 GitHub Pages 部署 workflow
 
-**里程碑** L · **依赖** [169](169-wasm-artifact-recheck.md) · **模型** sonnet · **独测** — · **状态** 待开始 · **估时** 20min
+**里程碑** L · **依赖** [169](169-wasm-artifact-recheck.md) · **模型** sonnet · **独测** — · **状态** workflow 已写，**等你开 Pages 开关**（2026-08-13）· **估时** 20min
 
 ## 目标
 
@@ -44,3 +44,44 @@
 ## 需要用户
 
 仓库 Settings → Pages → Source 选 **GitHub Actions**。这一步我做不了。
+
+---
+
+## 实做记录（2026-08-13）
+
+`.github/workflows/pages.yml` 已写。**在你打开 Pages 开关之前它跑不了**，
+所以下面「验收」那四条一条都还没打勾——不是忘了打。
+
+### 落地的几个决定
+
+**与 `ci.yml` 分成两个文件**（不合并）：一个是门禁一个是部署，触发条件与权限都不一样。
+`ci.yml` 的 `wasm` job 保证「编得出来」，`pages.yml` 只负责「把编出来的挂上去」。
+
+**触发限定路径**（`crates/agent-wasm/**` / `scripts/build-wasm.sh` / 本 workflow 自身）
++ `workflow_dispatch`。改文档不该触发一次部署。
+
+**`concurrency: cancel-in-progress: false`**：部署跑到一半被砍会留下半个站点，宁可排队。
+
+**`rust-cache` 要显式列 `crates/agent-wasm`**——它是独立 workspace（自带
+`Cargo.lock` / `target`），不列就每次全量编 128k 行。
+
+**`upload-pages-artifact` 必须排在 `build-wasm.sh` 之后**：`www/pkg/` 在仓库里是
+gitignore 的（产物不进版本控制），顺序反了传上去就是一个没有 wasm 的空壳页面。
+这一条在 workflow 里写了注释，因为它是那种「一眼看不出错、上线才发现白屏」的顺序依赖。
+
+### 已核实
+
+- 两份 workflow YAML 都能被解析（`ci.yml` 三个 job、`pages.yml` 一个）
+- **页面全部用相对路径**（`./pkg/agent_wasm.js` 等 4 处 import），
+  挂在 `/einfach-agent-rust/` 这种子路径下不会断
+- 部署上去的就是 `www/` 下这 12 个文件：`index.html` + 5 个 js + `pkg/` 里 5 个产物
+  （外加一个 `pkg/.gitignore`，无害）
+- 本地起静态服务器跑通过完整对话 + 撤销（[169](169-wasm-artifact-recheck.md) /
+  [196](196-wasm-expose-undo.md) 两轮真机），**部署的是同一份字节**
+
+### 你要做的两步
+
+1. Settings → Pages → Source 选 **GitHub Actions**
+2. `git push` —— 首推会同时触发 `ci.yml` 与 `pages.yml`
+
+推完把 URL 给我，我接着做 [173](173-readme-demo-hero.md)（README 挂 demo + 填 homepage）。
