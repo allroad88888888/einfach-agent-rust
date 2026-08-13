@@ -866,7 +866,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [171](171-demo-first-screen.md) | demo 首屏文案 + BYOK 引导 | 170 | sonnet | 20min | ✅ 完成 |
 | [172](172-demo-gif.md) | 录 demo GIF（口令实验） | 171 | claude+**你** | 20min | 待开始 |
 | [173](173-readme-demo-hero.md) | README 挂 demo + 填 homepage | 170+172 | sonnet | 15min | 待开始 |
-| [174](174-openai-compat-probe.md) | 探针：OpenAI 兼容打一发 | 165 | sonnet | 20min | 代码侧完成，**探针缺凭据** |
+| [174](174-openai-compat-probe.md) | 探针：裸 OpenAI 请求打三家 | 165 | sonnet | 20min | ✅ 完成 |
 | [175](175-openai-compat-decision.md) | 兼容层落在哪（**决策**，顶红线 12） | 174 | **opus** | 20min | 待开始 |
 | [176](176-openai-compat-adapter.md) | adapter 实现 | 175 | sonnet | 20min | 待开始 |
 | [177](177-openai-compat-config.md) | 配置面 + example（Ollama 零成本入口） | 176 | sonnet | 20min | 待开始 |

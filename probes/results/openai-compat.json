@@ -1,0 +1,484 @@
+{
+  "deepseek": [
+    {
+      "data": {
+        "content": "PONG",
+        "error": null,
+        "finish_reason": "stop",
+        "status": 200,
+        "usage": {
+          "completion_tokens": 19,
+          "completion_tokens_details": {
+            "reasoning_tokens": 16
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 101,
+          "prompt_tokens": 101,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 120
+        }
+      },
+      "note": "裸 OpenAI 请求（无 thinking / 无 temperature 特例）能否正常回复",
+      "probe": "A/vanilla-chat"
+    },
+    {
+      "data": {
+        "deepseek_path": 0,
+        "openai_standard_path": 0,
+        "usage": {
+          "completion_tokens": 24,
+          "completion_tokens_details": {
+            "reasoning_tokens": 21
+          },
+          "prompt_cache_hit_tokens": 0,
+          "prompt_cache_miss_tokens": 98,
+          "prompt_tokens": 98,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 122
+        },
+        "usage_keys": [
+          "completion_tokens",
+          "completion_tokens_details",
+          "prompt_cache_hit_tokens",
+          "prompt_cache_miss_tokens",
+          "prompt_tokens",
+          "prompt_tokens_details",
+          "total_tokens"
+        ]
+      },
+      "note": "usage 的全部字段名 —— 通用 adapter 的 CACHED_PATHS 要照着填",
+      "probe": "B/usage-shape"
+    },
+    {
+      "data": {
+        "finish_reason": "tool_calls",
+        "status": 200,
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"city\": \"Paris\"}",
+              "name": "get_weather"
+            },
+            "id": "call_00_aieH8kNcru5jsjeORKMx8532",
+            "index": 0,
+            "type": "function"
+          }
+        ]
+      },
+      "note": "非流式的 tool_calls 形状",
+      "probe": "C/tool-calls-nonstream"
+    },
+    {
+      "data": {
+        "line_count": 33,
+        "lines": [
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"reasoning_content\":\"\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"The\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" user\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" wants\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" the\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" weather\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" in\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" Paris\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\".\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" I\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"'ll\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" call\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" the\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" get\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"_\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\"weather\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" tool\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" with\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" city\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\" Paris\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":null,\"reasoning_content\":\".\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_00_7jnne5RQ1tjc56o6Zz4p1790\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"city\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\": \"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"Paris\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null}",
+          "data: {\"id\":\"c6862ea5-a4ed-4426-b65e-d13c4e3e500b\",\"object\":\"chat.completion.chunk\",\"created\":1786595826,\"model\":\"deepseek-v4-flash\",\"system_fingerprint\":\"fp_a18b46594c_prod0820_fp8_kvcache_20260402\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"reasoning_content\":null},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":375,\"completion_tokens\":65,\"total_tokens\":440,\"prompt_tokens_details\":{\"cached_tokens\":256},\"completion_tokens_details\":{\"reasoning_tokens\":20},\"prompt_cache_hit_tokens\":256,\"prompt_cache_miss_tokens\":119}}",
+          "data: [DONE]"
+        ]
+      },
+      "note": "流式的 tool_calls 分片：index 怎么给、arguments 怎么拼、[DONE] 有没有",
+      "probe": "C/tool-calls-stream"
+    },
+    {
+      "data": {
+        "body": {
+          "error": {
+            "code": "invalid_request_error",
+            "message": "The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed definitely-not-a-real-model-xyz.",
+            "param": null,
+            "type": "invalid_request_error"
+          }
+        },
+        "status": 400
+      },
+      "note": "模型名不存在时的状态码与错误体形状",
+      "probe": "D/bad-model"
+    },
+    {
+      "data": {
+        "choice_count": null,
+        "error": {
+          "code": "invalid_request_error",
+          "message": "Invalid n value (currently only n = 1 is supported)",
+          "param": null,
+          "type": "invalid_request_error"
+        },
+        "status": 400
+      },
+      "note": "OpenAI 的 n=2：拒绝、还是静默按 1 处理",
+      "probe": "D/unsupported-field-n"
+    },
+    {
+      "data": {
+        "first_usage": {
+          "completion_tokens": 37,
+          "completion_tokens_details": {
+            "reasoning_tokens": 35
+          },
+          "prompt_cache_hit_tokens": 1280,
+          "prompt_cache_miss_tokens": 21,
+          "prompt_tokens": 1301,
+          "prompt_tokens_details": {
+            "cached_tokens": 1280
+          },
+          "total_tokens": 1338
+        },
+        "second_usage": {
+          "completion_tokens": 25,
+          "completion_tokens_details": {
+            "reasoning_tokens": 23
+          },
+          "prompt_cache_hit_tokens": 1280,
+          "prompt_cache_miss_tokens": 21,
+          "prompt_tokens": 1301,
+          "prompt_tokens_details": {
+            "cached_tokens": 1280
+          },
+          "total_tokens": 1326
+        }
+      },
+      "note": "裸请求连打两次：第二次的缓存命中（不做任何前缀特化处理）",
+      "probe": "E/cache-parity"
+    }
+  ],
+  "glm": [
+    {
+      "data": {
+        "content": "PONG",
+        "error": null,
+        "finish_reason": "stop",
+        "status": 200,
+        "usage": {
+          "completion_tokens": 23,
+          "completion_tokens_details": {
+            "reasoning_tokens": 19
+          },
+          "prompt_tokens": 31,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 54
+        }
+      },
+      "note": "裸 OpenAI 请求（无 thinking / 无 temperature 特例）能否正常回复",
+      "probe": "A/vanilla-chat"
+    },
+    {
+      "data": {
+        "deepseek_path": null,
+        "openai_standard_path": 0,
+        "usage": {
+          "completion_tokens": 26,
+          "completion_tokens_details": {
+            "reasoning_tokens": 23
+          },
+          "prompt_tokens": 28,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 54
+        },
+        "usage_keys": [
+          "completion_tokens",
+          "completion_tokens_details",
+          "prompt_tokens",
+          "prompt_tokens_details",
+          "total_tokens"
+        ]
+      },
+      "note": "usage 的全部字段名 —— 通用 adapter 的 CACHED_PATHS 要照着填",
+      "probe": "B/usage-shape"
+    },
+    {
+      "data": {
+        "finish_reason": "tool_calls",
+        "status": 200,
+        "tool_calls": [
+          {
+            "function": {
+              "arguments": "{\"city\":\"Paris\"}",
+              "name": "get_weather"
+            },
+            "id": "call_-7355242270196492949",
+            "index": 0,
+            "type": "function"
+          }
+        ]
+      },
+      "note": "非流式的 tool_calls 形状",
+      "probe": "C/tool-calls-nonstream"
+    },
+    {
+      "data": {
+        "line_count": 28,
+        "lines": [
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"The\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" user\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" wants\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" to\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" know\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" the\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" weather\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" in\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" Paris\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\".\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" I\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"'ll\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" call\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" the\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" get\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"_weather\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" function\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" with\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" \\\"\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"Paris\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"\\\"\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" as\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" the\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\" city\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\".\"}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"call_b289d211a7c04746a0f420a9\",\"index\":0,\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]}}]}",
+          "data: {\"id\":\"20260813123603b20bf7ba26104eb0\",\"created\":1786595763,\"object\":\"chat.completion.chunk\",\"model\":\"glm-5.2\",\"choices\":[{\"index\":0,\"finish_reason\":\"tool_calls\",\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}],\"usage\":{\"prompt_tokens\":178,\"completion_tokens\":37,\"total_tokens\":215,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":25}}}",
+          "data: [DONE]"
+        ]
+      },
+      "note": "流式的 tool_calls 分片：index 怎么给、arguments 怎么拼、[DONE] 有没有",
+      "probe": "C/tool-calls-stream"
+    },
+    {
+      "data": {
+        "body": {
+          "error": {
+            "code": "1214",
+            "message": "modelCode：不存在"
+          }
+        },
+        "status": 400
+      },
+      "note": "模型名不存在时的状态码与错误体形状",
+      "probe": "D/bad-model"
+    },
+    {
+      "data": {
+        "choice_count": 1,
+        "error": null,
+        "status": 200
+      },
+      "note": "OpenAI 的 n=2：拒绝、还是静默按 1 处理",
+      "probe": "D/unsupported-field-n"
+    },
+    {
+      "data": {
+        "first_usage": {
+          "completion_tokens": 3,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 1231,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1234
+        },
+        "second_usage": {
+          "completion_tokens": 3,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 1231,
+          "prompt_tokens_details": {
+            "cached_tokens": 1216
+          },
+          "total_tokens": 1234
+        }
+      },
+      "note": "裸请求连打两次：第二次的缓存命中（不做任何前缀特化处理）",
+      "probe": "E/cache-parity"
+    }
+  ],
+  "glm_wrong_path_v1": [
+    {
+      "data": {
+        "content": null,
+        "error": "Not Found",
+        "finish_reason": null,
+        "status": 404,
+        "usage": null
+      },
+      "note": "裸 OpenAI 请求（无 thinking / 无 temperature 特例）能否正常回复",
+      "probe": "A/vanilla-chat"
+    },
+    {
+      "data": {
+        "deepseek_path": null,
+        "openai_standard_path": null,
+        "usage": null,
+        "usage_keys": []
+      },
+      "note": "usage 的全部字段名 —— 通用 adapter 的 CACHED_PATHS 要照着填",
+      "probe": "B/usage-shape"
+    },
+    {
+      "data": {
+        "finish_reason": null,
+        "status": 404,
+        "tool_calls": null
+      },
+      "note": "非流式的 tool_calls 形状",
+      "probe": "C/tool-calls-nonstream"
+    },
+    {
+      "data": {
+        "line_count": 1,
+        "lines": [
+          "HTTP 404: {\"timestamp\":\"2026-08-13T04:35:22.960+00:00\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/v4/v1/chat/completions\"}"
+        ]
+      },
+      "note": "流式的 tool_calls 分片：index 怎么给、arguments 怎么拼、[DONE] 有没有",
+      "probe": "C/tool-calls-stream"
+    },
+    {
+      "data": {
+        "body": {
+          "error": "Not Found",
+          "path": "/v4/v1/chat/completions",
+          "status": 404,
+          "timestamp": "2026-08-13T04:35:23.051+00:00"
+        },
+        "status": 404
+      },
+      "note": "模型名不存在时的状态码与错误体形状",
+      "probe": "D/bad-model"
+    },
+    {
+      "data": {
+        "choice_count": null,
+        "error": "Not Found",
+        "status": 404
+      },
+      "note": "OpenAI 的 n=2：拒绝、还是静默按 1 处理",
+      "probe": "D/unsupported-field-n"
+    },
+    {
+      "data": {
+        "first_usage": null,
+        "second_usage": null
+      },
+      "note": "裸请求连打两次：第二次的缓存命中（不做任何前缀特化处理）",
+      "probe": "E/cache-parity"
+    }
+  ],
+  "kimi": [
+    {
+      "data": {
+        "content": null,
+        "error": {
+          "message": "invalid temperature: only 1 is allowed for this model",
+          "type": "invalid_request_error"
+        },
+        "finish_reason": null,
+        "status": 400,
+        "usage": null
+      },
+      "note": "裸 OpenAI 请求（无 thinking / 无 temperature 特例）能否正常回复",
+      "probe": "A/vanilla-chat"
+    },
+    {
+      "data": {
+        "deepseek_path": null,
+        "openai_standard_path": null,
+        "usage": null,
+        "usage_keys": []
+      },
+      "note": "usage 的全部字段名 —— 通用 adapter 的 CACHED_PATHS 要照着填",
+      "probe": "B/usage-shape"
+    },
+    {
+      "data": {
+        "finish_reason": null,
+        "status": 400,
+        "tool_calls": null
+      },
+      "note": "非流式的 tool_calls 形状",
+      "probe": "C/tool-calls-nonstream"
+    },
+    {
+      "data": {
+        "line_count": 1,
+        "lines": [
+          "HTTP 400: {\"error\":{\"message\":\"invalid temperature: only 1 is allowed for this model\",\"type\":\"invalid_request_error\"}}"
+        ]
+      },
+      "note": "流式的 tool_calls 分片：index 怎么给、arguments 怎么拼、[DONE] 有没有",
+      "probe": "C/tool-calls-stream"
+    },
+    {
+      "data": {
+        "body": {
+          "error": {
+            "message": "Not found the model definitely-not-a-real-model-xyz or Permission denied",
+            "type": "resource_not_found_error"
+          }
+        },
+        "status": 404
+      },
+      "note": "模型名不存在时的状态码与错误体形状",
+      "probe": "D/bad-model"
+    },
+    {
+      "data": {
+        "choice_count": null,
+        "error": {
+          "message": "invalid temperature: only 1 is allowed for this model",
+          "type": "invalid_request_error"
+        },
+        "status": 400
+      },
+      "note": "OpenAI 的 n=2：拒绝、还是静默按 1 处理",
+      "probe": "D/unsupported-field-n"
+    },
+    {
+      "data": {
+        "first_usage": null,
+        "second_usage": null
+      },
+      "note": "裸请求连打两次：第二次的缓存命中（不做任何前缀特化处理）",
+      "probe": "E/cache-parity"
+    }
+  ]
+}

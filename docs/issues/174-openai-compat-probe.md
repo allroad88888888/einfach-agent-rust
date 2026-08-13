@@ -1,6 +1,6 @@
 # 174 探针：OpenAI 兼容 endpoint 打一发
 
-**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **独测** — · **估时** 20min · **状态** 代码侧分析完成；**真实探针缺凭据，卡住**（2026-08-13）
+**里程碑** L · **依赖** [165](165-launch-positioning-decision.md) · **模型** sonnet · **独测** — · **估时** 20min · **状态** 完成（2026-08-13，三家真机实测）
 
 ## 目标
 
@@ -42,17 +42,20 @@ OpenAI / OpenRouter / 硅基流动 / Ollama / vLLM，**其中 Ollama 还是零�
 
 ## 实做记录（2026-08-13）
 
-### ⚠️ 先说卡在哪
+### 探针跑成了：`probes/api/src/bin/openai_compat.rs` + `probes/results/openai-compat.json`
 
-**本机没有任何可打的 OpenAI 兼容端点**：无 `ollama`（`11434` 端口也没别的服务）、
-环境里无 `OPENAI_API_KEY` / `OPENROUTER_*` / `SILICONFLOW_*`。
-所以「对至少两个兼容 endpoint 各打一发」**没做成**，`probes/results/` 没有新文件。
+> 第一版记录里我写「本机没有可打的兼容端点，卡住」。**是我把问题想窄了**——
+> 用户点出 DeepSeek 的 `/v1` 就是标准 OpenAI 接口。三家本来就都是兼容端点，
+> 探针早就能跑，缺的不是凭据是想法。
 
-**要解锁只需二选一**（任一即可，都不用改代码）：
+**探的不是「这家能不能用」，而是**：一个**完全不知道对面是谁**的通用 adapter，
+发一份标准 OpenAI 形状的请求（无 `thinking`、无 `caps::temperature` 特例、
+零 provider 分支），打到自称 OpenAI 兼容的 `base_url` 上会怎样。
+这正是 [175](175-openai-compat-decision.md) 那个「退化实现」方案在 wire 上的样子。
 
-- `brew install ollama && ollama pull qwen3:4b`（零成本，且这正是 [177](177-openai-compat-config.md)
-  要主推的入口——**顺带就把那条路验了**）
-- 给一个 OpenAI 官方或 OpenRouter 的 key
+跑法：`cd probes/api && cargo run --bin openai_compat`（默认 deepseek；
+`PROBE_PROVIDERS=kimi,glm`、`PROBE_NO_V1=1` 可调）。28 条观测已落
+`probes/results/openai-compat.json`。
 
 ### 但代码侧的问题问出答案了
 
@@ -101,17 +104,60 @@ glm:      &[&["prompt_tokens_details", "cached_tokens"]]   // kimi 同款
 最重要的输入**：不是「要不要支持一种新形状」，而是「已经支持三家的那套东西，
 退化到没有特殊处的情形」。
 
-### 给 [175](175-openai-compat-decision.md) 的判据
+### 实测结果：裸 OpenAI 请求打三家
 
-代码结构强烈指向 **B 案的一个弱化版**：不需要「抽出共享基座」（**基座早就在了**），
-只需要**再加一个 `openai/` 目录，里面是三个文件的退化实现**——
-`encode` 不做任何妥协、`CACHED_PATHS` 走 `prompt_tokens_details.cached_tokens`
-（OpenAI 官方口径）、`classify` 按标准 `error.type`。**存量三家一个字节不用动。**
+| | DeepSeek | Kimi | GLM |
+|---|---|---|---|
+| **端点路径** | `/v1/chat/completions` ✅ | `/v1/chat/completions` ✅ | **`/chat/completions`，没有 `/v1`** |
+| **裸请求** | ✅ 200 `PONG` | ❌ **400** | ✅ 200 `PONG` |
+| **缓存字段** | **两条路径都给，且数值相同** | — | **只有** OpenAI 标准那条 |
+| **tool_calls 非流式** | 标准形状 + `index` | — | 标准形状 + `index` |
+| **流式收尾** | `data: [DONE]` | — | `data: [DONE]` |
+| **模型名不存在** | 400 / `invalid_request_error` | **404** / `resource_not_found_error` | 400 / `{"code":"1214"}` |
+| **`n: 2`** | **400 拒绝** | — | **200，静默按 1 处理** |
+| **裸请求缓存命中** | 1280/1301 = **98.4%** | — | 1216/1231 = **98.8%** |
 
-但**这个判据是从代码读出来的，不是从真实响应读出来的**，[175](175-openai-compat-decision.md)
-拍板前应该等上面那个探针补上——尤其是两件事：
+### 四条会改变 [175](175-openai-compat-decision.md) 的结论
 
-1. **Ollama 这类本地实现的 `tool_calls` 分片**是否与云端一致（历来是各家最爱跑偏的地方）
-2. **没有缓存字段的家**（Ollama 大概率没有）会让 `CACHED_PATHS` 取到什么，
-   `stream/usage.rs` 会不会把「没有」读成 0 ——那会让 [024](024-cache-guard.md)
-   的三层兜底得到**假绿**，这是本 issue 列的第 4 条观测项，也是最有可能咬人的一条
+**一、`/v1` 不是通用约定。** GLM 的兼容端点是 `/api/paas/v4/chat/completions`——
+我第一跑按「OpenAI 就是 `/v1`」拼路径，整组 404，错误体还是 Spring 风格的
+`{"timestamp","status","error","path"}`，连 `error.type` 都没有。
+（那一跑没删，留在结果文件的 `glm_wrong_path_v1` 键下——**它就是这条结论的证据**。）
+→ 通用 adapter **不能自己拼 `/v1`**，`base_url` 必须由用户带全路径。
+
+**二、合法的 OpenAI 值会被硬拒。** Kimi 对 `temperature: 0.0` 直接
+`400 invalid temperature: only 1 is allowed for this model`——0.0 是 OpenAI 的
+合法值，通用 adapter 不可能知道这家的规矩。**这一条否掉了「一个退化实现打天下」**：
+通用 adapter 必然会撞上「我发的是标准的，但这家不收」，所以它**必须有把
+`Adjustment` 报出来的能力**，不能假设自己永远不需要妥协。
+这恰好是决策 17 的形状——事后报调整，而不是事前问能力。
+
+**三、静默降级真的存在，而且就在手边。** `n: 2` 在 DeepSeek 上 400 拒绝，
+在 GLM 上 **200 + 一条 choice + 零错误**。探针注释里我写「静默忽略比拒绝糟——
+通用 adapter 会以为自己拿到了要的东西」，一跑就撞上了。
+→ 通用 adapter 对**自己发出去但对面可能不认的字段**必须保守：能不发就不发。
+
+**四、缓存字段这条是好消息。** DeepSeek 同时给 `prompt_cache_hit_tokens`
+和 `prompt_tokens_details.cached_tokens`，且 E 组实测**两个数一模一样**（1280/1280）。
+GLM 只给 OpenAI 标准那条。→ 通用 adapter 用
+`prompt_tokens_details.cached_tokens` 在这两家都读得对。
+
+> 但 174 原列的第 4 条隐患**没被证伪，只是没在这三家上出现**：
+> 「一家什么缓存字段都不给时，`stream/usage.rs` 会读成 0 还是读成『不知道』」。
+> 三家都给了字段，所以这一跑碰不到。**Ollama 那类本地实现大概率不给**，
+> 到 [178](178-openai-compat-dogfood.md) 真机时必须专门验——读成 0 就是让
+> [024](024-cache-guard.md) 的三层兜底拿到**假绿**。
+
+### 给 [175](175-openai-compat-decision.md) 的判据（已按实测修正）
+
+代码侧的结构分析仍然成立（`wire/` + `stream/` 是共享层、`Provider` 只有四个纯函数、
+真正的厂商差异是每家 2–4 个 `Adjustment` 点 + 一个常量路径），所以**方向仍是
+「加一个 `openai/` 目录，存量三家一字不动」**。
+
+但实测把「退化实现」这个说法**修正掉了**——它不是「什么都不做的那一版」：
+
+1. **不许自己拼 `/v1`**（结论一）
+2. **必须能报 `Adjustment`**，因为它一定会撞上合法值被拒（结论二）
+3. **可选字段能不发就不发**，因为静默降级在真实兼容实现里存在（结论三）
+4. `CACHED_PATHS` 用 `prompt_tokens_details.cached_tokens`（结论四），
+   但**「字段缺失」与「字段为 0」必须能分开**——这条留给 [178](178-openai-compat-dogfood.md) 钉死
