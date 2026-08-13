@@ -50,6 +50,11 @@ travel 和 Temporal 的 durable execution。
 
 ### 宿主可以动态扩展 Agent
 
+**[第二个 demo →](https://allroad88888888.github.io/einfach-agent-rust/roles.html)**
+同一份 wasm、两个角色：viewer 只有一条只读工具，operator 多一条声明为 `irreversible`
+的退款工具。让 viewer 去退款，它自己回答「我只有只读的订单查询工具」。
+**同一个部署、同一个 agent，能力面随调用者变——Rust 里写死一份工具表表达不了这件事。**
+
 每个会话可以声明自己的 `web:` / `desk:` tools、skills 和内置工具开关。因此同一个 agent core
 可以进入财务系统、管理后台、设计工具或桌面应用，而不需要把所有业务集成都写死在 Rust 中。
 

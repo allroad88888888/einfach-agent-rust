@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>einfach-agent — the host decides what the agent can do</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%E2%86%BA%3C/text%3E%3C/svg%3E">
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    margin: 0 auto; max-width: 62rem; padding: 1.5rem 1rem 4rem;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  .sub { opacity: .7; margin: 0 0 1.25rem; }
+  .hero { border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; padding: 1rem 1.1rem; margin: 0 0 1rem; }
+  fieldset { border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; margin: 0 0 1rem; padding: .75rem 1rem 1rem; }
+  legend { padding: 0 .4rem; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .35rem 0; }
+  label { min-width: 6.5rem; }
+  input, select, textarea, button { font: inherit; padding: .35rem .5rem; border-radius: .35rem; border: 1px solid rgba(128,128,128,.5); background: transparent; color: inherit; }
+  input[type=text], input[type=password] { flex: 1 1 18rem; }
+  button { cursor: pointer; }
+  button[disabled] { opacity: .45; cursor: default; }
+  #transcript { min-height: 10rem; max-height: 24rem; overflow-y: auto; border: 1px solid rgba(128,128,128,.4); border-radius: .5rem; padding: .75rem; white-space: pre-wrap; word-break: break-word; }
+  .turn { margin: 0 0 .9rem; }
+  .who { font-weight: 600; opacity: .75; }
+  .tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; opacity: .8; border-left: 3px solid rgba(128,128,128,.5); padding-left: .5rem; margin: .3rem 0; }
+  pre { overflow: auto; max-height: 16rem; background: rgba(128,128,128,.08); padding: .6rem; border-radius: .35rem; font-size: .8rem; }
+  #status, #undoStatus { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; opacity: .8; }
+  .en { opacity: .6; font-size: .85em; font-weight: 400; }
+  .role-pill { display: inline-block; padding: .1rem .5rem; border-radius: 1rem; border: 1px solid rgba(128,128,128,.5); font-size: .85em; }
+  @media (max-width: 34rem) {
+    label { min-width: 100%; }
+    input[type=text], input[type=password] { flex: 1 1 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>The host decides what the agent can do</h1>
+<p class="sub">
+  Same wasm binary, same model, same prompt — two roles, two different tool tables.
+  <a href="./">← back to the main demo</a> ·
+  <a href="https://github.com/allroad88888888/einfach-agent-rust">source</a>
+</p>
+
+<div class="hero">
+  <p style="margin-top:0">
+    <strong>Why this can't be hard-coded.</strong> The tool table isn't a property of the
+    build — it's supplied by the host when it creates the conversation. Here a
+    <span class="role-pill">viewer</span> gets one read-only tool and an
+    <span class="role-pill">operator</span> additionally gets a refund tool. One deployment,
+    one agent, and the capability surface changes per caller. There is no version of this
+    that a fixed tool list in the Rust core can express.
+  </p>
+  <p>
+    Two more things fall out of it, and both are visible here:
+  </p>
+  <ul style="margin:.4rem 0; padding-left:1.3rem">
+    <li>
+      <strong>Refund is declared <code>irreversible</code>.</strong> Ask the operator to
+      refund something, then hit undo — it stops and names the tool that blocked it, instead
+      of silently rolling back a payment that already left. The money is in this page's
+      memory; the ledger can't reach it, which is exactly why the barrier exists.
+    </li>
+    <li>
+      <strong>The role is journaled with the session.</strong> Reload the page and reopen a
+      viewer session: it comes back as a viewer, with the tool table it had at the time —
+      not whatever the host would hand out today.
+    </li>
+  </ul>
+  <p style="margin-bottom:0">
+    Bring your own key (it stays in this tab, same as the main demo). Suggested script:
+    ask <code>find orders for Acme</code> as viewer, switch to operator, ask
+    <code>refund A-1001</code>, then press undo.
+  </p>
+</div>
+
+<fieldset>
+  <legend>1 · Provider <span class="en">配置</span></legend>
+  <div class="row">
+    <label for="provider">provider</label>
+    <select id="provider">
+      <option value="deepseek" selected>deepseek</option>
+      <option value="kimi">kimi</option>
+      <option value="glm">glm</option>
+    </select>
+    <label for="model">model</label>
+    <input type="text" id="model" value="deepseek-v4-flash">
+  </div>
+  <div class="row">
+    <label for="baseUrl">base_url</label>
+    <input type="text" id="baseUrl" value="https://api.deepseek.com">
+  </div>
+  <div class="row">
+    <label for="apiKey">api_key</label>
+    <input type="password" id="apiKey" placeholder="paste your own key / 粘你自己的 key" autocomplete="off">
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>2 · Role <span class="en">角色 —— 决定工具表</span></legend>
+  <div class="row">
+    <label for="role">role</label>
+    <select id="role">
+      <option value="viewer" selected>viewer — search only</option>
+      <option value="operator">operator — search + refund</option>
+    </select>
+    <button id="connect">Open session as this role</button>
+  </div>
+  <div class="row"><span id="status">not connected</span></div>
+  <details>
+    <summary>The exact declaration this role sends <span class="en">（进 prompt 最前面的那几个字节）</span></summary>
+    <pre id="decl">（pick a role and open a session）</pre>
+  </details>
+</fieldset>
+
+<fieldset>
+  <legend>3 · Chat</legend>
+  <div id="transcript"></div>
+  <div class="row">
+    <textarea id="input" rows="2" style="flex:1 1 100%" placeholder="e.g. find orders for Acme  /  refund A-1001"></textarea>
+  </div>
+  <div class="row">
+    <button id="send" disabled>Send</button>
+    <button id="undo" disabled>Undo one turn</button>
+    <span id="undoStatus"></span>
+  </div>
+</fieldset>
+
+<details>
+  <summary>Event stream <span class="en">事件流</span></summary>
+  <pre id="log"></pre>
+</details>
+
+<script type="module">
+import init, { AgentHost } from './pkg/agent_wasm.js';
+import { mountTranscript } from './transcript.js';
+import { toolsForRole, createRolesToolCallback } from './roles-tools.js';
+
+const $ = (id) => document.getElementById(id);
+const { log, onEvent, renderHistory, appendUserTurn, endTurn } = mountTranscript({
+  transcript: $('transcript'),
+  logPre: $('log'),
+});
+
+let host = null;
+
+const onToolCall = createRolesToolCallback({
+  log,
+  onRefund: (id) => log(`[page] ${id} 的钱已经打出去了。ledger 撤得掉这一轮对话，撤不掉这笔钱。`),
+});
+
+$('role').addEventListener('change', () => {
+  $('decl').textContent = toolsForRole($('role').value);
+});
+$('decl').textContent = toolsForRole($('role').value);
+
+$('connect').addEventListener('click', async () => {
+  $('connect').disabled = true;
+  try {
+    const role = $('role').value;
+    // **建宿主那一刻定死**（122）：没有中途改表的方法。换角色 = 重新建宿主 +
+    // 换一个会话 id，正是真实宿主该做的事（换了人就是另一条会话）。
+    const declaration = toolsForRole(role);
+    host = new AgentHost(JSON.stringify({
+      provider: $('provider').value,
+      base_url: $('baseUrl').value.trim(),
+      model: $('model').value.trim(),
+      api_key: $('apiKey').value,
+    }), declaration);
+    host.onEvent(onEvent);
+    host.onToolCall(onToolCall);
+
+    // 会话 id 带角色：**恢复时按 id 取回当初那一份声明**，不是按今天的角色表重建。
+    const replayed = await host.openSession(`roles-${role}`);
+    renderHistory(JSON.parse(replayed));
+    const n = JSON.parse(replayed).length;
+    $('status').textContent =
+      `role=${role} · session=roles-${role} · replayed ${n} message(s) from IndexedDB`;
+    $('send').disabled = false;
+    $('undo').disabled = false;
+    window.__rolesHost = host;
+  } catch (e) {
+    $('status').textContent = `failed: ${e.message ?? e}`;
+  } finally {
+    $('connect').disabled = false;
+  }
+});
+
+$('send').addEventListener('click', async () => {
+  const text = $('input').value.trim();
+  if (!text) return;
+  $('input').value = '';
+  appendUserTurn(text);
+  $('send').disabled = true;
+  try {
+    const outcome = JSON.parse(await host.send(text));
+    $('status').textContent = `turn done: ${outcome.status}`;
+  } catch (e) {
+    $('status').textContent = `send failed: ${e.message ?? e}`;
+  } finally {
+    $('send').disabled = false;
+    endTurn();
+  }
+});
+
+// 撤销后重画整份历史：真值在 Session 里，UI 哑渲染（同主 demo）。
+function afterUndo(json) {
+  const r = JSON.parse(json);
+  renderHistory(JSON.parse(host.historyJson()));
+  if (r.kind === 'Applied') {
+    $('undoStatus').textContent = `undid ${r.entries} change(s) (turn ${r.turnId})`;
+  } else if (r.kind === 'Nothing') {
+    $('undoStatus').textContent = 'nothing left to undo';
+  } else if (r.kind === 'Blocked') {
+    const what = r.barrier?.tool ?? r.barrier?.label ?? `seq ${r.barrierSeq}`;
+    $('undoStatus').textContent = `⛔ blocked by ${what} — that call is irreversible`;
+    log(`[undo] blocked by ${what}. 强行越过要显式确认：钱不会因为 undo 回来。`);
+    if (confirm(
+      `Undo hit an irreversible call: ${what}\n\n` +
+      `Cross it anyway? The refund already happened — undoing the conversation ` +
+      `does not undo the payment.`
+    )) {
+      afterUndo(host.undoTurnForce());
+    }
+  }
+}
+
+$('undo').addEventListener('click', () => {
+  try { afterUndo(host.undoTurn()); }
+  catch (e) { $('undoStatus').textContent = `undo failed: ${e.message ?? e}`; }
+});
+
+await init();
+$('status').textContent = 'wasm loaded — pick a role and open a session';
+window.__rolesReady = true;
+</script>
+
+</body>
+</html>

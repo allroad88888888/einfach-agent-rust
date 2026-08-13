@@ -63,6 +63,12 @@ and the browser host. [Architecture →](docs/ARCHITECTURE.en.md)
 
 ### Host applications teach the agent their own tools
 
+**[Second demo →](https://allroad88888888.github.io/einfach-agent-rust/roles.html)** Same
+wasm binary, two roles: a viewer gets one read-only tool, an operator additionally gets a
+refund tool declared `irreversible`. Ask the viewer to refund something and it answers
+"I only have a read-only order search tool." One deployment, one agent, capability surface
+per caller — there is no fixed tool list in a Rust core that expresses that.
+
 A host declares session-scoped tools and skills when it creates a conversation, so the same
 runtime works inside a finance app, an admin console, or a desktop shell without any of
 those integrations reaching the core. `web:` tools execute in the browser, `desk:` in the
