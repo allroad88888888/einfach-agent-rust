@@ -181,3 +181,21 @@ IndexedDB，而真实库名是 `agent-session-<会话id>`。`deleteDatabase` 对
 **照样触发 `onsuccess`**——于是我拿到「删除成功」，历史却一条没少，
 下一轮模型说「我已经在上一轮对这个订单执行过退款」才露馅。
 **又一次「验证方法本身有 bug，而它的 bug 长得跟成功一模一样」。**
+
+
+### 补：改完系统提示词，主 demo 也重验了一遍（2026-08-13）
+
+**这是一处差点漏掉的连带影响。** `BASE_SYSTEM` 改英文是在 `roles.html` 上发现并做的，
+但那个常量**两个 demo 共用**，而 README 的头号钩子（口令实验）就骑在它上面。
+「在 A 页面上验过」不等于「B 页面没事」——共用的东西改了，两边都要重验。
+
+主 demo（`index.html`）真机三条，全过：
+
+| 验的什么 | 结果 |
+|---|---|
+| 口令实验四步（README 的原话） | ✅ 第 2 步答出 `quokka-88`；撤两轮（`undid 3` / `undid 2`，历史清零）；**中性追问**（句中不出现 undo）→ *"No. Based on our conversation alone, you've never told me a passphrase — this is the only message so far."* |
+| 提示词里那句 "call the matching tool instead of guessing" | ✅ 问页面标题 → 真的调了 `web:page/title`，没有瞎猜 |
+| README 那句 "It stays gone after a refresh" | ✅ 刷新后同 id 重放 6 条，再问口令仍答「没给过」 |
+
+第三条是这次特意补的：**undo 落了盘，但「落盘的是撤销后的状态」这件事只有刷新才验得到**
+——而 README 把它写成了一句断言。
