@@ -1,5 +1,8 @@
 # einfach-agent
 
+[![CI](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/allroad88888888/einfach-agent-rust/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+
 > English is the primary project language. [简体中文](README.zh-CN.md)
 
 An embeddable agent runtime that lets each host application supply its own tools and skills—without
@@ -8,17 +11,17 @@ turning the model context or the Rust core into an integration dump.
 The standout feature is a complete host-capability loop:
 
 ```text
-Browser / Desktop / Java capabilities
+Browser / Desktop / Java declares its capabilities
                  │
-          compact skill index
+   session start: compact skill index enters the prefix
                  │
-          AI activates one bundle
+      AI reads one skill body on demand (a normal tool call)
                  │
-      instructions + tools appear
+     the body arrives as a tool result, in the conversation
                  │
-        host executes the tool
+        AI calls a host tool; the host executes it
                  │
-       result continues the turn
+             result continues the turn
 ```
 
 ## Why It Is Different
@@ -40,13 +43,17 @@ existing conversation.
 
 ### Large capability catalogs stay lazy
 
-Large tool surfaces can be grouped into skills. Initially, the model sees only a compact index of
-skill names and descriptions. It explicitly activates the relevant skill before the full instructions
-and its tool schemas enter the request.
+Large tool surfaces can be grouped into skills. At session start the model sees only a compact index
+of skill names and descriptions. It reads the full body of a skill on demand, through an ordinary
+tool call, and the body arrives as a tool result inside the conversation.
 
-This keeps unrelated domain knowledge out of the prompt, avoids context growth proportional to the
-entire catalog, and preserves stable prefixes for provider prompt caching. Small, always-available
-host tools may still be declared directly.
+Nothing is ever injected into the system prompt mid-conversation. Bodies are appended at the tail of
+the message history — the path prompt caching is designed for — so the cached prefix survives every
+read. Measured over ten turns against DeepSeek, including the turns where a skill body was read:
+97.5%–99.8% cache hit rate, mean 98.5%.
+
+This keeps unrelated domain knowledge out of the prompt and avoids context growth proportional to the
+entire catalog. Small, always-available host tools may still be declared directly.
 
 ### State is the source of truth
 
@@ -90,8 +97,9 @@ To run the standalone HTTP/SSE server:
 cargo run -p agent-server-bin -- --sessions-dir ./sessions
 ```
 
-This repository intentionally has no hosted build pipeline. Tests and invariant checks are run
-locally when changing the relevant component.
+Every push and pull request runs the same gates used locally: invariant checks, `clippy -D warnings`,
+the workspace test suite, the protocol-consistency test that regenerates the TypeScript types, the
+frontend typecheck, and a browser-host wasm build.
 
 ## Documentation
 
@@ -104,3 +112,12 @@ locally when changing the relevant component.
 
 The state engine originated as a fork of the Rust atomic engine in
 [einfach](https://github.com/allroad88888888/einfach) and now evolves independently.
+
+## License
+
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your
+option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in this
+work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.

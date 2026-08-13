@@ -22,6 +22,9 @@ members = [
 
 [workspace.package]
 edition = "2024"
+# 双许可是 Rust 生态惯例（crates.io 期待的形状），采用方可任选其一。
+# 全文：LICENSE-MIT / LICENSE-APACHE。
+license = "MIT OR Apache-2.0"
 
 # 2026-08-05 构建瘦身：两天开发期 target 曾膨胀到 58GB / deps 88 万文件，rustc 每次
 # 启动都要枚举整个 deps 目录，文件数一过几十万就是分钟级——构建自己拖慢自己。

@@ -10,3 +10,7 @@ dist/
 
 # 含真实 API key，永不提交。范例见 providers.example.toml
 providers.toml
+
+# playwright MCP 驱动浏览器时落的快照/控制台日志（169 真机复验用过）——
+# 调试副产物，不进版本控制。
+.playwright-mcp/

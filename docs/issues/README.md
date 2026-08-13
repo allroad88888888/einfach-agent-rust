@@ -811,6 +811,97 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 实测证据、以及「上传该放在哪」这个最容易放错的落点都在那里，别在 issue 里重新讨论。
 
 
+## L · 对外推广
+
+**跟 M1–M18 不是一条线。** 那些管「代码能不能用」，这条管「外面有没有人知道」——
+所以不叫 M19，编号从 165 起另开一段。做法照旧：一个文件一个任务、带验收、
+做完把状态改成完成并补实做记录。
+
+**两处与工程 issue 不同的地方**：①「模型」一列有些条目是**用户**——crates.io 发布、
+社交媒体发帖、找早期用户，这几件我做不了；②每条按**20 分钟**切，超过就继续拆
+（[193](193-embed-example-build.md) 现在是个占位，等 [192](192-embed-example-scope.md)
+定完场景再拆）。
+
+**定位拍板在 [165](165-launch-positioning-decision.md)**（L1 主战场英文社区 / L2 不进
+「Rust agent 框架」品类 / L3 不擅自恢复 CI），后面每条的取舍都能追溯到它，别在
+单个 issue 里重开这三个话题。
+
+```
+165 定位拍板（L1/L2/L3）
+ │
+ ├─ L0 堵血 ✅ ── 166 LICENSE ✅ ── 167 README 机制 ✅ ── 168 repo 元信息 ✅
+ │
+ ├─ L0' 195 CI 复活（L3 被用户推翻 2026-08-13）
+ │
+ ├─ L1a demo 上线 ── 169 产物复验 ✅ → 170 Pages workflow → 171 首屏文案 ┐
+ │                     └→ 196 wasm 暴露 undo ──→ 172 GIF ───────────────┼→ 173 README 挂 demo
+ │                        （169 查出：今天演不了一号钩子）              ┘        │
+ ├─ L1b 拉新前置 ── 174 探针 → 175 落点决策 → 176 adapter → 177 配置 → 178 真机 ┤
+ │                                                                             │
+ ├─ L1c 门面定稿 ── 179 README 重写 ←──────────────────────────────────────────┘
+ │                  180 名字查重 → 181 发布前置 → 182 首发 crates.io（独立，随时可并行）
+ │
+ ├─ L2 内容 ── 183 PROVIDERS 实测 ┐
+ │             184 决策 27 复盘   │ 五篇互不依赖，可并行
+ │             185 红线 12 条     │
+ │             186 adapter 接缝   │
+ │             187 target 58GB    ┘
+ │             188 英译 INVARIANTS → 189 英译 ARCHITECTURE
+ │                                → 190 英译 STATE-MODEL   （188 建术语表，后两条沿用）
+ │
+ ├─ ★ 191 首发帖（Show HN / r/rust）← 179 + 183 都就位才发，前置检查清单在 issue 里
+ │
+ └─ L3 落地 ── 192 样例场景决策 → 193 样例实现（待拆）
+                194 早期用户
+```
+
+| # | 任务 | 依赖 | 模型 | 估时 | 状态 |
+|---|---|---|---|---|---|
+| [165](165-launch-positioning-decision.md) | **定位与主战场**（决策） | — | **opus** | 20min | ✅ 完成 |
+| [166](166-license.md) | LICENSE 双许可 | 165 | sonnet | 20min | ✅ 完成 |
+| [167](167-readme-stale-mechanism.md) | 修 README 已删除的激活机制 | 165 | sonnet | 20min | ✅ 完成 |
+| [168](168-repo-metadata.md) | repo description + topics | 165 | haiku | 5min | ✅ 完成 |
+| [169](169-wasm-artifact-recheck.md) | wasm 产物本地复验（**刹车片**） | 165 | sonnet | 20min | ✅ 完成 |
+| [170](170-pages-workflow.md) | GitHub Pages 部署 workflow | 169 | sonnet | 20min | 待开始 |
+| [171](171-demo-first-screen.md) | demo 首屏文案 + BYOK 引导 | 170 | sonnet | 20min | 待开始 |
+| [172](172-demo-gif.md) | 录 demo GIF（口令实验） | 171 | claude+**你** | 20min | 待开始 |
+| [173](173-readme-demo-hero.md) | README 挂 demo + 填 homepage | 170+172 | sonnet | 15min | 待开始 |
+| [174](174-openai-compat-probe.md) | 探针：OpenAI 兼容打一发 | 165 | sonnet | 20min | 待开始 |
+| [175](175-openai-compat-decision.md) | 兼容层落在哪（**决策**，顶红线 12） | 174 | **opus** | 20min | 待开始 |
+| [176](176-openai-compat-adapter.md) | adapter 实现 | 175 | sonnet | 20min | 待开始 |
+| [177](177-openai-compat-config.md) | 配置面 + example（Ollama 零成本入口） | 176 | sonnet | 20min | 待开始 |
+| [178](178-openai-compat-dogfood.md) | 真机收官七条 | 177 | sonnet | 20min | 待开始 |
+| [179](179-readme-rewrite.md) | README 重写（英文定稿） | 173+178 | **opus** | 20min | 待开始 |
+| [180](180-crates-io-name-check.md) | crates.io 名字查重与取名 | 165 | sonnet | 15min | 待开始 |
+| [181](181-store-publish-prep.md) | `agent-store` 发布前置补全 | 180 | sonnet | 20min | 待开始 |
+| [182](182-store-publish.md) | `agent-store` 首发（**不可逆**） | 181 | **你** | 15min | 待开始 |
+| [183](183-post-providers.md) | 文章：三家实测差异 | 165 | **opus** | 20min | 待开始 |
+| [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统 | 165 | **opus** | 20min | 待开始 |
+| [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 待开始 |
+| [186](186-post-adapter-seam.md) | 文章：别在 core 里 `match provider` | 165 | **opus** | 20min | 待开始 |
+| [187](187-post-target-bloat.md) | 文章：两天 58GB | 165 | sonnet | 20min | 待开始 |
+| [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | 待开始 |
+| [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | 待开始 |
+| [190](190-translate-state-model.md) | 英译 STATE-MODEL | 188 | sonnet | 20min | 待开始 |
+| [191](191-launch-post.md) | ★ **首发帖**（只有一次机会） | 179+183 | **opus**+**你** | 20min | 待开始 |
+| [192](192-embed-example-scope.md) | 嵌入样例场景（**决策**） | 191 | **opus** | 20min | 待开始 |
+| [193](193-embed-example-build.md) | 嵌入样例实现 | 192 | sonnet | **待拆** | 占位 |
+| [194](194-early-adopters.md) | 找 3–5 个真实嵌入用户 | 191 | **你** | 持续 | 待开始 |
+| [195](195-ci-revival.md) | **CI 复活**（推翻 L3，用户拍板） | 165 | sonnet | 20min | 本地全绿，待推送 |
+| [196](196-wasm-expose-undo.md) | wasm 宿主暴露 undo（**[172](172-demo-gif.md) 的前置**） | 169 | sonnet | 20min | 待开始 |
+
+**L0 已完成**（2026-08-13）：只碰 `Cargo.toml` / 两份 README / 两份 LICENSE，零 `.rs` 改动；
+`cargo metadata` 通过、`check-invariants.sh --all` 退出码 0。
+
+**三条关键路径上的提醒**：
+
+- [169](169-wasm-artifact-recheck.md) 是**刹车片不是里程碑**——它要是不过，
+  170–173 全是空中楼阁，停下来修，别硬着头皮往下做。
+- [175](175-openai-compat-decision.md) 顶着**红线 12** 和决策 17。结论要是逼得 core 改一个字节，
+  说明结论错了，回去重定，别在 [176](176-openai-compat-adapter.md) 里将就。
+- [191](191-launch-post.md) **只有一次机会**，前置检查清单里任何一条不满足都别发。
+  最容易被低估的是最后一条：**你得有一整天守评论区**。
+
 ## M13 遗留（两条，都不阻塞，但别忘了）
 
 **一、只跑通了 DeepSeek 一家。** 三家各跑一轮那条验收没满足——本机

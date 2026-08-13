@@ -17,8 +17,12 @@
 
 ### 大规模能力按需加载
 
-大量 tools 可以组织成 skills。对话开始时，AI 只看到 skill 名称和描述组成的精简索引；只有
-AI 主动激活某个 skill 后，它的完整 instructions 和 tool schemas 才进入请求。
+大量 tools 可以组织成 skills。会话开始时，AI 只看到 skill 名称和描述组成的精简索引；正文由
+AI 按需经一次普通工具调用取回，以 tool result 进入**对话消息**。
+
+全程不往 system 段中途注入任何东西——正文走消息尾部追加，那正是 prompt 缓存本来就为之设计
+的路径，因此每次读取都不破坏已缓存前缀。DeepSeek 上十轮实测（含发生正文读取的轮）：缓存命中
+97.5%–99.8%，均值 98.5%。
 
 这让能力目录可以持续增长，而 prompt 不会随全部能力线性膨胀。少量始终可用的工具仍可直接
 声明为顶层 host tools。
@@ -43,4 +47,9 @@ cargo run -p agent-cli
 cargo run -p agent-server-bin -- --sessions-dir ./sessions
 ```
 
-本仓库不配置托管构建流水线；相关测试和红线检查在本地修改对应组件时执行。
+每次推送与 PR 都跑与本地同一套门禁：红线检查、`clippy -D warnings`、workspace 测试、
+协议一致性测试（重新生成 TS 类型）、前端 typecheck，以及浏览器宿主的 wasm 构建。
+
+## 许可
+
+[Apache License 2.0](LICENSE-APACHE) 或 [MIT](LICENSE-MIT) 双许可，采用方任选其一。

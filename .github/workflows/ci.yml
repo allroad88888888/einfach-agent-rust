@@ -1,0 +1,80 @@
+# 本地跑的门禁固化成推送/PR 的 CI —— 与 docs/WORKFLOW.md 的收工标准一字对应。
+# 红线检查用的是同一个 scripts/check-invariants.sh，本地 hook 和 CI 口径一致。
+#
+# 2026-08-13 复活（issue 195）：08-05 曾主动删除（9ae84d5），当时仓库是自用的，
+# 本地四道门禁 + PostToolUse hook 够用。现在要对外，README 顶部那个绿勾是陌生人
+# 判断可信度的第一个信号——变的是受众，不是工程判断。理由全文见 issue 195。
+#
+# 与 pages.yml（issue 170 的 demo 部署）是两个文件，别合并：一个是门禁一个是部署，
+# 触发条件和权限都不一样。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: rust (test + clippy + 红线)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # 红线 12 的孪生：core 不依赖 adapter、不做模型判断，全靠这个脚本守。
+      - name: 红线检查
+        run: bash scripts/check-invariants.sh --all
+      - name: clippy（-D warnings）
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test（默认 feature）
+        run: cargo test --workspace
+      # ts feature 打开 ts-rs，跑协议一致性测试——忘了重新生成 TS 就在这里红。
+      - name: test（--features ts，协议一致性）
+        run: cargo test -p agent-server --features ts
+
+  ts:
+    name: typescript (协议 + web typecheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: typecheck（protocol + web）
+        run: pnpm -r typecheck
+
+  # 08-05 那版没有这个 job —— 它写于 wasm 目标恢复（决策 26，08-10）之前。
+  # 今天本仓的收工标准是三门禁，build-wasm.sh 是第三道；而且它同时护着 issue 170
+  # 的公开 demo：demo 编不出来 = 首发的地基塌了，必须在合并前就红。
+  #
+  # crates/agent-wasm 是独立 workspace（自带 Cargo.lock / target），
+  # 所以 rust-cache 要显式指定它的路径，否则每次全量编。
+  wasm:
+    name: wasm (浏览器宿主构建)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/agent-wasm
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: build-wasm.sh
+        run: bash scripts/build-wasm.sh
