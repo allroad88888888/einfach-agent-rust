@@ -82,7 +82,7 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 恢复后三次 spawn 仍全被「最多 2 个」拒**（160 之前必红）、恢复后描述也仍是 2、
 CLI 侧新建与恢复两条路同款。恢复那一跳缓存 96.4%，`drift=Clean`。
 
-### 已完成：M17 宿主声明开局块（2026-08-12，真机 dogfood 六条全过，157 后置）
+### 已完成：M17 宿主声明开局块（2026-08-12，真机 dogfood 六条全过；157 于 08-13 补做完成）
 
 决策 31 落地：`capabilities.prefix` 声明**内容**不声明执行体，装配期合成常量文本
 timed 工具（[154](issues/154-host-prefix-slot.md) 状态位 /
@@ -94,8 +94,11 @@ timed 工具（[154](issues/154-host-prefix-slot.md) 状态位 /
 跨二进制 sha256 相等（不声明零字节差）；口令实验三连（现答 / `kill -9` 恢复后
 仍答 / 缓存 95%–97.3%）；spawn 活对照——`[]` 的子缓存在 128 断、真不知道，缺省的子
 思考里逐字引用简报口令。[157](issues/157-wasm-prefix-declaration.md)（wasm 同路）
-**后置**等另一会话的 agent-wasm capabilities 在飞工作合并，不阻塞本里程碑。
-逐条记录见 [158](issues/158-m17-dogfood.md)。
+曾后置等地基——那个「第三个会话」的在飞工作（wasm skills 声明落店）后由主会话
+认领收尾为 [164](issues/164-wasm-skills-declaration.md)，157 踩着它于 08-13 补做
+完成：校验判定与 server 一字不差，真机浏览器四钉全进（声明块现答口令 /
+`srv:skill/read` 自主链路 / **刷新 + 零声明宿主恢复只认 journal** / 恢复表完整）。
+逐条记录见 [158](issues/158-m17-dogfood.md) 与 157/164 实做记录。
 
 ### 已完成：M16 Rust 扩展包（2026-08-12，前半真机 dogfood 六条全过，153 收口）
 

@@ -119,14 +119,20 @@ pub(crate) fn declare(json: Option<&str>) -> Result<Vec<(ToolSpec, Reversibility
 /// 分两次 `with_host_tools` 而不是拼成一个 `Vec` 排一次序：内建那一段的字节因此
 /// 不随页面声明了什么而挪动（红线 11）。入参已经过 [`declare`]，撞名在那里就拒掉
 /// 了，所以这里不会踩到 `push_spec` 的丢弃分支。
+///
+/// `prefix`（决策 31，157）挂在**链尾**——155 的表尾约定：内置 timed（skills
+/// 索引）先注册，声明块的前缀块因此永远排在内置块之后。合成条目不进
+/// `specs()`/`declares()`，所以 [`tool_table_json`] 的字节不随它变。
 pub(crate) fn browser_tool_table(
     declared: &[(ToolSpec, Reversibility)],
     skills: Vec<HostSkill>,
+    prefix: &[(Arc<str>, Arc<str>)],
 ) -> ToolTable {
     ToolTable::empty()
         .with_host_tools(builtin_tools())
         .with_skills(SkillRegistry::from_host_skills(skills))
         .with_host_tools(declared.to_vec())
+        .with_host_prefix(prefix)
 }
 
 /// 三条内建 + 各自的可逆性。全是纯读/纯回显，所以 `Pure`——`/undo` 撞上它们不用

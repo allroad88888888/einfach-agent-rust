@@ -87,7 +87,8 @@ pub(crate) async fn open(
         .ok_or_else(|| "没填 key：key 只能由使用者自己提供，这个页面不内置任何 key".to_string())?;
     // 恢复时能力只认 journal：当前宿主传入的能力不参与，不会把历史会话的声明
     // 覆盖掉。全新会话则使用本次 `AgentHost` 构造期解析出的能力，随后持久化。
-    let (host_tools, host_skills) = capabilities_for_session(config, &session, restored);
+    let (host_tools, host_skills, host_prefix) =
+        capabilities_for_session(config, &session, restored);
     let mut ctx = RunnerCtx::new(
         config.adapter()?,
         Arc::new(Client::new()),
@@ -96,9 +97,9 @@ pub(crate) async fn open(
         // 112 的注入接缝：浏览器没有文件系统，本地工具一件都执行不了。表里
         // 本来也没有声明任何本地工具，所以这个 executor 永远不会被查到。
         NullToolExecutor,
-        // 122：三条内建、直接 host tool，及 skill 的 read/index。恢复走上面的
-        // journal 快照；新会话才走构造 `AgentHost` 时给定的页面能力。
-        crate::tools::browser_tool_table(&host_tools, host_skills),
+        // 122：三条内建、直接 host tool、skill 的 read/index，及开局块（157）。
+        // 恢复走上面的 journal 快照；新会话才走构造 `AgentHost` 时给定的页面能力。
+        crate::tools::browser_tool_table(&host_tools, host_skills, &host_prefix),
         vec![SystemChunk {
             label: Arc::from("base"),
             text: Arc::from(BASE_SYSTEM),
@@ -155,6 +156,9 @@ fn record_capabilities(ctx: &mut RunnerCtx, session: &mut Session, config: &Host
     if !config.declared_skills().is_empty() {
         session.declare_host_skills(config.declared_skills().to_vec());
     }
+    if !config.declared_prefix().is_empty() {
+        session.declare_host_prefix(config.declared_prefix().to_vec());
+    }
     session.begin_turn();
     agent_runtime::persist::sync(ctx, session);
 }
@@ -167,13 +171,19 @@ fn capabilities_for_session(
 ) -> (
     Vec<(agent_core::ToolSpec, agent_core::Reversibility)>,
     Vec<agent_core::HostSkill>,
+    Vec<(Arc<str>, Arc<str>)>,
 ) {
     if restored {
-        (session.host_tools(), session.host_skills())
+        (
+            session.host_tools(),
+            session.host_skills(),
+            session.host_prefix(),
+        )
     } else {
         (
             config.declared_tools().to_vec(),
             config.declared_skills().to_vec(),
+            config.declared_prefix().to_vec(),
         )
     }
 }
@@ -209,7 +219,11 @@ mod tests {
             r#"{"provider":"deepseek","base_url":"https://example.invalid","model":"test","api_key":"test"}"#,
         )
         .expect("测试配置应有效")
-        .with_declared_capabilities(vec![tool("web:current/tool")], vec![skill("current")])
+        .with_declared_capabilities(
+            vec![tool("web:current/tool")],
+            vec![skill("current")],
+            vec![(Arc::from("web:current/briefing"), Arc::from("当前配置的块"))],
+        )
     }
 
     #[test]
@@ -217,15 +231,19 @@ mod tests {
         let mut session = Session::new(AgentId::root());
         session.declare_host_tools(vec![tool("web:journal/tool")]);
         session.declare_host_skills(vec![skill("journal")]);
+        session.declare_host_prefix(vec![(Arc::from("web:journal/briefing"), Arc::from("journal 块"))]);
 
-        let (tools, skills) = capabilities_for_session(&config(), &session, true);
+        let (tools, skills, prefix) = capabilities_for_session(&config(), &session, true);
 
         assert_eq!(&*tools[0].0.name, "web:journal/tool");
         assert_eq!(skills[0].id.as_str(), "journal");
-        let table = crate::tools::browser_tool_table(&tools, skills);
+        assert_eq!(&*prefix[0].0, "web:journal/briefing");
+        let table = crate::tools::browser_tool_table(&tools, skills, &prefix);
         assert!(table.declares("web:journal/tool"));
         assert!(table.declares("srv:skill/read"));
         assert!(!table.declares("web:current/tool"));
+        // 合成的开局块条目住 timed 区，不进模型面（155 的既有语义）。
+        assert!(!table.declares("web:journal/briefing"));
     }
 
     #[test]

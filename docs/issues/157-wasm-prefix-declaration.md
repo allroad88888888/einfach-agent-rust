@@ -1,6 +1,6 @@
 # 157 wasm 宿主同路：页面声明开局块（后置，等在飞工作落地）
 
-**里程碑** M17 · **依赖** [155](155-with-host-prefix.md) + [156](156-server-prefix-declaration.md) + **另一会话的 agent-wasm capabilities 工作合并** · **模型** sonnet · **独测** — · **状态** **后置（2026-08-12）——不阻塞 M17 收口**
+**里程碑** M17 · **依赖** [155](155-with-host-prefix.md) + [156](156-server-prefix-declaration.md) + [164](164-wasm-skills-declaration.md)（地基） · **模型** 主会话前台（原计划 sonnet） · **独测** — · **状态** 完成（见文末，2026-08-13）
 
 ## 为什么后置
 
@@ -39,3 +39,43 @@
 - 本条的落点符号（模块名、函数名）以**届时合并后的真实代码**为准，
   上面写的名字来自在飞工作的一瞥，可能会变——先 `ls` + `grep` 再动手
   （WORKFLOW §四第 0 步）。
+
+## 实做记录（主会话前台，2026-08-13）
+
+**地基的来路变了**：等的那个「第三个会话」已不在（用户确认），其在飞工作由本会话
+认领收尾为 [164](164-wasm-skills-declaration.md)（提交 `45554e9`）。本条踩着它补做。
+
+**落点**：
+
+- `capabilities.rs`：`prefix` 字段解析 + 四条校验，判定与 server 的
+  `validate_prefix.rs` **一字不差**（前缀 `web:`/`desk:`；本体白名单非空、
+  `[A-Za-z0-9_/-]`、全名 ≤128；声明内/与 tools 重名拒；空 text 拒），文案贴宿主。
+  单测覆盖六条拒绝路 + `"web:/"` 合法（两边一致的另一半证据）。
+- `config.rs`：`declared_prefix` 第三样声明，同一条「建宿主定死」性质；
+  `has_declared_capabilities` 扩到三样。
+- `tools.rs`：`browser_tool_table` 链尾接 `.with_host_prefix(..)`（155 表尾约定）。
+- `assemble.rs`：`capabilities_for_session` 三元组（恢复只认 journal / 新会话用
+  构造配置）；`record_capabilities` 补 `declare_host_prefix`。既有单测扩到
+  prefix，并钉「合成条目不进 `declares()`」。
+
+**验证**：`cargo check --tests --target wasm32-unknown-unknown` 绿、
+`build-wasm.sh --dev` 绿、`check-invariants --all` 退出 0、全文件 ≤300 行。
+
+**真机浏览器 smoke（chrome + 真 DeepSeek，与 164 合验，四钉全进）**：
+
+1. 声明 1 skill + 1 prefix 块（藏口令 `QIANTANG-3352-HARBOR`）→ 新会话第一问
+   零工具答出口令，思考原文 "The briefing says it's QIANTANG-3352-HARBOR"；
+   模型面表 = 3 内建 + `srv:skill/read`，合成的开局块条目不在其中。
+2. 「读 ops-manual 的暗号」→ 模型自主调 `srv:skill/read`，正文以 tool_result
+   回来，暗号 `LUOXIA-8896-PAGODA` 原样引用（164 的链路）。
+3. **刷新页面 + 零声明宿主 + 同会话 id**：恢复后再问口令仍答
+   `QIANTANG-3352-HARBOR`，思考自述「来自 system prompt 里的值班简报」——
+   那个块只可能来自 journal 回放，空配置没有抹掉历史（决策 31 的恢复承诺）。
+4. 恢复后的会话表仍含 `srv:skill/read`（第二次 read 成功再引暗号）——
+   表从 journal 重建完整。
+
+**一个如实记录的显示性差异**：`AgentHost::toolTableJson()` 是宿主级常量
+（构造期按当前配置算），恢复出的会话按 journal 另建表——零声明宿主恢复老会话时
+`toolTableJson` 不含 `srv:skill/read` 而会话实际有。164 的原作者已把它的文档改成
+「这个宿主给**新会话**的工具表」，语义自洽，不是 bug；页面要看恢复会话的真实
+能力面，看行为（或将来加会话级读口，等真实需求）。

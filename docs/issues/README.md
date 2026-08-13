@@ -707,7 +707,7 @@ TurnEnd 不进协议（宿主墙外 poll/SSE 天然观测，副作用在自己�
 ```
 154（core 状态位）─┬→ 156（server 全链）→ 158（真机收官，M17 终点）
 155（runtime 合成）─┘
-157（wasm 同路）——后置：等另一会话的 agent-wasm capabilities 在飞工作合并后补做
+157（wasm 同路）——曾后置等地基；164（认领的孤儿地基）落地后 2026-08-13 补做完成
 ```
 
 | # | 任务 | 依赖 | 模型 | 独测 |
@@ -715,7 +715,8 @@ TurnEnd 不进协议（宿主墙外 poll/SSE 天然观测，副作用在自己�
 | [154](154-host-prefix-slot.md) | `Slot::HostPrefix`：声明进 store（073 同构） | — | sonnet | ✅ |
 | [155](155-with-host-prefix.md) | `ToolTable::with_host_prefix`：合成常量文本 timed 工具 | — | sonnet | ✅ |
 | [156](156-server-prefix-declaration.md) | server 全链：协议 + 校验 + 落店 + 装配 | 154+155 | sonnet | ✅ |
-| [157](157-wasm-prefix-declaration.md) | wasm 宿主同路（**后置**，见文内「为什么后置」） | 155+156+在飞合并 | sonnet | — |
+| [157](157-wasm-prefix-declaration.md) | wasm 宿主同路（曾后置，2026-08-13 补做完成） | 155+156+[164](164-wasm-skills-declaration.md) | 主会话前台 | — |
+| [164](164-wasm-skills-declaration.md) | **认领收尾**：另一会话在飞的 wasm skills 声明落店（157 的地基） | — | 主会话前台 | — |
 | [158](158-m17-dogfood.md) | 真机收官 + 文档清账 ← **M17 终点** | 156 | 主会话前台 | 本条即验收 |
 
 **排期注意**：154 与 155 无依赖可并行开工。**157 明确后置不阻塞收口**——
@@ -729,7 +730,13 @@ TurnEnd 不进协议（宿主墙外 poll/SSE 天然观测，副作用在自己�
 spawn 活对照（`[]` 的子缓存 128 断真不知道；缺省的子思考里逐字引用简报口令）、
 dormant 再声明 400。白捡两发现：断连自动取消真机复现；`existing` 活会话声明被
 静默忽略的文档/代码分歧挂 ROADMAP §四 待拍。逐条数字见
-[158](158-m17-dogfood.md) 实做记录。157 等 agent-wasm 在飞工作合并后作为补做。
+[158](158-m17-dogfood.md) 实做记录。
+
+**157 补做完成（2026-08-13）= M17 无尾巴**：等的「第三个会话」已不在，其在飞
+工作（wasm skills 声明落店）由主会话认领收尾为 [164](164-wasm-skills-declaration.md)，
+157 踩着它补齐 `capabilities.prefix` 的 wasm 半边（校验判定与 server 一字不差）。
+真机浏览器四钉全进：声明块新会话现答口令、`srv:skill/read` 自主链路、
+**刷新 + 零声明宿主恢复只认 journal**、恢复表完整。逐条见 157/164 实做记录。
 
 ---
 

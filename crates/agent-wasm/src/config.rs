@@ -72,6 +72,10 @@ pub(crate) struct HostConfig {
     /// journaled 到各自的会话；恢复时绝不以这份当前配置覆盖历史。
     #[serde(skip)]
     declared_skills: Vec<HostSkill>,
+    /// 决策 31（157）：页面声明的开局块 `(name, text)`。同一条性质：新会话的
+    /// 输入、journaled 落店、恢复只认 journal。
+    #[serde(skip)]
+    declared_prefix: Vec<(Arc<str>, Arc<str>)>,
 }
 
 impl HostConfig {
@@ -93,9 +97,11 @@ impl HostConfig {
         mut self,
         tools: Vec<(ToolSpec, Reversibility)>,
         skills: Vec<HostSkill>,
+        prefix: Vec<(Arc<str>, Arc<str>)>,
     ) -> Self {
         self.declared_tools = tools;
         self.declared_skills = skills;
+        self.declared_prefix = prefix;
         self
     }
 
@@ -109,9 +115,16 @@ impl HostConfig {
         &self.declared_skills
     }
 
+    /// 页面声明的开局块，建新会话时装表并写入 journal。
+    pub(crate) fn declared_prefix(&self) -> &[(Arc<str>, Arc<str>)] {
+        &self.declared_prefix
+    }
+
     /// 没有能力时不写任何声明 entry，也不人为推进 turn 边界。
     pub(crate) fn has_declared_capabilities(&self) -> bool {
-        !self.declared_tools.is_empty() || !self.declared_skills.is_empty()
+        !self.declared_tools.is_empty()
+            || !self.declared_skills.is_empty()
+            || !self.declared_prefix.is_empty()
     }
 
     /// 翻成 114d 的那个共用类型。`api_key` 在这一步交出所有权的副本——之后这个

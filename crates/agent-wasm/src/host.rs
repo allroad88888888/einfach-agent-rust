@@ -85,6 +85,10 @@ impl AgentHost {
     ///    skill 正文由 `srv:skill/read` 按需读，开局只写入索引；v1 不接受 skill
     ///    自带 `tools`。直接 `web:`/`desk:` 工具仍由 [`AgentHost::on_tool_call`] 的
     ///    回调执行。不给（或给 `null`）= 只有三条内建工具。
+    ///    还可声明开局块（决策 31，157）：
+    ///    `{"prefix":[{"name":"web:ops/briefing","text":"今天的上下文……"}]}`——
+    ///    页面自己跑完逻辑把**结果文本**带进来，新会话开局落成 system 前缀块；
+    ///    名字规则与 `tools` 一字不差（`web:`/`desk:` + 同款白名单），`text` 不能空。
     ///
     /// # 声明的规则
     ///
@@ -130,13 +134,15 @@ impl AgentHost {
         config.adapter().map_err(js_error)?;
         // 同理：声明写错了当场报，不要等模型第一次调它才发现表里没有。
         let declared = capabilities::parse(capabilities_json.as_deref()).map_err(js_error)?;
-        let config = config.with_declared_capabilities(declared.tools, declared.skills);
+        let config =
+            config.with_declared_capabilities(declared.tools, declared.skills, declared.prefix);
         let vision = KimiVisionConfig::parse(config_json);
         Ok(AgentHost {
             inner: Rc::new(Inner {
                 tool_table_json: tools::tool_table_json(&tools::browser_tool_table(
                     config.declared_tools(),
                     config.declared_skills().to_vec(),
+                    config.declared_prefix(),
                 )),
                 config,
                 vision,
