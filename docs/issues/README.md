@@ -878,7 +878,7 @@ default 所以不显形，**上限一可配，第一次重启就显形**（闸�
 | [183](183-post-providers.md) | 文章：三家实测差异（**赌流量最高**） | 165 | **opus** | 20min | 初稿完成 |
 | [184](184-post-decision-27.md) | 文章：删掉自己的激活子系统（净减 1945 行） | 165 | **opus** | 20min | 初稿完成 |
 | [185](185-post-invariants.md) | 文章：不会报错的那几类 bug | 165 | **opus** | 20min | 初稿完成 |
-| [186](186-post-adapter-seam.md) | 文章：别在 core 里 `match provider` | 165 | **opus** | 20min | 待开始 |
+| [186](186-post-adapter-seam.md) | 文章：能力位是 `match provider` 换层皮 | 165 | **opus** | 20min | 初稿完成 |
 | [187](187-post-target-bloat.md) | 文章：两天 58GB（**量出了续集**） | 165 | sonnet | 20min | 初稿完成 |
 | [188](188-translate-invariants.md) | 英译 INVARIANTS（**建术语表**） | 165 | sonnet | 20min | 待开始 |
 | [189](189-translate-architecture.md) | 英译 ARCHITECTURE | 188 | sonnet | 20min | 待开始 |
