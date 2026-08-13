@@ -18,7 +18,7 @@
 | [docs/ADAPTER.md](docs/ADAPTER.md) | **模型适配层的接缝定义**：料单 / 能力位 / trait / 放错的症状 |
 | [docs/STATE-MODEL.md](docs/STATE-MODEL.md) | 原子图、undo/redo、持久化与恢复 |
 | [docs/TOOLS.md](docs/TOOLS.md) | 工具三分与位置透明路由、skills、MCP |
-| [docs/INVARIANTS.md](docs/INVARIANTS.md) | **红线**——违反了整套机制就是漏的 |
+| [docs/INVARIANTS.md](docs/INVARIANTS.md) | **红线**——违反了整套机制就是漏的（英译 [INVARIANTS.en.md](docs/INVARIANTS.en.md) 并存，**中文是权威**） |
 | [probes/PROVIDERS.md](probes/PROVIDERS.md) | 三家模型的实测差异（adapter 内部消化，主线别引用细节） |
 
 M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全读：

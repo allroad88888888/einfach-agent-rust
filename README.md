@@ -106,7 +106,7 @@ frontend typecheck, and a browser-host wasm build.
 - [Architecture](docs/ARCHITECTURE.md)
 - [State model](docs/STATE-MODEL.md)
 - [Provider adapter contract](docs/ADAPTER.md)
-- [Hard invariants](docs/INVARIANTS.md)
+- [Hard invariants](docs/INVARIANTS.en.md) — the twelve rules whose violations produce no error
 - [Roadmap and decisions](docs/ROADMAP.md)
 - [Implementation issues](docs/issues/README.md)
 
