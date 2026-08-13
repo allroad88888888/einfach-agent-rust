@@ -103,7 +103,7 @@ frontend typecheck, and a browser-host wasm build.
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md)
+- [Architecture](docs/ARCHITECTURE.en.md) — packages, transport, deployment shapes, and what is *not* built yet
 - [State model](docs/STATE-MODEL.md)
 - [Provider adapter contract](docs/ADAPTER.md)
 - [Hard invariants](docs/INVARIANTS.en.md) — the twelve rules whose violations produce no error

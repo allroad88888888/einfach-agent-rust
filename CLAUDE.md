@@ -14,7 +14,7 @@
 | [docs/ROADMAP.md](docs/ROADMAP.md) | **已拍板的决策、现状、阶段顺序、未决问题** |
 | [docs/issues/](docs/issues/README.md) | **逐条任务**，一个文件一个，带验收标准 |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | 怎么做一个 issue：粒度、用什么模型、测试谁写 |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 包结构、传输、部署形态、各包边界 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 包结构、传输、部署形态、各包边界（英译 [ARCHITECTURE.en.md](docs/ARCHITECTURE.en.md) 并存，**中文是权威**） |
 | [docs/ADAPTER.md](docs/ADAPTER.md) | **模型适配层的接缝定义**：料单 / 能力位 / trait / 放错的症状 |
 | [docs/STATE-MODEL.md](docs/STATE-MODEL.md) | 原子图、undo/redo、持久化与恢复 |
 | [docs/TOOLS.md](docs/TOOLS.md) | 工具三分与位置透明路由、skills、MCP |
