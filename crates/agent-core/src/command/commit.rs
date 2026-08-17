@@ -4,7 +4,7 @@
 //! 复用 batch，不另造概念。」这个文件就是那句话的实现，一共做四件事：
 //!
 //! 1. 开 batch，把 [`Txn`] 交给转移表
-//! 2. 收账（[`Commit`](super::txn::Commit)：变更 / 屏障位 / 要不要 bump epoch）
+//! 2. 收账（[`Commit`](super::txn::Commit)：变更 / 可撤销档位 / 要不要 bump epoch）
 //! 3. 该 bump 就 bump 世代（取消走这条；undo 那条在 [`undo`](super::undo)）
 //! 4. 把这一批变更连同 [`EntryMeta`] 追加进日志
 //!
@@ -55,7 +55,7 @@ impl Session {
             &self.derived,
             agent,
             epoch_at_write,
-            &self.irreversible,
+            &self.tool_marks,
         );
 
         // batch 的句柄是 store 的一份克隆（`Store` 是 `Rc` 句柄，克隆即共享）：
@@ -73,7 +73,7 @@ impl Session {
             turn_id: self.turn_id,
             epoch: epoch_at_write,
             label,
-            barrier: commit.barrier,
+            undoability: commit.undoability,
         };
         let _ = self.history.append(meta, commit.changes);
 

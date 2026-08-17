@@ -11,7 +11,7 @@
 //! `agent-server` 的 `UndoOutcome::Blocked` 富化共用同一个读口），这里只剩「把
 //! `BarrierInfo` 格式化成一句人话」。
 
-use agent_core::{Session, UndoReport};
+use agent_core::{BlockedCause, Session, UndoReport, Undoability};
 use agent_runtime::RunnerCtx;
 
 use crate::print;
@@ -52,7 +52,10 @@ pub fn undo_force(session: &mut Session, ctx: &mut RunnerCtx) {
             .entries()
             .skip(session.cursor())
             .take(cursor_before - session.cursor())
-            .filter(|e| e.meta.barrier)
+            // 只找屏障：`Hooked` 那一档没被「越过」，它是**还原函数真的跑过了**，
+            // 说「已越过 xxx，副作用不会被回滚」对它是句假话（199 的三态之后
+            // 这一处机械跟随会改错，所以判据写死在 `Blocked` 上）。
+            .filter(|e| e.meta.undoability == Undoability::Blocked)
             .map(|e| describe_barrier(session, e.seq))
             .collect();
         for what in crossed {
@@ -68,9 +71,25 @@ fn report_undo(session: &Session, report: UndoReport, forced: bool) {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            cause,
         } => {
             let what = describe_barrier(session, barrier_seq);
-            print::undo_blocked(entries, &what, forced);
+            print::undo_blocked(entries, &what, &describe_cause(&cause), forced);
+        }
+    }
+}
+
+/// 三种成因 → 三句不同的人话（199 §五：屏障是「**没碰**」，后两种是「**碰了，
+/// 而且可能做了一半**」）。用户据此决定要不要 `/undo!`——同一句「撞上了不可逆
+/// 操作」套在还原失败上会让他以为外部世界还是干净的。
+fn describe_cause(cause: &BlockedCause) -> String {
+    match cause {
+        BlockedCause::NoHook => "它没有提供还原函数，本仓无从代它回退".to_string(),
+        BlockedCause::HookFailed(why) => {
+            format!("它的还原函数跑了但失败了（{why}），可能只还原了一半")
+        }
+        BlockedCause::HookLost => {
+            "它的还原函数随进程重启消失了（函数是闭包，不跨进程），没人能代它回退".to_string()
         }
     }
 }
@@ -86,9 +105,10 @@ pub fn after_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx) {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            cause,
         } => {
             let what = describe_barrier(session, barrier_seq);
-            print::cancelled_turn_kept(entries, &what);
+            print::cancelled_turn_kept(entries, &what, &describe_cause(&cause));
         }
         UndoReport::Nothing => {} // 没有可退的（理论上不会发生：取消前至少有一条 user_input entry）
     }
@@ -166,9 +186,10 @@ mod tests {
     fn describe_barrier_extracts_the_tool_name_and_call_id() {
         let session = session_with_a_barrier_entry();
         let entry = session.last_entry().unwrap();
-        assert!(
-            entry.meta.barrier,
-            "标记过 mark_irreversible，这条 entry 该带 barrier"
+        assert_eq!(
+            entry.meta.undoability,
+            Undoability::Blocked,
+            "标记过 mark_irreversible，这条 entry 该是屏障"
         );
 
         let described = describe_barrier(&session, entry.seq);

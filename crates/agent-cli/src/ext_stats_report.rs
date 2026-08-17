@@ -29,7 +29,7 @@
 
 use std::fmt::Write as _;
 
-use agent_core::{AgentActivity, AgentId, AgentNode, Session};
+use agent_core::{AgentActivity, AgentId, AgentNode, Session, Undoability};
 
 /// 子 agent 那一行里 task 保留多少个**字符**（不是字节——按字节切会切碎中文）。
 /// 比 `status_tool` 的 100 更短：这份报告是汇总，看全文该去看 spawn 那次调用。
@@ -137,13 +137,17 @@ pub(crate) fn count(session: &Session, agents: usize) -> Counts {
     }
 }
 
-/// 生效段里带屏障（不可越过的 `Irreversible` 调用，红线 6）的条数。
+/// 生效段里带屏障（不可越过的调用，红线 6）的条数。
+///
+/// 199 的三态之后这里只数 [`Undoability::Blocked`]：`Hooked` 不是屏障——它碰了外部
+/// 世界**但交回了还原函数**，撤得掉，数进来会让「这个会话有几处撤不回去」这个统计
+/// 凭空变大。判据是「挡不挡 undo」，不是「碰没碰外部世界」。
 fn barriers(session: &Session) -> usize {
     session
         .history()
         .entries()
         .take(session.cursor())
-        .filter(|entry| entry.meta.barrier)
+        .filter(|entry| entry.meta.undoability == Undoability::Blocked)
         .count()
 }
 

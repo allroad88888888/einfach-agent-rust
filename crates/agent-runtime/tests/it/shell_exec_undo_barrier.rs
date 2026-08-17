@@ -102,7 +102,10 @@ fn undo_stops_at_the_shell_barrier_and_undo_force_crosses_it() {
         .entries()
         .find(|e| e.seq == barrier_seq)
         .unwrap();
-    assert!(barrier_entry.meta.barrier);
+    assert_eq!(
+        barrier_entry.meta.undoability,
+        agent_core::Undoability::Blocked
+    );
     let describes_the_shell_call = barrier_entry.changes.iter().any(|c| {
         let (Some(prev), Some(next)) = (c.prev.as_slots(), c.next.as_slots()) else {
             return false;

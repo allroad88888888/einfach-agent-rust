@@ -252,9 +252,10 @@ fn an_irreversible_ext_tool_leaves_a_barrier_that_stops_undo_until_forced() {
         .entries()
         .find(|e| e.seq == barrier_seq)
         .unwrap();
-    assert!(
-        barrier_entry.meta.barrier,
-        "撞停的这条 entry 该带 barrier 位"
+    assert_eq!(
+        barrier_entry.meta.undoability,
+        agent_core::Undoability::Blocked,
+        "撞停的这条 entry 该是屏障"
     );
 
     let report = session.undo_turn_force();

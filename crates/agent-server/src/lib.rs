@@ -67,8 +67,8 @@ pub use bind::{
 pub use bootstrap::{BootstrapError, BootstrapOptions, Bootstrapped, bootstrap};
 pub use command::{Command, Granularity};
 pub use event::{
-    Frame, OrphanFate, SessionEvent, TransientSourceFailureCause, TransientSourceFailureEvent,
-    UndoOutcome,
+    BlockedCause, Frame, OrphanFate, SessionEvent, TransientSourceFailureCause,
+    TransientSourceFailureEvent, UndoOutcome,
 };
 pub use handle::{SessionClosed, SessionHandle, Subscription};
 pub use http::{AgentServer, BoundAgentServer, ServerConfig, SessionTemplate, SessionsHandle};

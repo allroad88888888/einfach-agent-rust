@@ -15,10 +15,10 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use axum::extract::{Multipart, Path as AxumPath, State};
-use axum::http::{header, StatusCode};
-use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::extract::{Multipart, Path as AxumPath, State};
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
 use crate::http::error::ApiError;
@@ -37,9 +37,7 @@ fn verify_magic(mime: &str, bytes: &[u8]) -> Result<(), ApiError> {
     let matches = match mime {
         "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
         "image/jpeg" => bytes.starts_with(b"\xFF\xD8\xFF"),
-        "image/webp" => {
-            bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
-        }
+        "image/webp" => bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP",
         "image/gif" => bytes.starts_with(b"GIF8"),
         // handler 已按 ALLOWED_MIME 过滤，理论上到不了这里；保守起见仍拒绝。
         _ => false,
@@ -78,18 +76,17 @@ impl UploadStore {
         verify_magic(mime, bytes)?;
         // 目录不可建、字节写不进去都是**服务端环境问题**，不是调用方过错——5xx。
         std::fs::create_dir_all(&self.dir).map_err(|e| {
-            ApiError::internal_error(format!(
-                "上传目录不可写：{}（{e}）",
-                self.dir.display()
-            ))
+            ApiError::internal_error(format!("上传目录不可写：{}（{e}）", self.dir.display()))
         })?;
-        let id = format!("up-{}-{}", std::process::id(), self.next_id.fetch_add(1, Ordering::Relaxed));
-        std::fs::write(self.dir.join(&id), bytes).map_err(|e| {
-            ApiError::internal_error(format!("写入上传图片失败：{e}"))
-        })?;
-        std::fs::write(self.dir.join(format!("{id}.mime")), mime).map_err(|e| {
-            ApiError::internal_error(format!("写入上传 mime 失败：{e}"))
-        })?;
+        let id = format!(
+            "up-{}-{}",
+            std::process::id(),
+            self.next_id.fetch_add(1, Ordering::Relaxed)
+        );
+        std::fs::write(self.dir.join(&id), bytes)
+            .map_err(|e| ApiError::internal_error(format!("写入上传图片失败：{e}")))?;
+        std::fs::write(self.dir.join(format!("{id}.mime")), mime)
+            .map_err(|e| ApiError::internal_error(format!("写入上传 mime 失败：{e}")))?;
         Ok(id)
     }
 
@@ -99,12 +96,14 @@ impl UploadStore {
         if !valid_id(id) {
             return Err(ApiError::not_found(format!("上传的图片不存在：{id}")));
         }
-        let canonical_dir = self.dir.canonicalize().map_err(|e| {
-            ApiError::not_found(format!("上传目录不可用：{e}"))
-        })?;
-        let target = canonical_dir.join(id).canonicalize().map_err(|_| {
-            ApiError::not_found(format!("上传的图片不存在：{id}"))
-        })?;
+        let canonical_dir = self
+            .dir
+            .canonicalize()
+            .map_err(|e| ApiError::not_found(format!("上传目录不可用：{e}")))?;
+        let target = canonical_dir
+            .join(id)
+            .canonicalize()
+            .map_err(|_| ApiError::not_found(format!("上传的图片不存在：{id}")))?;
         if !target.starts_with(&canonical_dir) {
             return Err(ApiError::not_found(format!("上传 id 越界：{id}")));
         }
@@ -135,9 +134,11 @@ pub(crate) async fn upload(
 
     let mut mime: Option<String> = None;
     let mut bytes: Option<Vec<u8>> = None;
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        ApiError::bad_request(format!("multipart 解析失败：{e}"))
-    })? {
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| ApiError::bad_request(format!("multipart 解析失败：{e}")))?
+    {
         if field.name() == Some("file") {
             mime = field.content_type().map(str::to_owned);
             let data = field
@@ -183,10 +184,5 @@ pub(crate) async fn get(
         .uploads()
         .ok_or_else(|| ApiError::not_found("上传端点未启用（未配置 upload_dir）"))?;
     let (bytes, mime) = store.load(&id)?;
-    Ok((
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, mime)],
-        bytes,
-    )
-        .into_response())
+    Ok((StatusCode::OK, [(header::CONTENT_TYPE, mime)], bytes).into_response())
 }

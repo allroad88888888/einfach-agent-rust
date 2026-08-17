@@ -7,18 +7,68 @@
 //!
 //! 011 的实做记录已经点名这道账：「落盘 schema 归 011，它那一侧的 `label` 是
 //! `String`」——这份类型就是那句话的落地。
+//!
+//! ## 199 之前写的会话文件怎么读回来
+//!
+//! 那一版的字段是 `barrier: bool`，这一版是三态的
+//! [`Undoability`]。映射**逐字确定**：`barrier: true → Blocked`、
+//! `barrier: false → StateOnly`。老会话本来就没有还原钩子（`Hooked` 这一档是 199
+//! 才有的），所以这个映射对它们是**真的**，不是将就（199 §九）。
+//!
+//! 迁移做在 [`RawMeta`] 上而不是给 `undoability` 加个 `#[serde(default)]`：默认值
+//! 会把老文件里 `barrier: true` 的那一条读成 `StateOnly`，也就是**一条真实的不可逆
+//! 操作从此不再挡 undo**——不报错、不 panic，只是某一天用户撤销时副作用悄悄留在了
+//! 外面。这正是红线导言点名的那类 bug，所以老字段必须真的被读进来。
+//!
+//! 这一份类型同时供两个后端用（`jsonl` 与 `idb`——两边都是
+//! `SessionStore<AtomKey, AgentValue, PersistedMeta>`，`M` 全程泛型透传），所以迁移
+//! 写在这里一处，两条持久化路一起生效。
 
 use serde::{Deserialize, Serialize};
 
-use agent_core::{EntryMeta, Epoch, known_label};
+use agent_core::{EntryMeta, Epoch, Undoability, known_label};
 
 /// `agent_core::EntryMeta` 的可落盘姊妹类型。字段一一对应，只有 `label` 换了类型。
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "RawMeta")]
 pub struct PersistedMeta {
     pub turn_id: u64,
     pub epoch: u64,
     pub label: String,
-    pub barrier: bool,
+    pub undoability: Undoability,
+}
+
+/// 反序列化的中转形状：**两个版本的字段都收**，由 [`From`] 决定信哪个。
+///
+/// `undoability` 有值就用它（199 之后写的文件）；没有就看老的 `barrier` 位。
+/// 两个都没有的行只可能是被截断/损坏的（`Jsonl` 那一层已经处理过尾部半行），
+/// 退回 `StateOnly` 是这里能做的最保守的猜——它不会凭空**取消**一道屏障，
+/// 因为老文件里真有屏障的那一行一定带着 `barrier: true`。
+#[derive(Deserialize)]
+struct RawMeta {
+    turn_id: u64,
+    epoch: u64,
+    label: String,
+    #[serde(default)]
+    undoability: Option<Undoability>,
+    #[serde(default)]
+    barrier: Option<bool>,
+}
+
+impl From<RawMeta> for PersistedMeta {
+    fn from(raw: RawMeta) -> Self {
+        let migrated = match raw.barrier {
+            Some(true) => Undoability::Blocked,
+            _ => Undoability::StateOnly,
+        };
+        let undoability = raw.undoability.unwrap_or(migrated);
+        PersistedMeta {
+            turn_id: raw.turn_id,
+            epoch: raw.epoch,
+            label: raw.label,
+            undoability,
+        }
+    }
 }
 
 impl From<&EntryMeta> for PersistedMeta {
@@ -27,7 +77,7 @@ impl From<&EntryMeta> for PersistedMeta {
             turn_id: meta.turn_id,
             epoch: meta.epoch.0,
             label: meta.label.to_string(),
-            barrier: meta.barrier,
+            undoability: meta.undoability,
         }
     }
 }
@@ -60,47 +110,11 @@ impl TryFrom<PersistedMeta> for EntryMeta {
             turn_id: meta.turn_id,
             epoch: Epoch(meta.epoch),
             label,
-            barrier: meta.barrier,
+            undoability: meta.undoability,
         })
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_known_label_round_trips_through_the_persisted_form() {
-        let meta = EntryMeta {
-            turn_id: 3,
-            epoch: Epoch(7),
-            label: "tool_result",
-            barrier: true,
-        };
-        let persisted = PersistedMeta::from(&meta);
-        assert_eq!(
-            persisted,
-            PersistedMeta {
-                turn_id: 3,
-                epoch: 7,
-                label: "tool_result".to_string(),
-                barrier: true
-            }
-        );
-
-        let back = EntryMeta::try_from(persisted).unwrap();
-        assert_eq!(back, meta);
-    }
-
-    #[test]
-    fn an_unrecognized_label_is_rejected_not_guessed() {
-        let persisted = PersistedMeta {
-            turn_id: 1,
-            epoch: 0,
-            label: "some_future_label".to_string(),
-            barrier: false,
-        };
-        let err = EntryMeta::try_from(persisted).unwrap_err();
-        assert_eq!(err, UnknownLabel("some_future_label".to_string()));
-    }
-}
+#[path = "meta_tests.rs"]
+mod tests;

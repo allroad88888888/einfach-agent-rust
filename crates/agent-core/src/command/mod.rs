@@ -22,6 +22,7 @@
 //! | [`step`] | `Session::step`：epoch 闸 + agent 闸 + 分发 |
 //! | `transitions` | 转移表本体（002/016/003 的语义，逐格搬进原子图） |
 //! | [`undo`] | `undo_turn` / `undo_turn_force` / `redo_turn`，红线 6 在这里结账 |
+//! | [`undo_hook`] | 199：undo 的逐条循环——先跑还原钩子、`Ok` 才回滚这一条；`Blocked` 的三种成因 |
 //! | [`meta`] | `EntryMeta` 与 agent 侧三个日志类型别名 |
 //! | [`restore`] | 027：崩溃恢复——从 `SessionStore::load()` 的产物重建 `Session`（恢复就是 redo） |
 //! | [`tree`] | 028：这棵树上现在有哪些 agent、谁是谁的孩子、谁还活着 |
@@ -74,6 +75,7 @@ mod transitions;
 pub mod tree;
 pub mod txn;
 pub mod undo;
+pub mod undo_hook;
 
 pub use advance_boundary::BoundaryRejected;
 pub use barrier::BarrierInfo;
@@ -81,7 +83,8 @@ pub use child_config::ChildConfig;
 pub use clear_tool_results::ClearOutcome;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
-pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, known_label};
+pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, Undoability, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};
 pub use spawn::{AgentLimits, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused};
-pub use undo::UndoReport;
+pub use undo::{UndoReport, always_ok};
+pub use undo_hook::{BlockedCause, HookOutcome};

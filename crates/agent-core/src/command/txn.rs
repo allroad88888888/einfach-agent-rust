@@ -34,16 +34,16 @@ use crate::value::message::{ContentBlock, Message, Role};
 use crate::value::send_plan::SendPlan;
 use crate::value::send_plan_codec;
 
-use super::meta::AgentChange;
+use super::meta::{AgentChange, Undoability};
 
-/// 一次转移写完之后交还给调用方的账：变更、屏障位、要不要 bump epoch。
+/// 一次转移写完之后交还给调用方的账：变更、可撤销档位、要不要 bump epoch。
 ///
 /// 三样东西一起返回而不是让转移表各自去改 `Session`：转移表拿不到 `Session`
 /// （它只看得见 [`Txn`]），于是「一次转移能对会话做什么」在类型上就是这三件，
 /// 不会有第四件从某个角落里长出来。
 pub(crate) struct Commit {
     pub(crate) changes: Vec<AgentChange>,
-    pub(crate) barrier: bool,
+    pub(crate) undoability: Undoability,
     pub(crate) bump_epoch: bool,
 }
 
@@ -54,9 +54,9 @@ pub(crate) struct Txn {
     derived: DerivedFamily,
     agent: AgentId,
     epoch: Epoch,
-    irreversible: Vec<ToolCallId>,
+    tool_marks: Vec<(ToolCallId, Undoability)>,
     changes: Vec<AgentChange>,
-    barrier: bool,
+    undoability: Undoability,
     bump_epoch: bool,
 }
 
@@ -67,7 +67,7 @@ impl Txn {
         derived: &DerivedFamily,
         agent: &AgentId,
         epoch: Epoch,
-        irreversible: &[ToolCallId],
+        tool_marks: &[(ToolCallId, Undoability)],
     ) -> Self {
         Txn {
             store: store.clone(),
@@ -75,9 +75,9 @@ impl Txn {
             derived: derived.clone(),
             agent: agent.clone(),
             epoch,
-            irreversible: irreversible.to_vec(),
+            tool_marks: tool_marks.to_vec(),
             changes: Vec::new(),
-            barrier: false,
+            undoability: Undoability::StateOnly,
             bump_epoch: false,
         }
     }
@@ -87,7 +87,7 @@ impl Txn {
     pub(crate) fn finish(self) -> Commit {
         Commit {
             changes: self.changes,
-            barrier: self.barrier,
+            undoability: self.undoability,
             bump_epoch: self.bump_epoch,
         }
     }
@@ -108,14 +108,14 @@ impl Txn {
         self.bump_epoch = true;
     }
 
-    /// 这一步记录的是一次不可逆操作的结果 → `EntryMeta.barrier = true`。
-    pub(crate) fn mark_barrier(&mut self) {
-        self.barrier = true;
-    }
-
-    /// 这次调用是宿主标记过的不可逆工具吗（见 `Session::mark_irreversible`）。
-    pub(crate) fn is_irreversible(&self, call_id: &ToolCallId) -> bool {
-        self.irreversible.contains(call_id)
+    /// 按宿主派发这次调用时登记的档位，给这一条 entry 定性（199 §九的三态）。
+    ///
+    /// 名单里没有这个 `call_id` = 宿主两样都没说 = 没碰外部世界，保持 `StateOnly`。
+    /// **core 自己不判**：交没交回还原函数只有执行工具的那一侧知道（002 的裁决）。
+    pub(crate) fn mark_tool_undoability(&mut self, call_id: &ToolCallId) {
+        if let Some((_, marked)) = self.tool_marks.iter().find(|(id, _)| id == call_id) {
+            self.undoability = *marked;
+        }
     }
 
     fn atom(&self, slot: Slot) -> AtomId {

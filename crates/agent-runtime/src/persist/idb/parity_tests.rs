@@ -110,7 +110,7 @@ fn tool_table_bytes_survive_persist_and_reload_byte_for_byte() {
             turn_id: 1,
             epoch: 0,
             label: "tool_result".to_string(),
-            barrier: false,
+            undoability: agent_core::Undoability::StateOnly,
         },
         changes: vec![Change {
             key: AtomKey::Agent(AgentId::root(), Slot::ToolsAllowed),

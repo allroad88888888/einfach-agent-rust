@@ -18,8 +18,8 @@ use agent_core::{
 };
 
 use crate::{
-    Frame, OrphanFate, SessionEvent, TransientSourceFailureCause, TransientSourceFailureEvent,
-    UndoOutcome,
+    BlockedCause, Frame, OrphanFate, SessionEvent, TransientSourceFailureCause,
+    TransientSourceFailureEvent, UndoOutcome,
 };
 
 use super::fixtures_cast::cast_sample;
@@ -80,6 +80,7 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
             label: String::new(),
             tool: None,
             call_id: None,
+            cause: BlockedCause::NoHook,
         }),
         SessionEvent::Redo(UndoOutcome::Nothing),
         SessionEvent::Lagged { skipped: 0 },

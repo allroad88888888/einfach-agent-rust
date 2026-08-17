@@ -133,7 +133,14 @@ pub struct EntryMeta {
     pub turn_id: u64,          // 两层粒度靠它分组。由 root agent 分配
     pub epoch: Epoch,          // 这一步发生在哪一代（红线 6 的凭证）
     pub label: &'static str,   // "user_input" / "provider_done" / "tool_result" / …
-    pub barrier: bool,         // 不可越过的屏障：这一步记录了一次 Irreversible 工具调用
+    pub undoability: Undoability,  // 这一步撤销起来要做什么（199 §九的三态，见下）
+}
+
+// 三态，199 之前是一个 `barrier: bool`
+pub enum Undoability {
+    StateOnly,   // 没碰外部世界——状态回滚就够了（绝大多数 entry）
+    Hooked,      // 碰了，且工具交回了还原函数（钩子表按 Entry::seq 查，住 runtime）
+    Blocked,     // 碰了，没交还原函数 —— 屏障
 }
 ```
 
@@ -143,9 +150,19 @@ pub struct EntryMeta {
 字段一一对应，只有 `label` 从 `&'static str` 换成 `String`——进程内的标签是有限的编译期
 常量集，落盘的标签是历史数据，允许出现这一版不认识的取值。
 
-`barrier` 是 undo 屏障的**唯一**落盘依据：宿主派发不可逆工具前调 `Session::mark_irreversible`，
-随后那条 `tool_result` entry 就带上这一位，`undo` 撞上它返回 `UndoOutcome::Blocked`。
-崩溃重启之后仍然拦得住——这一位在文件里。
+`undoability` 是 undo 屏障的**唯一**落盘依据：宿主派发工具前调
+`Session::mark_irreversible`（→ `Blocked`）或 `Session::mark_hooked`（→ `Hooked`），
+随后那条 `tool_result` entry 就带上这一档，`undo` 撞上 `Blocked` 返回 `UndoOutcome::Blocked`。
+崩溃重启之后仍然拦得住——这一档在文件里。
+
+**为什么必须是三态而不是一个 bool**（决策 199 §九）：「不挡 undo」实际上是两件事——
+这一步压根没碰外部世界，和这一步碰了但交了还原函数。**状态的逆跨进程有效**（journal 的
+prev/next 是数据），**外部世界的逆不跨进程**（它是闭包，住 runtime 的钩子表）。两者混成
+一位，崩溃恢复之后就会照「不挡」走，**静默跳过一次真实副作用**。`Hooked` 但表里查不到
+（恢复后的常态）按「还原失败」处理：`UndoReport::Blocked { cause: HookLost }`，问用户。
+
+199 之前写的会话文件里这一位是 `barrier: bool`，载入时逐字确定地迁移：
+`true → Blocked`、`false → StateOnly`（老会话本来就没有钩子，这个映射对它们是真的）。
 
 **没有 `agent` 字段**：每处变更的归属藏在 `Change.key` 里（`AtomKey::agent()`），
 一条 entry 可以横跨多个 agent 的键。undo 本来就不看它（一条扁平日志按时间排序），

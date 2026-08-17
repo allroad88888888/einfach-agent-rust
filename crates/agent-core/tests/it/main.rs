@@ -86,6 +86,7 @@ mod session_timeout;
 mod session_tool_convergence;
 mod session_tool_outcome;
 mod session_transitions_grid;
+mod session_undo_hook;
 mod session_undo_redo;
 mod subagent_indep_accounting;
 mod subagent_indep_despawn;

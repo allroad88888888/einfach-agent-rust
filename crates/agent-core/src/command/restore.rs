@@ -133,11 +133,13 @@ impl Session {
             history,
             epoch: Epoch(max_epoch.map_or(0, |e| e.0 + 1)),
             turn_id: max_turn.unwrap_or(1),
-            // 屏障恢复不需要这份列表（027 已裁决）：`barrier` 位随 `EntryMeta` 落盘，
-            // `undo_turn` 读的是日志里的 `barrier`，不是这份运行时提示列表——它只在
-            // **当次进程**里，工具结果落地的那一刻，把 `mark_irreversible` 登记过的
-            // call_id 翻译成 entry 的 `barrier` 位，翻译一旦发生就不再需要了。
-            irreversible: Vec::new(),
+            // 屏障恢复不需要这份列表（027 已裁决）：档位随 `EntryMeta.undoability`
+            // 落盘，`undo_turn` 读的是日志里的那一位，不是这份运行时提示列表——它只在
+            // **当次进程**里，工具结果落地的那一刻，把 `mark_irreversible` /
+            // `mark_hooked` 登记过的 call_id 翻译成 entry 的档位，翻译一旦发生就
+            // 不再需要了。**`Hooked` 那一档的还原函数本身另说**：它是闭包、住 runtime、
+            // 不跨进程，恢复之后钩子表是空的，撞上就按「钩子已消失」处理（199 §九）。
+            tool_marks: Vec::new(),
             // 结构性硬限是**配置**不是状态（`Session` 的字段表），落盘里没有它——
             // 所以它恢复不出来，只能由宿主经入参**再说一遍**（160；本函数文档
             // 「`limits` 为什么必须是入参」记了它曾经硬写 default 埋下的静默失配）。

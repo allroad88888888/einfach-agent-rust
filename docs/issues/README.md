@@ -948,3 +948,60 @@ token 走 GitHub secret（`release.yml`），你按的那一下从 `cargo login`
 > `srv:agent/status` / `srv:vision/inspect`。**这些不是漏网的 shell/fs**——是子 agent
 > 编排（029 的并行）与视觉检查，本来就该在。被裁掉的 `shell/exec` 与 `srv:fs/read`
 > 确实 `strings` 0 命中，spec 构造器从没被调用，整个被 DCE 删了。
+
+---
+
+## M19 · 可逆性从标签改成交付物
+
+**跟 L 波不同，这条是代码线，所以接 M18 编 M19。** 它改的是一个核心机制：
+「这一步能不能撤销」从**一个声明的枚举**变成**一个交回来的函数**。
+
+**缘起**：用户 2026-08-17 读 [A Programming Paradigm for Spatiotemporal
+Composability](https://github.com/cordiverse/paper)（Cordis，PKU + DeepSeek-AI）
+之后的判断——
+
+> 不是 tool 提供的还原函数么，我们还原的时候，不就是要调用 tool 提供的这个函数，
+> 没提供，就默认无法回退。
+
+**它修的是一个今天就成立的静默问题**：宿主声明 `"reversibility": "reversible"`
+的工具，`/undo` 会**直接跳过它，且不提示任何东西**——因为那个「补偿动作」在代码里
+从来没有人调用。`Reversible` 今天唯一的差别是打印给人看的那个字符串
+（勘查全表在 [199](199-reversibility-as-delivery-decision.md) §现状清账）。
+
+```
+199 拍板（十条）
+ ├→ 200 core：钩子先跑、再回滚状态；barrier 扩三态 ─┬→ 202 宿主/MCP 恒不交 → 堵掉那个场景 ─┬→ 203（M19 终点）
+ └───────────────────────────────────────────────┴→ 201 runtime：签名交付 + seq 记账 ────┘
+```
+
+| # | 任务 | 依赖 | 模型 | 独测 | 状态 |
+|---|---|---|---|---|---|
+| [199](199-reversibility-as-delivery-decision.md) | **拍板**：可逆性 = 交付物不是标签 | — | **opus** | 决策类 | 未开始 |
+| [200](200-core-undo-hook-path.md) | core：undo 路先跑钩子再回滚；`barrier` → 三态 | 199 | **opus** | ✅ | ✅ 完成 |
+| [201](201-runtime-undo-fn-delivery.md) | runtime：执行体交还原函数，钩子表按 `seq` | 200 | sonnet | ✅ | 未开始 |
+| [202](202-host-mcp-undo-none.md) | 宿主 / MCP 恒 `Blocked`；`Reversibility` 降成显示标签 | 200 | sonnet | ✅ | 未开始 |
+| [203](203-reversibility-docs-cleanup.md) | 五份文档同步 ← M19 终点 | 201+202 | sonnet | — | 未开始 |
+
+**M19 验收**（可判定，不用形容词）：
+
+- 一个真扩展工具建了文件 → `/undo` **文件真的没了**（不是「日志说撤了」）
+- 还原函数失败 → 停下来问，**失败那条的状态不回滚**（store 与外部世界一致）
+- `/undo!` 越过它继续退，**一次只放行一条**
+- 宿主声明 `"reversible"` 的工具 `/undo` **停下来问**，不再静默跳过
+- 老会话文件恢复后，`barrier: true` 的那条仍然挡
+
+**三条最容易做错的地方**：
+
+- **[200](200-core-undo-hook-path.md) §3 的顺序**是全程唯一会**静默出错**的地方：
+  写成「先回滚状态再跑钩子」不报错、大部分测试也不红，只在还原失败那条罕见路径上
+  浮出来——store 说没发生，CRM 说发生了。200 的验收里有一条专门钉它，别删。
+- **[199](199-reversibility-as-delivery-decision.md) §九**：还原函数是闭包，**不跨进程**。
+  恢复之后钩子表是空的，而 `barrier` 位是持久的——所以那一位必须是三态，否则恢复后
+  会静默跳过真实副作用。这条是写 200 时才浮出来的，不是一开始就想到的。
+- **[202](202-host-mcp-undo-none.md) 是一次面向宿主的行为变更**（声明 `pure`/`reversible`
+  的宿主工具从不挡变成挡），即便协议字段一个都没动。要如实写进文档，别当成纯内部改动。
+
+**明确不做**（[199](199-reversibility-as-delivery-decision.md) §十，别在里面重开）：
+让模型「想办法撤销」（失败模式是「看起来成功了」）、宿主侧还原回调（第二步，
+等真实宿主要它）、论文的空间维（我们的工具表一次性装配、运行实例内不变，
+那半边解决的问题在这里从源头不存在，而运行期重连正是红线 11 的对面）。

@@ -9,7 +9,7 @@
 //! 跟 073/064 的声明记录用的是同一个变量。
 
 use agent_core::Session;
-use agent_runtime::{run_session_start, ToolTable};
+use agent_runtime::{ToolTable, run_session_start};
 
 /// `restored` 为真（恢复路径）时是空操作——134 的状态已经带着上一次的值。
 ///

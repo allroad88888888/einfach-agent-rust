@@ -59,6 +59,7 @@ fn report_json(session: &Session, report: &UndoReport) -> String {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            cause,
         } => {
             let info = session.barrier_info(*barrier_seq);
             serde_json::json!({
@@ -73,9 +74,28 @@ fn report_json(session: &Session, report: &UndoReport) -> String {
                     "tool": i.tool.as_deref(),
                     "callId": i.call_id.map(|id| id.0.to_string()),
                 })),
+                // 199 §五：`barrier` 回答「停在哪一条」，`cause` 回答「为什么停」。
+                // 页面据此换措辞——「没交还原函数」和「还原函数跑挂了、可能做了
+                // 一半」对用户是两件事，只给前一句等于把后一种情况说成前一种。
+                "cause": cause_json(cause),
             })
         }
         UndoReport::Nothing => serde_json::json!({ "kind": "Nothing" }),
     };
     value.to_string()
+}
+
+/// 三种成因 → `{ kind, message? }`。形状跟 `agent-server` 那一侧的
+/// `BlockedCause`（邻接标签的 TS 枚举）不必逐字节相同——这条路上没有 ts-rs，
+/// 页面读的是这里手拼的 JSON（196 的口子），所以就用本文件其余字段一样的
+/// camelCase 风格，把「哪一种 + 一句原因」说全即可。
+fn cause_json(cause: &agent_core::BlockedCause) -> serde_json::Value {
+    match cause {
+        agent_core::BlockedCause::NoHook => serde_json::json!({ "kind": "NoHook" }),
+        agent_core::BlockedCause::HookFailed(why) => serde_json::json!({
+            "kind": "HookFailed",
+            "message": why.as_ref(),
+        }),
+        agent_core::BlockedCause::HookLost => serde_json::json!({ "kind": "HookLost" }),
+    }
 }

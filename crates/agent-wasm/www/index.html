@@ -361,13 +361,20 @@ function afterUndo(json) {
   } else if (r.kind === 'Nothing') {
     $('undoStatus').textContent = 'nothing left to undo';
   } else if (r.kind === 'Blocked') {
-    // 屏障：如实说被什么拦住的，再问要不要越过。**不默认越过**——越过意味着
-    // 那次不可逆副作用不回滚，这是用户的决定。
+    // 停下来：如实说被什么拦住的、**为什么**拦住，再问要不要越过。不默认越过——
+    // 越过意味着那一步的副作用不回滚，这是用户的决定。199 起 `cause` 分三种：
+    // 没交还原函数（没碰）/ 还原函数跑挂了（碰了，可能做了一半）/ 函数随进程
+    // 重启没了。三句话不同，用户据此决定。
     const what = r.barrier?.tool
       ? `${r.barrier.tool}${r.barrier.callId ? `（call ${r.barrier.callId}）` : ''}`
       : (r.barrier?.label ?? `seq ${r.barrierSeq}`);
-    $('undoStatus').textContent = `\u26d4 blocked by ${what} — that call is irreversible (undid ${r.entries} so far)`;
-    if (confirm(`Undo hit an irreversible call: ${what}\n\nCross it anyway? That call's side effect will NOT be rolled back.`)) {
+    const why = r.cause?.kind === 'HookFailed'
+      ? `its undo function ran but failed (${r.cause.message}) — it may have half-restored`
+      : r.cause?.kind === 'HookLost'
+        ? 'its undo function is gone (closures do not survive a restart)'
+        : 'it shipped no undo function, so nothing here can roll it back';
+    $('undoStatus').textContent = `\u26d4 stopped at ${what} — ${why} (undid ${r.entries} so far)`;
+    if (confirm(`Undo stopped at: ${what}\n\n${why}.\n\nCross it anyway? That step's side effect will NOT be rolled back.`)) {
       afterUndo(host.undoTurnForce());
     }
   }

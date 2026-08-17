@@ -1,5 +1,5 @@
 //! [`Session::barrier_info`]：从一条屏障 entry 里抠出「越过它意味着什么」
-//! （034）——`/undo!` 越过一条 `EntryMeta.barrier = true` 的 entry 之前，用户
+//! （034）——`/undo!` 越过一条 `Undoability::Blocked` 的 entry 之前，用户
 //! 该看到工具名 + call_id，不是一个裸的 `barrier_seq` 数字（027 的原则：
 //! 让人明白自己在确认什么）。
 //!
@@ -19,8 +19,8 @@ use crate::ids::ToolCallId;
 use super::meta::AgentEntry;
 use super::session::Session;
 
-/// 一条屏障（[`crate::EntryMeta::barrier`] 为真）的描述——[`Session::barrier_info`]
-/// 的返回值。
+/// 一条屏障（[`Undoability::Blocked`](crate::Undoability::Blocked)）的描述
+/// ——[`Session::barrier_info`] 的返回值。
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct BarrierInfo {
     /// 这条 entry 是什么（`EntryMeta.label`）。
@@ -74,6 +74,7 @@ fn tool_barrier_of(entry: &AgentEntry) -> (Option<Arc<str>>, Option<ToolCallId>)
 mod tests {
     use std::sync::Arc;
 
+    use crate::command::meta::Undoability;
     use crate::engine::Event;
     use crate::ids::AgentId;
     use crate::seam::PrefixImage;
@@ -126,9 +127,10 @@ mod tests {
     fn barrier_info_extracts_the_tool_name_and_call_id() {
         let session = session_with_a_barrier_entry();
         let entry = session.last_entry().unwrap();
-        assert!(
-            entry.meta.barrier,
-            "标记过 mark_irreversible，这条 entry 该带 barrier"
+        assert_eq!(
+            entry.meta.undoability,
+            Undoability::Blocked,
+            "标记过 mark_irreversible，这条 entry 该是屏障"
         );
 
         let info = session

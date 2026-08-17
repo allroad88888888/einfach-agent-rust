@@ -19,7 +19,7 @@ fn meta(turn_id: u64, epoch: u64, label: &'static str) -> EntryMeta {
         turn_id,
         epoch: Epoch(epoch),
         label,
-        barrier: false,
+        undoability: crate::command::meta::Undoability::StateOnly,
     }
 }
 

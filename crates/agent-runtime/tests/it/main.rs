@@ -48,6 +48,7 @@ mod ladder_tier2_alone_suffices;
 mod ladder_tier3_after_tier2_exhausted;
 mod ladder_tier4_user_triggered;
 mod late_provider_reply_after_timeout;
+mod legacy_barrier_migration;
 mod mcp_epoch_writeback;
 mod mcp_execution;
 mod mcp_undo_barrier;

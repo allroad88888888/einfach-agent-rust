@@ -55,7 +55,7 @@ mod tests {
                 turn_id: 1,
                 epoch: 0,
                 label: "user_input".to_string(),
-                barrier: false,
+                undoability: agent_core::Undoability::StateOnly,
             },
             changes: vec![agent_store::Change {
                 key: agent_core::AtomKey::Agent(

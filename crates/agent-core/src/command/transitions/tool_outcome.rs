@@ -44,12 +44,11 @@ pub(super) fn on_tool_outcome(
     let stored: Arc<str> = Arc::from(truncated_view.into_owned());
 
     txn.set_tool_slots(finish_slot(&slots, &call_id, stored, is_error));
-    // 屏障（020）：这一条 entry 记录的是一次不可逆操作的结果，undo 走到它要停下问人。
-    // **在这里而不是派发时标记**：派发那一步没有写下任何「这次调用发生了」的源状态，
+    // 可撤销档位（020 的屏障 → 199 §九的三态）：这一条 entry 记录的是一次真的
+    // 碰过外部世界的调用，撤它要么有还原函数（`Hooked`）、要么停下问人（`Blocked`）。
+    // **在这里而不是派发时定性**：派发那一步没有写下任何「这次调用发生了」的源状态，
     // 回滚它不需要越过任何副作用；真正不能白回滚的是「结果已经落地」这一条。
-    if txn.is_irreversible(&call_id) {
-        txn.mark_barrier();
-    }
+    txn.mark_tool_undoability(&call_id);
 
     let mut effects = Vec::new();
     if was_truncated {

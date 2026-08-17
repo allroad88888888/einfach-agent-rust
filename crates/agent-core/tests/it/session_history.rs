@@ -5,7 +5,7 @@
 //! 的那两块：一个证明「写下来了」，一个证明「退得回去」。
 
 use crate::support;
-use agent_core::{AgentValue, AtomKey, Slot, TurnStatus};
+use agent_core::{AgentValue, AtomKey, Slot, TurnStatus, Undoability};
 
 use crate::support::session::new_session;
 
@@ -44,7 +44,11 @@ fn one_full_turn_leaves_exactly_one_entry_per_transition_that_changed_something(
             .entries()
             .all(|e| e.meta.epoch == agent_core::Epoch::START)
     );
-    assert!(s.history().entries().all(|e| !e.meta.barrier));
+    assert!(
+        s.history()
+            .entries()
+            .all(|e| e.meta.undoability == Undoability::StateOnly)
+    );
 }
 
 /// 协议违规**不落条目**：它一个 primitive 都没写，`History::append` 拒绝空步。

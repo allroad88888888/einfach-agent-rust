@@ -165,7 +165,14 @@ pub struct EntryMeta {
     pub turn_id: u64,          // groups the two undo granularities; allocated by the root agent
     pub epoch: Epoch,          // which generation this step happened in (red line 6's credential)
     pub label: &'static str,   // "user_input" / "provider_done" / "tool_result" / …
-    pub barrier: bool,         // an uncrossable barrier: this step recorded an Irreversible tool call
+    pub undoability: Undoability,  // what undoing this step takes (199 §9's three tiers, below)
+}
+
+// Three tiers; before 199 this was a single `barrier: bool`
+pub enum Undoability {
+    StateOnly,   // never touched the outside world — rolling back state is enough
+    Hooked,      // touched it, and the tool handed back an undo function (table keyed by Entry::seq, lives in runtime)
+    Blocked,     // touched it, handed back nothing — a barrier
 }
 ```
 
@@ -176,10 +183,24 @@ that `label` becomes a `String` — in-process labels are a finite set of compil
 constants, while on-disk labels are historical data and may contain values this version
 doesn't recognize.
 
-`barrier` is the **only** on-disk basis for the undo barrier: before dispatching an
-irreversible tool the host calls `Session::mark_irreversible`, the resulting `tool_result`
-entry carries the bit, and an undo that hits it returns `UndoOutcome::Blocked`. It still
-stops you after a crash and restart — the bit is in the file.
+`undoability` is the **only** on-disk basis for the undo barrier: before dispatching a tool
+the host calls `Session::mark_irreversible` (→ `Blocked`) or `Session::mark_hooked`
+(→ `Hooked`), the resulting `tool_result` entry carries the tier, and an undo that hits
+`Blocked` returns `UndoOutcome::Blocked`. It still stops you after a crash and restart —
+the tier is in the file.
+
+**Why three tiers and not a bool** (decision 199 §9): "does not block undo" is really two
+different things — this step never touched the outside world, versus it did but handed back
+an undo function. **The inverse of state survives a restart** (the journal's prev/next are
+data); **the inverse of the outside world does not** (it is a closure, living in runtime's
+hook table). Collapse them into one bit and a recovered session will take the "does not
+block" path and **silently skip a real side effect**. `Hooked` with nothing in the table
+(the normal case after recovery) is treated as a failed restore: `UndoReport::Blocked
+{ cause: HookLost }`, which asks the user.
+
+Session files written before 199 carry `barrier: bool`; loading migrates them by a literal
+mapping: `true → Blocked`, `false → StateOnly` (those sessions never had hooks, so the
+mapping is true for them, not a fudge).
 
 **There is no `agent` field**: attribution lives inside each `Change.key` (via
 `AtomKey::agent()`), and one entry may span keys belonging to several agents. Undo never

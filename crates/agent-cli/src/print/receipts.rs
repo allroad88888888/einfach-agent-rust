@@ -32,9 +32,9 @@ pub fn cancelled_turn_erased(entries: usize, turn_id: u64) {
 /// 取消轮撞上屏障（这一轮已经执行过一个不可逆工具，比如 `shell/exec`）：
 /// **保留该轮 + 打印说明**，不擅自越过用户没被问到的不可逆操作
 /// （「诚实优于整洁」，027 已裁决）。
-pub fn cancelled_turn_kept(entries: usize, what: &str) {
+pub fn cancelled_turn_kept(entries: usize, what: &str, why: &str) {
     println!(
-        "[无法自动撤销] 取消的这一轮已经执行过一个不可逆操作：{what}，只退回了它之后的 {entries} 条。\
+        "[无法自动撤销] 取消的这一轮停在了 {what}——{why}，只退回了它之后的 {entries} 条。\
          这一轮的痕迹保留在历史里；需要连它也撤掉的话输入 /undo!"
     );
 }
@@ -52,15 +52,15 @@ pub fn undo_nothing() {
 /// `/undo`（或 `/undo!` 撞上第二个屏障）停在一个不可逆操作门口。`forced`
 /// 为真时说明这已经是 `/undo!` 越过第一条之后又撞上的下一条——用词要让人
 /// 明白自己在确认什么：**哪一个**不可逆操作挡住了路。
-pub fn undo_blocked(entries: usize, what: &str, forced: bool) {
+pub fn undo_blocked(entries: usize, what: &str, why: &str, forced: bool) {
     let prefix = if forced {
         "[仍有阻挡]"
     } else {
         "[撤销受阻]"
     };
     println!(
-        "{prefix} 已经退了 {entries} 条，撞上了一个不可逆操作：{what}，undo 在这里停下不会自动越过。\
-         确认要越过它（副作用不会跟着回滚）就输入 /undo!"
+        "{prefix} 已经退了 {entries} 条，停在了 {what}——{why}，undo 在这里不会自动越过。\
+         确认要越过它（这一步的副作用不会跟着回滚）就输入 /undo!"
     );
 }
 

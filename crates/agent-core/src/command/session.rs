@@ -23,7 +23,7 @@ use crate::engine::state::TurnStatus;
 use crate::graph::{AgentStore, DerivedFamily, SourceFamily, build_agent};
 use crate::ids::{AgentId, ToolCallId};
 
-use super::meta::AgentHistory;
+use super::meta::{AgentHistory, Undoability};
 use super::spawn::AgentLimits;
 
 /// 日志上限（STATE-MODEL §「cap 与分支」：默认 100 条，溢出从最老一端丢）。
@@ -45,7 +45,7 @@ pub const DEFAULT_HISTORY_CAP: usize = 100;
 /// |------|----------------|
 /// | `epoch` | 世代**只增不减**。进了原子图就会被 undo 回滚回去，而 undo 恰恰是要 bump 它的那个动作（红线 6 会自相矛盾）。它进 `EntryMeta`，恢复时取日志里的最大值继续发 |
 /// | `turn_id` | 同上，且它是**日志的分组依据**，不是被日志记录的状态 |
-/// | `irreversible` | 宿主在派发工具时告诉 core「这次是不可逆的」。真正的家是 `ToolCall(_, _, Request)` 那个发起时快照，但 core 没有工具表，`AgentValue` 也没有装它的变体——现在编一个占位快照就是 002 裁决过的那种编造（假的 `Irreversible` 会让 undo 白拦一次 `fs/read`）。M2 先做成运行时提示，027 接线时由 CLI 的工具表喂 |
+/// | `tool_marks` | 宿主在派发工具时告诉 core「这次调用撤起来算哪一档」（199 §九的三态）。真正的家是 `ToolCall(_, _, Request)` 那个发起时快照，但 core 没有工具表，`AgentValue` 也没有装它的变体——现在编一个占位快照就是 002 裁决过的那种编造（假的 `Irreversible` 会让 undo 白拦一次 `fs/read`）。M2 先做成运行时提示，027 接线时由 CLI 的工具表喂 |
 /// | `limits` | 子 agent 树的结构性硬限（深度 / 子数，决策 20）。是这个会话的**配置**，不是它的状态：调大上限不是一次可以撤销的状态变更，撤回去只会让一批已经存在的子 agent 变成非法。跟 `History` 的 cap 同一类 |
 ///
 /// # `agent` 字段是 root，不是「当前 agent」
@@ -62,7 +62,7 @@ pub struct Session {
     pub(super) history: AgentHistory,
     pub(super) epoch: Epoch,
     pub(super) turn_id: u64,
-    pub(super) irreversible: Vec<ToolCallId>,
+    pub(super) tool_marks: Vec<(ToolCallId, Undoability)>,
     pub(super) limits: AgentLimits,
 }
 
@@ -93,7 +93,7 @@ impl Session {
             history,
             epoch: Epoch::START,
             turn_id: 1,
-            irreversible: Vec::new(),
+            tool_marks: Vec::new(),
             limits: AgentLimits::default(),
         }
     }
@@ -145,18 +145,36 @@ impl Session {
         self.commit("set_max_retries", |txn| txn.set_max_retries(max_retries));
     }
 
-    /// 告诉 core「这次工具调用是不可逆的」（`Reversibility::Irreversible`）。
+    /// 告诉 core「这次工具调用**没有**交回还原函数」→ [`Undoability::Blocked`]。
     ///
-    /// 宿主在**派发工具时**调用——它持有工具表，core 没有。落到日志上的效果是：
-    /// 记录这次调用结果的那条 `Entry` 带 `barrier: true`，`undo_turn` 走到它会返回
+    /// 宿主在**派发工具时**调用——它持有工具表、它才知道执行完交没交回还原函数，
+    /// core 没有。落到日志上的效果是：记录这次调用结果的那条 `Entry` 是屏障，
+    /// `undo_turn` 走到它会返回
     /// [`UndoReport::Blocked`](super::UndoReport::Blocked) 而不是静默回滚
-    /// （`docs/TOOLS.md`：undo 越过 `Irreversible` 要停下问）。
-    ///
-    /// 重复登记同一个 `call_id` 是幂等的。
+    /// （`docs/TOOLS.md`：undo 越过不可逆操作要停下问）。
     pub fn mark_irreversible(&mut self, call_id: ToolCallId) {
-        if !self.irreversible.contains(&call_id) {
-            self.irreversible.push(call_id);
+        self.mark_tool(call_id, Undoability::Blocked);
+    }
+
+    /// 告诉 core「这次工具调用**交回了**还原函数」→ [`Undoability::Hooked`]。
+    ///
+    /// 决策 199 §一：可逆性从此是**每次调用**的属性，不是每个工具的属性——
+    /// `fs/write` 写新文件、覆盖旧文件、写失败，同一个工具三次调用三种还原方式，
+    /// 枚举表达不了，函数天然表达了。core 到头到尾不认识 `UndoFn` 这个类型
+    /// （红线 7）：函数本体住 runtime 的钩子表，按 `Entry::seq` 键；这里只记
+    /// 「这一条有钩子」这一位，好让 undo 路知道该去问一次。
+    pub fn mark_hooked(&mut self, call_id: ToolCallId) {
+        self.mark_tool(call_id, Undoability::Hooked);
+    }
+
+    /// 同一个 `call_id` 重复登记是幂等的（**后说的算**：宿主改主意只可能是因为
+    /// 它拿到了更准的信息，比如工具真的跑完之后才知道有没有还原函数）。
+    fn mark_tool(&mut self, call_id: ToolCallId, undoability: Undoability) {
+        if let Some(slot) = self.tool_marks.iter_mut().find(|(id, _)| *id == call_id) {
+            slot.1 = undoability;
+            return;
         }
+        self.tool_marks.push((call_id, undoability));
     }
 
     /// 改日志上限。`None` = 无上限。见 [`DEFAULT_HISTORY_CAP`]。

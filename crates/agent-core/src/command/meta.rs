@@ -5,11 +5,38 @@
 //! （ARCHITECTURE §包结构）。整组字段因此成为泛型 `M`——[`EntryMeta`] 就是 026
 //! 把它填上的那一份。
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::engine::epoch::Epoch;
 use crate::graph::AtomKey;
 use crate::value::atom_value::AgentValue;
+
+/// 这一步**撤销起来要做什么**（决策 199 §九，取代原来的 `barrier: bool`）。
+///
+/// 两态不够用，因为「不挡 undo」实际上是两件不同的事：这一步压根没碰外部世界
+/// （`user_input` / `provider_done` 这类），和这一步碰了但工具把还原函数交回来了。
+/// 两者在日志里长得一样，可**还原函数是闭包、活在进程里**：崩溃恢复之后钩子表是
+/// 空的，而落盘的这一位是持久的。分不开就会在恢复之后照「不挡」走，**静默跳过
+/// 一次真实副作用**。
+///
+/// 这条同时把边界画明白：**状态的逆跨进程有效**（journal 的 prev/next 是数据），
+/// **外部世界的逆不跨进程**（它是闭包）。
+///
+/// 落盘用得上 `Deserialize`（`EntryMeta` 自己因为 `label: &'static str` 不能 derive，
+/// 见类型文档；这个枚举没有那个问题，于是 `agent-runtime` 的 `PersistedMeta` 直接
+/// 复用它，不另抄一份三态）。
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Undoability {
+    /// 没碰外部世界——状态回滚就够了（今天绝大多数 entry）。
+    StateOnly,
+    /// 碰了，且交了还原函数。钩子表按 [`Entry::seq`](agent_store::Entry::seq) 查，
+    /// **不按 `ToolCallId`**：`seq` 由 `History` 铸造、严格递增、本来就在 `Entry` 上，
+    /// 而往 [`EntryMeta`] 塞一个 `call_id` 要动落盘 schema（199 §九：能不加字段就不加）。
+    Hooked,
+    /// 碰了，没交还原函数——**屏障**，undo 走到这里停下来问用户。
+    Blocked,
+}
 
 /// 一个 undo 步的元数据。
 ///
@@ -29,13 +56,14 @@ pub struct EntryMeta {
     pub epoch: Epoch,
     /// 这一步是什么（`"user_input"` / `"provider_done"` / …）。进 UI 时间线与审计。
     pub label: &'static str,
-    /// **不可越过的屏障**（020 的落点）：这一步记录了一次 `Irreversible` 工具调用的
-    /// 结果，undo 走到这里要停下来问用户（`UndoOutcome::Blocked`）。
+    /// 这一步撤销起来要做什么（199 §九的三态，2026-08-17 之前是 `barrier: bool`）。
     ///
-    /// 谁来置真：宿主在派发工具时调 [`Session::mark_irreversible`](super::Session::mark_irreversible)
-    /// ——**core 没有工具表**，`Reversibility` 是工具描述符上的元数据，core 现造一个
-    /// 等于编造（002 合并时的裁决）。
-    pub barrier: bool,
+    /// 谁来置：宿主在派发工具时调
+    /// [`Session::mark_irreversible`](super::Session::mark_irreversible)（→ [`Undoability::Blocked`]）
+    /// 或 [`Session::mark_hooked`](super::Session::mark_hooked)（→ [`Undoability::Hooked`]）
+    /// ——**core 没有工具表**，也不认识还原函数的类型，工具交没交回还原函数只有
+    /// 宿主知道，core 现造一个结论等于编造（002 合并时的裁决，199 §二原样沿用）。
+    pub undoability: Undoability,
 }
 
 /// 一处源状态变更。键是逻辑键（红线 4）。
@@ -52,9 +80,14 @@ pub(crate) fn same_turn(a: &EntryMeta, b: &EntryMeta) -> bool {
     a.turn_id == b.turn_id
 }
 
-/// 屏障谓词：`barrier` 为真的条目不可越过。喂给 `History::undo_turn`。
+/// 屏障谓词：**只有 [`Undoability::Blocked`] 挡路**。喂给 `History::undo_turn`。
+///
+/// [`Undoability::Hooked`] 不挡：它有还原函数，撤得掉。它撤不掉的那种情况
+/// （钩子跑失败 / 钩子随进程重启没了）判不出来——那要真的调一次钩子才知道，
+/// 而 `History` 的谓词只看得见 `&EntryMeta`。所以那一档停在
+/// [`undo_hook`](super::undo_hook) 的逐条循环里，不在这里。
 pub(crate) fn is_barrier(meta: &EntryMeta) -> bool {
-    meta.barrier
+    matches!(meta.undoability, Undoability::Blocked)
 }
 
 /// 全部合法的 `label` 取值——[`transitions::label_of`](super::transitions) 的九个 +

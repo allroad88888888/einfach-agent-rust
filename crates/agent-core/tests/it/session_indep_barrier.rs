@@ -5,7 +5,7 @@
 //! `undo_turn_force` 恰放行一条屏障——同一轮里还有第二条屏障时，force 一次只
 //! 越过遇到的第一条，仍然会在第二条前面再次 `Blocked`（026 实做记录判断 7）。
 
-use agent_core::{ToolCallId, UndoReport};
+use agent_core::{ToolCallId, UndoReport, Undoability};
 use crate::support::session::thinking_session;
 use crate::support::{provider_done_tool_use, tool_result_event};
 
@@ -21,14 +21,16 @@ fn a_barrier_entry_blocks_undo_turn_at_the_right_seq() {
     session.mark_irreversible(ToolCallId::new("call_1"));
     let _ = session.step(tool_result_event(epoch, "call_1", "r1"));
     let barrier_entry_seq = session.history().last().unwrap().seq;
-    assert!(
-        session.history().last().unwrap().meta.barrier,
-        "call_1 落地的这条 entry 该带 barrier"
+    assert_eq!(
+        session.history().last().unwrap().meta.undoability,
+        Undoability::Blocked,
+        "call_1 落地的这条 entry 该是屏障"
     );
 
     let _ = session.step(tool_result_event(epoch, "call_2", "r2"));
-    assert!(
-        !session.history().last().unwrap().meta.barrier,
+    assert_eq!(
+        session.history().last().unwrap().meta.undoability,
+        Undoability::StateOnly,
         "call_2 没被标记，这条不是屏障"
     );
 
@@ -37,6 +39,7 @@ fn a_barrier_entry_blocks_undo_turn_at_the_right_seq() {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            ..
         } => {
             assert_eq!(entries, 1, "只有 call_2 落地那条比屏障新，该被先弹掉");
             assert_eq!(
@@ -74,6 +77,7 @@ fn undo_turn_force_crosses_exactly_one_barrier_then_blocks_on_the_next() {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            ..
         } => {
             assert_eq!(entries, 0);
             assert_eq!(barrier_seq, second_barrier_seq);
@@ -87,6 +91,7 @@ fn undo_turn_force_crosses_exactly_one_barrier_then_blocks_on_the_next() {
         UndoReport::Blocked {
             entries,
             barrier_seq,
+            ..
         } => {
             assert_eq!(entries, 1, "只放行了刚才那一条屏障");
             assert_eq!(barrier_seq, first_barrier_seq, "第二条屏障仍然拦着");
@@ -118,7 +123,7 @@ fn marking_the_same_call_id_irreversible_twice_is_idempotent() {
     let barrier_entries: Vec<_> = session
         .history()
         .entries()
-        .filter(|e| e.meta.barrier)
+        .filter(|e| e.meta.undoability == Undoability::Blocked)
         .collect();
     assert_eq!(
         barrier_entries.len(),

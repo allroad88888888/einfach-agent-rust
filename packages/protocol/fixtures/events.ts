@@ -129,7 +129,11 @@ export const events = [
           "barrier_seq": 5,
           "label": "tool_result",
           "tool": "srv:shell/exec",
-          "call_id": "call_1"
+          "call_id": "call_1",
+          "cause": {
+            "type": "hook_failed",
+            "data": "CRM 返回 409：草稿已被他人编辑"
+          }
         }
       }
     }

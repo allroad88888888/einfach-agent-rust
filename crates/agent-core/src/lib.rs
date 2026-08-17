@@ -46,9 +46,10 @@ pub use compaction::{
 // 会话形态：类型提到根上，模块保留（`command::Session` 与 `agent_core::Session`
 // 都通），跟 `engine` 一侧的惯例一致。
 pub use command::{
-    AgentEntry, AgentLimits, BarrierInfo, BoundaryRejected, ChildConfig, ClearOutcome,
-    DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, DespawnRefused,
-    DespawnReport, EntryMeta, ReadDenied, Session, SpawnRefused, UndoReport, known_label,
+    AgentEntry, AgentLimits, BarrierInfo, BlockedCause, BoundaryRejected, ChildConfig,
+    ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN,
+    DespawnRefused, DespawnReport, EntryMeta, HookOutcome, ReadDenied, Session, SpawnRefused,
+    UndoReport, Undoability, known_label,
 };
 pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};
 pub use graph::{AtomKey, Slot, ToolCallSlot, Visibility};

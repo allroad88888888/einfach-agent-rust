@@ -58,14 +58,14 @@ use state::AppState;
 /// `Frame`/`PollResponse` 一起导出给前端（065 直接用生成的类型，不手写镜像）。
 #[cfg(feature = "ts")]
 pub(crate) use capabilities::Capabilities;
-/// 072：`GET /sessions/{id}/pending_tools` 的响应体——宿主执行一次远端工具之前
-/// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
-#[cfg(feature = "ts")]
-pub(crate) use pending::PendingToolsResponse;
 /// 109：`GET /sessions/{id}/compaction_record` 的响应体——展开压缩点/清除标记
 /// 要看的完整记录 + 摘要库。跟 `Frame`/`PollResponse` 一起导出给前端。
 #[cfg(feature = "ts")]
 pub(crate) use compaction::CompactionRecordResponse;
+/// 072：`GET /sessions/{id}/pending_tools` 的响应体——宿主执行一次远端工具之前
+/// 求证用的那份投影。跟 `Frame`/`PollResponse` 一起导出给前端。
+#[cfg(feature = "ts")]
+pub(crate) use pending::PendingToolsResponse;
 #[cfg(feature = "ts")]
 pub(crate) use poll_protocol::PollResponse;
 #[cfg(feature = "ts")]

@@ -11,8 +11,8 @@ use agent_core::{
 };
 
 use crate::{
-    OrphanFate, SessionEvent, TransientSourceFailureCause, TransientSourceFailureEvent,
-    UndoOutcome,
+    BlockedCause, OrphanFate, SessionEvent, TransientSourceFailureCause,
+    TransientSourceFailureEvent, UndoOutcome,
 };
 
 pub(super) fn cast_sample(ev: SessionEvent) -> SessionEvent {
@@ -76,12 +76,15 @@ pub(super) fn cast_sample(ev: SessionEvent) -> SessionEvent {
         // 034：样本挑 `Blocked`（不是 `Applied`）——这是唯一带富化字段
         // （label/tool/call_id）的分支，选它才能让 TS 的 `satisfies` 检查真的
         // 照到这三个新字段的形状，而不是让协议改动躲过 fixtures 这道实检。
+        // 199：`cause` 挑 `HookFailed`（不是 `NoHook`）同一条理由——三个变体里
+        // 只有它带内容，选它才照得到「邻接标签 + 载荷」那个形状。
         SessionEvent::Undo(_) => SessionEvent::Undo(UndoOutcome::Blocked {
             entries: 1,
             barrier_seq: 5,
             label: "tool_result".to_string(),
             tool: Some("srv:shell/exec".to_string()),
             call_id: Some("call_1".to_string()),
+            cause: BlockedCause::HookFailed("CRM 返回 409：草稿已被他人编辑".to_string()),
         }),
         SessionEvent::Redo(_) => SessionEvent::Redo(UndoOutcome::Nothing),
         SessionEvent::Lagged { .. } => SessionEvent::Lagged { skipped: 7 },

@@ -5,7 +5,9 @@
 //! M1 没有对应文件——这是 026 长出来的能力本身。
 
 use crate::support;
-use agent_core::{AgentValue, AtomKey, Slot, ToolCallId, TurnStatus, UndoReport};
+use agent_core::{
+    AgentValue, AtomKey, BlockedCause, Slot, ToolCallId, TurnStatus, UndoReport, Undoability,
+};
 
 use crate::support::session::{new_session, session_with_pending_tools};
 
@@ -120,7 +122,11 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
 
     let _ = s.step(support::tool_result_event(s.epoch(), "call_1", "rm 干完了"));
     let barrier_entry = s.last_entry().unwrap();
-    assert!(barrier_entry.meta.barrier, "不可逆调用的结果那一条是屏障");
+    assert_eq!(
+        barrier_entry.meta.undoability,
+        Undoability::Blocked,
+        "不可逆调用的结果那一条是屏障"
+    );
     let barrier_seq = barrier_entry.seq;
 
     let _ = s.step(support::provider_done_end_turn(s.epoch(), "干完了"));
@@ -132,7 +138,9 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
         report,
         UndoReport::Blocked {
             entries: 1,
-            barrier_seq
+            barrier_seq,
+            // 199：屏障的成因永远是「这一步没交还原函数」。
+            cause: BlockedCause::NoHook,
         },
         "屏障之上的那一条已经退了，屏障本身停在门口"
     );
@@ -148,7 +156,8 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
         s.undo_turn(),
         UndoReport::Blocked {
             entries: 0,
-            barrier_seq
+            barrier_seq,
+            cause: BlockedCause::NoHook,
         }
     );
     assert_eq!(s.cursor(), cursor_before - 1, "游标一动不动");
@@ -174,7 +183,8 @@ fn undo_turn_force_crosses_exactly_one_barrier() {
         s.undo_turn(),
         UndoReport::Blocked {
             entries: 0,
-            barrier_seq: second_barrier
+            barrier_seq: second_barrier,
+            cause: BlockedCause::NoHook,
         }
     );
 
@@ -183,7 +193,8 @@ fn undo_turn_force_crosses_exactly_one_barrier() {
         s.undo_turn_force(),
         UndoReport::Blocked {
             entries: 1,
-            barrier_seq: first_barrier
+            barrier_seq: first_barrier,
+            cause: BlockedCause::NoHook,
         },
         "一次确认只放行一条"
     );

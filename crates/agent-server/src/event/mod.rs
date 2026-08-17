@@ -68,7 +68,7 @@ mod undo_outcome;
 pub use frame::Frame;
 pub use orphan_fate::OrphanFate;
 pub use transient_source_failure::{TransientSourceFailureCause, TransientSourceFailureEvent};
-pub use undo_outcome::UndoOutcome;
+pub use undo_outcome::{BlockedCause, UndoOutcome};
 
 use std::sync::Arc;
 
