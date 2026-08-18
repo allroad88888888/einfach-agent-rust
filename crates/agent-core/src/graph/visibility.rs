@@ -118,6 +118,12 @@ impl Slot {
             | Slot::SendPlan
             | Slot::PrevSendPlan
             | Slot::Summaries => Visibility::Private,
+            // `Inbox`（205）：**发得进去 ≠ 读得出来**。投递是一条命令（写），
+            // 不是读——A 能往 B 的收件箱放话，但读不到 B 的收件箱，包括自己投的
+            // 那条被没被消费。开成 `Shared` 就等于让「谁给谁发过什么」成为所有人
+            // 都看得到的东西，而那不是任何一个已知需求要的。要确认对方收到没有，
+            // 等他回一条（决策 35 §五点名不做投递回执）。
+            Slot::Inbox => Visibility::Private,
         }
     }
 }
@@ -195,6 +201,8 @@ mod tests {
                 Slot::SendPlan,
                 Slot::PrevSendPlan,
                 Slot::Summaries,
+                // 205 追加 Inbox：发得进去 ≠ 读得出来。
+                Slot::Inbox,
             ]
         );
     }

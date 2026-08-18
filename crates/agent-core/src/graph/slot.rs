@@ -232,6 +232,24 @@ pub enum Slot {
     /// 的、也不知道它们会被怎么用（红线 12 的精神）——那是 155/156 装配期的事，
     /// 这里只是一处「声明」的状态位。
     HostPrefix,
+    /// **别的 agent 投进来、本 agent 还没消费的消息**（205，决策 35）。值是
+    /// [`AgentValue::Json`] 里一个 `[[from, text, when], …]` 数组
+    /// （`value::inbox` 那一处编解码），`Json([])` = 收件箱是空的（默认值）。
+    ///
+    /// **两档送达时机共用这一个槽位**，靠每条自带的 `when` 区分（`Deliver::Now`
+    /// 加入本轮 loop / `Deliver::NextTurn` 这一轮结束之后才送达）。不拆成两个槽位
+    /// 是因为它们的落盘、恢复、undo、可见性**逐字相同**，差别只有「哪个定点来收」
+    /// ——拆开就要把那四样各写一遍，而它们必须永远一致。
+    ///
+    /// **站 `Private`**（见 [`visibility`](super::visibility)）：**发得进去 ≠ 读得
+    /// 出来**。A 能往 B 的收件箱投递（那是一条命令，不是读），但 A 读不到 B 的
+    /// 收件箱——包括自己投的那条被没被消费。要确认就等对方回一条，跟人一样。
+    /// 一旦开成 `Shared`，「谁给谁发过什么」就成了所有人都订阅得到的东西。
+    ///
+    /// **默认值必须是空数组**——019 的按需重建拿的就是它，若默认成别的，undo 路径上
+    /// 凭空重建出来的 atom 会给一个从没收到过消息的 agent 平添几句话，而那几句话
+    /// 会被排空进它的 `Messages`、从此每轮都进 prompt。链通、值错、不报错。
+    Inbox,
 }
 
 impl Slot {
@@ -242,7 +260,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 21] = [
+    pub const ALL: [Slot; 22] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -266,5 +284,7 @@ impl Slot {
         Slot::PrefixAllowed,
         // 154 追加 HostPrefix。
         Slot::HostPrefix,
+        // 205 追加 Inbox（决策 35）。
+        Slot::Inbox,
     ];
 }

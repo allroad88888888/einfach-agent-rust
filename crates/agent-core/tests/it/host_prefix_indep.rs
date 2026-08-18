@@ -294,8 +294,12 @@ fn an_old_snapshot_missing_the_key_falls_back_to_empty_default() {
 /// 红线钉子：`Slot::ALL` 恰好 21 个（154 从 20 加到 21），且 `HostPrefix` 在其中，
 /// `default_value()` 是空 `Vec`——新建会话不用声明什么都能正常跑。
 #[test]
-fn slot_all_has_twenty_one_entries_including_host_prefix_with_an_empty_default() {
-    assert_eq!(Slot::ALL.len(), 21, "154 把 Slot::ALL 从 20 个加到 21 个");
+fn slot_all_has_twenty_two_entries_including_host_prefix_with_an_empty_default() {
+    assert_eq!(
+        Slot::ALL.len(),
+        22,
+        "154 把 Slot::ALL 加到 21 个，205 追加 Inbox → 22（决策 35）"
+    );
     assert!(Slot::ALL.contains(&Slot::HostPrefix));
 
     let fresh = Session::new(root());

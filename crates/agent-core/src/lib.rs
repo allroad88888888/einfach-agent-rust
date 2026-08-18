@@ -48,7 +48,8 @@ pub use compaction::{
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, BlockedCause, BoundaryRejected, ChildConfig,
     ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN,
-    DespawnRefused, DespawnReport, EntryMeta, HookOutcome, ReadDenied, Session, SpawnRefused,
+    DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, ReadDenied, Session,
+    SpawnRefused,
     UndoReport, Undoability, known_label,
 };
 pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};
@@ -63,6 +64,9 @@ pub use seam::{
 };
 pub use value::atom_value::AgentValue;
 pub use value::host_skills::HostSkill;
+// 收件箱（205，决策 35）：**类型提到根上，编解码不提**——`Deliver` 与 `InboxItem`
+// 是运行时要构造和读取的东西，`to_value`/`from_value` 是槽位的内部形状。
+pub use value::inbox::{Deliver, InboxItem};
 pub use value::message::{ContentBlock, Message, Role};
 // 压缩的发送侧坐标（099）：**类型和常量**提到根上，投影函数不提——
 // `send_plan::project(...)` 说得出是在投什么，裸的 `project(...)` 说不出

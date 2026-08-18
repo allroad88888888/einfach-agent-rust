@@ -54,7 +54,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 144 新增：spawn 时快照的「开局产物」授予名单。
             | Slot::PrefixAllowed
             // 154 新增：宿主经 capabilities.prefix 声明的开局块（决策 31）。
-            | Slot::HostPrefix => {}
+            | Slot::HostPrefix
+            // 205 新增：别的 agent 投进来、还没消费的消息（决策 35）。
+            | Slot::Inbox => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

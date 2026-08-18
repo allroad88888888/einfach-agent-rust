@@ -46,10 +46,10 @@ fn primitives_of_a_two_child_session_cover_the_whole_tree() {
     assert!(agents_present.contains(&a2));
     assert_eq!(
         snap.len(),
-        63,
-        "root + a1 + a2，每个 agent 二十一个槽位（103 追加了 PrevSendPlan，107 追加了 \
+        66,
+        "root + a1 + a2，每个 agent 二十二个槽位（103 追加了 PrevSendPlan，107 追加了 \
          Summaries，134 追加了 PrefixChunks，144 追加了 PrefixAllowed，154 追加了 \
-         HostPrefix）"
+         HostPrefix，205 追加了 Inbox）"
     );
 }
 
