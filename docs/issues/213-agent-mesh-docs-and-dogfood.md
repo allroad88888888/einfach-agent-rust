@@ -21,7 +21,7 @@
 | `CLAUDE.md` §当前状态 | M1–M19 | 补 M20 一段，**并把「会话能自己往下跑」写进去**——它是这个仓第一次在没有用户输入时消耗 token，比新增几个工具重要得多 |
 | `graph/visibility.rs` 模块文档 | `U ∩ D = ∅ ⇒ 无环` 的完整证明 | **整段替换**（205 里做）。旧证明每一句都建立在「两个方向不相交」上，删掉方向之后一句都不成立——留半句比全删更糟 |
 | 启动参数文档（`agent-server-bin` / `agent-cli` 的 `--help` 与 ARCHITECTURE） | `--max-agent-depth` / `--max-children` | 加 `--max-auto-turns`，并写清**三层闸各管什么**：树多大 / 一轮说多少话 / 没人看着时能跑几轮。部署方是靠这三个数相乘估账的 |
-| `docs/STATE-MODEL.md`（中英） §「读取边界」 | 两个读口的完整论述 | 改成四个口（`read_agent` / `peek_agent` + 两个方向断言封装），`Visibility` 两态，无环论证换成新的 |
+| `docs/STATE-MODEL.md`（中英） §「读取边界」 | 两个读口的完整论述 | 改成 `read_agent`（不限方向、只查 `Private`）+ 两个方向断言封装；`Visibility` 两态；**并说清这些读一条边都不建**——无环的论证从此挂在 212 那条 derived 上，不挂在这几个口上 |
 | `docs/ORCHESTRATION.md` §二 | 「子 agent 不跨 turn」的完整论述 | **结论不变**，但要加一句：**消息跨 turn，agent 不跨 turn**——`when="next_turn"` 靠的是 root 头上的槽位状态，§二说的那些机械（pending-slot 跨 `run_turn` 重挂、`turn_id`/undo 重写、per-child 取消）**一样都不需要** |
 | `docs/ORCHESTRATION.md` §三 / §五 / §六 | 「三个工具」那张表 | 现在是八个（+ `send` / `await` / `self` / `notes` 读写）。§五 红线账里红线 10 那条按 204 重写；§六「不做」里把「跨 turn 后台 agent」改写成「跨 turn 复活已死的子 agent」，并说明 `next_turn` 已经解决了它想解决的问题 |
 | `docs/ORCHESTRATION.md` §四.4（孤儿收尾） | 「root 终态 + 后台子静止 = 一轮结束」 | **这句话不再是全部**：收尾之后还要看 `NextTurn` 收件箱与 `AutoTurnBudget`。停机论证从一层变三层，按 204 §二 重写 |

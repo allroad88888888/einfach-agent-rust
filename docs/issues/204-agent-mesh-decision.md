@@ -69,18 +69,41 @@ let DerivedKey::ToolsConverged(agent) = key;
 环在结构上不可能。且它今天由类型系统守着（读口收的是 `Slot`，`Slot` 只映射到
 source family），不靠人记。
 
-三条路的落点：
+### 落地前又查了一遍，机械比上面写的还要空（2026-08-18，开工时补正）
+
+上面那节把「响应式路」记在 `read_ancestor` / `read_descendant` 头上。**查错了。**
+三条 grep 的结果：
+
+1. 两个口走 `Session::peek` → `store.get(id)`（`tree.rs:126`），是**命令层的非追踪读**
+   ——**它们从来不建依赖边**。建边只发生在 derived 的 read fn 里调 `args.get`。
+2. `args.get` 在生产代码里**只出现一次**：`build.rs:103`，读的是**自己 agent 的**
+   `ToolSlots`。
+3. 于是**全系统今天没有一条跨 agent 的依赖边**。`build.rs:90` 那句「M3 的『等所有子
+   agent 完成』会在同一个位置汇聚」是**将来时**——029 的汇聚 derived 从没建过，
+   运行时用 `Subtree::harvest` 命令式地做了（ORCHESTRATION §五 早写着这件事）。
+4. 而且这两个口**没有任何生产调用方**——四十处引用全在测试里。
+
+**所以红线 10 今天是一道架在没人调的 API 上、防着一类还不存在的边的策略闸。**
+放开它不是「几乎白拿」，是**零**。
+
+三条路因此收成两条：
 
 | 路 | 口 | 方向 | 建边 |
 |---|---|---|---|
-| **响应式读**（订阅：目标一变，我这边自动重算） | **新增** `Session::read_agent` | **不限** | 建，但只指向 primitive |
-| **快照读**（一次取值，进 tool_result） | 新增 `Session::peek_agent` | **不限** | 不建 |
+| **读**（取一次值：进 tool_result，或喂给 derived 之外的任何人） | `read_agent`（`read_ancestor`/`read_descendant` 降为它加一道方向断言的薄封装） | **不限** | **不建**——命令层的读本来就不建 |
 | **写**（往别人的 `Inbox` 投递） | `deliver`，走命令层 | **不限** | 不建 |
 
-`read_ancestor` / `read_descendant` **保留不删**：它们现在是 `read_agent` 加一道
-方向断言的薄封装。029 的汇聚确实是往下的，让调用点把这个意图说出来是有价值的，
-而且现有调用方与测试**一行都不用改**（照 200 保留无参 `undo_turn()` 的同一条理由：
-一次全改是无谓的爆炸半径）。
+不再有 `peek_agent`：**Session 层没有「建边的读」这回事**，两个名字会是同一个实现，
+而两份实现就是两处可以判错的地方（`cross_read.rs:94` 把两个口的后半段合成一处，
+理由完全相同）。
+
+**响应式那条边第一次出现，是在 [212](212-await-tool-and-wait-graph.md) 的 `await`
+derived 里**——它会是这个系统历史上第一条跨 agent 的边。所以「边只许指向 primitive」
+这条新判据的**落地与测试都在 212**，不在 205。
+
+`read_ancestor` / `read_descendant` 保留不删：现有测试**一行都不用改**（照 200 保留
+无参 `undo_turn()` 的同一条理由，一次全改是无谓的爆炸半径），而且「029 的汇聚确实是
+往下的」这个意图值得让调用点说出来——等它真的被建出来的那天。
 
 ### `Visibility` 三态收成两态
 

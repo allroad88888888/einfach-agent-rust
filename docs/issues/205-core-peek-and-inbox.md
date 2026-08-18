@@ -9,29 +9,36 @@ primitive」；`Visibility` 三态收成两态；多一个带送达时机标记�
 
 ## 做什么
 
-### 1. 两个新读口，都不查方向
+> **开工时的补正**（204 §一 末节）：这份 issue 初稿写的是「两个新读口，一个建边一个
+> 不建边」。查错了——`read_ancestor`/`read_descendant` 走 `Session::peek` →
+> `store.get(id)`（`tree.rs:126`）是**命令层的非追踪读，本来就不建边**；建边只发生在
+> derived 的 read fn 里调 `args.get`，而那在生产代码里只有 `build.rs:103` 一处、
+> 读的是自己 agent 的槽位。**全系统今天没有一条跨 agent 的依赖边。**
+> 所以本 issue 只有**一个**新读口，而「边只许指向 primitive」的落地与测试挪去
+> [212](212-await-tool-and-wait-graph.md)——那里才第一次真的建出跨 agent 的边。
+
+### 1. 一个新读口，不查方向
 
 ```rust
-/// 横读（响应式）：建边，目标一变调用方跟着重算。**订阅走这条。**
-/// 只接受 primitive 槽位 —— 这是「环不可能」现在唯一的依据（204 §一）。
+/// 跨 agent 读：任意方向取一次值。**不建依赖边**——命令层的读本来就不建
+/// （`tree.rs:126` 的 `peek` → `store.get`），这一点在红线 10 改写前后都成立。
 pub fn read_agent(&self, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
-
-/// 横读（快照）：取一次值，**不建边**。工具的一次性读走这条。
-pub fn peek_agent(&self, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
 ```
 
-- **都不查方向**（这就是横读全开那一下）；
-- **都查 `Private`**：`slot.visibility() == Private` → `Err(ReadDenied::NotVisible)`；
-- **primitive 由类型保证，不是由检查保证**：两个口收的都是 `Slot`，`Slot` 只映射到
-  `AtomKey::Agent`，只落在 source family 上（`build.rs:47`）。**在模块文档里把这条
-  写死**——它是新红线 10 成立的全部理由，而它今天靠的是一个不显眼的类型事实；
-- `peek_agent` **非创建**（复用 `Session::peek`）：读不到就说读不到（`NoSuchAtom`），
-  不顺手在 family 里留一个没人写的 atom——`cross_read.rs` 模块文档那条理由原样适用；
+- **不查方向**（这就是横读全开那一下）；
+- **查 `Private`**：`slot.visibility() == Private` → `Err(ReadDenied::NotVisible)`；
+- **非创建**（复用 `Session::peek`）：读不到就说读不到（`NoSuchAtom`），不顺手在
+  family 里留一个没人写的 atom——`cross_read.rs` 模块文档那条理由原样适用；
+- **不加第二个「快照口」**。`Session` 层没有「建边的读」这回事，两个名字会是同一个
+  实现，而两份实现就是两处可以判错的地方——`cross_read.rs:94` 把两个口的后半段合成
+  一处，理由完全相同；
 - **`read_ancestor` / `read_descendant` 保留不删**，改写成 `read_agent` 加一道方向
-  断言的薄封装。029 的汇聚确实是往下的，让调用点说出这个意图有价值，而且现有调用方
-  与测试**一行都不用改**（照 200 保留无参 `undo_turn()` 的同一条理由）；
-- 改写 `cross_read.rs` 模块文档：第一句「跨 agent 读的两个口，没有第三个（红线 10）」
-  以及那张「两道校验」的表**整个过期**，按 204 §一 重写。
+  断言的薄封装。它们**没有任何生产调用方**（四十处引用全在测试里），保留是为了让
+  现有测试**一行都不用改**（照 200 保留无参 `undo_turn()` 的同一条理由）；
+- 改写 `cross_read.rs` 模块文档：第一句「跨 agent 读的两个口，没有第三个（红线 10）」、
+  那张「两道校验」的表、以及「兄弟互读在 API 面上不存在，环因此在结构上不可能」
+  **整段过期**。新文档要说清两件事：**这里的读不建边**（所以跟环无关），
+  **环的判据搬去了哪里**（212 的 derived）。
 
 ### 1b. `Visibility` 三态收成两态
 
@@ -111,17 +118,13 @@ pub fn drain_next_turn(&mut self) -> usize;
 
 ## 验收
 
-- **兄弟横读成功**：`read_agent` 与 `peek_agent` 各读一次兄弟的 `Status`，都拿到值。
-- **`peek_agent` 不建边、`read_agent` 建边**：同一对 agent，`peek_agent` 之后
-  reader 的依赖集合**不含** target 的 atom，`read_agent` 之后**含**。两条一起断言，
-  单断一条证不出这两个口有区别。
-- **无环仍然是结构保证的**（本 issue 最重要的一条，替代原来那条 `U ∩ D = ∅`）：
-  断言**每一个 `Slot` 都落在 source family 上**——遍历 `Slot::ALL`，对每一个
-  构造 `AtomKey::Agent(id, slot)` 并断言它在 `sources` 里、`derived` 里没有对应项。
-  这是「跨 agent 的边全是长度 1 的悬边」的直接证据。加了第一个跨 agent 的 derived
-  槽位时这条会红——**那正是要它红的时刻**（212 加的是新 `DerivedKey`，不是新 `Slot`，
-  所以不该红）。
-- 两个口读 `Private` 槽位（`TurnsUsed` / `Inbox` / `Summaries` / `Notes`）→ `NotVisible`。
+- **兄弟横读成功**：`read_agent` 读一次兄弟的 `Status`，拿到值。
+- **读不建边**（这条替代原来那条 `U ∩ D = ∅`，是「横读开了但环仍不可能」现在的
+  全部证据）：`read_agent` 之后，断言 reader 的依赖集合**不含** target 的 atom。
+  今天它必然过——因为命令层的读本来就不建边——**它的价值是等哪天有人把这个口改成
+  tracked 的时候会红**。
+- `read_agent` 读 `Private` 槽位（`TurnsUsed` / `Inbox` / `Summaries` / `Notes`）
+  → `NotVisible`。
 - **`read_ancestor` / `read_descendant` 的既有测试一条断言都不改，全绿**——方向断言
   留在薄封装里，它们的行为逐字不变。
 - `Visibility` 的分区测试换成两条：**每个槽位恰好站一边**（`Shared` ∪ `Private` =

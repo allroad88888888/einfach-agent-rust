@@ -7,9 +7,17 @@
 决策 204 §一 的「互相订阅」落地：**一个 agent 能挂起等另一个 agent 到达某个状态，
 含兄弟。**
 
-**依赖环不是这里的危险**（204 §一 证过：`Slot` 全是 primitive，跨 agent 的边全是
-长度 1 的悬边，环在结构上不可能）。**死锁才是**，而它不报错——所以本 issue 的一半
-是那张等待图。
+**本 issue 建出这个系统历史上第一条跨 agent 的依赖边。** 开工时查实（204 §一 末节）：
+`args.get` 在生产代码里只有 `build.rs:103` 一处，读的是自己 agent 的 `ToolSlots`；
+`read_ancestor`/`read_descendant` 走的是命令层的非追踪读，从来不建边。**所以在此之前，
+全系统一条跨 agent 的边都没有。**
+
+于是新红线 10（**边只许指向 primitive**）的落地与测试**都在这里**，不在 205——
+205 那个口不建边，它证不了这条。
+
+**依赖环在这里仍然不可能**，但理由要在本 issue 里由断言兑现：`Slot` 全是 primitive
+（类型上的事实，`build.rs:47`/`:53`），所以这条新边是一条**长度 1 的悬边**，
+绕不回来。**死锁才是真危险**，而它不报错——所以本 issue 的一半是那张等待图。
 
 ## 做什么
 
@@ -80,6 +88,14 @@
   已经作废的槽写活。
 - **新 derived 的纯函数性**（红线 1）：read fn 里没有时钟、没有随机数、没有 IO；
   `check_invariants` 的 `check_derived_purity` 覆盖新文件。
+- **边只许指向 primitive**（新红线 10 的落点，本 issue 独有的一条）：遍历
+  `Slot::ALL`，对每一个构造 `AtomKey::Agent(id, slot)`，断言它落在 **source** family
+  上、`derived` family 里没有对应项。这是「这条新的跨 agent 边是长度 1 的悬边」的
+  直接证据。**哪天有人加了一个跨 agent 读 derived 的 derived，这条会红——那正是要它
+  红的时刻**（本 issue 加的是新 `DerivedKey` + 一条指向 primitive 的边，不该红）。
+- **`args.get` 的跨 agent 目标清单**：断言新 derived 的 read fn 只 `args.get` 了
+  目标的 `Status` 这一个 primitive（不是「读了一堆恰好都是 primitive」）。
+  形式可以是把「这个 derived 读哪些键」抽成一个可测的纯函数。
 - `cargo test --workspace` 全绿 + `check-invariants --all` 过 + `build-wasm.sh` 绿。
 
 ## 注意
