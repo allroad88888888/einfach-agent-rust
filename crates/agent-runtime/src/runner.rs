@@ -139,6 +139,10 @@ pub(crate) async fn resume_after_first_commit(
     // 被正当丢弃（红线 6），而不是在泵这层无声抹掉。
     let mut mcp_calls: Vec<McpCall> = Vec::new();
     let mut subtree = Subtree::default();
+    // 212：本轮挂起的 `await`。跟 `subtree` 同款「turn 内生死、每次 resume 重建」
+    // ——「哪个 call_id 在等谁」是本轮内的记账；跨轮要活下来的那一半（等待图本身）
+    // 在 core 的 `Slot::AwaitingOn` 里，journaled，恢复之后还查得了环。
+    let mut awaits = crate::await_slot::AwaitSlots::default();
     // 106：摘要子 agent 的等待登记，跟 `subtree` 同款「turn 内生死、`resume` 每次
     // 重建」，只是收割的是另外两个事件（`Event::CompactDone`/`CompactFailed`）。
     let mut compactions = CompactSlots::default();
@@ -188,6 +192,7 @@ pub(crate) async fn resume_after_first_commit(
                     session,
                     ctx,
                     &mut subtree,
+                    &mut awaits,
                     &mut compactions,
                     &bus,
                     &source,
@@ -222,6 +227,9 @@ pub(crate) async fn resume_after_first_commit(
             // 收割紧跟在 `step` 之后而不是攒到批末：父那个槽早一步收敛，父就早
             // 一步能接着干活。摘要子 agent（106）同款收割，紧跟在后面。
             pending.extend(subtree.harvest(session, ctx));
+            // 212：等到了（或者等不到了）的 `await` 在这里收敛。**跟子 agent 的
+            // 收割并排**：两者都是「泵每转一圈问一次，到了就喂一条 ToolResult 回去」。
+            pending.extend(awaits.harvest(session, ctx));
             pending.extend(compactions.harvest(session));
         }
 

@@ -176,7 +176,8 @@ impl ToolTableSpec {
                 .with_collect()
                 .with_send()
                 .with_self()
-                .with_notes(),
+                .with_notes()
+                .with_await(),
         }
     }
 

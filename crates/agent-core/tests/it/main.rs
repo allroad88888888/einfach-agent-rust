@@ -3,6 +3,7 @@
 //! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
 //! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
 
+mod await_edges_point_at_primitives;
 mod advance_boundary_command;
 mod advance_boundary_window_clear;
 mod apply_summary_atomic_write;

@@ -57,7 +57,8 @@ async fn a_disabled_builtin_is_invisible_here_and_untouched_next_door() {
             "srv:agent/send",
             "srv:agent/self",
             "srv:agent/notes",
-            "srv:agent/notes/set"
+            "srv:agent/notes/set",
+            "srv:agent/await"
         ],
         "关掉的那两件不该在表里，没点名的一件不许少（顺序也不许变——红线 11）"
     );
@@ -81,7 +82,8 @@ async fn a_disabled_builtin_is_invisible_here_and_untouched_next_door() {
             "srv:agent/send",
             "srv:agent/self",
             "srv:agent/notes",
-            "srv:agent/notes/set"
+            "srv:agent/notes/set",
+            "srv:agent/await"
         ],
         "隔壁那个不带开关的会话该是完整的一档——开关是 per-session 的，不粘在全局 template 上"
     );

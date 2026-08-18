@@ -1,9 +1,9 @@
 //! 工具表的**子 agent 一族**：`spawn` / `status` / `collect` / `send` / `self` /
-//! `notes` 各自的开闸档（029 / 051 / 053 / 206 / 208 / 209）。
+//! `await` / `notes` 各自的开闸档（029 / 051 / 053 / 206 / 208 / 212 / 209）。
 //!
 //! # 为什么它们值一个文件
 //!
-//! 这一族的五个 `with_*` 共享同一整套理由，而那套理由跟「工具表是什么」是两件事：
+//! 这一族的七个 `with_*` 共享同一整套理由，而那套理由跟「工具表是什么」是两件事：
 //!
 //! - **每一个是一档独立授权**，不是一个「多 agent 模式」的总开关。部署方决定开
 //!   哪几个（`with_shell` / `with_skills` / `with_mcp` 一套规矩）。
@@ -11,7 +11,7 @@
 //!   （领不回结果，全在轮末被拆）、开 `send` 不开 `status`（拿不到别人的 id）。
 //! - **顺序是契约**（红线 11）：工具表在 prompt 最前面，新的一律追加在表尾。
 //!
-//! 把它们留在 `tool_table.rs` 里，「工具表是什么」那句话就得先说完五档子 agent
+//! 把它们留在 `tool_table.rs` 里，「工具表是什么」那句话就得先说完这一族的
 //! 授权才说得完（红线 9 的判据：说得清、且不含「和」）。
 //!
 //! # 这个文件不认识那些工具怎么执行
@@ -22,6 +22,7 @@
 
 use agent_core::AgentLimits;
 
+use crate::await_tool::await_spec;
 use crate::collect_tool::collect_spec;
 use crate::notes_tool::{notes_set_spec, notes_spec};
 use crate::self_tool::self_spec;
@@ -119,6 +120,20 @@ impl ToolTable {
     pub fn with_notes(mut self) -> Self {
         self.push_spec(notes_spec());
         self.push_spec(notes_set_spec());
+        self
+    }
+
+    /// 212 开闸：追加 `srv:agent/await`，模型从此能挂起等另一个 agent（含兄弟）
+    /// 到达某个状态（决策 35 §一）。
+    ///
+    /// 跟 `with_collect` 各自一档：**它们不是一回事**。`collect` 领的是「我自己
+    /// 开的后台子」的正文（领取即消费），`await` 只回答「它到了没有」、不给正文，
+    /// 而且等得了**不归你领的**——兄弟，或者别人开的。只开 await 不开 collect 是
+    /// 合法但难用的组合：模型知道对方到了，却没有办法拿到它的答案。
+    ///
+    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。
+    pub fn with_await(mut self) -> Self {
+        self.push_spec(await_spec());
         self
     }
 }

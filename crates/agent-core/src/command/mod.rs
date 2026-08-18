@@ -94,7 +94,7 @@ pub use clear_tool_results::ClearOutcome;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use inbox::DeliverDenied;
-pub use awaiting::AwaitDenied;
+pub use awaiting::{AwaitDenied, AwaitProgress};
 pub use notes::{MAX_NOTES, NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, Undoability, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};

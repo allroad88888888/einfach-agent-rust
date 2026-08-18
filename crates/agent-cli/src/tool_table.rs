@@ -8,7 +8,7 @@
 //!
 //! # 顺序是契约，不是风格（红线 11）
 //!
-//! `builtin → shell → spawn → status/collect → send/self/notes → skills → MCP → vision → 扩展`
+//! `builtin → shell → spawn → status/collect → send/self/notes/await → skills → MCP → vision → 扩展`
 //! 这个次序**只加不改**：进 prompt 的东西序列化必须逐字节确定，工具表在 prompt
 //! 最前面，任何一次插队都会让那一段之后的全部字节位移，缓存整段作废
 //! （038 探针实测：DeepSeek 上「中途改工具数组」把命中率归零，120 倍差价）。
@@ -66,6 +66,7 @@ pub fn assemble(
         .with_send()
         .with_self()
         .with_notes()
+        .with_await()
         .with_skills(parts.skills)
         // MCP 工具追加在最后：server 之间按 id、server 内按 tools/list，
         // 已经在 `mcp::bootstrap` 排好序了。

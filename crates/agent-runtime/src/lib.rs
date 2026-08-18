@@ -84,6 +84,8 @@
 //!
 
 mod auto_turn;
+mod await_slot;
+mod await_tool;
 mod block_on;
 mod builtin_intercepts;
 mod child_outcome;
@@ -177,6 +179,7 @@ pub use auto_turn::{
 #[cfg(not(target_arch = "wasm32"))]
 pub use auto_turn::run_auto_turns;
 pub use block_on::block_on;
+pub use await_tool::{AWAIT_TOOL, await_spec};
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
 pub use notes_tool::{NOTES_SET_TOOL, NOTES_TOOL, notes_set_spec, notes_spec};
 pub use self_tool::{SELF_TOOL, self_spec};

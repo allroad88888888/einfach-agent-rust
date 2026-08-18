@@ -31,9 +31,10 @@ use std::rc::Rc;
 
 use agent_store::{AtomFamily, AtomId, ReadArgs, Store};
 
-use crate::engine::state::SlotState;
+use crate::engine::state::{SlotState, TurnStatus};
 use crate::ids::AgentId;
 use crate::value::atom_value::AgentValue;
+use crate::value::awaiting::AwaitUntil;
 
 use super::atom_key::{AtomKey, DerivedKey};
 use super::slot::Slot;
@@ -71,12 +72,85 @@ pub fn derived_atom(
     derived: &DerivedFamily,
     key: &DerivedKey,
 ) -> AtomId {
-    let DerivedKey::ToolsConverged(agent) = key;
-    let (agent, store_h, family_h) = (agent.clone(), store.clone(), sources.clone());
-    derived.borrow_mut().get_or_create(key.clone(), || {
-        store
-            .create_derived_ctx(move |args| tools_converged_read(args, &store_h, &family_h, &agent))
-    })
+    // 212 起这里是 `match` 而不是一个不可反驳的 `let`——**加第二种 derived 时
+    // 编译器会在这儿逼下一个人回答「你这个 derived 读了什么」**，而那正是红线 10
+    // 唯一还有意义的那半条判据的落点（见模块文档）。
+    match key {
+        DerivedKey::ToolsConverged(agent) => {
+            let (agent, store_h, family_h) = (agent.clone(), store.clone(), sources.clone());
+            derived.borrow_mut().get_or_create(key.clone(), || {
+                store.create_derived_ctx(move |args| {
+                    tools_converged_read(args, &store_h, &family_h, &agent)
+                })
+            })
+        }
+        DerivedKey::AwaitReached { target, until } => {
+            let (target, until) = (target.clone(), *until);
+            let (store_h, family_h) = (store.clone(), sources.clone());
+            derived.borrow_mut().get_or_create(key.clone(), || {
+                store.create_derived_ctx(move |args| {
+                    await_reached_read(args, &store_h, &family_h, &target, until)
+                })
+            })
+        }
+    }
+}
+
+/// `srv:agent/await` 那个 derived 的 read fn（212）：**读目标的 `Status`，一格**。
+///
+/// # 这是全系统第一条跨 agent 的边
+///
+/// 三态，不是两态：
+///
+/// | 值 | 意思 | 等待方该做什么 |
+/// |---|---|---|
+/// | `Bool(true)` | 到了 | 收敛，成功 |
+/// | `Bool(false)` | 目标已经落终态，但**不是**你等的那一种 | 收敛，`is_error`——**继续等就是永远等** |
+/// | `Pending` | 还没到 | 接着等（沿依赖图往下游传，同 `tools_converged`） |
+///
+/// 中间那一档是刻意的：`until = Done` 而目标 `Failed` 收场时，等待方必须**立刻**
+/// 知道等不到了。两态的话它只能一直 `Pending`，而泵会安静地返回，留下一个永远
+/// 挂着的槽——正是 212 要防的那类死等。
+///
+/// # 为什么它证明得了「边只许指向 primitive」
+///
+/// 这里 `args.get` 的入参只可能是 `source_atom(...)` 的产物，而 `source_atom` 的
+/// 键是 `AtomKey`，永远落在 source family 上（`build.rs` 里 source 与 derived 是
+/// 两张按不同键类型索引的表——「快照只存 primitive」是**类型上的事实**）。
+/// primitive 没有出边，所以这条跨 agent 的边是一条**长度 1 的悬边**，绕不回来。
+///
+/// 决策 35 之前红线 10 的论证是「两个方向可读的槽位集合不相交 ⇒ 无环」，
+/// 而那个论证的前提在这个仓里从来没成立过：跨 agent 读走的是命令层的非追踪读
+/// （`cross_read`），一条边都不建。方向约束防的是一类当时还不存在的边。
+fn await_reached_read(
+    args: &ReadArgs<'_, AgentValue>,
+    store: &AgentStore,
+    family: &SourceFamily,
+    target: &AgentId,
+    until: AwaitUntil,
+) -> AgentValue {
+    // 现查，不捕获 id（红线 4 的孪生条款）。
+    let status_id = source_atom(store, family, &AtomKey::Agent(target.clone(), Slot::Status));
+    let value = args.get(status_id);
+    let Some(status) = value.as_status() else {
+        // 同 `tools_converged_read`：唯一合法的走到这里的路径是 DV-3 的故障占位，
+        // read fn 在这里**不许 panic**（`agent-store` 的 read 契约）。
+        debug_assert!(args.is_faulted(), "Status 槽位只可能持 Status：{value:?}");
+        return AgentValue::Null;
+    };
+    let hit = match until {
+        AwaitUntil::Settled => status.is_terminal(),
+        AwaitUntil::Done => matches!(status, TurnStatus::Done { .. }),
+        AwaitUntil::Failed => matches!(status, TurnStatus::Failed(_)),
+    };
+    if hit {
+        AgentValue::Bool(true)
+    } else if status.is_terminal() {
+        // 它收场了，但不是你等的那一种——**等不到了**，别再挂着。
+        AgentValue::Bool(false)
+    } else {
+        AgentValue::Pending
+    }
 }
 
 /// 003 预言的那个 derived 的 read fn：**扫槽位**，没有一个还是 `Pending` 就算收敛。

@@ -42,6 +42,7 @@
 
 use std::sync::Arc;
 
+use crate::await_tool::{self, AWAIT_TOOL};
 use crate::collect_tool::{self, COLLECT_TOOL};
 use crate::ctx::RunnerCtx;
 use crate::intercept_registry::{InterceptArgs, InterceptFn};
@@ -52,18 +53,19 @@ use crate::spawn_tool::{self, SPAWN_TOOL};
 use crate::send_tool::{self, SEND_TOOL};
 use crate::status_tool::{self, STATUS_TOOL};
 
-/// 八个内置截获，`declares()` 为真才注册（一名一路，见 `intercept_registry`
+/// 九个内置截获，`declares()` 为真才注册（一名一路，见 `intercept_registry`
 /// 模块文档「撞名判据」）。命中即 `debug_assert_eq!` 校验「声明⟺注册」——这是
 /// 半开状态「表 declares 但没注册」那一半的看门狗：镜像的另一半（「注册了但
 /// 表没 declares」）已经在 `RunnerCtx::registrable` 共用的三道闸里（146 的
 /// `debug_assert!`），不在这里重复。
 pub(crate) fn register_builtin_intercepts(ctx: &mut RunnerCtx) {
-    let builtins: [(&str, InterceptFn); 8] = [
+    let builtins: [(&str, InterceptFn); 9] = [
         (SPAWN_TOOL, spawn_intercept()),
         (COLLECT_TOOL, collect_intercept()),
         (STATUS_TOOL, status_intercept()),
         (SEND_TOOL, send_intercept()),
         (SELF_TOOL, self_intercept()),
+        (AWAIT_TOOL, await_intercept()),
         (NOTES_TOOL, notes_read_intercept()),
         (NOTES_SET_TOOL, notes_set_intercept()),
         (SKILL_READ, skill_read_intercept()),
@@ -156,6 +158,22 @@ fn self_intercept() -> InterceptFn {
             ..
         } = args;
         self_tool::intercept(session, ctx, agent, call_id, input, epoch)
+    })
+}
+
+fn await_intercept() -> InterceptFn {
+    Box::new(|args: InterceptArgs<'_>| {
+        let InterceptArgs {
+            session,
+            ctx,
+            awaits,
+            agent,
+            call_id,
+            input,
+            epoch,
+            ..
+        } = args;
+        await_tool::intercept(session, ctx, awaits, agent, call_id, input, epoch)
     })
 }
 

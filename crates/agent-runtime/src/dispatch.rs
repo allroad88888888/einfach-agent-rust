@@ -82,10 +82,17 @@ pub(crate) enum Dispatched {
     CancelAll,
 }
 
+// 212 起入参到了 8 个。**不为了压这个数把它们打成一个结构体**：这些引用的
+// 生命周期各不相同（`session`/`ctx`/三张本轮表都是 `&mut`，`bus` 是 `&`），
+// 装进一个结构体要给它挂一串生命周期参数，比现在难读。参数多是这个函数
+// 「按 effect 分派、不做任何包装」定位的直接后果——同 `intercept_registry::dispatch`
+// 那条既有的同款豁免。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_effect(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     subtree: &mut Subtree,
+    awaits: &mut crate::await_slot::AwaitSlots,
     compactions: &mut CompactSlots,
     bus: &IoBus,
     source: &AgentId,
@@ -133,6 +140,7 @@ pub(crate) fn run_effect(
                     session,
                     ctx,
                     subtree,
+                    awaits,
                     compactions,
                     bus,
                     &agent,

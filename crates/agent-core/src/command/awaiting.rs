@@ -28,7 +28,8 @@
 //! `graph::build` 的新 derived）。等待环在依赖图上**一条边都不多**：它是「谁在等
 //! 谁」这件事本身成的环。两者同名不同物，别混。
 
-use crate::graph::{AtomKey, Slot};
+use crate::graph::{AtomKey, DerivedKey, Slot, derived_atom};
+use crate::value::atom_value::AgentValue;
 use crate::ids::AgentId;
 use crate::value::awaiting::{self, AwaitUntil, Awaiting};
 
@@ -52,7 +53,40 @@ pub enum AwaitDenied {
     WouldCycle { chain: Vec<AgentId> },
 }
 
+/// 一次「等到了没有」的回答。三态，不是布尔——见 `graph::build::await_reached_read`。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum AwaitProgress {
+    /// 到了。
+    Reached,
+    /// 目标已经收场，但**不是**你等的那一种（`until = Done` 而它 `Failed` 之类）。
+    /// **继续等就是永远等**，调用方必须当场收敛成一个错误。
+    Unreachable,
+    /// 还没到，接着等。
+    Waiting,
+}
+
 impl Session {
+    /// `target` 到达 `until` 了吗——**读那个 derived**，不是现扫一遍。
+    ///
+    /// 于是 `/undo` 回滚了目标的 `Status` 之后这个答案**自动**跟着回来：它是图上
+    /// 的一个值，不是某处维护出来的判断（同 `tools_converged` 的形状与理由）。
+    pub fn await_progress(&self, target: &AgentId, until: AwaitUntil) -> AwaitProgress {
+        let id = derived_atom(
+            &self.store,
+            &self.sources,
+            &self.derived,
+            &DerivedKey::AwaitReached {
+                target: target.clone(),
+                until,
+            },
+        );
+        match self.store.get(id) {
+            AgentValue::Bool(true) => AwaitProgress::Reached,
+            AgentValue::Bool(false) => AwaitProgress::Unreachable,
+            _ => AwaitProgress::Waiting,
+        }
+    }
+
     /// 这个 agent 此刻在等谁（按 target 升序，`value::awaiting` 保证）。
     ///
     /// 非创建读（`peek`，同 `inbox_of` 的先例）：探一个不在树上的 id 答空，

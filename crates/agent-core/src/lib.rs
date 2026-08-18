@@ -48,7 +48,7 @@ pub use compaction::{
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, BlockedCause, BoundaryRejected, ChildConfig,
     ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_AUTO_TURNS, DEFAULT_MAX_CHILDREN,
-    AwaitDenied, DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, MAX_NOTES,
+    AwaitDenied, AwaitProgress, DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, MAX_NOTES,
     NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied, ReadDenied, Session, SpawnRefused,
     UndoReport, Undoability, known_label,
 };
@@ -66,6 +66,7 @@ pub use value::atom_value::AgentValue;
 pub use value::host_skills::HostSkill;
 // 收件箱（205，决策 35）：**类型提到根上，编解码不提**——`Deliver` 与 `InboxItem`
 // 是运行时要构造和读取的东西，`to_value`/`from_value` 是槽位的内部形状。
+pub use value::awaiting::AwaitUntil;
 pub use value::inbox::{Deliver, InboxItem};
 pub use value::message::{ContentBlock, Message, Role};
 // 压缩的发送侧坐标（099）：**类型和常量**提到根上，投影函数不提——

@@ -62,7 +62,8 @@ async fn a_recovered_session_keeps_its_switch_without_being_told_again() {
             "srv:agent/send",
             "srv:agent/self",
             "srv:agent/notes",
-            "srv:agent/notes/set"
+            "srv:agent/notes/set",
+            "srv:agent/await"
         ],
         "夹具前提：第一次那一轮，关掉的两件确实不在"
     );
