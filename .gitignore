@@ -8,6 +8,11 @@ dist/
 # 路径监狱落在这里（issue 033）——运行时产物，不进版本控制。
 .agent-server-tools/
 
+# `standard_local` 那一族的可撤回文件事务把旧内容存在这里（`revert_workspace_change`
+# 靠它回滚）——在仓库根跑 agent-cli 就会长出来。运行时产物，不进版本控制。
+# M20 的真机 dogfood 第一次把它带出来。
+.agent/
+
 # 含真实 API key，永不提交。范例见 providers.example.toml
 providers.toml
 
