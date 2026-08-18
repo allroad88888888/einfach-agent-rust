@@ -46,6 +46,7 @@ mod guard_indep_report;
 mod guard_indep_window;
 mod host_prefix_indep;
 mod inbox_indep;
+mod known_label_coverage;
 mod inbox_indep_deny;
 mod inbox_indep_undo_restore;
 mod host_skills_indep_restore;

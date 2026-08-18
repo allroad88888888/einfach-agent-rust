@@ -93,15 +93,10 @@ pub(crate) async fn run(
         // `Outcome.status` 仍然是**用户那一轮**的终态，不被自开的轮次改写：
         // 页面靠事件流看自驱动那几轮，靠这个返回值判断刚才那句话的结果。
         while let AutoTurnStep::Ran(auto) = try_one_auto_turn_async(session, ctx).await? {
-            let auto = drain_host_tools(session, ctx, auto).await?;
-            // 自开的一轮被取消 → 跟用户那一轮同一条路（`undo_turn` 丢弃半轮），
-            // 然后**不再继续**：下一次循环开头那道取消检查也会挡住它，这里提前
-            // 退出只是少绕一圈。
-            if matches!(auto, TurnStatus::Failed(Failure::Cancelled)) {
-                let _ = agent_runtime::undo::undo_turn(session, ctx);
-                agent_runtime::persist::sync(ctx, session);
-                break;
-            }
+            // 被取消的那一轮走不到这里：`try_one_auto_turn_async` 自己丢掉半轮
+            // （留言退回收件箱）并回 `Held`，循环当场结束。这里只需要把这一轮
+            // 里模型发起的 `web:` 工具排空——那件事 `agent-runtime` 不认识。
+            let _ = drain_host_tools(session, ctx, auto).await?;
         }
         return Ok(Outcome {
             status,

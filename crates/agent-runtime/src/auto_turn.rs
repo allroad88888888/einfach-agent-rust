@@ -17,10 +17,17 @@
 //! |---|---|---|
 //! | 没有留言了 | root 收件箱里没有 `NextTurn` 条目 | 什么都不说（正常收工） |
 //! | 预算见底 | [`Session::spend_auto_turn`] 回 `None` | `AutoTurnHeld { BudgetExhausted }` |
-//! | 用户喊停 | 取消标志被置上 | `AutoTurnHeld { Cancelled }` |
+//! | 用户喊停（开轮之前） | 取消标志被置上 | `AutoTurnHeld { Cancelled }` |
+//! | 用户喊停（这一轮跑到一半） | 这一轮落 `Failed(Cancelled)` | `undo_turn` 丢掉这半轮 → **留言退回收件箱** → `AutoTurnHeld { Cancelled }` |
 //!
-//! 后两条共有的承诺是**留言原地留着，不丢弃**。一个不说话的「什么都没发生」
-//! 跟「留言被吞了」在外面长得一模一样，所以两条都必须 `emit` 出去。
+//! 后三条共有的承诺是**留言原地留着，不丢弃**。一个不说话的「什么都没发生」
+//! 跟「留言被吞了」在外面长得一模一样，所以三条都必须 `emit` 出去。
+//!
+//! 最后那一条要动手才成立：留言在 `drain_next_turn` 那一刻已经**搬出**收件箱进了
+//! `Messages`，所以「留在收件箱」靠的是把这半轮 `undo_turn` 掉。做在这里而不是
+//! 让每个宿主自己做——211 的独立测试 agent 逮到的正是那个形状：浏览器宿主手工做
+//! 了，CLI/server 走的 `run_auto_turns` 没做，同一条承诺在两个宿主上一个成立一个
+//! 不成立，而且不报错。
 //!
 //! # 取消标志**不清**
 //!
@@ -41,7 +48,7 @@
 
 use std::sync::atomic::Ordering;
 
-use agent_core::{Deliver, Event, Session, TurnStatus};
+use agent_core::{Deliver, Event, Failure, Session, TurnStatus};
 
 use crate::ctx::RunnerCtx;
 use crate::event::{AutoTurnHold, RunnerEvent};
@@ -105,6 +112,28 @@ pub async fn try_one_auto_turn_async(
         },
     )
     .await?;
+
+    // 半路被取消：**这半轮要丢掉**（`undo_turn`，跟用户那一轮被取消时同一条路），
+    // 于是那条 `drain_next_turn` 的 entry 跟着退掉，**留言退回收件箱**——这是
+    // 「喊停之后剩下的留言留在收件箱、不丢弃」那条承诺的实际兑现处。
+    //
+    // 放在这里而不是让每个宿主自己做：211 的独立测试 agent 逮到的正是那个形状
+    // ——浏览器宿主手工做了这件事，而 `run_auto_turns`（CLI/server 走的那条）
+    // 没有，于是同一条承诺在两个宿主上一个成立一个不成立，还不报错。
+    //
+    // **预算不退**：provider 调用真的发出去了，钱烧掉了（跟 `/undo` 不退还它
+    // 同一条理由，见 `agent_core::command::auto_turn` 模块文档）。
+    if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
+        let _ = crate::undo::undo_turn(session, ctx);
+        persist::sync(ctx, session);
+        hold(
+            ctx,
+            &root,
+            pending_next_turn_mail(session),
+            AutoTurnHold::Cancelled,
+        );
+        return Ok(AutoTurnStep::Held);
+    }
     Ok(AutoTurnStep::Ran(status))
 }
 

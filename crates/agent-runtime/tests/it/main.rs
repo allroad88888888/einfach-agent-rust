@@ -9,6 +9,14 @@
 //! 是夹具结构的改动，不该混进「让 CI 变绿」（195）这件事。
 #![allow(clippy::duplicate_mod)]
 
+mod auto_turn_indep_begin_turn_preserves_budget;
+mod auto_turn_indep_cancel_holds;
+mod auto_turn_indep_chain_runs_and_stops;
+mod auto_turn_indep_recovery_holds;
+mod auto_turn_indep_support;
+mod auto_turn_indep_three_places_agree;
+mod auto_turn_indep_undo_keeps_spent;
+mod auto_turn_indep_user_input_refills;
 mod blocking_spawn_omits_child_turns;
 mod call_timing_indep;
 mod cancel;
