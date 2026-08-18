@@ -106,6 +106,22 @@ pub fn run(session: &mut Session, ctx: &mut RunnerCtx, config: &RootConfig, mcp:
         if matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
             undo::after_cancelled_turn(session, ctx);
         }
+        // 211：这一轮里要是有人给 root 留了 `when="next_turn"` 的话，**会话自己
+        // 把下一轮开起来**（决策 35 §二）。循环在 `run_turn` 外面，每一轮都是
+        // 一次完整的新 turn——`turn_id` / undo 粒度 / 孤儿收尾一个字都不用改。
+        //
+        // 停机与「说出来」全在 `agent_runtime::auto_turn` 里：预算见底、用户
+        // Ctrl-C、没有留言，三条出路各自报一句（`AutoTurnStarted`/`AutoTurnHeld`
+        // 经 `print::events` 落到终端上）。这里只负责**在真实用户输入之后调它
+        // 一次**，以及把每一轮的终态照常打出来。
+        match agent_runtime::run_auto_turns(session, ctx) {
+            Ok(statuses) => {
+                for status in &statuses {
+                    crate::print::turn_outcome(status);
+                }
+            }
+            Err(failure) => eprintln!("{failure:?}"),
+        }
         // 其余情况（正常终态 / 非终态卡住）状态原样留着：正常终态等下一轮
         // 输入时上面那个 `begin_turn` 分支处理；非终态已经打过一条协议违规
         // 通报，用户可以 /quit 重开或者 /undo。

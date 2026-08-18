@@ -277,6 +277,15 @@ pub(super) fn run(
         commands::emit_transient_source_failure(&events_tx, failure);
     }
 
+    // 211：恢复出来的会话里要是还躺着 `when="next_turn"` 的留言，**说一声，
+    // 但一轮都不开**（决策 35 §二）。两条理由都不能让步：打开应用它自己就开始
+    // 烧钱；以及用户还没来得及看上一轮发生了什么。恢复是「回到现场」，不是
+    // 「接着跑」——所以这里调的是 `report_recovered_mail`，而
+    // `run_auto_turns` 只长在真实用户输入那条路上（`commands::handle_input`）。
+    if restored {
+        agent_runtime::report_recovered_mail(&session, &mut ctx);
+    }
+
     let cancel = ctx.cancel_flag();
     if ready_tx.send(Ok(cancel)).is_err() {
         // opener 那边已经不要这个握手结果了（比如它自己被取消/超时放弃了）——

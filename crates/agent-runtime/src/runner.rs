@@ -153,13 +153,6 @@ pub(crate) async fn resume_after_first_commit(
     // 才会跟它比出差异、触发一次回调，`run_turn` 被反复调用（一轮接一轮）也不会
     // 在每轮开头都白白重发一次跟上一轮收尾时完全相同的树（见 `maybe_emit_tree`）。
     let mut last_tree: Option<AgentTree> = ctx.tree_events_enabled().then(|| session.agent_tree());
-    // 206：轮末「还有几条没被读到」只报一次——终态之后泵可能还转不止一圈
-    // （B0 的清算和 B 的收工判定各自还要过一遍）。
-    //
-    // **214 起这一笔要能重新上膛**：唤醒会把 root 从终态拉回来接着跑，之后它会
-    // 再落一次终态，而那一次可能有新的没被读到的话。一路 `true` 到底的话，
-    // 第二次终态的漏读一条都报不出来——报过一次就再也不报，不报错。
-    let mut unread_reported = false;
     let mut after_commit = Some(after_commit);
 
     pending.push_back(initial);
@@ -236,19 +229,23 @@ pub(crate) async fn resume_after_first_commit(
         //     （不走会话级取消，理由见 `crate::orphan`），跑完没人领的告警丢掉。
         //     放在 B **之前**：这一圈可能就是收工的那一圈（后台子已经静止但还活
         //     着），拆干净了再返回，别把一棵没人要的子树留给下一轮。
-        // B0'. 206：还没被读到的 `Deliver::Now` 报一句。**在 reap 之前**——
-        //      reap 会把没人领的后台子拆掉、它们的收件箱跟着被逐出，而「给一个
-        //      已经答完的子 agent 发了话」恰恰是这条告警最想抓的场景。
-        //      终态之后泵可能还转不止一圈，所以自己记一笔只报一次。
-        if session.status().is_terminal() {
-            if !unread_reported {
-                unread_reported = true;
-                crate::unread_inbox::report(session, ctx);
-            }
-        } else {
-            // 214：被唤醒（或者别的什么把它拉回非终态）→ 重新上膛，下一次终态
-            // 再盘一遍。
-            unread_reported = false;
+        // B0'. 206：还没被读到的 `Deliver::Now` 报一句。两个位置约束，缺一不可：
+        //
+        //      **在 reap 之前**——reap 会把没人领的后台子拆掉、它们的收件箱跟着
+        //      被逐出，而「给一个已经答完的子 agent 发了话」恰恰是这条告警最想
+        //      抓的场景。
+        //
+        //      **判据跟 B 的收工判据逐字相同**（两张在飞表都空 + root 终态）
+        //      ——所以它只在**真正要返回的那一圈**跑，恰好一次，不需要任何
+        //      「只报一次」的闩。
+        //
+        //      214 的独立测试 agent 逮到的正是那个闩的漏：它原先只在 root 被拉回
+        //      非终态时重新上膛，于是「root 已经终态、某个还在跑的子 agent 又给
+        //      另一个终态子发了一条话」这种时序里，那条话真的没人读、也没人报。
+        //      改成跟收工同一个判据之后，这一类时序天然被盖住：**盘点发生在
+        //      这一轮所有事都停下来之后**。
+        if calls.is_empty() && mcp_calls.is_empty() && session.status().is_terminal() {
+            crate::unread_inbox::report(session, ctx);
         }
 
         if orphan::reap(session, ctx, &mut subtree) {

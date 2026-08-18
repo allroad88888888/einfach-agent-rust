@@ -70,6 +70,18 @@ pub(super) fn handle_input(
         Ok(_) => {}
         Err(failure) => emit_transient_source_failure(events, failure),
     }
+    // 211：留言自己把下一轮开起来（决策 35 §二）。跟 `agent_cli::repl::run`
+    // 逐行同一条规矩：**只在真实用户输入之后调一次**，恢复路径调的是
+    // `report_recovered_mail`（`crate::actor::body`）——那条选择刻意长在两个
+    // 不同的调用点上，不藏在一个 `if recovered` 里。
+    //
+    // 被取消的自开轮次不走 `erase_cancelled_turn`：`run_auto_turns` 在开每一轮
+    // **之前**先看取消标志，所以标志已经置上时它一轮都不开，也就没有需要擦除
+    // 的轮次；真在半路被取消的那一轮由它自己的终态走上面同一条路（下一次
+    // `Input` 到来时）。
+    if let Err(failure) = agent_runtime::run_auto_turns(session, ctx) {
+        emit_transient_source_failure(events, failure);
+    }
 }
 
 /// `Command::Undo { granularity, force }`：`Turn` + `force = false` 对应

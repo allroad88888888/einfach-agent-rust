@@ -83,6 +83,7 @@
 //! `max_children` 默认 8，长会话压 8 次之后自动压缩永久失效。
 //!
 
+mod auto_turn;
 mod block_on;
 mod builtin_intercepts;
 mod child_outcome;
@@ -166,6 +167,15 @@ pub mod persist;
 pub mod undo;
 
 pub use agent_mcp::McpRegistry;
+/// 211：自驱动的轮次——留言自己就能把下一轮启动（决策 35 §二）。
+/// **恢复路径该调的是 `report_recovered_mail`，不是 `run_auto_turns*`**，
+/// 那条选择刻意长在调用点上，不藏在一个 `if recovered` 里。
+pub use auto_turn::{
+    AutoTurnStep, pending_next_turn_mail, report_recovered_mail, run_auto_turns_async,
+    try_one_auto_turn_async,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use auto_turn::run_auto_turns;
 pub use block_on::block_on;
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
 pub use notes_tool::{NOTES_SET_TOOL, NOTES_TOOL, notes_set_spec, notes_spec};

@@ -130,6 +130,12 @@ pub(crate) async fn open(
     // `Session::restore` 灌回来的旧条目当新条目重新 append 一遍（CLI 那边抓到过
     // 的真 bug，见 `persist::seed_after_recover` 文档）。对全新会话是无害空操作。
     agent_runtime::persist::seed_after_recover(&mut ctx, &session);
+    // 211：恢复出来的会话里要是还躺着 `when="next_turn"` 的留言，**说一声，
+    // 但一轮都不开**（决策 35 §二）。浏览器上这条尤其要紧：打开页面就自己开始
+    // 烧钱，而这儿没有 Ctrl-C。恢复是「回到现场」，不是「接着跑」。
+    if restored {
+        agent_runtime::report_recovered_mail(&session, &mut ctx);
+    }
     if !restored {
         agent_runtime::run_session_start(&mut session, ctx.tools()).map_err(|error| {
             format!(

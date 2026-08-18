@@ -41,11 +41,17 @@ use crate::event::RunnerEvent;
 
 /// 扫一遍活着的 agent，报出还没被读到的 `Now` 条目。
 ///
-/// **调用点在 `runner` 的 B0，`orphan::reap` 之前**：reap 会把没人领的后台子
-/// `despawn_child` 掉，它们的收件箱 atom 跟着被逐出——报在后面就一条都看不到了，
-/// 而「给一个已经答完的子 agent 发了话」恰恰是这条告警最想抓的场景。
+/// **调用点在 `runner` 的 B0，`orphan::reap` 之前，且判据跟 B 的收工判据逐字
+/// 相同**（两张在飞表都空 + root 终态）。两个约束各有各的理由：
 ///
-/// 调用方负责**只报一次**（泵在终态上可能转不止一圈）。
+/// - **reap 之前**：reap 会把没人领的后台子 `despawn_child` 掉，它们的收件箱
+///   atom 跟着被逐出——报在后面就一条都看不到了，而「给一个已经答完的子 agent
+///   发了话」恰恰是这条告警最想抓的场景。
+/// - **跟收工同判据**：于是它只在真正要返回的那一圈跑，恰好一次。214 之前这里
+///   靠一个「只报一次」的闩，而那个闩漏掉了一类时序——root 已经终态、某个还在
+///   跑的子 agent 又给另一个终态子发了一条话，那条话真的没人读也没人报
+///   （214 的独立测试 agent 逮到的）。盘点发生在**这一轮所有事都停下来之后**，
+///   这一类时序天然被盖住。
 pub(crate) fn report(session: &Session, ctx: &mut RunnerCtx) {
     for agent in live_sorted(session) {
         let count = session
