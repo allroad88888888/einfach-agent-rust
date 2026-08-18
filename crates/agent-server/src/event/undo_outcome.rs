@@ -169,7 +169,7 @@ mod tests {
             },
             adjustments: Vec::new(),
         });
-        session.mark_irreversible(call_id.clone());
+        session.mark_no_undo(call_id.clone());
         let _ = session.step(Event::ToolResult {
             agent: AgentId::root(),
             epoch: session.epoch(),

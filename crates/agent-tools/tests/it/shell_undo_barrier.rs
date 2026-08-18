@@ -3,9 +3,11 @@
 //! `agent-store`（017）的 `History::undo_turn` 撞上一条标了 irreversible 的
 //! entry 时确实停在门口，不越过去。
 //!
-//! `srv:shell/exec` 的 reversibility 是 `Irreversible`；宿主侧的 undo command
-//! 会用等价于 `Reversibility::blocks_undo()` 的谓词当 barrier 喂给
-//! `undo_turn`。这个测试钉死 `History` 那一侧的行为契约，不牵涉 `agent-tools`
+//! `srv:shell/exec` 交不出还原函数，所以宿主侧派发时会 `mark_irreversible`，
+//! 那条结果 entry 落 `Undoability::Blocked`；undo command 用「是不是 `Blocked`」
+//! 当 barrier 谓词喂给 `undo_turn`（199/200 之前那个谓词是
+//! `Reversibility::blocks_undo()`，枚举降级成显示标签之后已删）。
+//! 这个测试钉死 `History` 那一侧的行为契约，不牵涉 `agent-tools`
 //! 自己的任何实现——这也是为什么它只依赖 `agent-store`（本文件是唯一需要
 //! `agent-store` 这个 dev-dependency 的地方）。
 

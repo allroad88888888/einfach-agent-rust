@@ -208,9 +208,14 @@ fn undoing_the_turn_takes_the_whole_subtree_and_the_next_prompt_has_no_trace_of_
     assert!(!session.messages_of(&child_a).is_empty());
 
     let report = session.undo_turn();
+    // 201（决策 199）：断言一个字没改，**理由换了**。以前是「spawn 声明成
+    // `Reversible`」；现在 `Reversibility` 不再是任何行为的依据，spawn 走的是
+    // 「**没碰外部世界**」这一档（`Aftermath::Nothing` → `Undoability::StateOnly`）
+    // ——它只写了状态，而状态的逆就是 journal 回滚本身，子 agent 的原子跟着一起退
+    // （下面三条断言正是这件事）。
     assert!(
         matches!(report, agent_core::UndoReport::Applied { .. }),
-        "spawn 是 Reversible，不该被屏障挡住：{report:?}"
+        "spawn 只写状态，不该被屏障挡住：{report:?}"
     );
     assert!(session.messages().is_empty(), "root 的消息全退了");
     assert!(

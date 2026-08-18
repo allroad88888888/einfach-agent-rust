@@ -118,27 +118,51 @@ pub(crate) fn run_effect(
             // 了截获」完全合法：一个只声明不截获的普通工具）。
             if ctx.session_tool_registered(&tool) {
                 return intercept_registry::dispatch(
-                    session, ctx, subtree, compactions, bus, &agent, call_id, &tool, input, epoch,
+                    session,
+                    ctx,
+                    subtree,
+                    compactions,
+                    bus,
+                    &agent,
+                    call_id,
+                    &tool,
+                    input,
+                    epoch,
                 );
             }
             // 027：发起时快照在这里造一次，`Irreversible` 的立刻登记——记录点
             // 必须在**派发**这一刻，而不是等结果落地才回头看，否则进程在工具
             // 跑到一半崩溃时，恢复出来的日志里压根没有这次调用「不可逆」的痕迹
-            // （`mark_irreversible` 本身不落日志，落的是它让随后那条 `tool_result`
-            // entry 带上的 `barrier` 位——见 `Session::mark_irreversible` 文档）。
+            // （`mark_no_undo` 本身不落日志，落的是它让随后那条 `tool_result`
+            // entry 带上的 `barrier` 位——见 `Session::mark_no_undo` 文档）。
             let table_declared = ctx.tools.declares(&tool);
             let request = ctx.tools.snapshot(&tool, Arc::clone(&input));
             if matches!(request.reversibility, Reversibility::Irreversible) {
-                session.mark_irreversible(call_id.clone());
+                session.mark_no_undo(call_id.clone());
             }
             // MCP 第四路（docs/MCP.md §「dispatch 怎么分第四路」）：`mcp:` 前缀且工具表
             // 声明了它 → 起一次异步 `tools/call`，**不走 ctx.fs**（executor 够不着
             // `McpRegistry`，跟它够不着 `Session` 同理，spawn/skill 截获同款）。按工具
             // 名分派在宿主侧合法：这里没有任何模型相关判断（红线 12 管的是 core 里的
-            // provider 分支）。snapshot + mark_irreversible 已在上面做过——readOnly 的
-            // MCP 工具落 `Pure` 无屏障，非 readOnly 落 `Irreversible` 带屏障，复用
-            // 020/027 的既有屏障机制，MCP 不新造。
+            // provider 分支）。屏障复用 020/027 的既有机制，MCP 不新造——`readOnlyHint:
+            // true` 落 `Pure` 不挡（决策 22，202 **没有**反转它），其余落 `Irreversible`
+            // 带屏障；202 只补了「声明 `reversible` 却交不出函数」那一格，见分支里。
             if tool.starts_with("mcp:") && table_declared {
+                // 202（决策 199 §七「承诺挡，事实不挡」）：`mcp:` 的执行体在 server
+                // 进程里，**结构上交不回一个我们能调用的还原函数**。但「交不出函数」
+                // 只对**承诺**（`Reversible`：「有补偿动作」）致命，对**事实断言**
+                // （`Pure`：「没碰外部世界」）不致命——后者压根不需要函数来兑现。
+                //
+                // 所以这里不是「一律挡」（初稿那句是两态时期的措辞，改三态之后它把
+                // 「没碰」和「碰了但撤不回」压成了同一格），而是只补上面那个公共块
+                // **算不出**的那一格：`Reversible` 在那里不标记，而它的补偿动作
+                // 没有任何人会执行。`Pure`/`Irreversible` 两格行为一个字节不变。
+                //
+                // 记录点在**派发这一刻**（理由与公共块那段注释逐字相同）：进程在
+                // `tools/call` 往返到一半崩溃时，恢复出来的日志里得有这次调用的屏障位。
+                if crate::is_unkeepable_promise(&request) {
+                    session.mark_no_undo(call_id.clone());
+                }
                 return start_mcp(ctx, bus, agent, call_id, request, epoch);
             }
             // 远端第五路（`web:` / `desk:`）：登记等待槽、把调用推给宿主，**挂起**
@@ -153,6 +177,28 @@ pub(crate) fn run_effect(
             // 模型看到 `is_error` 自纠——跟同样被编造出来的 `srv:` 名字待遇一致
             // （决策 20 的兜底）。
             if request.location.is_remote() && table_declared {
+                // 202（决策 199 §七「承诺挡，事实不挡」）：宿主工具的执行体在
+                // 浏览器/桌面进程里，本仓手上只有一条 `POST /tool_result` 的回传
+                // 通道，**那条通道里没有「怎么撤」这半句话**。
+                //
+                // 变的只有一格：声明 `reversible`（「有补偿动作」——一个**承诺**）
+                // 从静默放过变成停下来问。这正是 199 现状清账那个失败场景的堵口:
+                // 宿主声明 `web:crm/draft` 可逆，模型建了草稿，`/undo` 打印「回退了
+                // 3 条目」而**草稿还在 CRM 里**——「有人会补偿」被当成了「已经补偿」。
+                //
+                // 声明 `pure` 的**不挡**：那是「没碰外部世界」这个**事实断言**，
+                // 不需要函数来兑现，`HOST-CAPABILITIES.md` §五「它自己的数据，
+                // 它自己负责」照旧采信。`ask_user_question` 这类挡了也保护不了
+                // 任何东西，只会让「模型问了一句话」那一轮撤不掉。
+                //
+                // 声明 `irreversible`（含未声明）本来就被上面那个公共块标了，
+                // 这里不重复——所以这个 `if` 只射中 `Reversible` 那一格。
+                //
+                // 标记在**派发这一刻**（同公共块的理由）：宿主执行到一半、回传永远
+                // 不来时，日志里也得有这次调用的屏障位。
+                if crate::is_unkeepable_promise(&request) {
+                    session.mark_no_undo(call_id.clone());
+                }
                 let public_request = if crate::transient_source_policy::is_transient_source(&tool) {
                     crate::transient_source_policy::sanitize_request(&request)
                 } else {

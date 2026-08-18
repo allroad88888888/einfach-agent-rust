@@ -1,13 +1,13 @@
 //! 026 独立测试：屏障链路（020 的 barrier 谓词接上真日志）。
 //!
-//! `mark_irreversible(call_id)` 之后，落地那次结果的 entry 带 `barrier: true`；
+//! `mark_no_undo(call_id)` 之后，落地那次结果的 entry 带 `barrier: true`；
 //! `undo_turn` 走到它要停下（`Blocked`，`barrier_seq` 指向正确的那条 entry）；
 //! `undo_turn_force` 恰放行一条屏障——同一轮里还有第二条屏障时，force 一次只
 //! 越过遇到的第一条，仍然会在第二条前面再次 `Blocked`（026 实做记录判断 7）。
 
-use agent_core::{ToolCallId, UndoReport, Undoability};
 use crate::support::session::thinking_session;
 use crate::support::{provider_done_tool_use, tool_result_event};
+use agent_core::{ToolCallId, UndoReport, Undoability};
 
 #[test]
 fn a_barrier_entry_blocks_undo_turn_at_the_right_seq() {
@@ -18,7 +18,7 @@ fn a_barrier_entry_blocks_undo_turn_at_the_right_seq() {
         &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")],
     ));
 
-    session.mark_irreversible(ToolCallId::new("call_1"));
+    session.mark_no_undo(ToolCallId::new("call_1"));
     let _ = session.step(tool_result_event(epoch, "call_1", "r1"));
     let barrier_entry_seq = session.history().last().unwrap().seq;
     assert_eq!(
@@ -63,8 +63,8 @@ fn undo_turn_force_crosses_exactly_one_barrier_then_blocks_on_the_next() {
         &[("call_1", "srv:fs/read"), ("call_2", "srv:fs/read")],
     ));
 
-    session.mark_irreversible(ToolCallId::new("call_1"));
-    session.mark_irreversible(ToolCallId::new("call_2"));
+    session.mark_no_undo(ToolCallId::new("call_1"));
+    session.mark_no_undo(ToolCallId::new("call_2"));
     let _ = session.step(tool_result_event(epoch, "call_1", "r1"));
     let first_barrier_seq = session.history().last().unwrap().seq;
     let _ = session.step(tool_result_event(epoch, "call_2", "r2"));
@@ -114,8 +114,8 @@ fn marking_the_same_call_id_irreversible_twice_is_idempotent() {
     let epoch = session.epoch();
     let _ = session.step(provider_done_tool_use(epoch, &[("call_1", "srv:fs/read")]));
 
-    session.mark_irreversible(ToolCallId::new("call_1"));
-    session.mark_irreversible(ToolCallId::new("call_1"));
+    session.mark_no_undo(ToolCallId::new("call_1"));
+    session.mark_no_undo(ToolCallId::new("call_1"));
     let _ = session.step(tool_result_event(epoch, "call_1", "r1"));
 
     // 收敛之后状态已经离开 ToolsPending，barrier 落在「call_1 落地」这一条，而不是

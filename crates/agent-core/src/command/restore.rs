@@ -135,7 +135,7 @@ impl Session {
             turn_id: max_turn.unwrap_or(1),
             // 屏障恢复不需要这份列表（027 已裁决）：档位随 `EntryMeta.undoability`
             // 落盘，`undo_turn` 读的是日志里的那一位，不是这份运行时提示列表——它只在
-            // **当次进程**里，工具结果落地的那一刻，把 `mark_irreversible` /
+            // **当次进程**里，工具结果落地的那一刻，把 `mark_no_undo` /
             // `mark_hooked` 登记过的 call_id 翻译成 entry 的档位，翻译一旦发生就
             // 不再需要了。**`Hooked` 那一档的还原函数本身另说**：它是闭包、住 runtime、
             // 不跨进程，恢复之后钩子表是空的，撞上就按「钩子已消失」处理（199 §九）。

@@ -11,7 +11,7 @@
 //!
 //! | 半边 | 装进哪儿 | 那一刻宿主手上有什么 |
 //! |---|---|---|
-//! | specs + 可逆性 + timed | [`ToolTable`] | 只有表——`RunnerCtx::new` 还没调，ctx 不存在 |
+//! | specs + timed | [`ToolTable`] | 只有表——`RunnerCtx::new` 还没调，ctx 不存在 |
 //! | 截获执行体 | [`RunnerCtx`] | ctx 已经建好，而它**吃掉了**那张表 |
 //!
 //! 这不是接缝设计得不好，是既有结构的事实：`RunnerCtx::new` 按值收 `ToolTable`
@@ -56,23 +56,16 @@
 //! 某个包里有没有截获工具，今天空、下个版本加了一条截获的包，会让一个「反正是空的
 //! 就没写 install」的宿主**在升级依赖那一刻静默半开**。这正是本节要挡的那件事。
 //!
-//! # 可逆性复用 `host_reversibility`，不新开第三张表
+//! # 201：可逆性不再经过这里
 //!
-//! 扩展工具的可逆性走**跟 M10 注入工具同一张映射**（[`ToolTable::snapshot`] 三级
-//! 优先级的第一级，`tool_table_host.rs` 那张）。理由三条：
+//! 148 时这条路还要往 `host_reversibility`（[`ToolTable::snapshot`] 三级优先级的
+//! 第一级）里插一条「包作者声明的可逆性」。**决策 199 之后没有那个声明了**——
+//! 撤销的依据是执行体返回的 `Aftermath`，不是注册时的一个枚举
+//! （[`ExtensionPack`] 模块文档 §「可逆性不再是注册时的一个参数」）。
 //!
-//! 1. **语义逐字相同**：那一级答的是「有人在装配期按名字**显式声明**过这个工具的
-//!    可逆性吗」——包作者填的第二个位置参数正是这句话。差别只在声明**来源**
-//!    （编译期 Rust 依赖 vs 一次 HTTP 请求体），而来源今天**没有读者**：
-//!    `snapshot` 只问值是多少。为一个没人读的维度新开一张表，就是 `docs/TOOLS.md`
-//!    §「没有 `Source` 枚举」拒绝过的第二份真相。
-//! 2. **那张表的门是按表查、不按前缀查**（062 特意选的，见 `tool_table_host.rs`
-//!    §「查表的门为什么按表而不按前缀」）——它对 `ext:` 这个前缀天然成立，一个
-//!    字节都不用改；新开一张表反而要在 `snapshot` 里加第四个分支，而那个分支的
-//!    行为会跟第一级逐字一样。
-//! 3. **撞不了键**：注入名强制 `web:`/`desk:`、扩展名强制 `ext:`，069 的命名红利
-//!    保证两族结构上不相交；即便有人绕过前缀闸，[`ToolTable::push_spec`] 也会先
-//!    在 specs 区拦下后来的那一条，映射根本走不到 `insert`。
+//! 于是 `ext:` 工具的 `snapshot` 落到第三级（名字规则）的保守兜底
+//! `Irreversible`，而那个值从此**只进显示**（199 §八）：屏障与否看的是那条 entry
+//! 的 `Undoability`，由 `mark_hooked`/`mark_no_undo` 在执行完之后置。
 //!
 //! # 顺序：包内顺序原样保留，**不排序**
 //!
@@ -93,9 +86,8 @@ use super::ToolTable;
 
 impl ToolTable {
     /// 148：把一个扩展包的**表半边**装进这张表——specs 走
-    /// [`ToolTable::push_spec`] 判重、可逆性进注入映射、timed 条目走
-    /// [`ToolTable::with_timed`]——并把 **ctx 半边**打包成 [`PendingInterceptors`]
-    /// 交回给调用方。
+    /// [`ToolTable::push_spec`] 判重、timed 条目走 [`ToolTable::with_timed`]——
+    /// 并把 **ctx 半边**打包成 [`PendingInterceptors`] 交回给调用方。
     ///
     /// 两半边必须来自同一个包实例，机制见模块文档「防呆」第 1 条。
     ///
@@ -109,11 +101,9 @@ impl ToolTable {
         let (pack_name, tools, timed) = pack.into_parts();
 
         let mut pending = Vec::with_capacity(tools.len());
-        for (spec, reversibility, run) in tools {
+        for (spec, run) in tools {
             let name = Arc::clone(&spec.name);
             if self.push_spec(spec) {
-                self.host_reversibility
-                    .insert(Arc::clone(&name), reversibility);
                 pending.push((name, run));
             }
         }

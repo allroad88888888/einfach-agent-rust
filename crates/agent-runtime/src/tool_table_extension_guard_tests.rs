@@ -9,8 +9,7 @@
 
 use std::sync::Arc;
 
-use agent_core::{AgentId, Reversibility, Session};
-use serde_json::Value;
+use agent_core::{AgentId, Session};
 
 use super::fixtures::{
     PACK, READ_TOOL, build_ctx, log, nop_tool, recording_hook, spec, test_pack,
@@ -28,22 +27,14 @@ fn a_misnamed_entry_reaches_neither_the_prompt_nor_any_execution_path() {
     let hook_log = Arc::clone(&log);
     let build = move || {
         ExtensionPack::new(PACK)
-            .with_tool(spec("tree_echo", "裸名"), Reversibility::Pure, nop_tool())
-            .with_tool(
-                spec("srv:demo/shell", "冒用 srv:"),
-                Reversibility::Irreversible,
-                nop_tool(),
-            )
+            .with_tool(spec("tree_echo", "裸名"), nop_tool())
+            .with_tool(spec("srv:demo/shell", "冒用 srv:"), nop_tool())
             .with_timed(
                 spec("turn_end_ping", "裸名钩子"),
                 CallTiming::TurnEnd,
                 recording_hook(hook_log),
             )
-            .with_tool(
-                spec(READ_TOOL, "同一包里合法的那条"),
-                Reversibility::Pure,
-                nop_tool(),
-            )
+            .with_tool(spec(READ_TOOL, "同一包里合法的那条"), nop_tool())
     };
 
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(build));
@@ -105,12 +96,8 @@ fn the_table_half_survives_a_dropped_ctx_half_and_that_is_exactly_the_hazard() {
 fn a_spec_the_table_refused_never_leaves_its_interceptor_behind() {
     let assemble = || {
         let pack = ExtensionPack::new(PACK)
-            .with_tool(spec(READ_TOOL, "第一条"), Reversibility::Pure, nop_tool())
-            .with_tool(
-                spec(READ_TOOL, "重名的第二条"),
-                Reversibility::Irreversible,
-                nop_tool(),
-            );
+            .with_tool(spec(READ_TOOL, "第一条"), nop_tool())
+            .with_tool(spec(READ_TOOL, "重名的第二条"), nop_tool());
         let (tools, pending) = ToolTable::builtin().with_extension(pack);
         let mut ctx = build_ctx(tools);
         pending.install(&mut ctx);
@@ -138,9 +125,14 @@ fn a_spec_the_table_refused_never_leaves_its_interceptor_behind() {
         "模型面只能有一份说明书"
     );
     assert_eq!(
-        table.snapshot(READ_TOOL, Arc::new(Value::Null)).reversibility,
-        Reversibility::Pure,
-        "留下的是先到的那条，可逆性也是它的"
+        &*table
+            .specs()
+            .iter()
+            .find(|s| &*s.name == READ_TOOL)
+            .unwrap()
+            .description,
+        "第一条",
+        "留下的是先到的那条"
     );
     assert!(ctx.session_tool_registered(READ_TOOL));
 }

@@ -152,7 +152,12 @@ impl Session {
     /// `undo_turn` 走到它会返回
     /// [`UndoReport::Blocked`](super::UndoReport::Blocked) 而不是静默回滚
     /// （`docs/TOOLS.md`：undo 越过不可逆操作要停下问）。
-    pub fn mark_irreversible(&mut self, call_id: ToolCallId) {
+    ///
+    /// **名字为什么不再叫 `mark_irreversible`**（201）：那个名字来自
+    /// `Reversibility` 枚举的时代，留着会让人以为背后还有一个「这个工具可不可逆」
+    /// 的分类在起作用。决策 199 之后依据只有一件事——**这次调用交没交回还原
+    /// 函数**，这个方法登记的就是「没交」。
+    pub fn mark_no_undo(&mut self, call_id: ToolCallId) {
         self.mark_tool(call_id, Undoability::Blocked);
     }
 

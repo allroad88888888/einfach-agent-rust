@@ -184,7 +184,7 @@ constants, while on-disk labels are historical data and may contain values this 
 doesn't recognize.
 
 `undoability` is the **only** on-disk basis for the undo barrier: before dispatching a tool
-the host calls `Session::mark_irreversible` (→ `Blocked`) or `Session::mark_hooked`
+the host calls `Session::mark_no_undo` (→ `Blocked`) or `Session::mark_hooked`
 (→ `Hooked`), the resulting `tool_result` entry carries the tier, and an undo that hits
 `Blocked` returns `UndoOutcome::Blocked`. It still stops you after a crash and restart —
 the tier is in the file.

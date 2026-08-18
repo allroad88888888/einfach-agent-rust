@@ -17,8 +17,11 @@ use agent_runtime::RunnerCtx;
 use crate::print;
 
 /// `/undo`：撤一整轮。撞上屏障就停下打 `undo_blocked`，不静默回滚。
+///
+/// 201 起走 [`agent_runtime::undo`] 而不是 `Session::undo_turn`——那条路带着钩子表，
+/// 撤销撞上一次「交回过还原函数」的调用时会先把函数跑掉再回滚状态（决策 199 §三）。
 pub fn undo(session: &mut Session, ctx: &mut RunnerCtx) {
-    let report = session.undo_turn();
+    let report = agent_runtime::undo::undo_turn(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     report_undo(session, report, false);
 }
@@ -41,7 +44,7 @@ pub fn redo(session: &mut Session, ctx: &mut RunnerCtx) {
 /// 同一轮里第二个不可逆操作还是会再停一次）。
 pub fn undo_force(session: &mut Session, ctx: &mut RunnerCtx) {
     let cursor_before = session.cursor();
-    let report = session.undo_turn_force();
+    let report = agent_runtime::undo::undo_turn_force(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     report_undo(session, report.clone(), true);
     // 成功越过：把 [cursor_after, cursor_before) 这一段里带 barrier 的 entry
@@ -98,7 +101,7 @@ fn describe_cause(cause: &BlockedCause) -> String {
 /// `Applied` 就是干净擦除，`Blocked` 就是「这一轮已经执行过不可逆工具，保留 +
 /// 打印说明」（诚实优于整洁：不替用户悄悄越过一个他没被问到的不可逆操作）。
 pub fn after_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx) {
-    let report = session.undo_turn();
+    let report = agent_runtime::undo::undo_turn(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     match report {
         UndoReport::Applied { entries, turn_id } => print::cancelled_turn_erased(entries, turn_id),
@@ -140,7 +143,7 @@ mod tests {
 
     /// 一个真实的「派发一次 `srv:shell/exec`、宿主标记不可逆、结果落地」序列
     /// ——跟 `agent-runtime::runner::run_effect` 派发工具时做的事一样（先
-    /// `mark_irreversible` 再等结果），只是这里手工喂事件，不需要真的起进程。
+    /// `mark_no_undo` 再等结果），只是这里手工喂事件，不需要真的起进程。
     fn session_with_a_barrier_entry() -> Session {
         let mut session = Session::new(AgentId::root());
         let _ = session.step(Event::UserInput {
@@ -168,7 +171,7 @@ mod tests {
             },
             adjustments: Vec::new(),
         });
-        session.mark_irreversible(call_id.clone());
+        session.mark_no_undo(call_id.clone());
         let _ = session.step(Event::ToolResult {
             agent: AgentId::root(),
             epoch: session.epoch(),
@@ -189,7 +192,7 @@ mod tests {
         assert_eq!(
             entry.meta.undoability,
             Undoability::Blocked,
-            "标记过 mark_irreversible，这条 entry 该是屏障"
+            "标记过 mark_no_undo，这条 entry 该是屏障"
         );
 
         let described = describe_barrier(&session, entry.seq);

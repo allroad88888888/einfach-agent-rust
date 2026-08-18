@@ -88,7 +88,7 @@ pub(crate) async fn run(
     // 「取消轮丢弃」的正牌答案是 `Session::undo_turn`（027），不是手工截断消息
     // 列表。跟 `agent_cli::undo::after_cancelled_turn` 同一句；撞上不可逆屏障时
     // 它自己会拒绝，那时半轮内容留着是对的。
-    let report = session.undo_turn();
+    let report = agent_runtime::undo::undo_turn(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     Ok(Outcome {
         status,

@@ -65,7 +65,7 @@ fn tier(mark: fn(&mut Session, ToolCallId)) -> Undoability {
 #[test]
 fn the_hosts_two_marks_land_on_the_result_entry_and_nothing_else_does() {
     assert_eq!(tier(Session::mark_hooked), Undoability::Hooked);
-    assert_eq!(tier(Session::mark_irreversible), Undoability::Blocked);
+    assert_eq!(tier(Session::mark_no_undo), Undoability::Blocked);
     // 两样都不标 = 宿主什么都没说 = 这次调用没碰外部世界。
     assert_eq!(tier(|_, _| {}), Undoability::StateOnly);
 }

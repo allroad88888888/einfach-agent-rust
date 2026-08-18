@@ -2,7 +2,7 @@
 //!
 //! `srv:shell/exec` 真的执行（`ToolExecutor` 分发到 `agent_tools::shell`），
 //! 派发时 `runner::run_effect` 按 `ToolTable::with_shell()` 的
-//! `reversibility_of` 判定 `Irreversible` 并调 `Session::mark_irreversible`
+//! `reversibility_of` 判定 `Irreversible` 并调 `Session::mark_no_undo`
 //! ——工具结果落地的那条 entry 因此带 `barrier: true`，`Session::undo_turn`
 //! 走到它要停下（`UndoReport::Blocked`），`undo_turn_force` 才越过。
 //!

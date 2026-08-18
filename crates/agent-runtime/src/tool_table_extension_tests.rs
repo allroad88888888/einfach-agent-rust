@@ -28,10 +28,13 @@ use super::*;
 use crate::tool_table::CallTiming;
 use crate::turn_end;
 
-/// 表半边（spec 进模型面、可逆性进映射、timed 进 timed 区）与 ctx 半边（截获注册）
-/// 各自落位，且 `TurnEnd` 钩子经**真实驱动** [`turn_end::fire`] 真的被调到。
+/// 表半边（spec 进模型面、timed 进 timed 区）与 ctx 半边（截获注册）各自落位，
+/// 且 `TurnEnd` 钩子经**真实驱动** [`turn_end::fire`] 真的被调到。
+///
+/// 201 起表半边里**没有可逆性这一格**了（那个参数删了），所以这条只剩 spec /
+/// timed / 截获三样要落位。
 #[test]
-fn a_pack_lands_its_specs_reversibility_timed_hooks_and_intercepts() {
+fn a_pack_lands_its_specs_timed_hooks_and_intercepts() {
     let log = log();
     let (tools, pending) = ToolTable::builtin().with_extension(test_pack(Arc::clone(&log)));
 
@@ -49,7 +52,6 @@ fn a_pack_lands_its_specs_reversibility_timed_hooks_and_intercepts() {
     assert!(tools.declares_timed(HOOK_TOOL), "它该在 timed 区");
     assert_eq!(tools.timed(CallTiming::TurnEnd).count(), 1);
     let request = tools.snapshot(READ_TOOL, Arc::new(Value::Null));
-    assert_eq!(request.reversibility, Reversibility::Pure, "包声明的那个值");
     assert_eq!(request.location, Location::Server, "`ext:` 在本进程里跑");
 
     // ctx 半边。
@@ -83,10 +85,10 @@ fn the_packs_read_tool_narrows_to_the_callers_subtree() {
         .spawn_child(&root, ChildConfig::default(), None)
         .unwrap();
 
-    let from_root = tree_echo(&mut session, &root, &Value::Null).unwrap();
+    let (from_root, _) = tree_echo(&mut session, &root, &Value::Null).unwrap();
     assert_eq!(&*from_root, format!("{READ_SENTINEL} descendants=1"));
 
-    let from_child = tree_echo(&mut session, &child, &Value::Null).unwrap();
+    let (from_child, _) = tree_echo(&mut session, &child, &Value::Null).unwrap();
     assert_eq!(
         &*from_child,
         format!("{READ_SENTINEL} descendants=0"),
@@ -120,31 +122,36 @@ fn a_session_without_the_pack_is_byte_for_byte_what_it_was() {
     );
 }
 
-/// 声明的值直接就是 `snapshot` 的答案。`Pure` 那条是真判据：名字规则对 `ext:`
-/// 一律落 `Irreversible`（`tool_table_names.rs` 的看门狗），所以它只可能来自包的
-/// 声明经注入映射查到——这条一红就说明那一级被绕过去了，症状会是「`/undo` 白白
-/// 多问一句」，或者反过来更糟。
+/// 201（决策 199 §一 §八）：**装配期不再有「包声明的可逆性」这回事**。
+///
+/// 148 时这条测试断言的是反面（「声明的值直接就是 `snapshot` 的答案」）。删掉那个
+/// 参数之后，`ext:` 工具落名字规则的保守兜底 `Irreversible`——而那个值从此**只进
+/// 显示**：`/undo` 停不停看的是那条 entry 的 `Undoability`，由执行体返回的
+/// `Aftermath` 在跑完之后置（真行为在 `tests/it/ext_undo_fn_delivery.rs` 上钉）。
+///
+/// 这条一红的两种可能都值得当场知道：要么有人给 `ext:` 加了一条名字规则（那就是
+/// 「按名字猜一件我们看不见的事」，199 判过的根上的错误），要么有人把注入映射那一
+/// 级又接回来了。
 #[test]
-fn the_declared_reversibility_is_the_answer_not_the_name_rule() {
+fn an_extension_tool_no_longer_declares_a_reversibility_at_assembly_time() {
     let pack = ExtensionPack::new(PACK)
-        .with_tool(spec(READ_TOOL, "纯读"), Reversibility::Pure, nop_tool())
-        .with_tool(
-            spec(WRITE_TOOL, "会写东西"),
-            Reversibility::Irreversible,
-            nop_tool(),
-        );
+        .with_tool(spec(READ_TOOL, "纯读"), nop_tool())
+        .with_tool(spec(WRITE_TOOL, "会写东西"), nop_tool());
     let (tools, pending) = ToolTable::builtin().with_extension(pack);
 
+    // 纯读的那条也是 `Irreversible`：标签保守，不代表 `/undo` 会被它挡住。
     assert_eq!(
-        tools.snapshot(READ_TOOL, Arc::new(Value::Null)).reversibility,
-        Reversibility::Pure
+        tools
+            .snapshot(READ_TOOL, Arc::new(Value::Null))
+            .reversibility,
+        Reversibility::Irreversible,
+        "名字规则的保守兜底"
     );
     assert_eq!(
         tools
             .snapshot(WRITE_TOOL, Arc::new(Value::Null))
             .reversibility,
-        Reversibility::Irreversible,
-        "屏障照常登记：/undo 撞上它会停下来问"
+        Reversibility::Irreversible
     );
 
     pending.install(&mut build_ctx(tools));

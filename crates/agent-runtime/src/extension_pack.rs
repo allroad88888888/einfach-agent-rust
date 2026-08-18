@@ -12,22 +12,35 @@
 //! 才真的是一行——而不是「记得把 spec 加进表、记得把闭包注册进 ctx、记得把可逆性
 //! 填对」这三件必须同时记住、漏一件不报错的事。
 //!
-//! # 三元成对：spec、可逆性、执行体一起进
+//! # 二元成对：spec 与执行体一起进
 //!
-//! [`ExtensionPack::with_tool`] 一次收三个，中间没有「先声明、以后再补执行体」的
+//! [`ExtensionPack::with_tool`] 一次收两个，中间没有「先声明、以后再补执行体」的
 //! 状态。这是 147 的教训直接写进类型：`dispatch.rs` 里那四条手工截获的**声明**
 //! （`ToolTable::with_*` 的 `push_spec`）和**执行路径**（`if` 链）分住两个文件，
 //! 改一半而另一半没跟上不会报错——只会让模型看见一个永远落 `unknown_tool` 的名字，
-//! 或者让一个没人声明的名字被偷偷执行（146 那三道闸挡的正是这两件事）。三元一格，
+//! 或者让一个没人声明的名字被偷偷执行（146 那三道闸挡的正是这两件事）。二元一格，
 //! 「半开」在这个类型里表达不出来。
 //!
-//! **可逆性没有缺省**：不是「不填就 `Irreversible`」，是**「填不填」这个选择不存在**
-//! ——它是 [`ExtensionPack::with_tool`] 的第二个位置参数，少给一个不编译。148 在
-//! 这点上比 issue 原文（「缺省 `Irreversible`」）严一档，理由是缺省值等于告诉作者
-//! 「这件事可以不想」，而它恰恰是 `/undo` 撞上这个工具时停不停的唯一依据。怎么判
-//! 见 `docs/TOOLS.md` §可逆性：**拿不准就 `Irreversible`**，判错的代价不对称
-//! （判宽了只是多问一句，判窄了是真的放过一次删除）；给 `Pure` 的举证责任在包
-//! 作者身上——纯读、不落 entry、没有需要补偿的动作，三条都成立才是 `Pure`。
+//! # 可逆性不再是注册时的一个参数（201，决策 199 §一）
+//!
+//! 148 这里曾有第三个位置参数 `Reversibility`，并且刻意没有缺省值（「填不填这个
+//! 选择不存在」）。**201 把它整个删掉**——理由不是「不重要」，恰恰相反：
+//!
+//! 一个注册时填的枚举是**对一件我们看不见的事做的分类**，标签可以吹；而
+//! `/undo` 真正需要的是一个**能被调用的东西**。同一个工具的三次调用还可以有三种
+//! 结局（建新文件 / 覆盖旧文件 / 写失败），一个 per-tool 的枚举表达不了。所以
+//! 依据从此是执行体返回的 [`Aftermath`](crate::Aftermath)：交回还原函数就撤得掉，
+//! 交不出就是屏障，什么都没碰就什么都不用做。
+//!
+//! 判断的责任一点没减，只是落点从「填一个枚举」变成「交不交函数」：**拿不准就
+//! 别交**（等价于 199 之前的「拿不准就 `Irreversible`」），判错的代价一样不对称
+//! ——判宽了只是多问用户一句，判窄了是真的放过一次删除。
+//!
+//! 副作用一条，如实记在这里：`ToolSpec` 之外那个**给人看的** `Reversibility` 标签
+//! （CLI 打印 / Web 渲染）从此对 `ext:` 工具一律落名字规则的保守值
+//! `Irreversible`（`tool_table_names::reversibility_of` 的兜底）。199 §八 允许的
+//! 就是这个降级：标签不再是任何行为的依据，宁可显示得保守，也不要让它替一个
+//! 交不出函数的工具说「这个可以撤」。
 //!
 //! # 名字：`ext:<pack>/<tool>` 强制，不是建议
 //!
@@ -55,7 +68,7 @@
 
 use std::sync::Arc;
 
-use agent_core::{Reversibility, ToolSpec};
+use agent_core::ToolSpec;
 
 // `SessionToolFn` 走 crate 根的再导出而不是它此刻的定义模块：146/147 期间那个类型
 // 的家还在挪（`intercept_registry` → 更专门的文件），根导出是它稳定的公开路径。
@@ -75,18 +88,18 @@ const EXT_PREFIX: &str = "ext:";
 /// 表半边与 ctx 半边分两阶段，那边的模块文档解释为什么以及怎么防「只装一半」。
 pub struct ExtensionPack {
     name: Arc<str>,
-    /// 截获式工具：声明、可逆性、执行体三元成对。`Vec` 而不是任何 map——
-    /// 顺序就是进 prompt 的顺序，由作者的代码写死（红线 11）。
+    /// 截获式工具：声明与执行体二元成对（201 删掉了中间那个可逆性枚举）。`Vec`
+    /// 而不是任何 map——顺序就是进 prompt 的顺序，由作者的代码写死（红线 11）。
     tools: InterceptEntries,
     /// timed 工具：声明、时机、执行体三元成对。**不进 prompt**（timed 区对
     /// `specs()`/`declares()` 不可见，133），但顺序仍然是执行顺序。
     timed: TimedEntries,
 }
 
-/// 截获式工具的三元组序列。**只是给 [`ExtensionPack::into_parts`] 的返回类型起个名字**——
+/// 截获式工具的二元组序列。**只是给 [`ExtensionPack::into_parts`] 的返回类型起个名字**——
 /// 那个返回值是「名字 + 两条序列」的三元组，写平了 clippy 的 `type_complexity` 会红，
 /// 而拆成结构体又会给一个只在装配那一刻活着的中间物起名。语义一个字节没变。
-type InterceptEntries = Vec<(ToolSpec, Reversibility, SessionToolFn)>;
+type InterceptEntries = Vec<(ToolSpec, SessionToolFn)>;
 
 /// timed 工具的三元组序列。理由同 [`InterceptEntries`]。
 type TimedEntries = Vec<(ToolSpec, CallTiming, TimedRun)>;
@@ -113,25 +126,23 @@ impl ExtensionPack {
         }
     }
 
-    /// 加一条**截获式工具**：模型看得见的声明、`/undo` 用的可逆性、拿 `Session`
-    /// 手套干活的执行体，一次给全。
+    /// 加一条**截获式工具**：模型看得见的声明 + 拿 `Session` 手套干活的执行体，
+    /// 一次给全。
     ///
-    /// `run` 收的是 146 的公开层 [`SessionToolFn`]（`Box<dyn Fn(&mut Session,
-    /// &AgentId, &Value) -> Result<Arc<str>, Arc<str>>>`），不是 `impl Fn`：跟
-    /// `RunnerCtx::register_session_tool` / `ToolTable::with_timed` 两个既有注册
-    /// 入口同一个形状——同一件事只留一种写法，省掉「装箱在调用方还是被调方」这个
-    /// 每次都要重新回答的问题。
+    /// `run` 收的是 146 的公开层 [`SessionToolFn`]（201 起返回
+    /// `Result<(Arc<str>, Aftermath), Arc<str>>`——正文加「这次调用在外部世界留下
+    /// 了什么」），不是 `impl Fn`：跟 `RunnerCtx::register_session_tool` /
+    /// `ToolTable::with_timed` 两个既有注册入口同一个形状——同一件事只留一种写法，
+    /// 省掉「装箱在调用方还是被调方」这个每次都要重新回答的问题。
+    ///
+    /// **可逆性不在这里填**（201）：它由 `run` 的返回值逐次决定，理由见模块文档
+    /// §「可逆性不再是注册时的一个参数」。
     ///
     /// 闭包里的读写纪律（后代收窄、只走 command 面）机制不强制，见
     /// [`SessionToolFn`] 的文档与 `docs/EXTENSIONS.md` §正门。
-    pub fn with_tool(
-        mut self,
-        spec: ToolSpec,
-        reversibility: Reversibility,
-        run: SessionToolFn,
-    ) -> Self {
+    pub fn with_tool(mut self, spec: ToolSpec, run: SessionToolFn) -> Self {
         if self.accepts(&spec.name, "截获式工具") {
-            self.tools.push((spec, reversibility, run));
+            self.tools.push((spec, run));
         }
         self
     }

@@ -79,7 +79,7 @@ pub(super) fn handle_input(
 /// **`Step` 忽略 `force`**：`agent_core::Session` 没有 `undo_step` 的 force 变体
 /// （`undo.rs` 模块文档——只有 turn 档设计了「越过第一条屏障」这个用户确认动作），
 /// 031 的 HTTP 层在进队列前就已经拒绝 `granularity: "step", force: true` 这个
-/// 组合（400，见 `crate::http::routes::undo`）——这里的 `_ => session.undo_step()`
+/// 组合（400，见 `crate::http::routes::undo`）——这里的 `_ => undo::undo_step(..)`
 /// 是防御性第二道闸：万一有调用方绕过 HTTP 层直接构造这个 `Command`（比如未来
 /// 的另一种传输、或者测试），也不会把这个字段吞成「什么都不做」，而是做一件
 /// 明确定义的事（忽略 force，退一条 entry）。
@@ -91,10 +91,13 @@ pub(super) fn handle_undo(
     force: bool,
 ) {
     ctx.discard_remote_tools();
+    // 201：三档都走 `agent_runtime::undo`（带钩子表的那条路）——撤销撞上一次交回过
+    // 还原函数的调用时先跑函数再回滚状态（决策 199 §三）。`Session` 上的无参版本
+    // 等价于「递一个恒 Ok 的钩子」，在这里用就等于把扩展交回的还原函数静默跳过。
     let report = match (granularity, force) {
-        (Granularity::Turn, false) => session.undo_turn(),
-        (Granularity::Turn, true) => session.undo_turn_force(),
-        (Granularity::Step, _) => session.undo_step(),
+        (Granularity::Turn, false) => agent_runtime::undo::undo_turn(session, ctx),
+        (Granularity::Turn, true) => agent_runtime::undo::undo_turn_force(session, ctx),
+        (Granularity::Step, _) => agent_runtime::undo::undo_step(session, ctx),
     };
     agent_runtime::persist::sync(ctx, session);
     // 034：`from_report` 现查 `session` 富化 `Blocked`（工具名/call_id），不再是
@@ -198,7 +201,7 @@ pub(super) fn handle_remote_tool_timeout(
 /// 取消后自动擦除」和「用户主动 `/undo`」产出的是同一种事件，语义也确实相同
 /// （都是一次 `undo_turn`），不必另开变体。
 pub(super) fn erase_cancelled_turn(session: &mut Session, ctx: &mut RunnerCtx, events: &Events) {
-    let report = session.undo_turn();
+    let report = agent_runtime::undo::undo_turn(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     emit_root(
         events,

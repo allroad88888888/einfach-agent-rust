@@ -14,7 +14,7 @@ use std::io::{self, Write};
 use agent_core::{AgentId, Notice};
 use agent_runtime::{AgentEvent, RunnerEvent};
 
-use super::event_text::{describe_fate, print_turn_guard};
+use super::event_text::{describe_fate, describe_reversibility, print_turn_guard};
 
 const DIM_ON: &str = "\x1b[2m";
 const RESET: &str = "\x1b[0m";
@@ -67,9 +67,15 @@ impl EventPrinter {
             }
             RunnerEvent::ToolExecuting { call_id, request } => {
                 self.finish_line();
+                // `reversibility` 不直接 `{:?}`：宿主与 MCP 工具的那个字要带上
+                // 「本仓不代为补偿」（202），判据在 `describe_reversibility`。
                 println!(
-                    "{at}[tool] {} {} (call_id={} location={:?} reversibility={:?})",
-                    request.tool, request.input, call_id.0, request.location, request.reversibility
+                    "{at}[tool] {} {} (call_id={} location={:?} reversibility={})",
+                    request.tool,
+                    request.input,
+                    call_id.0,
+                    request.location,
+                    describe_reversibility(&request)
                 );
             }
             RunnerEvent::ToolExecuted {

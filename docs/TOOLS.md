@@ -237,7 +237,7 @@ epoch 已经 bump，而且取消/undo/会话终止都会 `discard_remote_tools()
 `undo` 往回走时撞上 `Irreversible` 的 entry → 停下，走 `UndoOutcome::Blocked`
 （SSE 上是 `undo` 事件里嵌一个 `blocked`），让用户确认「继续（副作用不回滚）」还是取消。
 落盘依据是 `EntryMeta.undoability`（决策 199 §九起是三态，之前是 `barrier: bool`）：
-宿主派发不可逆工具前调 `Session::mark_irreversible`，随后那条 `tool_result` entry 就带上
+宿主派发不可逆工具前调 `Session::mark_no_undo`，随后那条 `tool_result` entry 就带上
 `Undoability::Blocked`——**屏障是落盘的**，崩溃重启之后仍然拦得住。交得出还原函数的那种
 调用走 `Session::mark_hooked` → `Undoability::Hooked`，undo 路上先调一次钩子、成功了才
 回滚状态（顺序不能反，见 STATE-MODEL §「Command log」）。

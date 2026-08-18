@@ -151,7 +151,7 @@ pub enum Undoability {
 常量集，落盘的标签是历史数据，允许出现这一版不认识的取值。
 
 `undoability` 是 undo 屏障的**唯一**落盘依据：宿主派发工具前调
-`Session::mark_irreversible`（→ `Blocked`）或 `Session::mark_hooked`（→ `Hooked`），
+`Session::mark_no_undo`（→ `Blocked`）或 `Session::mark_hooked`（→ `Hooked`），
 随后那条 `tool_result` entry 就带上这一档，`undo` 撞上 `Blocked` 返回 `UndoOutcome::Blocked`。
 崩溃重启之后仍然拦得住——这一档在文件里。
 

@@ -118,7 +118,7 @@ fn consecutive_undos_walk_turn_by_turn_and_then_report_nothing() {
 #[test]
 fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
     let mut s = session_with_pending_tools(&[("call_1", "srv:shell/exec")]);
-    s.mark_irreversible(ToolCallId::new("call_1"));
+    s.mark_no_undo(ToolCallId::new("call_1"));
 
     let _ = s.step(support::tool_result_event(s.epoch(), "call_1", "rm 干完了"));
     let barrier_entry = s.last_entry().unwrap();
@@ -169,8 +169,8 @@ fn a_barrier_entry_blocks_undo_instead_of_silently_rolling_it_back() {
 fn undo_turn_force_crosses_exactly_one_barrier() {
     let mut s =
         session_with_pending_tools(&[("call_1", "srv:shell/exec"), ("call_2", "srv:shell/exec")]);
-    s.mark_irreversible(ToolCallId::new("call_1"));
-    s.mark_irreversible(ToolCallId::new("call_2"));
+    s.mark_no_undo(ToolCallId::new("call_1"));
+    s.mark_no_undo(ToolCallId::new("call_2"));
 
     let _ = s.step(support::tool_result_event(s.epoch(), "call_1", "第一次 rm"));
     let first_barrier = s.last_entry().unwrap().seq;

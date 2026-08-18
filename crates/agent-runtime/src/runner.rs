@@ -216,8 +216,14 @@ pub(crate) async fn resume_after_first_commit(
             let event = crate::transient_source_ingress::prepare(ctx, event);
             let source = event.agent().clone();
             ladder.note(&event);
+            // 201：这条事件要是让某个截获工具交回的还原函数落地，`seq` 要在
+            // `step` **之后**才有——所以先记下「等哪个 call_id、当前日志末端在哪」，
+            // 落地之后再挂表（`crate::undo_hook` 模块文档「两步登记」）。暂存区
+            // 空时这一句连 clone 都不做。
+            let landing = crate::undo_hook::landing(ctx, session, &event);
             let mut effects = session.step(event);
             persist::sync(ctx, session);
+            crate::undo_hook::settle(ctx, session, landing);
             // 107 → 108 的硬契约：过了 epoch 闸（回执里有那条通报）才回写摘要。
             // 判据显式住在 `compact_writeback::passed_epoch_gate`，不是这里的
             // 「effects 是不是空的」。
@@ -257,6 +263,10 @@ pub(crate) async fn resume_after_first_commit(
                             call.cancel();
                         }
                         pending.clear();
+                        // 201：队列里那些事件不会再被 step 了，等着它们落地的还原
+                        // 函数也就永远等不到自己的 `seq`——丢掉，别让它们占着内存
+                        // 等一条不会来的 entry（`crate::undo_hook::discard_staged`）。
+                        ctx.undo_hooks.discard_staged();
                     }
                 }
             }

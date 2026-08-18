@@ -36,7 +36,7 @@ use std::sync::{Arc, Mutex};
 
 use agent_core::{AgentId, Reversibility, Session, TurnStatus};
 use agent_providers::wire_name;
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{run_turn, Aftermath, ToolTable};
 
 use crate::intercept_registry_indep_support::{
     install, spec, tool_result, ERR_SENTINEL, ERR_TOOL, TREE_SENTINEL, TREE_TOOL, WRITE_TOOL,
@@ -69,7 +69,8 @@ fn a_registered_pure_read_tool_reaches_the_next_prompt_via_tool_result() {
                 .find(|n| &n.id == agent)
                 .and_then(|n| n.task.clone())
                 .unwrap_or_default();
-            Ok(Arc::from(format!("{TREE_SENTINEL} task={task}")))
+            // 201：纯读，什么都没碰 → `Aftermath::Nothing`。
+            Ok((Arc::from(format!("{TREE_SENTINEL} task={task}")), Aftermath::Nothing))
         }),
     );
 
@@ -127,7 +128,9 @@ fn a_registered_tool_writes_through_the_command_surface_and_leaves_one_labeled_e
             let after = session.history_len();
             let label = session.last_entry().expect("刚写完该有一条 entry").meta.label;
             *probe_captured.lock().unwrap() = Some((before, after, label));
-            Ok(Arc::from("plan advanced"))
+            // 201：只写了**状态**（走 command 面、进日志），外部世界没碰过——
+            // 状态回滚就够了，所以是 `Nothing` 而不是交一个还原函数。
+            Ok((Arc::from("plan advanced"), Aftermath::Nothing))
         }),
     );
 

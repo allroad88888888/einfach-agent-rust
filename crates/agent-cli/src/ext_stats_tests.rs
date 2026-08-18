@@ -144,7 +144,10 @@ fn the_second_audit_line_reports_the_history_len_at_that_moment() {
 
     session.set_max_turns(7); // 造一条真实的 command log entry
     let history_len = session.history_len();
-    assert!(history_len > 0, "夹具没有制造出任何 entry，这条测试测不出东西");
+    assert!(
+        history_len > 0,
+        "夹具没有制造出任何 entry，这条测试测不出东西"
+    );
     ledger.append_turn_line(&session).unwrap(); // 第 2 轮：账本已经多了这条 entry
 
     let written = lines(&path);
@@ -225,6 +228,9 @@ fn both_names_live_in_the_packs_namespace() {
 fn the_intercept_body_renders() {
     let run = report_run();
     let mut session = Session::new(AgentId::root());
-    let body = run(&mut session, &AgentId::root(), &Value::Null).expect("纯读不该失败");
+    let (body, aftermath) =
+        run(&mut session, &AgentId::root(), &Value::Null).expect("纯读不该失败");
     assert!(body.starts_with("本会话至今："));
+    // 201：交 `Nothing`——`report` 没碰外部世界，`/undo` 路过它不该停下来问。
+    assert!(matches!(aftermath, Aftermath::Nothing));
 }

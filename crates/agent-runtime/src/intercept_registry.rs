@@ -67,7 +67,7 @@
 //! # [`dispatch`] 不做任何包装
 //!
 //! 每一次截获都欠两笔账：`ToolExecuting` 可见性、红线 6 的屏障登记
-//! （`mark_irreversible`）。这两笔账**在插进表之前就该还清**——`SessionToolFn`
+//! （`mark_no_undo`）。这两笔账**在插进表之前就该还清**——`SessionToolFn`
 //! 那层由 `adapt`/`announce`（[`crate::session_tool_ext`]）代还；既有四条自己在
 //! `intercept` 函数体内部还（`crate::builtin_intercepts` 原样转发，不加包装）。
 //! 所以 [`dispatch`] 只剩「查表 + 调用」——重新在这里包一层会让既有四条的

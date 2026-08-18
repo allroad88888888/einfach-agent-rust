@@ -55,10 +55,9 @@ pub struct ToolTable {
     /// 而不是给 `ToolSpec` 加字段」全在 [`host`]（`with_host_tools`）。空表 = 这个
     /// 会话没有注入。
     ///
-    /// 148 起**扩展包声明的可逆性也记在这张表里**（[`extension`]）：这一级答的是
-    /// 「有人在装配期按名字显式声明过吗」，`ext:` 与 `web:`/`desk:` 的差别只是声明
-    /// 来源，而 `snapshot` 只问值是多少——不新开第三张表的完整理由（含撞不了键的
-    /// 依据）在 [`extension`] 模块文档。
+    /// 148 曾让扩展包声明的可逆性也进这张表；**201 撤掉了那一路**——决策 199 之后
+    /// 扩展不再在注册时声明可逆性（依据是执行体返回的 `Aftermath`），`ext:` 工具
+    /// 因此落到第三级名字规则的保守兜底，见 [`extension`] 模块文档。
     host_reversibility: BTreeMap<Arc<str>, Reversibility>,
     /// timed 工具独立区（133）。**不进 `specs`，`declares()`/`snapshot()` 看不见
     /// 它**——模型面的表只有一个答案，这是 076 disable 判据的延续；`with_timed`/

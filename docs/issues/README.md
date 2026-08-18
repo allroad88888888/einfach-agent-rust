@@ -976,10 +976,10 @@ Composability](https://github.com/cordiverse/paper)（Cordis，PKU + DeepSeek-AI
 
 | # | 任务 | 依赖 | 模型 | 独测 | 状态 |
 |---|---|---|---|---|---|
-| [199](199-reversibility-as-delivery-decision.md) | **拍板**：可逆性 = 交付物不是标签 | — | **opus** | 决策类 | 未开始 |
+| [199](199-reversibility-as-delivery-decision.md) | **拍板**：可逆性 = 交付物不是标签 | — | **opus** | 决策类 | ✅ 完成（决策 34；§一/§六/§七 三处两态残留在落地期修正） |
 | [200](200-core-undo-hook-path.md) | core：undo 路先跑钩子再回滚；`barrier` → 三态 | 199 | **opus** | ✅ | ✅ 完成 |
-| [201](201-runtime-undo-fn-delivery.md) | runtime：执行体交还原函数，钩子表按 `seq` | 200 | sonnet | ✅ | 未开始 |
-| [202](202-host-mcp-undo-none.md) | 宿主 / MCP 恒 `Blocked`；`Reversibility` 降成显示标签 | 200 | sonnet | ✅ | 未开始 |
+| [201](201-runtime-undo-fn-delivery.md) | runtime：执行体交还原函数（`Aftermath` 三态），钩子表按 `seq` | 200 | **opus** | ✅ | ✅ 完成 |
+| [202](202-host-mcp-undo-none.md) | 宿主 / MCP：**承诺挡、事实不挡**；`Reversibility` 降成显示标签 | 200 | **opus** | ✅ | ✅ 完成 |
 | [203](203-reversibility-docs-cleanup.md) | 五份文档同步 ← M19 终点 | 201+202 | sonnet | — | 未开始 |
 
 **M19 验收**（可判定，不用形容词）：
@@ -998,8 +998,10 @@ Composability](https://github.com/cordiverse/paper)（Cordis，PKU + DeepSeek-AI
 - **[199](199-reversibility-as-delivery-decision.md) §九**：还原函数是闭包，**不跨进程**。
   恢复之后钩子表是空的，而 `barrier` 位是持久的——所以那一位必须是三态，否则恢复后
   会静默跳过真实副作用。这条是写 200 时才浮出来的，不是一开始就想到的。
-- **[202](202-host-mcp-undo-none.md) 是一次面向宿主的行为变更**（声明 `pure`/`reversible`
+- **[202](202-host-mcp-undo-none.md) 是一次面向宿主的行为变更**（声明 `reversible`
   的宿主工具从不挡变成挡），即便协议字段一个都没动。要如实写进文档，别当成纯内部改动。
+  落地时**收窄过一次**：初稿「一律挡」会连 `ask_user_question` 这类字面上不可能有
+  副作用的工具一起挡，改判据为**承诺挡、事实不挡**（199 §七），决策 22 因此不被反转。
 
 **明确不做**（[199](199-reversibility-as-delivery-decision.md) §十，别在里面重开）：
 让模型「想办法撤销」（失败模式是「看起来成功了」）、宿主侧还原回调（第二步，

@@ -21,8 +21,12 @@ use agent_core::{Session, UndoReport};
 use agent_runtime::RunnerCtx;
 
 /// `undo`：撤一整轮（决策 5 的默认档）。撞上屏障停下并如实报告，不静默回滚。
+///
+/// 201 起走 [`agent_runtime::undo`]（带钩子表的那条路）：截获式扩展工具交回的还原
+/// 函数在状态回滚**之前**跑（决策 199 §三）。浏览器宿主同样装得了扩展包，所以这条
+/// 路对它不是可选的。
 pub(crate) fn undo(session: &mut Session, ctx: &mut RunnerCtx) -> String {
-    let report = session.undo_turn();
+    let report = agent_runtime::undo::undo_turn(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     report_json(session, &report)
 }
@@ -31,7 +35,7 @@ pub(crate) fn undo(session: &mut Session, ctx: &mut RunnerCtx) -> String {
 /// 同一轮里第二个不可逆操作还会再停一次，这是有意的（越过永远是一次显式决定，
 /// `History` 不记「这条已经问过了」）。
 pub(crate) fn undo_force(session: &mut Session, ctx: &mut RunnerCtx) -> String {
-    let report = session.undo_turn_force();
+    let report = agent_runtime::undo::undo_turn_force(session, ctx);
     agent_runtime::persist::sync(ctx, session);
     report_json(session, &report)
 }

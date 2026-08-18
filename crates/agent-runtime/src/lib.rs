@@ -9,7 +9,7 @@
 //! 通报是 loop 说「停」的唯一出口，见 agent-core engine/mod.rs 的文档）。
 //! 027 额外接上两件事：每条命令之后经 [`persist`] 转发进 `SessionStore`
 //! （011 的端口），以及派发 `ExecuteTool` 时按工具表的 `Reversibility` 调
-//! `Session::mark_irreversible`（020 的屏障开闸）。
+//! `Session::mark_no_undo`（020 的屏障开闸）。
 //!
 //! # 为什么不进 `agent-core`，也不进 `agent-transport`
 //!
@@ -35,7 +35,7 @@
 //! | effect | 谁执行 | 怎么执行 |
 //! |---|---|---|
 //! | `CallProvider` | [`provider_call::start`] | 泵所在线程取料 → `encode` → 发前 `check_drift` → 把一个跑 `post_stream` 的 future 交给泵（117 之前是起一条 IO 线程）。**只起飞不落地**，落地由泵统一等（029 的并行就是这一刀） |
-//! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_irreversible` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
+//! | `ExecuteTool` | [`tool_exec::execute`] / [`mcp_call::start`] / [`dispatch`] | 按名字查 [`ToolTable`]，本地同步执行；`Irreversible` 的先 `mark_no_undo` 再执行。`srv:agent/spawn`、`srv:agent/status`（051，纯读、当场回写）、skill 激活在分派处被截获；`mcp:` 前缀且工具表声明的走**异步第四路**（`mcp_call`，不进 `ToolExecutor`），epoch 回写前过闸（红线 6，043） |
 //! | `Compact` | [`compact_spawn::intercept`] | 106：spawn 一个窄范围子 agent（`ChildConfig::execution_profile` 来自 [`ctx::RunnerCtx::with_compaction_execution_profile`]，`agent-core` 没有为摘要新增任何 provider 分支），把 `[0, upto)` 那段历史渲染成它的第一条 user 消息；子落终态由 [`compact_slot::CompactSlots`] 收割成 `Event::CompactDone`/`CompactFailed`。spawn 被拒或子agent失败都是**正常事件**（`CompactFailed`，原样带回同一个 `epoch`）——压缩这一次作废、边界不动、下一轮照常跑 |
 //! | `CancelInFlight` | [`dispatch`] | 置共享的取消标志 + 斩断队列里还没喂进去的待办 |
 //! | `Emit(Notice)` | [`dispatch`] | 带上「出自谁的 `step`」转给 [`RunnerCtx`] 的事件回调 |
@@ -144,11 +144,18 @@ mod transient_source_recovery;
 mod transient_source_tests;
 mod transient_source_vault;
 mod turn_end;
+mod undo_hook;
+mod undo_promise;
 
 pub mod ctx;
 pub mod event;
 pub mod jsonl;
 pub mod persist;
+/// 201：三个宿主唯一该调的撤销入口——**带着钩子表**调 `Session` 的 `*_with`
+/// （决策 199 §三）。`pub mod` 而不是把三个函数提到根上：`agent_runtime::undo::
+/// undo_turn(session, ctx)` 在调用点一眼看得出「这是带钩子的那一档」，而根上一个
+/// 光秃秃的 `undo_turn` 跟 `Session::undo_turn` 长得一模一样，正是最容易调错的形状。
+pub mod undo;
 
 pub use agent_mcp::McpRegistry;
 pub use block_on::block_on;
@@ -171,15 +178,15 @@ pub use execution_binding::ExecutionBinding;
 /// 装配是两阶段的——ctx 半边那个必须被消费的中间产物是
 /// [`PendingInterceptors`]，接缝文档 `docs/EXTENSIONS.md`。
 pub use extension_pack::ExtensionPack;
-/// 146：`RunnerCtx::register_session_tool` 收的公开层签名——`intercept_registry`
-/// 本身是私有模块（注册表只能在装配期改），但这个类型要跨层出去：扩展/独测
-/// 拿它构造要注册的闭包。
-pub use intercept_registry::SessionToolFn;
 /// 122：一份宿主工具声明 JSON → [`ToolTable::with_host_tools`] 要的料。纯函数，
 /// 给**没有 HTTP 那一层**的宿主用（浏览器宿主 `agent-wasm` 是第一个）；server
 /// 形态走的仍是自己那份绑着请求体与 `ts-rs` 的 `http/capabilities`，两份的分界与
 /// 漂移风险写在 [`host_declaration`] 模块文档里。
 pub use host_declaration::{HostDeclarationError, host_tools_from_declaration};
+/// 146：`RunnerCtx::register_session_tool` 收的公开层签名——`intercept_registry`
+/// 本身是私有模块（注册表只能在装配期改），但这个类型要跨层出去：扩展/独测
+/// 拿它构造要注册的闭包。
+pub use intercept_registry::SessionToolFn;
 pub use jsonl::{Jsonl, SessionStoreError};
 pub use persist::{
     PersistedMeta, RecoverError, SessionBackend, has_unresolved_tool_calls, open_backend, recover,
@@ -220,3 +227,13 @@ pub use transient_source_failure::TransientSourceFailure;
 /// 不带前缀常量本身——见 [`transient_source_policy::is_transient_source`] 文档。
 pub use transient_source_policy::is_transient_source;
 pub use transient_source_recovery::recovered_transient_source_needs_fail_close;
+/// 201：截获式工具执行完交代的那件事——「这次调用在外部世界留下了什么」
+/// （决策 199 §一）。扩展作者写 [`SessionToolFn`] 时要构造它，所以是公开类型；
+/// 三态与 `agent_core::Undoability` 一一对应，翻译在 [`session_tool_ext`] 做。
+pub use undo_hook::{Aftermath, UndoFn};
+
+/// 202：这次调用声明的可逆性是不是一个**本仓兑现不了的承诺**（决策 199 §七
+/// 「承诺挡，事实不挡」）。跨 crate 公开是因为**显示层要跟行为共用同一个判据**：
+/// `agent-cli` 打工具卡片时拿它决定要不要在 `reversibility` 后面补一句
+/// 「本仓不代为补偿」。三格取舍与「为什么不能各写一遍」见 [`undo_promise`] 模块文档。
+pub use undo_promise::is_unkeepable_promise;

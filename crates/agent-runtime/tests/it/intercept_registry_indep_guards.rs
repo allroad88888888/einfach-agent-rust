@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use agent_core::{AgentId, Session, TurnStatus};
 use agent_providers::wire_name;
-use agent_runtime::{run_turn, ToolTable};
+use agent_runtime::{run_turn, Aftermath, ToolTable};
 
 use crate::intercept_registry_indep_support::{install, tool_result, GHOST_TOOL, UNKNOWN_TOOL};
 use crate::support;
@@ -69,7 +69,7 @@ fn registering_a_name_the_table_never_declared_panics_in_debug() {
         &mut ctx,
         GHOST_TOOL,
         Box::new(|_session: &mut Session, _agent: &AgentId, _input: &serde_json::Value| {
-            Ok(Arc::from("unreachable"))
+            Ok((Arc::from("unreachable"), Aftermath::Nothing))
         }),
     );
 }
@@ -100,7 +100,7 @@ fn a_session_that_never_touches_the_registry_gets_byte_identical_first_round_byt
         &mut ctx_b,
         "srv:fs/read",
         Box::new(|_session: &mut Session, _agent: &AgentId, _input: &serde_json::Value| {
-            Ok(Arc::from("stub-unused"))
+            Ok((Arc::from("stub-unused"), Aftermath::Nothing))
         }),
     );
     let mut session_b = Session::new(AgentId::root());

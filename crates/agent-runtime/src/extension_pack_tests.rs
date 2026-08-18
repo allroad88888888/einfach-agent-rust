@@ -21,7 +21,9 @@ fn spec(name: &str) -> ToolSpec {
 }
 
 fn nop_tool() -> SessionToolFn {
-    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| Ok(Arc::from("ok")))
+    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| {
+        Ok((Arc::from("ok"), crate::Aftermath::Nothing))
+    })
 }
 
 fn nop_timed() -> TimedRun {
@@ -54,11 +56,7 @@ fn a_name_belongs_to_a_pack_only_when_it_is_exactly_ext_pack_slash_something() {
 #[test]
 #[should_panic(expected = "`tree_echo` 不叫 `ext:demo/<tool>`")]
 fn with_tool_rejects_a_bare_name() {
-    let _ = ExtensionPack::new(PACK).with_tool(
-        spec("tree_echo"),
-        Reversibility::Pure,
-        nop_tool(),
-    );
+    let _ = ExtensionPack::new(PACK).with_tool(spec("tree_echo"), nop_tool());
 }
 
 /// 冒用 `srv:` 比裸名更该拦：它会让 `location_of` 把一个扩展工具判成内置服务端
@@ -66,33 +64,21 @@ fn with_tool_rejects_a_bare_name() {
 #[test]
 #[should_panic(expected = "`srv:demo/shell` 不叫 `ext:demo/<tool>`")]
 fn with_tool_rejects_a_borrowed_srv_prefix() {
-    let _ = ExtensionPack::new(PACK).with_tool(
-        spec("srv:demo/shell"),
-        Reversibility::Irreversible,
-        nop_tool(),
-    );
+    let _ = ExtensionPack::new(PACK).with_tool(spec("srv:demo/shell"), nop_tool());
 }
 
 /// 冒用 `web:`：`location_of` 判成远端 → dispatch 去等一个永远不会来的宿主回传。
 #[test]
 #[should_panic(expected = "`web:demo/pick` 不叫 `ext:demo/<tool>`")]
 fn with_tool_rejects_a_borrowed_web_prefix() {
-    let _ = ExtensionPack::new(PACK).with_tool(
-        spec("web:demo/pick"),
-        Reversibility::Pure,
-        nop_tool(),
-    );
+    let _ = ExtensionPack::new(PACK).with_tool(spec("web:demo/pick"), nop_tool());
 }
 
 /// 别的包的命名空间：包名是这道闸的主语，不是摆设。
 #[test]
 #[should_panic(expected = "`ext:other/tree_echo` 不叫 `ext:demo/<tool>`")]
 fn with_tool_rejects_another_packs_namespace() {
-    let _ = ExtensionPack::new(PACK).with_tool(
-        spec("ext:other/tree_echo"),
-        Reversibility::Pure,
-        nop_tool(),
-    );
+    let _ = ExtensionPack::new(PACK).with_tool(spec("ext:other/tree_echo"), nop_tool());
 }
 
 /// timed 条目吃同一条前缀强制：它虽然不进 prompt，却跟 specs 区共用同一个名字

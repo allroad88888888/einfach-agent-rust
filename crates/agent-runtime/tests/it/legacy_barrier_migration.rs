@@ -4,7 +4,7 @@
 //!
 //! 为什么走真字节而不是手搓 `PersistedMeta`：手搓只证明 `From<RawMeta>` 写对了，
 //! 证明不了「老文件里那些字节还读得进来」。下面这份 journal 是用今天的代码跑一次
-//! 「user_input → provider_done(tool_use) → mark_irreversible → tool_result」落出来的
+//! 「user_input → provider_done(tool_use) → mark_no_undo → tool_result」落出来的
 //! 真产物，**只把 meta 那一段换回老形状**（`"undoability":"blocked"` → `"barrier":true`，
 //! `"state_only"` → `"barrier":false`）——除此之外一个字节没动。
 //!

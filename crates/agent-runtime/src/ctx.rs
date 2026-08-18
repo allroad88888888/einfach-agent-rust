@@ -84,6 +84,10 @@ pub struct RunnerCtx {
     /// [`RunnerCtx::new`] 收尾时调 `crate::builtin_intercepts::
     /// register_builtin_intercepts` 按 `declares()` 迁进来。
     pub(crate) session_tools: crate::intercept_registry::SessionToolRegistry,
+    /// 201：`seq → 还原函数` 的账本（决策 199 §二：函数住 runtime 不住 core）。跟在飞
+    /// 凭据表、`McpRegistry` 同一类——**活句柄住 store 外**（红线 3），不进 atom、不
+    /// 落盘。登记/清理在 [`crate::undo_hook`]，undo 怎么带着它走在 [`crate::undo`]。
+    pub(crate) undo_hooks: crate::undo_hook::UndoHooks,
     /// MCP server 的活句柄表（store 外的进程内 registry，红线 3）。dispatch 的第四路
     /// 只拿它 + server id 去查 client 起一次异步 `tools/call`（`crate::mcp_call`），
     /// client 句柄从不进任何 command/atom。默认空表——没接 MCP 的宿主永远查不到。
@@ -166,6 +170,7 @@ impl RunnerCtx {
             fs: Box::new(fs),
             tools,
             session_tools: crate::intercept_registry::SessionToolRegistry::default(),
+            undo_hooks: crate::undo_hook::UndoHooks::default(),
             mcp: Arc::new(McpRegistry::new()),
             system,
             cancel: Arc::new(AtomicBool::new(false)),

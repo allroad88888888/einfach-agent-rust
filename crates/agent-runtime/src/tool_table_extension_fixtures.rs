@@ -7,16 +7,16 @@
 
 use std::sync::{Arc, Mutex};
 
-use agent_core::{AgentId, Reversibility, Session, SessionConfig, ToolSpec};
+use agent_core::{AgentId, Session, SessionConfig, ToolSpec};
 use agent_providers::deepseek::DeepSeek;
 use agent_tools::ToolExecutor;
 use agent_transport::Client;
 use serde_json::{Value, json};
 
-use crate::SessionToolFn;
 use crate::ctx::RunnerCtx;
 use crate::extension_pack::ExtensionPack;
 use crate::tool_table::{CallTiming, ToolTable};
+use crate::{Aftermath, SessionToolFn};
 
 pub(super) const PACK: &str = "demo";
 pub(super) const READ_TOOL: &str = "ext:demo/tree_echo";
@@ -30,18 +30,24 @@ pub(super) const HOOK_SENTINEL: &str = "turn-end-ping";
 ///
 /// 它顺带演示正门的纪律（`docs/EXTENSIONS.md` §正门）：拿到的是整个
 /// `&mut Session`，但只数**调用者的后代**（红线 10），不把整棵树喂给模型。
+///
+/// 201：返回值多了一格 `Aftermath`——这条工具**什么都没碰**（只读了一次树），
+/// 所以交 `Nothing`，`/undo` 路过它不该停下来问任何事。
 pub(super) fn tree_echo(
     session: &mut Session,
     agent: &AgentId,
     _input: &Value,
-) -> Result<Arc<str>, Arc<str>> {
+) -> Result<(Arc<str>, Aftermath), Arc<str>> {
     let tree = session.agent_tree();
     let mine = tree
         .nodes
         .iter()
         .filter(|node| node.id.is_descendant_of(agent))
         .count();
-    Ok(Arc::from(format!("{READ_SENTINEL} descendants={mine}")))
+    Ok((
+        Arc::from(format!("{READ_SENTINEL} descendants={mine}")),
+        Aftermath::Nothing,
+    ))
 }
 
 /// 验收要的那个测试用 pack：一条纯读截获 + 一条 TurnEnd 钩子。钩子被调到时往
@@ -51,7 +57,6 @@ pub(super) fn test_pack(log: Arc<Mutex<Vec<&'static str>>>) -> ExtensionPack {
     ExtensionPack::new(PACK)
         .with_tool(
             spec(READ_TOOL, "数一数调用者有几个后代"),
-            Reversibility::Pure,
             Box::new(tree_echo),
         )
         .with_timed(
@@ -80,7 +85,9 @@ pub(super) fn spec(name: &str, description: &str) -> ToolSpec {
 
 /// 一条什么都不干的截获执行体——被测的是装配，不是它做了什么。
 pub(super) fn nop_tool() -> SessionToolFn {
-    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| Ok(Arc::from("ok")))
+    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| {
+        Ok((Arc::from("ok"), Aftermath::Nothing))
+    })
 }
 
 pub(super) fn log() -> Arc<Mutex<Vec<&'static str>>> {

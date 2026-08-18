@@ -59,7 +59,7 @@ pub struct EntryMeta {
     /// 这一步撤销起来要做什么（199 §九的三态，2026-08-17 之前是 `barrier: bool`）。
     ///
     /// 谁来置：宿主在派发工具时调
-    /// [`Session::mark_irreversible`](super::Session::mark_irreversible)（→ [`Undoability::Blocked`]）
+    /// [`Session::mark_no_undo`](super::Session::mark_no_undo)（→ [`Undoability::Blocked`]）
     /// 或 [`Session::mark_hooked`](super::Session::mark_hooked)（→ [`Undoability::Hooked`]）
     /// ——**core 没有工具表**，也不认识还原函数的类型，工具交没交回还原函数只有
     /// 宿主知道，core 现造一个结论等于编造（002 合并时的裁决，199 §二原样沿用）。

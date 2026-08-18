@@ -13,7 +13,7 @@
 //!
 //! | 文件 | 职责 |
 //! |------|------|
-//! | [`session`] | `Session` 结构本身与会话级命令（`new` / `begin_turn` / `set_max_*` / `mark_irreversible`） |
+//! | [`session`] | `Session` 结构本身与会话级命令（`new` / `begin_turn` / `set_max_*` / `mark_no_undo`） |
 //! | [`read`] | 公开读口：宿主取料的地方，形状对齐 M1 的 `TurnState` 字段 |
 //! | [`barrier`] | 034：`barrier_info`——描述一条屏障 entry「越过它意味着什么」，CLI 与 server 共用 |
 //! | [`child_config`] | 子 agent 出生时固化的 durable 配置；live provider binding 不进 core |

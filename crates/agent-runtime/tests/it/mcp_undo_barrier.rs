@@ -3,9 +3,16 @@
 //! 机制，MCP 不新造）。
 //!
 //! 屏障怎么落：dispatch 第四路先 `snapshot` 再按 `Reversibility::Irreversible` 调
-//! `Session::mark_irreversible`——跟 `srv:shell/exec` 那条路一模一样，只是可逆性来自
+//! `Session::mark_no_undo`——跟 `srv:shell/exec` 那条路一模一样，只是可逆性来自
 //! MCP 映射（`readOnlyHint`）而不是名字。所以这条测试和 `shell_exec_undo_barrier`
 //! 是同一套断言，换了工具来源。
+//!
+//! **202 没有动这两条断言**，值得记一笔：决策 199 §七 的初稿写着「MCP 恒挡」，
+//! 那会把 `readOnlyHint: true` 从「不挡」翻成「挡」——**实打实地反转决策 22**，
+//! 而 199 从没为它单独论证过。修正后的判据是「承诺挡，事实不挡」：`readOnlyHint:
+//! true → Pure` 声明的是「没碰外部世界」这个**事实**，不需要还原函数来兑现，
+//! 所以照旧不挡。202 在第四路只补了 `Reversible` 那一格（翻译今天产不出它，
+//! 但 `ToolTable::with_mcp` 收得下——见 `undo_promise` 模块文档）。
 
 use crate::support;
 use agent_core::{AgentId, Session, TurnStatus, UndoReport};
@@ -42,7 +49,8 @@ fn run_one_mcp_turn(dir: &std::path::Path, tool: &str, read_only: bool) -> Sessi
 #[test]
 fn read_only_mcp_result_has_no_barrier_and_undo_crosses_it_cleanly() {
     let dir = support::temp_dir("mcp-undo-readonly");
-    // readOnly → Pure → 不 mark_irreversible → 结果 entry barrier=false。
+    // readOnly → Pure → 不 mark_no_undo → 结果 entry `StateOnly`。
+    // 202 之后仍然如此：`Pure` 是事实断言，不是承诺（见模块文档）。
     let mut session = run_one_mcp_turn(&dir, "echo", true);
 
     // `/undo` 一步干净退掉整轮，不撞屏障。
@@ -57,7 +65,7 @@ fn read_only_mcp_result_has_no_barrier_and_undo_crosses_it_cleanly() {
 #[test]
 fn non_read_only_mcp_result_gets_a_barrier_that_stops_undo_until_forced() {
     let dir = support::temp_dir("mcp-undo-barrier");
-    // 非 readOnly → Irreversible → mark_irreversible → 结果 entry barrier=true。
+    // 非 readOnly → Irreversible → mark_no_undo → 结果 entry `Blocked`。
     let mut session = run_one_mcp_turn(&dir, "sendEmail", false);
 
     // `/undo` 撞上屏障停下（推 undo_blocked），不静默回滚。

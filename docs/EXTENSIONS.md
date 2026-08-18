@@ -20,7 +20,7 @@ pub struct ExtensionPack { /* 字段私有 */ }
 
 impl ExtensionPack {
     pub fn new(name: impl Into<Arc<str>>) -> Self;
-    pub fn with_tool(self, spec: ToolSpec, reversibility: Reversibility, run: SessionToolFn) -> Self;
+    pub fn with_tool(self, spec: ToolSpec, run: SessionToolFn) -> Self;
     pub fn with_timed(self, spec: ToolSpec, timing: CallTiming, run: TimedRun) -> Self;
     pub fn name(&self) -> &str;
 }
@@ -37,24 +37,59 @@ impl ExtensionPack {
 `session` 参数就是了。为「不碰状态的工具」另开一条 executor 注册路，换来的只是多一个
 必须回答的问题（同一个名字两条注册路时谁赢）。
 
-### 三元成对，没有半开的中间态
+### 二元成对，没有半开的中间态
 
-`with_tool` 一次收 **spec + 可逆性 + 执行体**，`with_timed` 一次收 **spec + 时机 + 执行体**。
+`with_tool` 一次收 **spec + 执行体**，`with_timed` 一次收 **spec + 时机 + 执行体**。
 「先声明、以后再补执行体」在类型里表达不出来。这是 [147](issues/147-migrate-intercepts.md)
 的教训写进接缝：内核自己那四条手工截获的声明（`ToolTable::with_*`）和执行路径
 （`dispatch.rs` 的 `if` 链）分住两个文件，改一半而另一半没跟上**不报错**——只会让模型看见
 一个永远落 `unknown_tool` 的名字，或者让一个没人声明的名字被偷偷执行。
 
-### 可逆性：**没有缺省**
+### 可逆性：**交一个函数，不填一个枚举**（决策 34 / [201](issues/201-runtime-undo-fn-delivery.md)）
 
-`Reversibility` 是 `with_tool` 的第二个位置参数，**少给一个不编译**。不是「不填就
-`Irreversible`」——缺省值等于告诉作者「这件事可以不想」，而它恰恰是 `/undo` 撞上这个工具时
-停不停的唯一依据（红线 6 的屏障账）。
+`with_tool` 曾有第二个位置参数 `Reversibility`（「少给一个不编译」）。它**已经删掉**——
+标签是我们在给一件自己看不见的事做分类，可以吹；而 `/undo` 需要的是一个能被调用的东西。
+现在依据是执行体的返回值：
 
-判据表在 [TOOLS.md](TOOLS.md) §可逆性，一句话版本：**拿不准就 `Irreversible`**，判错的代价
-不对称（判宽了只是多问一句，判窄了是真的放过一次删除）。给 `Pure` 的举证责任在包作者：
-纯读、不落 entry、没有需要补偿的动作，三条都成立才是 `Pure`；有明确且可靠的补偿动作才是
-`Reversible`。
+```rust
+pub type SessionToolFn = Box<
+    dyn Fn(&mut Session, &AgentId, &Value) -> Result<(Arc<str>, Aftermath), Arc<str>>
+        + Send + Sync>;
+
+pub enum Aftermath {
+    Nothing,           // 没碰外部世界 —— 状态回滚就够了
+    Undo(UndoFn),      // 碰了，这是还原它的函数
+    Irreversible,      // 碰了，还不回去 —— `/undo` 撞上它停下来问
+}
+
+pub type UndoFn = Box<dyn FnOnce() -> Result<(), Arc<str>> + Send + Sync>;
+```
+
+三态**不是 `Option<UndoFn>`**：`Option` 会把「没碰」和「碰了但撤不回」压成同一个 `None`，
+而落盘那一位（`agent_core::Undoability`）是三态，返回类型必须与它同构。
+
+**白拿一档粒度**：可逆性从此是**每次调用**的属性。同一个 `fs/write` 建新文件（还原 = 删掉）、
+覆盖旧文件（还原 = 写回旧内容）、写失败（还原 = 空），三次调用三种交代，枚举表达不了。
+
+写 `UndoFn` 的三条纪律：
+
+- **捕获执行时的现场**（旧文件内容、创建出来的资源 id）——逆是在执行的那个状态上选的。
+- **不能捕获 `&Session`**（类型上也不允许：`UndoFn` 是 `'static`）。它跑在 undo 路上，那时
+  core 正在回滚状态；让它同时写状态就是在一次回滚中间插一次前向写入，红线 6 的账当场乱。
+  状态那半边由 journal 的回滚承担，还原函数**只管外部世界**。
+- **`FnOnce`：只跑一次。** 跑挂了就是 `UndoReport::Blocked { cause: HookFailed }`，用户
+  `/undo!` 越过；不会有人替他偷偷重试。
+
+判断的责任一点没减，落点变了：**拿不准就别交函数**（等价于以前的「拿不准就 `Irreversible`」），
+判错的代价一样不对称——判宽了只是多问用户一句，判窄了是真的放过一次删除。
+
+**还原函数不跨进程**（决策 34 §九）：它是闭包，活在 runtime 的钩子表里（按 `Entry::seq` 键），
+崩溃恢复之后表是空的。日志里那条 entry 仍然记着「这一步交过函数」，于是恢复后 undo 它会得到
+`Blocked { cause: HookLost }` 而不是静默放过。**状态的逆跨进程有效，外部世界的逆不跨进程**——
+这是边界，不是缺陷。
+
+顺带一条如实记着的副作用：CLI/Web 上**给人看的**那个 `Reversibility` 标签，对 `ext:` 工具
+从此一律显示名字规则的保守值 `irreversible`；它不再是任何行为的依据（决策 34 §八）。
 
 ## 二、命名：`ext:<pack>/<tool>` 强制
 
@@ -151,7 +186,7 @@ pub type SessionToolFn =
 
 **能**：
 - 读整棵 `Session::agent_tree()` 与各类型化读口；
-- 写——但只能经 `Session` 的公开命令方法（`set_max_turns`/`mark_irreversible`/`spawn_child`/
+- 写——但只能经 `Session` 的公开命令方法（`set_max_turns`/`mark_no_undo`/`spawn_child`/
   `replace_send_plan`/……），它们内部都经 `commit`/`commit_as` 落一条 journaled `Entry`；
 - 返回 `Ok` = 给模型看的 tool_result 正文，`Err` = 拒绝文案（决策 20：不 panic、不卡这一轮，
   让模型自己收敛）。
@@ -184,21 +219,22 @@ dogfood——下面每个数字都是那次跑出来的，不是设想。
 
 | 条目 | 谁发起 | 干什么 |
 |---|---|---|
-| `ext:stats/report`（截获式，`Pure`） | 模型自主调 | 读账本，回一段「这个会话至今干了什么」 |
+| `ext:stats/report`（截获式，交 `Aftermath::Nothing`） | 模型自主调 | 读账本，回一段「这个会话至今干了什么」 |
 | `ext:stats/audit`（`TurnEnd` timed） | runtime，每个完成轮 | 往 `<session>.audit.log` 追加一行 |
 
 ### 五步
 
-**1. 组包**（三元成对，可逆性必填）：
+**1. 组包**（二元成对：声明与执行体一起进）：
 
 ```rust
 ExtensionPack::new("stats")
-    .with_tool(report_spec(), Reversibility::Pure, report_run())
+    .with_tool(report_spec(), report_run())
     .with_timed(audit_spec(), CallTiming::TurnEnd, audit_run(ledger))
 ```
 
-**2. 执行体只做纯函数能做的事**。`report_run` 拿到 `&mut Session`，第一件事是把它降成
-`&Session` 交给一个纯函数——签名本身就是「这个工具 `Pure`」的举证的一部分。
+**2. 执行体只做纯函数能做的事**，并**如实交代自己碰了什么**。`report_run` 拿到
+`&mut Session`，第一件事是把它降成 `&Session` 交给一个纯函数，然后返回
+`Ok((正文, Aftermath::Nothing))`——签名本身就是「这次调用什么都没碰」的举证的一部分。
 
 **3. 收窄**（红线 10）：`agent_tree()` 是权威的整棵树，报告只列**调用者自己 + 它的严格
 后代**。真机上一个子 agent 调它，看不到兄弟、看不到 root。
@@ -265,7 +301,7 @@ turn=6 entries=25/25 agents=1 tools=2
 | 谁写的 | 自家/受信的 Rust 作者 | 任意第三方 server | 客户端自己 |
 | 名字 | `ext:<pack>/<tool>` | `mcp:<server>/<tool>` | `web:`/`desk:` 强制 |
 | 位置 | `Server`（本进程） | `Server`（宿主本地起子进程） | `Web`/`Desktop` |
-| 可逆性从哪来 | **包作者显式声明**（必填） | server 的 `readOnlyHint` 翻译，查不到落 `Irreversible` | 客户端声明，没说落 `Irreversible` |
+| 可逆性从哪来 | **执行体每次调用现交**（`Aftermath`，决策 34） | server 的 `readOnlyHint` 翻译，查不到落 `Irreversible` | 客户端声明，没说落 `Irreversible` |
 | 何时装 | 编译期决定，装配期一行 | 握手时 `tools/list` | 每次 `POST /sessions` 的请求体 |
 | **能不能碰 `Session`** | **能**（截获正门，本文档 §四） | 不能 | 不能 |
 | 撞名怎么办 | 前缀强制 → 结构上撞不了；同名重复 = 后来的整条丢 | 名字自带 server id → 撞不了 | 整份 400，会话不创建 |

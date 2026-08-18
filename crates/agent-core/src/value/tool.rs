@@ -3,6 +3,14 @@
 //! `Location` 与 `Reversibility` 是两个正交维度（决策 7，docs/ROADMAP.md）：
 //! 执行在哪、可不可逆是两件独立的事——桌面工具可以不可逆（写剪贴板），服务端
 //! 工具可以是纯的（读文件）。不要把它们合并成一个「工具分类」枚举。
+//!
+//! **199（M19）之后 `Reversibility` 只是一个显示标签**：undo 挡不挡由
+//! `EntryMeta.undoability`（`Undoability` 三态）说了算，而那一位来自「工具执行完
+//! 有没有交回还原函数」这件事实，不来自任何人填的枚举。这个文件里因此**没有**
+//! 任何以 `Reversibility` 为依据的谓词——199 §八 把 `is_replayable()`（恢复走
+//! `apply_next` 重放 journal 的状态值、从不重新执行工具，判据永远用不上）与
+//! `blocks_undo()`（职责被 `Undoability` 接走，留着就是第二份真相）一并删了，
+//! 202 执行。要加一个新谓词回来之前，先读 docs/issues/199。
 
 use std::sync::Arc;
 
@@ -40,38 +48,35 @@ impl Location {
     }
 }
 
-/// 一次工具调用的可逆性等级。决定 undo 能不能越过它、崩溃恢复时能不能重发。
-/// 判据与「拿不准怎么办」的完整讨论见 docs/TOOLS.md §「reversibility 等级怎么定」。
+/// 一次工具调用的可逆性等级——**声明它的那一方对这个工具的自我描述**，
+/// 决策 199（M19）之后**只用于显示，不是任何行为的依据**。
 ///
-/// **拿不准就填 `Irreversible`。** 判错成 `Pure` 的代价是重复发邮件、重复扣款；
-/// 判错成 `Irreversible` 的代价只是多问用户一次「要不要继续」。两个错误的代价
-/// 不对称，所以默认值必须落在保守的那一边——这也是 `undo_blocked` 事件存在的
-/// 原因：宁可多问，不可错放。
+/// 谁在声明：内置工具由名字规则给（`agent_runtime::tool_table_names`）、宿主建
+/// 会话时按工具声明（`capabilities.tools[].reversibility`）、MCP server 经
+/// `annotations.readOnlyHint` 给。三者都是**一句话**，而撤销要跑的是一个**函数**。
+///
+/// **undo 挡不挡跟这个枚举无关**：那由记在 command log 上的 `Undoability` 三态
+/// 决定，而它来自「这次调用执行完有没有把还原函数交回来」这件事实。标签可以吹，
+/// 函数不给就是没有——所以执行体在别的进程里的两类工具（宿主 `web:`/`desk:`、
+/// MCP）**一律挡 undo**，声明什么都一样。显示这个字段时要把这层意思一并说出来
+/// （202：只印一个 `Reversible` 就是骗人）。
+///
+/// **拿不准就填 `Irreversible`** 这条判据没变，只是落点变了：它现在是「拿不准
+/// 就别交还原函数」。判错成 `Pure` 的代价是重复发邮件、重复扣款，判错成
+/// `Irreversible` 只是多问用户一次「要不要继续」——两个错误的代价不对称，
+/// 默认值必须落在保守的那一边。
+///
 /// 032：经 `ToolCallRequest.reversibility` 可达，`ts` feature 门后面导出 TS。
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub enum Reversibility {
-    /// 重复执行任意次，外部世界不变（读文件、查询、搜索）。
+    /// 声明方说：重复执行任意次，外部世界不变（读文件、查询、搜索）。
     Pure,
-    /// 有明确且可靠的补偿动作（创建资源，补偿是删除；写入有版本的记录）。
+    /// 声明方说：有明确且可靠的补偿动作（创建资源，补偿是删除）。
+    /// **本仓不会替它执行那个补偿**——除非工具自己把还原函数交回来。
     Reversible,
     /// 其余全部（发邮件、支付、删数据、跑 shell）。
     Irreversible,
-}
-
-impl Reversibility {
-    /// 仅 `Pure` 可以在崩溃恢复时安全重放——重放等价于「再读一次」，不会有
-    /// 副作用累积。
-    pub fn is_replayable(self) -> bool {
-        matches!(self, Reversibility::Pure)
-    }
-
-    /// 仅 `Irreversible` 会挡住 undo：往回走撞上它就停下，推 `undo_blocked`
-    /// 事件让用户确认「继续（副作用不回滚）」还是取消（docs/TOOLS.md）。
-    /// `Reversible` 有补偿动作，不挡。
-    pub fn blocks_undo(self) -> bool {
-        matches!(self, Reversibility::Irreversible)
-    }
 }
 
 /// 一个工具的静态描述——喂给 provider 的工具表里的一项。
@@ -201,17 +206,5 @@ mod tests {
         assert_eq!(Location::Server.prefix(), "srv");
         assert_eq!(Location::Web.prefix(), "web");
         assert_eq!(Location::Desktop.prefix(), "desk");
-    }
-
-    /// `Reversibility::is_replayable` / `blocks_undo` 的穷举断言。
-    #[test]
-    fn reversibility_predicates_exhaustive() {
-        assert!(Reversibility::Pure.is_replayable());
-        assert!(!Reversibility::Reversible.is_replayable());
-        assert!(!Reversibility::Irreversible.is_replayable());
-
-        assert!(!Reversibility::Pure.blocks_undo());
-        assert!(!Reversibility::Reversible.blocks_undo());
-        assert!(Reversibility::Irreversible.blocks_undo());
     }
 }

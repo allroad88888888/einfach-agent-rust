@@ -26,7 +26,7 @@ pub struct BarrierInfo {
     /// 这条 entry 是什么（`EntryMeta.label`）。
     pub label: &'static str,
     /// 若这条屏障来自一次工具结果，工具名——**目前恒为 `Some`**：`barrier`
-    /// 只会在 `tool_result`/`tool_failed` 那条上置真（`Session::mark_irreversible`
+    /// 只会在 `tool_result`/`tool_failed` 那条上置真（`Session::mark_no_undo`
     /// 的唯一调用点是宿主派发工具时）。`None` 是防御性的兜底，不是已知会走到
     /// 的分支。
     pub tool: Option<Arc<str>>,
@@ -113,7 +113,7 @@ mod tests {
             },
             adjustments: Vec::new(),
         });
-        session.mark_irreversible(call_id.clone());
+        session.mark_no_undo(call_id.clone());
         let _ = session.step(Event::ToolResult {
             agent: AgentId::root(),
             epoch: session.epoch(),
@@ -130,7 +130,7 @@ mod tests {
         assert_eq!(
             entry.meta.undoability,
             Undoability::Blocked,
-            "标记过 mark_irreversible，这条 entry 该是屏障"
+            "标记过 mark_no_undo，这条 entry 该是屏障"
         );
 
         let info = session

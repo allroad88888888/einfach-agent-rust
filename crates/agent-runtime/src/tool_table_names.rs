@@ -73,10 +73,18 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // undo 往回走会先撞上子 agent 那条屏障停下来问，轮不到 spawn 这条。
         // 组合因此天然成立，不需要 spawn 自己保守成 `Irreversible`——那样反而会
         // 让「拆了任务的那一轮」一律撤不掉，哪怕子 agent 只读了两个文件。
+        //
+        // **201 之后这个值只进显示**（决策 199 §八）。行为面上 spawn 走的是
+        // `Undoability::StateOnly`（它的截获压根不标任何位）：三态里那一档的定义
+        // 就是「没碰外部世界，状态回滚就够了」，而 spawn 恰好如此——子 agent 的
+        // 状态跟父的这一步在**同一条日志**上，回滚它就是补偿。**没有给它挂一个
+        // 空的还原钩子**：`Hooked` 的语义是「碰了外部世界、交了逆」，而且钩子表
+        // 不跨进程——恢复之后一条 `Hooked` 的 spawn entry 会变成 `HookLost` 屏障，
+        // 正好是上面那段注释拒绝过的「拆了任务的那一轮一律撤不掉」。
         SPAWN_TOOL => Reversibility::Reversible,
         // status 是**纯读**：一次 `Session::agent_tree()` 派生读，不写任何
         // primitive、不落 entry、没有需要补偿的动作——`Pure` 的定义本身，
-        // 跟 `srv:fs/read` 同一格。于是它不进 `mark_irreversible`，日志上不留
+        // 跟 `srv:fs/read` 同一格。于是它不进 `mark_no_undo`，日志上不留
         // 屏障位，`/undo` 路过它时不会停下来问（问了也没有东西可撤）。
         STATUS_TOOL => Reversibility::Pure,
         // collect 同理是**纯读**：读一份子 agent 已经产出的结果（经宿主 harvest
@@ -113,9 +121,15 @@ mod tests {
     }
 
     /// 名字规则这一层对 `ext:` 的可逆性**不表态**——落兜底的 `Irreversible`。
-    /// 真实答案总是由包作者显式声明、经 `with_extension` 记进注入映射，
-    /// `snapshot` 的第一级先查表（`tool_table_extension.rs` 模块文档），永远轮不到
-    /// 这里。这条钉的是「没人替它说话时保守值是什么」。
+    ///
+    /// 148 时这条是「永远轮不到的保守值」（真实答案由包作者在 `with_extension`
+    /// 时声明，`snapshot` 第一级先查表）。**201 删掉了那个声明**（决策 199 §一：
+    /// 依据改成执行体返回的 `Aftermath`），于是这里成了 `ext:` 工具**真正**会拿到
+    /// 的那个值——而它从此只进显示（199 §八）：`/undo` 停不停看的是那条 entry 的
+    /// `Undoability`，跟这个标签无关。
+    ///
+    /// 这条现在钉的是「**别给 `ext:` 加名字规则**」：按名字猜一件我们看不见的事，
+    /// 正是 199 判过的根上的错误。保守值可以显示得难看，不能骗人。
     #[test]
     fn extension_names_never_infer_a_reversibility() {
         assert_eq!(

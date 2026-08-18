@@ -22,7 +22,7 @@
 //!
 //! 迁移前 `dispatch.rs` 手工 if 链直接调用 `xxx_tool::intercept`，那几个函数
 //! 内部自己 `ctx.tools.snapshot` + `ctx.emit(ToolExecuting)`（该不该
-//! `mark_irreversible` 也是它们自己的事，虽然现在四个都是 `Pure`/`Reversible`，
+//! `mark_no_undo` 也是它们自己的事，虽然现在四个都是 `Pure`/`Reversible`，
 //! 从没真的调用过）。下面四个闭包原样转发，不加一分钱包装——
 //! `intercept_registry::dispatch`（通用查表+调用那一段）本身也不包装。跟
 //! `session_tool_ext::adapt`（`SessionToolFn` 那条公开路径的适配器，

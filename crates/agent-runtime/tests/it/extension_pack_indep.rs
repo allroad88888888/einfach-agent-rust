@@ -6,11 +6,20 @@
 //! # 被测契约（委派任务原文，一字不差）
 //!
 //! ```ignore
-//! use agent_runtime::{ExtensionPack, PendingInterceptors, ToolTable, CallTiming, SessionToolFn, TimedRun};
-//! ExtensionPack::new(name).with_tool(spec, Reversibility, SessionToolFn).with_timed(spec, CallTiming, TimedRun).name();
+//! use agent_runtime::{Aftermath, ExtensionPack, PendingInterceptors, ToolTable, CallTiming, SessionToolFn, TimedRun};
+//! ExtensionPack::new(name).with_tool(spec, SessionToolFn).with_timed(spec, CallTiming, TimedRun).name();
 //! ToolTable::with_extension(self, pack) -> (ToolTable, PendingInterceptors);
 //! PendingInterceptors::install(self, &mut ctx);
 //! ```
+//!
+//! # 201 改了其中一条契约（决策 199 §一）
+//!
+//! `with_tool` 的第二个位置参数（`Reversibility`）删了，可逆性改由执行体返回的
+//! [`Aftermath`] 逐次交代。下面「验收 2」那两条因此换了判据：**不是**「声明 Pure /
+//! 声明 Irreversible」，而是「交 `Nothing` / 交 `Irreversible`」——被测的行为
+//! （不挡 undo / 挡住直到 `/undo!`）一个字节没变，这正是这次换法该有的样子。
+//! 「交 `Undo(f)` 之后 `/undo` 真的把外部世界收拾了」是 201 自己的验收，住
+//! `ext_undo_fn_delivery.rs`。
 //!
 //! 复杂文件豁免（>300 行、≤500 行）：七条测试是同一个接缝契约的五个不重叠角度
 //! （见下），拆开会把「测试对应哪条验收」这条映射打散；落点被委派任务锁定为
@@ -22,10 +31,11 @@
 //! 1. [`a_scripted_pack_call_reaches_the_next_prompt_and_the_turn_end_hook_fires_once`]：
 //!    装一个 pack（纯读截获工具 + 一个 TurnEnd hook）→ 脚本化模型调用截获工具 →
 //!    下一轮请求体含哨兵；轮跑完 → hook 计数 +1。
-//! 2. [`a_pure_ext_tool_leaves_no_barrier_and_undo_crosses_it_cleanly`] /
+//! 2. [`an_ext_tool_that_touched_nothing_leaves_no_barrier_and_undo_crosses_it_cleanly`] /
 //!    [`an_irreversible_ext_tool_leaves_a_barrier_that_stops_undo_until_forced`]：
-//!    Pure 声明不挡 undo；Irreversible 声明挡住 undo，`/undo!` 才越过（照抄
-//!    `mcp_undo_barrier.rs`/`shell_exec_undo_barrier.rs` 的既有屏障测试手法）。
+//!    交 `Nothing` 不挡 undo；交 `Irreversible` 挡住 undo，`/undo!` 才越过（照抄
+//!    `mcp_undo_barrier.rs`/`shell_exec_undo_barrier.rs` 的既有屏障测试手法；
+//!    201 之前这两条的判据是注册时声明的 `Reversibility`）。
 //! 3. [`a_pack_installed_but_never_called_only_appends_bytes_after_the_existing_table_tail`]：
 //!    不装 pack 的会话与装了但模型从未调用的会话，第一轮请求体里 `tools` 段的共有
 //!    表头逐字节相同——pack 只在表尾追加（红线 11，手法照抄
@@ -45,9 +55,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use agent_core::{AgentId, ContentBlock, Reversibility, Session, ToolSpec, TurnStatus, UndoReport};
+use agent_core::{AgentId, ContentBlock, Session, ToolSpec, TurnStatus, UndoReport};
 use agent_providers::wire_name;
-use agent_runtime::{CallTiming, ExtensionPack, SessionToolFn, TimedRun, ToolTable, run_turn};
+use agent_runtime::{
+    Aftermath, CallTiming, ExtensionPack, SessionToolFn, TimedRun, ToolTable, run_turn,
+};
 use serde_json::{Value, json};
 
 use crate::support;
@@ -71,16 +83,22 @@ fn spec(name: &str, description: &str) -> ToolSpec {
     }
 }
 
-/// 什么都不做、总是 `Ok` 的截获执行体。
+/// 什么都不做、总是 `Ok` 的截获执行体。交 `Aftermath::Nothing`：它连外部世界的
+/// 边都没碰过。
 fn ok_session_fn() -> SessionToolFn {
-    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| Ok(Arc::from("ok")))
+    Box::new(|_session: &mut Session, _agent: &AgentId, _input: &Value| {
+        Ok((Arc::from("ok"), Aftermath::Nothing))
+    })
 }
 
 /// 忽略入参、原样回哨兵串的截获执行体——闭包每次调用都现造一个新 `Box`
-/// （`SessionToolFn` 不是 `Clone`）。
-fn sentinel_session_fn(sentinel: &'static str) -> SessionToolFn {
+/// （`SessionToolFn` 不是 `Clone`）。`aftermath` 是每次调用现造的那一份交代
+/// （`Aftermath` 也不是 `Clone`：它里面可能装着一个 `FnOnce`）。
+fn sentinel_session_fn(sentinel: &'static str, aftermath: fn() -> Aftermath) -> SessionToolFn {
     Box::new(
-        move |_session: &mut Session, _agent: &AgentId, _input: &Value| Ok(Arc::from(sentinel)),
+        move |_session: &mut Session, _agent: &AgentId, _input: &Value| {
+            Ok((Arc::from(sentinel), aftermath()))
+        },
     )
 }
 
@@ -155,8 +173,7 @@ fn a_scripted_pack_call_reaches_the_next_prompt_and_the_turn_end_hook_fires_once
     let pack = ExtensionPack::new("demo")
         .with_tool(
             spec(ECHO_TOOL, "纯读截获工具：回哨兵串"),
-            Reversibility::Pure,
-            sentinel_session_fn(ECHO_SENTINEL),
+            sentinel_session_fn(ECHO_SENTINEL, || Aftermath::Nothing),
         )
         .with_timed(
             spec(HOOK_TOOL, "每轮收尾计数一次"),
@@ -188,15 +205,15 @@ fn a_scripted_pack_call_reaches_the_next_prompt_and_the_turn_end_hook_fires_once
     );
 }
 
-/// 验收 2 上半：声明 `Pure` 的 ext 工具跑完之后，`/undo` 干净越过，不撞屏障。
+/// 验收 2 上半（201 换判据）：交 `Aftermath::Nothing` 的 ext 工具跑完之后，
+/// `/undo` 干净越过，不撞屏障。
 #[test]
-fn a_pure_ext_tool_leaves_no_barrier_and_undo_crosses_it_cleanly() {
+fn an_ext_tool_that_touched_nothing_leaves_no_barrier_and_undo_crosses_it_cleanly() {
     let dir = support::temp_dir("extension-pack-barrier-pure");
     let wire = wire_name::to_wire(BARRIER_TOOL);
     let pack = ExtensionPack::new("barrier").with_tool(
-        spec(BARRIER_TOOL, "声明 Pure 的截获工具"),
-        Reversibility::Pure,
-        sentinel_session_fn(BARRIER_SENTINEL),
+        spec(BARRIER_TOOL, "交 Nothing 的截获工具"),
+        sentinel_session_fn(BARRIER_SENTINEL, || Aftermath::Nothing),
     );
     let (tools, pending) = ToolTable::builtin().with_extension(pack);
     let port = support::spawn_scripted_server(vec![
@@ -214,21 +231,20 @@ fn a_pure_ext_tool_leaves_no_barrier_and_undo_crosses_it_cleanly() {
     let report = session.undo_turn();
     assert!(
         matches!(report, UndoReport::Applied { .. }),
-        "声明 Pure 该干净越过：{report:?}"
+        "交 Nothing 该干净越过：{report:?}"
     );
     assert!(session.messages().is_empty(), "越过之后这一轮该整个退掉");
 }
 
-/// 验收 2 下半：声明 `Irreversible` 的 ext 工具跑完之后，`/undo` 撞屏障停下
-/// （推 `UndoReport::Blocked`），`/undo!` 才越过。
+/// 验收 2 下半（201 换判据）：交 `Aftermath::Irreversible` 的 ext 工具跑完之后，
+/// `/undo` 撞屏障停下（推 `UndoReport::Blocked`），`/undo!` 才越过。
 #[test]
 fn an_irreversible_ext_tool_leaves_a_barrier_that_stops_undo_until_forced() {
     let dir = support::temp_dir("extension-pack-barrier-irreversible");
     let wire = wire_name::to_wire(BARRIER_TOOL);
     let pack = ExtensionPack::new("barrier").with_tool(
-        spec(BARRIER_TOOL, "声明 Irreversible 的截获工具"),
-        Reversibility::Irreversible,
-        sentinel_session_fn(BARRIER_SENTINEL),
+        spec(BARRIER_TOOL, "交 Irreversible 的截获工具"),
+        sentinel_session_fn(BARRIER_SENTINEL, || Aftermath::Irreversible),
     );
     let (tools, pending) = ToolTable::builtin().with_extension(pack);
     let port = support::spawn_scripted_server(vec![
@@ -245,7 +261,7 @@ fn an_irreversible_ext_tool_leaves_a_barrier_that_stops_undo_until_forced() {
 
     let report = session.undo_turn();
     let UndoReport::Blocked { barrier_seq, .. } = report else {
-        panic!("声明 Irreversible 该撞屏障停下，拿到 {report:?}");
+        panic!("交 Irreversible 该撞屏障停下，拿到 {report:?}");
     };
     let barrier_entry = session
         .history()
@@ -285,7 +301,6 @@ fn a_pack_installed_but_never_called_only_appends_bytes_after_the_existing_table
         support::spawn_recording_server(vec![support::sse_text("plain reply, no ext tools")]);
     let pack = ExtensionPack::new("demo").with_tool(
         spec(UNUSED_TOOL, "从不被模型调用的截获工具，只用来证明表尾追加"),
-        Reversibility::Pure,
         ok_session_fn(),
     );
     let (tools, pending) = ToolTable::builtin().with_extension(pack);
@@ -325,13 +340,11 @@ fn a_pack_with_a_bare_name_tool_panics_at_assembly_in_debug_builds() {
     let pack = ExtensionPack::new("relwit")
         .with_tool(
             spec("bare-name-no-prefix", "裸名，没有 ext: 前缀"),
-            Reversibility::Pure,
             ok_session_fn(),
         )
         .with_tool(
             spec("ext:relwit/legit", "合法名字"),
-            Reversibility::Pure,
-            sentinel_session_fn(RELWIT_SENTINEL),
+            sentinel_session_fn(RELWIT_SENTINEL, || Aftermath::Nothing),
         );
     let _ = ToolTable::builtin().with_extension(pack);
 }
@@ -350,13 +363,11 @@ fn a_bare_name_tool_is_dropped_alone_in_release_the_legit_sibling_still_works() 
     let pack = ExtensionPack::new("relwit")
         .with_tool(
             spec("bare-name-no-prefix", "裸名，没有 ext: 前缀"),
-            Reversibility::Pure,
             ok_session_fn(),
         )
         .with_tool(
             spec("ext:relwit/legit", "合法名字，不该被裸名连累"),
-            Reversibility::Pure,
-            sentinel_session_fn(RELWIT_SENTINEL),
+            sentinel_session_fn(RELWIT_SENTINEL, || Aftermath::Nothing),
         );
     let (tools, pending) = ToolTable::builtin().with_extension(pack);
     assert!(
@@ -399,8 +410,7 @@ fn extension_tool_still_works_after_snapshot_recovery_reinstalls_the_pack() {
     fn echo_pack() -> ExtensionPack {
         ExtensionPack::new("demo").with_tool(
             spec(ECHO_TOOL, "恢复前后都该能调的截获工具"),
-            Reversibility::Pure,
-            sentinel_session_fn(ECHO_SENTINEL),
+            sentinel_session_fn(ECHO_SENTINEL, || Aftermath::Nothing),
         )
     }
 

@@ -6,7 +6,7 @@
 //!
 //! | 条目 | 谁发起 | 干什么 |
 //! |---|---|---|
-//! | `ext:stats/report`（截获式，`Pure`） | 模型自主调 | 读账本，回一段「这个会话至今干了什么」 |
+//! | `ext:stats/report`（截获式，交 `Aftermath::Nothing`） | 模型自主调 | 读账本，回一段「这个会话至今干了什么」 |
 //! | `ext:stats/audit`（`TurnEnd` timed） | runtime，每个完成轮 | 往 `<session>.audit.log` 追加一行 |
 //!
 //! # 落点为什么在 `agent-cli` 里、为什么是开关不是 feature
@@ -17,7 +17,7 @@
 //! 话最直接的证据；feature 门下这两次是两个二进制，「零变化」就得靠比对两份构建产物
 //! 说话，反而更绕。不新开 crate 同样照 issue：第一个扩展包先证明接缝。
 //!
-//! # `Pure` 的举证（EXTENSIONS.md §可逆性：给 `Pure` 的举证责任在包作者）
+//! # 「什么都没碰」的举证（201 起：举证责任在包作者，落点是交不交还原函数）
 //!
 //! `report` 三条都成立：**纯读**（[`crate::ext_stats_report::render`] 只收 `&Session`，
 //! 一条 command 都不发）、**不落 entry**、**没有需要补偿的动作**。153 之前它还有一处
@@ -41,9 +41,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use agent_core::{AgentId, Reversibility, Session, ToolSpec};
+use agent_core::{AgentId, Session, ToolSpec};
 use agent_runtime::{
-    CallTiming, ExtensionPack, PendingInterceptors, SessionToolFn, TimedRun, ToolTable,
+    Aftermath, CallTiming, ExtensionPack, PendingInterceptors, SessionToolFn, TimedRun, ToolTable,
 };
 use serde_json::{Value, json};
 
@@ -107,7 +107,7 @@ pub fn install(
 /// 组包本身。条目顺序 = 这里写死的 push 顺序（红线 11，包内不排序）。
 pub fn pack(ledger: Arc<Ledger>) -> ExtensionPack {
     ExtensionPack::new(PACK)
-        .with_tool(report_spec(), Reversibility::Pure, report_run())
+        .with_tool(report_spec(), report_run())
         .with_timed(audit_spec(), CallTiming::TurnEnd, audit_run(ledger))
 }
 
@@ -143,10 +143,14 @@ pub fn audit_spec() -> ToolSpec {
 ///
 /// 读写纪律（后代收窄、只走 command 面）在 [`crate::ext_stats_report`] 那边落实——
 /// 这里连 `&mut Session` 都没用上，直接降成 `&Session` 交给纯函数。
+///
+/// **交 [`Aftermath::Nothing`]**（201）：这次调用**没碰外部世界**，状态回滚就够了。
+/// 这跟 [`Aftermath::Irreversible`] 的区别是决策 199 的全部要点——后者是「碰了但撤
+/// 不回」，而 `report` 连读都只读进程内的账本，`/undo` 路过它不该停下来问任何事。
 fn report_run() -> SessionToolFn {
     Box::new(move |session: &mut Session, agent: &AgentId, _input: &Value| {
         let (body, _counts) = ext_stats_report::render(session, agent);
-        Ok(Arc::from(body))
+        Ok((Arc::from(body), Aftermath::Nothing))
     })
 }
 
