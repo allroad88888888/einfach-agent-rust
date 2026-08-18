@@ -48,8 +48,8 @@ pub use compaction::{
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, BlockedCause, BoundaryRejected, ChildConfig,
     ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN,
-    DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, ReadDenied, Session,
-    SpawnRefused,
+    DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, MAX_NOTES,
+    NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied, ReadDenied, Session, SpawnRefused,
     UndoReport, Undoability, known_label,
 };
 pub use engine::{Effect, Epoch, Event, Failure, Notice, SlotState, ToolSlot, TurnStatus};

@@ -124,6 +124,15 @@ impl Slot {
             // 都看得到的东西，而那不是任何一个已知需求要的。要确认对方收到没有，
             // 等他回一条（决策 35 §五点名不做投递回执）。
             Slot::Inbox => Visibility::Private,
+            // `Notes`（209）：模块文档那条规矩的一次直接应用——**开放要有理由，
+            // 封闭不需要**，而这一格提不出理由。它是这个 agent 写给自己的东西；
+            // 子 agent 要父的上下文走 `Messages` 那条边，要谁说句话走
+            // `srv:agent/send`，两条都有边界、都看得见来源。
+            //
+            // 开成 `Shared` 的代价具体是：横读全开之后那不是「子继承父」，是
+            // **所有人都读得到**，于是「一个 agent 改一个 key」变成影响别人下一轮
+            // prompt 的事，而模型完全看不到这条因果。
+            Slot::Notes => Visibility::Private,
         }
     }
 }
@@ -203,6 +212,8 @@ mod tests {
                 Slot::Summaries,
                 // 205 追加 Inbox：发得进去 ≠ 读得出来。
                 Slot::Inbox,
+                // 209 追加 Notes：模型自己的草稿纸，只有它自己看得到。
+                Slot::Notes,
             ]
         );
     }

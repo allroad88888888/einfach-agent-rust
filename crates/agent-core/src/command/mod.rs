@@ -14,7 +14,8 @@
 //! | 文件 | 职责 |
 //! |------|------|
 //! | [`session`] | `Session` 结构本身与会话级命令（`new` / `begin_turn` / `set_max_*` / `mark_no_undo`） |
-//! | [`read`] | 公开读口：宿主取料的地方，形状对齐 M1 的 `TurnState` 字段 |
+//! | [`read`] | 公开读口：宿主**取料**的地方（一个 agent 的一格），形状对齐 M1 的 `TurnState` 字段 |
+//! | [`read_ledger`] | 208 拆出：**整份状态与整条日志**的读口（`primitives` / `history` / 游标），读者是持久化、恢复与审计 |
 //! | [`barrier`] | 034：`barrier_info`——描述一条屏障 entry「越过它意味着什么」，CLI 与 server 共用 |
 //! | [`child_config`] | 子 agent 出生时固化的 durable 配置；live provider binding 不进 core |
 //! | [`commit`] | 一次转移 → 一个 batch → 一条 `Entry` |
@@ -39,7 +40,9 @@
 //! | [`apply_summary`] | 107：`apply_summary` / `summary_text`——第 3 档的回写，**一条 entry 同时存正文、推边界、填引用**；epoch 闸在 `step`，契约见该模块文档 |
 //! | [`compaction_record`] | 109：`summary_library`——压缩可见性的读口，展开原文走这条链，不经 `SendPlan` |
 //! | [`prefix`] | 134：`set_prefix_chunks` / `prefix_chunks`——`PrefixChunks` 槽位的 journaled 读写（会话创建期定下的 system 前缀，恢复时原样回来、**不重算**） |
-//! | [`cross_read`] | 028：跨 agent 读的两个口，没有第三个（红线 10） |
+//! | [`inbox`] | 205：`deliver`/`drain_now`/`drain_next_turn`——`Inbox` 槽位的三条命令，两档送达时机各认各的定点（决策 35 §二） |
+//! | [`notes`] | 209：`set_note`/`notes_of`——`Notes` 槽位的读写，**整张槽位表里唯一属于模型自己的一格**（决策 35 §三） |
+//! | [`cross_read`] | 028：跨 agent 读的正门 `read_agent`（决策 35 之后不限方向，只查 `Visibility`，红线 10） |
 //!
 //! ## 一个 `Session` = 整棵树
 //!
@@ -64,8 +67,10 @@ pub mod host_skills;
 pub mod host_tools;
 pub mod inbox;
 pub mod meta;
+pub mod notes;
 pub mod prefix;
 pub mod read;
+pub mod read_ledger;
 mod restore;
 pub mod send_plan;
 pub mod session;
@@ -85,6 +90,7 @@ pub use clear_tool_results::ClearOutcome;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use inbox::DeliverDenied;
+pub use notes::{MAX_NOTES, NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, Undoability, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};
 pub use spawn::{AgentLimits, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN, SpawnRefused};

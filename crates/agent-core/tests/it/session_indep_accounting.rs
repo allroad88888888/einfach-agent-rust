@@ -56,7 +56,9 @@ fn assert_known_primitive_key(key: &AtomKey) {
             // 154 新增：宿主经 capabilities.prefix 声明的开局块（决策 31）。
             | Slot::HostPrefix
             // 205 新增：别的 agent 投进来、还没消费的消息（决策 35）。
-            | Slot::Inbox => {}
+            | Slot::Inbox
+            // 209 新增：这个 agent 自己记的东西（决策 35 §三，唯一属于模型的一格）。
+            | Slot::Notes => {}
         },
         AtomKey::ToolCall(_, _, slot) => match slot {
             ToolCallSlot::Result => {}

@@ -250,41 +250,29 @@ pub enum Slot {
     /// 凭空重建出来的 atom 会给一个从没收到过消息的 agent 平添几句话，而那几句话
     /// 会被排空进它的 `Messages`、从此每轮都进 prompt。链通、值错、不报错。
     Inbox,
-}
-
-impl Slot {
-    /// 一个 agent 的全部 source 槽位。`Session::new` 建图、`Session::primitives`
-    /// 出快照都用它——**新增槽位只要加进这个数组，两条路径自动跟上**，
-    /// 忘了改其中一条正是「快照缺一块」的来源。
+    /// **这个 agent 自己记的东西**（209，决策 35 §三）。值是
+    /// [`AgentValue::Json`] 里一个按 key 升序的 `[[key, value], …]` 数组
+    /// （`value::notes` 那一处编解码），`Json([])` = 草稿纸是空的（默认值）。
     ///
-    /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
-    /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
-    /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 22] = [
-        Slot::Messages,
-        Slot::Status,
-        Slot::ToolSlots,
-        Slot::PrevPrefix,
-        Slot::NextMessageId,
-        Slot::TurnsUsed,
-        Slot::MaxTurns,
-        Slot::RetriesUsed,
-        Slot::MaxRetries,
-        Slot::ToolsAllowed,
-        Slot::SkillsActive,
-        Slot::HostTools,
-        Slot::HostSkills,
-        Slot::DisabledBuiltins,
-        Slot::ExecutionProfile,
-        Slot::SendPlan,
-        Slot::PrevSendPlan,
-        Slot::Summaries,
-        Slot::PrefixChunks,
-        // 144 追加 PrefixAllowed。
-        Slot::PrefixAllowed,
-        // 154 追加 HostPrefix。
-        Slot::HostPrefix,
-        // 205 追加 Inbox（决策 35）。
-        Slot::Inbox,
-    ];
+    /// 这是**整张表里唯一属于模型自己的一格**。其余每一格都是别人的账——
+    /// `MaxTurns` 是部署方的、`ToolsAllowed` 是父给的、`SendPlan`/`Summaries`
+    /// 是 adapter 的、`Status` 是父要读的。用户要「改本 agent 状态」，正确的
+    /// 形状是给它一个自己的槽位，而不是给现有槽位开写口：**那等于让被约束者
+    /// 改自己的约束**。
+    ///
+    /// 新槽位不碰任何现有不变量，而且白拿全套机制：`/undo` 连带撤销、崩溃恢复
+    /// 自动带回、审计看得到每一次改。这是本仓架构直接掉出来的，不是新造的机制。
+    ///
+    /// **站 `Private`**（见 [`visibility`](super::visibility)）：只有它自己读得到、
+    /// 写得到。开成 `Shared` 听起来方便，但横读全开之后那就是**所有人都读得到**，
+    /// 而且「一个 agent 改一个 key」会变成影响别人下一轮 prompt 的事，模型完全
+    /// 看不到这条因果。要共享上下文有 `Messages`，要传话有 `Slot::Inbox`。
+    ///
+    /// **容器必须有序**（红线 11）：它以 tool_result 的形式进 prompt。`HashMap`
+    /// 写起来一样、功能完全正常，只是每一轮全价且不报错——所以内存里那一份是
+    /// [`Notes`](crate::value::notes::Notes)（`BTreeMap` 的别名），落盘那一份是
+    /// 按 key 升序的数组。
+    ///
+    /// **默认值必须是空数组**——019 的按需重建拿的就是它（同 `Inbox` 那条理由）。
+    Notes,
 }

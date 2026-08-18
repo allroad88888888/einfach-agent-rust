@@ -147,8 +147,9 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
     // 093 加 `ExecutionProfile` 是 15、100 加 `SendPlan` 是 16、
     // 103 加 `PrevSendPlan` 是 17、107 加 `Summaries` 是 18、
     // 134 加 `PrefixChunks` 是 19、144 加 `PrefixAllowed` 是 20、
-    // 154 加 `HostPrefix` 是 21，205 加 `Inbox`（决策 35）是 22。
-    assert_eq!(child_key_count(&session, &child), 22);
+    // 154 加 `HostPrefix` 是 21，205 加 `Inbox`（决策 35）是 22、
+    // 209 加 `Notes`（决策 35 §三）是 23。
+    assert_eq!(child_key_count(&session, &child), 23);
 
     let report = session
         .despawn_child(&child)
@@ -156,10 +157,10 @@ fn despawn_evicts_leaf_first_without_panicking_and_leaves_exactly_one_tombstone(
 
     assert_eq!(report.agents, vec![child.clone()]);
     assert_eq!(
-        report.atoms_evicted, 21,
-        "二十二个槽位里只留 ToolsAllowed 一个墓碑（144 的 PrefixAllowed、154 的\
-         HostPrefix、205 的 Inbox 都不是墓碑，照样被逐出——despawn.rs 只特化 ToolsAllowed \
-         一个
+        report.atoms_evicted, 22,
+        "二十三个槽位里只留 ToolsAllowed 一个墓碑（144 的 PrefixAllowed、154 的\
+         HostPrefix、205 的 Inbox、209 的 Notes 都不是墓碑，照样被逐出——despawn.rs \
+         只特化 ToolsAllowed 一个
          变体）"
     );
     assert_eq!(
@@ -200,9 +201,9 @@ fn undo_after_despawn_rebuilds_the_subtree_with_its_live_values_and_it_keeps_wor
     assert_eq!(session.children_of(&root), vec![child.clone()]);
     assert_eq!(
         child_key_count(&session, &child),
-        22,
-        "全部二十二个槽位都该被按需重建（144 加了 PrefixAllowed，154 加了 HostPrefix，\
-         205 加了 Inbox）"
+        23,
+        "全部二十三个槽位都该被按需重建（144 加了 PrefixAllowed，154 加了 HostPrefix，\
+         205 加了 Inbox，209 加了 Notes）"
     );
     assert_eq!(
         value_of(&session, &child, Slot::Status),

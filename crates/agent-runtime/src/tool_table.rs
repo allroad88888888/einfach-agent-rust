@@ -12,6 +12,7 @@
 //! | 文件 | 那一件事 |
 //! |---|---|
 //! | 本文件 | 五档装配 + `snapshot` 的三级判定 + `push_spec` 判重（075） |
+//! | [`agent_family`]（`tool_table_agent.rs`，208 拆出） | **子 agent 一族这件事**：`spawn`/`status`/`collect`/`send`/`self` 五档授权、它们的陷阱组合 |
 //! | [`names`]（`tool_table_names.rs`，076 拆出） | **名字规则**：全名怎么机械推出 `Location`/`Reversibility` |
 //! | [`host`]（`tool_table_host.rs`，062） | **宿主注入这件事**：那张可逆性映射怎么进表、为什么排序、为什么另挂一张表 |
 //! | [`host_prefix`]（`tool_table_host_prefix.rs`，155/决策 31） | **宿主声明开局块这件事**：`(name, text)` 对怎么合成 `SessionStart` timed 条目 |
@@ -27,14 +28,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use agent_core::{AgentLimits, Reversibility, ToolCallRequest, ToolSpec};
+use agent_core::{Reversibility, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
-use crate::collect_tool::collect_spec;
-use crate::send_tool::send_spec;
 use crate::skill::SkillRegistry;
-use crate::spawn_request::spawn_spec;
-use crate::status_tool::status_spec;
 
 use names::{location_of, reversibility_of};
 pub use timed::{CallTiming, TimedRun, TimedTool};
@@ -69,6 +66,9 @@ pub struct ToolTable {
 
 #[path = "tool_table_names.rs"]
 mod names;
+
+#[path = "tool_table_agent.rs"]
+mod agent_family;
 
 #[path = "tool_table_host.rs"]
 mod host;
@@ -151,65 +151,6 @@ impl ToolTable {
         let mut specs = agent_tools::builtin_specs();
         specs.push(agent_tools::shell_spec());
         Self::from_specs(specs)
-    }
-
-    /// 029 开闸：追加 `srv:agent/spawn`，宿主从此允许模型分解任务（决策 20）。
-    ///
-    /// **`limits` 必须跟 `Session` 手上那份是同一组数**（`Session::agent_limits`，
-    /// 默认都是 [`AgentLimits::default`]）：这里的数字只进工具描述给模型看，真正
-    /// 拦人的是 `Session::spawn_child` 里那两道闸。两边不一致不会出错，只会让模型
-    /// 收到一句跟描述对不上的拒绝——所以宿主要么两边都用默认值，要么两边传同一个
-    /// 值。数字进描述而不是让模型试出来，是为了省掉大部分「试→被拒→重试」的往返。
-    ///
-    /// 追加在末尾而不是插进 `builtin()` 内部：`builtin_specs()` 的顺序是 013 钉死
-    /// 的既有契约，工具表在 prompt 最前面（红线 11），只加不改。
-    pub fn with_spawn(mut self, limits: AgentLimits) -> Self {
-        self.push_spec(spawn_spec(limits));
-        self
-    }
-
-    /// 051 开闸：追加 `srv:agent/status`，模型从此能在子 agent 还在跑的时候看它们
-    /// 此刻在干啥（M8，docs/ORCHESTRATION.md §三）。
-    ///
-    /// **跟 `with_spawn` 分开两个开关**（而不是塞进它）：每个 `with_*` 是一档独立的
-    /// 授权，跟 `with_shell`/`with_skills`/`with_mcp` 一套规矩；而且工具表在 prompt
-    /// 最前面（红线 11），把 status 折进 `with_spawn` 会让所有既有宿主的前缀无声
-    /// 变一次。只开 status 不开 spawn 是**合法但没用**的组合（永远没有后代可看），
-    /// 宿主该两个一起开——`agent-cli` / `ToolTableSpec::Full` 就是这么接的。
-    ///
-    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。宿主的链式顺序决定它落在
-    /// 哪一格，`agent-cli` 把它紧跟在 `with_spawn` 之后、`with_skills`/`with_mcp`
-    /// 之前：这样「静态那一段」在所有会话里逐字节相同，不随装了几个 skill / 几个
-    /// MCP 工具而移位。
-    pub fn with_status(mut self) -> Self {
-        self.push_spec(status_spec());
-        self
-    }
-
-    /// 053 开闸：追加 `srv:agent/collect`，模型从此能**择时**领后台子 agent 的结果
-    /// （M8 闭环的最后一格，docs/ORCHESTRATION.md §三）。
-    ///
-    /// 跟 `with_spawn`/`with_status` 各自一档，理由同 `with_status`。只开 collect
-    /// 不开 spawn 是**合法但没用**的组合（永远没有后台子可领）；反过来——开了
-    /// spawn 不开 collect——才是真的会咬人：模型看得见 `background=true` 却没有
-    /// 任何办法把结果拿回来，发出去的子全部在轮末被拆掉。宿主要么三个一起开，
-    /// 要么把 spawn 也关掉。
-    ///
-    /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。
-    pub fn with_collect(mut self) -> Self {
-        self.push_spec(collect_spec());
-        self
-    }
-
-    /// 206 开闸：追加 `srv:agent/send`，模型从此能给会话里**任意**活 agent 说一句话
-    /// （决策 35 §二，横读全开之后兄弟也发得到）。
-    ///
-    /// 跟 `with_spawn`/`with_status`/`with_collect` 各自一档，理由同 `with_status`：
-    /// 部署方决定开哪些，不是一个「多 agent 模式」的总开关。**只开 send 不开 status
-    /// 是合法但难用的组合**——模型拿不到别人的 id，只能靠自己 spawn 时记下的那些。
-    pub fn with_send(mut self) -> Self {
-        self.push_spec(send_spec());
-        self
     }
 
     /// s5 开闸：追加 `srv:vision/inspect`（写死 Kimi 3 的识图工具）。它调

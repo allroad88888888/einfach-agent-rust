@@ -24,7 +24,7 @@
 use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::value::atom_value::AgentValue;
 use crate::value::{
-    host_prefix, inbox, prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries,
+    host_prefix, inbox, notes, prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries,
 };
 
 use super::atom_key::{AtomKey, ToolCallSlot};
@@ -125,6 +125,13 @@ impl Slot {
             // 空列表也走同一条编解码路径，读取点因此不必区分「没收到过」和
             // 「收到过但已经排空了」——它们就是同一个值。
             Slot::Inbox => inbox::to_value(&[]),
+            // 空草稿纸的编码，不是 `Null`：同 `Inbox` 那条理由——**默认值必须是
+            // 空**，019 的按需重建拿的就是它。若默认成别的，undo 路径上凭空重建
+            // 出来的 atom 会给一个从没记过东西的 agent 平添几条 note，而 note
+            // 是它下一次调 `srv:agent/notes` 时照着干活的依据。链通、值错、
+            // 不报错。空表也走同一条编解码路径，读取点因此不必区分「从没记过」
+            // 和「记了又都删了」——它们就是同一个值。
+            Slot::Notes => notes::to_value(&notes::Notes::new()),
         }
     }
 }

@@ -2,10 +2,11 @@
 //!
 //! | 文件 | 职责 |
 //! |------|------|
-//! | [`slot`] | 一个 agent 的槽位怎么称呼：`Slot`，以及「有哪些槽位」（`Slot::ALL`） |
+//! | [`slot`] | 一个 agent 的槽位怎么称呼、为什么存在：`Slot` |
+//! | [`slot_all`] | 名册：一共有哪些槽位（`Slot::ALL`，209 从 `slot` 拆出） |
 //! | [`atom_key`] | 落盘的键长什么样：`AtomKey` / `ToolCallSlot` / `DerivedKey`（154 从 `slot` 拆出） |
 //! | [`slot_default`] | 每个槽位「没有值的时候是什么」——`default_value` 的唯一一处 |
-//! | [`visibility`] | 每个槽位跨 agent 时朝哪个方向可读（红线 10 的结构面） |
+//! | [`visibility`] | 每个槽位别的 agent 读不读得到（红线 10 的结构面） |
 //! | [`build`] | 构图函数：`source_atom` / `derived_atom` / `build_agent`，建 atom 的唯一入口 |
 //!
 //! 这一层**不写值**。写值一律走 `command/`（红线 2），这里只负责「哪个槽位、
@@ -15,6 +16,7 @@
 pub mod atom_key;
 pub mod build;
 pub mod slot;
+pub mod slot_all;
 pub mod slot_default;
 pub mod visibility;
 

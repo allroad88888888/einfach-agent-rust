@@ -164,10 +164,19 @@ impl ToolTableSpec {
             // **开了 `background` 却不开 `collect` 是陷阱**——模型能发后台子，却
             // 领不回结果，只能等轮末被当孤儿拆掉（`agent_runtime::orphan`）。
             // 054 之前这一档漏了 collect，CLI（`agent-cli::main`）那边一直是全的。
+            //
+            // M20（决策 35）追加 `send`（206）/`self`（208）/`notes`（209）：这一档的意思是
+            // 「开子 agent」，而横读全开之后兄弟之间说得上话才是这一波的行为
+            // 核心。**声明是唯一的开关**——截获注册跟着 `declares()` 走
+            // （`agent_runtime::builtin_intercepts`），这一行不加，模型连这两个
+            // 工具存在都不知道，206/208 就是死代码。
             ToolTableSpec::Full { spawn_limits } => agent_runtime::ToolTable::with_shell()
                 .with_spawn(spawn_limits)
                 .with_status()
-                .with_collect(),
+                .with_collect()
+                .with_send()
+                .with_self()
+                .with_notes(),
         }
     }
 

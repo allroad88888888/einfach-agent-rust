@@ -24,10 +24,10 @@ fn the_spec_tells_the_model_the_scope_and_where_an_answer_actually_comes_from() 
     // 207：范围是整棵树，而且这份清单是 send 的 id 来源。
     assert!(text.contains("整棵树"), "范围得说清：{text}");
     assert!(text.contains("兄弟"), "兄弟看得见是这一波的核心：{text}");
-    // 206 落地之后把这个字面量换成 `crate::SEND_TOOL` 常量——那样「send 改了名而
-    // 这段描述没跟上」也一样红（照下面 `COLLECT_TOOL` 那条的写法）。
+    // 206 落地之后这里从字面量换成了常量（208 补做）：「send 改了名而这段描述
+    // 没跟上」从此也一样红，照下面 `COLLECT_TOOL` 那条的写法。
     assert!(
-        text.contains("srv:agent/send"),
+        text.contains(crate::SEND_TOOL),
         "这份清单里的 id 就是 send 的 to，描述里该点名：{text}"
     );
 
