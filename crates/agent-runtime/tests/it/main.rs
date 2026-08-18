@@ -149,6 +149,7 @@ mod tree_snapshot_background_children;
 mod tree_snapshot_emits_on_change;
 mod turn_end_indep;
 mod undo_after_turns;
+mod wake_collect_after_wake;
 mod wake_indep_mutual_wake_halts;
 mod wake_indep_wakes_for_real;
 mod wasm_clock_source;

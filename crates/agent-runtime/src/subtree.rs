@@ -85,6 +85,18 @@ pub(crate) struct Subtree {
     detached: Vec<Detached>,
     /// 后台子已经跑完、但还没人领的结果。
     stash: Vec<Stashed>,
+    /// 214：**刚被叫醒、还没真的动起来**的后台子。
+    ///
+    /// 存在的理由是一个时序：`send` 叫醒它的那一刻，`Event::Wake` 还排在待办队列
+    /// 里没被 `step`，所以它**此刻仍然是终态**——`harvest_detached` 会立刻把那份
+    /// **旧**答案重新入 stash 并再次把它划出名单，于是它醒来后给的新答案照样没人收。
+    ///
+    /// 这个标记让收割在它「还没动起来」的那几圈**跳过**它；一旦观察到它离开终态，
+    /// 标记就清掉，之后按常规收割——那时拿到的才是新答案。
+    ///
+    /// **这个时序是真机 dogfood 逮到的**，而且是逮到了第一版修法本身的错：
+    /// 光把它从 stash 挪回 detached 不够，中间那几圈会把它原样打回去。
+    woken: Vec<AgentId>,
 }
 
 impl Subtree {
@@ -143,6 +155,11 @@ impl Subtree {
             parent: stashed.parent,
             epoch,
         });
+        // **必须连标记一起打**：这一刻 `Event::Wake` 还没被 `step`，它仍是终态，
+        // 下一圈收割会把旧答案原样打回 stash（见 `woken` 字段文档）。
+        if !self.woken.contains(child) {
+            self.woken.push(child.clone());
+        }
     }
 
     /// 053 的**领取即消费**：stash 里有这个子的结果就端走，同时从 stash 划掉。
@@ -255,6 +272,15 @@ impl Subtree {
             }
             let status = session.status_of(&self.detached[i].child);
             if !status.is_terminal() {
+                // 214：它真的动起来了 → 醒来标记该清掉，下一次落终态按常规收割
+                // （那一次拿到的才是新答案）。
+                self.woken.retain(|woken| woken != &self.detached[i].child);
+                i += 1;
+                continue;
+            }
+            // 214：刚被叫醒、还没动起来——**跳过**。收在这儿的会是旧答案，
+            // 而且收完就把它划出名单，新答案从此没人要（见 `woken` 字段文档）。
+            if self.woken.contains(&self.detached[i].child) {
                 i += 1;
                 continue;
             }
