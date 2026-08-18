@@ -39,15 +39,15 @@ fn a_dead_agents_tombstone_key_exists_with_null_but_is_live_says_no() {
         .filter(|(k, _)| k.agent() == &child)
         .count();
     assert_eq!(
-        before, 23,
+        before, 24,
         "每个 agent 一份 `Slot::ALL`（103 追加了 PrevSendPlan → 17，107 追加了 \
          Summaries → 18，134 追加了 PrefixChunks → 19，144 追加了 \
          PrefixAllowed → 20，154 追加了 HostPrefix → 21，\
-         205 追加了 Inbox → 22，209 追加了 Notes → 23）"
+         205 追加了 Inbox → 22，209 追加了 Notes → 23，212 追加了 AwaitingOn → 24）"
     );
 
     let report = session.despawn_child(&child).expect("despawn");
-    assert_eq!(report.atoms_evicted, 22);
+    assert_eq!(report.atoms_evicted, 23);
     assert!(!session.is_live(&child), "despawn 之后 is_live 该是假");
 
     let remaining: Vec<_> = session

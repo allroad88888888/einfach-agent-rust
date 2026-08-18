@@ -69,8 +69,9 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
         "子的 UserInput 该留一条 entry"
     );
     // 144 追加 `Slot::PrefixAllowed`：19 → 20；154 追加 `Slot::HostPrefix`：20 → 21；
-    // 205 追加 `Slot::Inbox`（决策 35）：21 → 22；209 追加 `Slot::Notes`：22 → 23。
-    assert_eq!(child_slot_count(&session, &child), 23);
+    // 205 追加 `Slot::Inbox`（决策 35）：21 → 22；209 追加 `Slot::Notes`：22 → 23；
+    // 212 追加 `Slot::AwaitingOn`：23 → 24。
+    assert_eq!(child_slot_count(&session, &child), 24);
 
     let report = session.undo_turn();
     assert!(
@@ -82,11 +83,12 @@ fn undoing_the_turn_that_spawned_a_child_removes_it_from_the_live_set() {
     assert_eq!(session.live_agents(), vec![root.clone()]);
     assert!(session.children_of(&root).is_empty());
 
-    // 裁决的核心：atom 还在（二十三个槽位一个不少，144 追加了 PrefixAllowed、
-    // 154 追加了 HostPrefix、205 追加了 Inbox、209 追加了 Notes），只是值回默认。
+    // 裁决的核心：atom 还在（二十四个槽位一个不少，144 追加了 PrefixAllowed、
+    // 154 追加了 HostPrefix、205 追加了 Inbox、209 追加了 Notes、212 追加了
+    // AwaitingOn），只是值回默认。
     assert_eq!(
         child_slot_count(&session, &child),
-        23,
+        24,
         "undo 不逐出 atom，只回滚值——这是跟 despawn 墓碑语义的关键区别"
     );
     assert_eq!(tools_allowed_of(&session, &child), AgentValue::Null);

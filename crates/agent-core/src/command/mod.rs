@@ -41,6 +41,7 @@
 //! | [`compaction_record`] | 109：`summary_library`——压缩可见性的读口，展开原文走这条链，不经 `SendPlan` |
 //! | [`prefix`] | 134：`set_prefix_chunks` / `prefix_chunks`——`PrefixChunks` 槽位的 journaled 读写（会话创建期定下的 system 前缀，恢复时原样回来、**不重算**） |
 //! | [`inbox`] | 205：`deliver`/`drain_now`/`drain_next_turn`——`Inbox` 槽位的三条命令，两档送达时机各认各的定点（决策 35 §二） |
+//! | [`awaiting`] | 212：`await_agent`/`awaiting_on`/`stop_awaiting`——等待图（`AwaitingOn` 槽位）与**建立那一刻查环**（决策 35 §一） |
 //! | [`auto_turn`] | 211：`auto_turn_budget`/`spend_auto_turn`——`AutoTurnBudget` 槽位的读写，「没人看着时还能自己跑几轮」那道闸（决策 35 §二） |
 //! | [`notes`] | 209：`set_note`/`notes_of`——`Notes` 槽位的读写，**整张槽位表里唯一属于模型自己的一格**（决策 35 §三） |
 //! | [`cross_read`] | 028：跨 agent 读的正门 `read_agent`（决策 35 之后不限方向，只查 `Visibility`，红线 10） |
@@ -56,6 +57,7 @@
 pub mod advance_boundary;
 pub mod apply_summary;
 pub mod auto_turn;
+pub mod awaiting;
 pub mod barrier;
 pub mod child_config;
 pub mod clear_tool_results;
@@ -92,6 +94,7 @@ pub use clear_tool_results::ClearOutcome;
 pub use cross_read::ReadDenied;
 pub use despawn::{DespawnRefused, DespawnReport};
 pub use inbox::DeliverDenied;
+pub use awaiting::AwaitDenied;
 pub use notes::{MAX_NOTES, NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied};
 pub use meta::{AgentChange, AgentEntry, AgentHistory, EntryMeta, Undoability, known_label};
 pub use session::{DEFAULT_HISTORY_CAP, Session};

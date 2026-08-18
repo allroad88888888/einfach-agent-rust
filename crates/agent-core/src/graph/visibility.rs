@@ -133,6 +133,11 @@ impl Slot {
             // **所有人都读得到**，于是「一个 agent 改一个 key」变成影响别人下一轮
             // prompt 的事，而模型完全看不到这条因果。
             Slot::Notes => Visibility::Private,
+            // `AwaitingOn`（212）：**等待图是内部账本**。它是「这个 agent 此刻在
+            // 等谁」——跟 `Inbox` 同一条判据：开成 `Shared` = 所有人都订阅得到
+            // 「谁在等谁」，而那不是任何一个已知需求要的。查环要遍历它，但那是
+            // core 内部的命令层在做，不经过跨 agent 读口。
+            Slot::AwaitingOn => Visibility::Private,
         }
     }
 }
@@ -214,6 +219,8 @@ mod tests {
                 Slot::Inbox,
                 // 209 追加 Notes：模型自己的草稿纸，只有它自己看得到。
                 Slot::Notes,
+                // 212 追加 AwaitingOn：等待图是内部账本，查环的人是 core 自己。
+                Slot::AwaitingOn,
             ]
         );
     }

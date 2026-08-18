@@ -158,6 +158,7 @@ const KNOWN_LABELS: &[&str] = &[
     "drain_next_turn",
     "set_note",
     "wake",
+    "await_agent",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

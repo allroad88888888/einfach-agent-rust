@@ -35,9 +35,10 @@ fn child_slot_count(session: &Session, child: &AgentId) -> usize {
 
 /// 144 把每个 agent 的槽位数从 019 定的 19 追加到 20；154 又追加
 /// `Slot::HostPrefix`，20 → 21；205 追加 `Slot::Inbox` → 22；209 追加
-/// `Slot::Notes` → 23（常量名沿用 144 落地时取的名字，不为一次数字漂移改名
+/// `Slot::Notes` → 23；212 追加 `Slot::AwaitingOn` → 24（常量名沿用 144
+/// 落地时取的名字，不为一次数字漂移改名
 /// ——名字要回答的是「这个数从哪来」，不是「最新是谁改的」）。
-const SLOTS_PER_AGENT_AFTER_144: usize = 23;
+const SLOTS_PER_AGENT_AFTER_144: usize = 24;
 
 #[test]
 fn spawn_with_some_sorts_and_dedupes_the_granted_names() {

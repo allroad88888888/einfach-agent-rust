@@ -24,7 +24,8 @@
 use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::value::atom_value::AgentValue;
 use crate::value::{
-    host_prefix, inbox, notes, prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries,
+    awaiting, host_prefix, inbox, notes, prefix_chunks, send_plan::SendPlan, send_plan_codec,
+    summaries,
 };
 
 use super::atom_key::{AtomKey, ToolCallSlot};
@@ -132,6 +133,13 @@ impl Slot {
             // 不报错。空表也走同一条编解码路径，读取点因此不必区分「从没记过」
             // 和「记了又都删了」——它们就是同一个值。
             Slot::Notes => notes::to_value(&notes::Notes::new()),
+            // 空等待图的编码，不是 `Null`：同 `Inbox`/`Notes` 那条理由——
+            // **默认值必须是空数组**，019 的按需重建拿的就是它。若默认成别的，
+            // undo 路径上凭空重建出来的 atom 会给一个从没等过谁的 agent 平添一条
+            // 等待边，而那条残边会把后续的反向 `await` 误判成环（查环正是遍历这张
+            // 图）。链通、值错、不报错。空图也走同一条编解码路径，读取点因此不必
+            // 区分「从没等过」和「等过又都清了」——它们就是同一个值。
+            Slot::AwaitingOn => awaiting::to_value(Vec::new()),
         }
     }
 }

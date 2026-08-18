@@ -19,7 +19,7 @@ impl Slot {
     /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
     /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
     /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 23] = [
+    pub const ALL: [Slot; 24] = [
         Slot::Messages,
         Slot::Status,
         Slot::ToolSlots,
@@ -47,5 +47,7 @@ impl Slot {
         Slot::Inbox,
         // 209 追加 Notes（决策 35 §三）。
         Slot::Notes,
+        // 212 追加 AwaitingOn：等待图（`value::awaiting`）。
+        Slot::AwaitingOn,
     ];
 }

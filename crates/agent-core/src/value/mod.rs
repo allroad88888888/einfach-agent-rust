@@ -28,8 +28,13 @@
 //! 它跟 [`prefix_chunks`] 站同一边——**不排序**，因为顺序就是话被说出来的先后。
 //! [`notes`]（209）站另一边：它是**一张表**不是流水账（同一个 key 写第二次是
 //! 覆盖），容器因此是 `BTreeMap`——有序是类型自带的，不是某个函数记得排一下。
+//! [`awaiting`] 是第二类里最新近的一个（212）：`Slot::AwaitingOn` 的编解码——
+//! 等待图一行 ↔ [`AgentValue::Json`] 数组。它也**排序**（红线 11：进 `await` 的
+//! 拒绝文本），但它必须 journaled 才能恢复后查环——放内存里，一次崩溃恢复就把
+//! 查环能力丢了，而丢了不报错（理由见它自己的模块文档）。
 
 pub mod atom_value;
+pub mod awaiting;
 pub mod host_prefix;
 pub mod inbox;
 pub mod notes;
