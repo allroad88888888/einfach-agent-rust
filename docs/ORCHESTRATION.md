@@ -72,7 +72,10 @@ pump 的静止条件是 `calls.is_empty()`（043 后加上 `&& mcp_calls.is_empt
 > 上面三条「全部一行不改」原样成立。它唯一动到的是**泵为什么会停**的论证：
 > 边界从「树的大小」变成「树的大小 × 每人的 `max_turns`」，见 `runner.rs` 模块文档。
 
-## 三、三个工具（都 `Server` 位置，dispatch 截获）
+## 三、这一族工具（都 `Server` 位置，dispatch 截获）
+
+> **M20 之后是八个**，不是三个。下面那张表是 M8 的三件套（spawn/status/collect），
+> 决策 35 又加了五个，各自的语义见本节末尾那张表。
 
 截获位置照 spawn/skill 同款（`dispatch.rs:70` 的 `Effect::ExecuteTool` 内按工具名截）。
 
@@ -84,6 +87,20 @@ pump 的静止条件是 `calls.is_empty()`（043 后加上 `&& mcp_calls.is_empt
 
 **漂亮之处：前台 spawn ≡ spawn(bg) + 紧跟 collect 融进一个槽。** 后台把这俩拆开，中间塞进
 observe/react。决策 20 是这个模型的一个特例，不是被推翻。
+
+### M20 追加的五个（决策 35）
+
+| 工具 | 语义 | 阻塞? | `Aftermath` |
+|---|---|---|---|
+| `srv:agent/send` | 给这个会话里**任意活 agent**（含兄弟）说一句话。`when="now"` 加入对方本轮 loop（对方已终态就**把它叫醒**，`Event::Wake`，214）；`when="next_turn"` 留到下一轮，**只能投给 root**（子 agent 不跨 turn） | 否 | `Nothing` |
+| `srv:agent/self` | 看**自己**这一刻还剩多少额度：本轮请求次数、子数、深度、工具数、压没压过、这个会话还能自己开几轮 | 否 | `Nothing` |
+| `srv:agent/notes` | 读自己的草稿纸（整张槽位表里**唯一属于模型自己的一格**） | 否 | `Nothing` |
+| `srv:agent/notes/set` | 写/删一条 note。同 key 是覆盖 | 否 | `Nothing` |
+| `srv:agent/await` | 挂起等另一个 agent 到达某个状态（含兄弟）。**只告诉你「它到了」，不给正文**——正文要 `collect` | 是 | `Nothing` |
+
+`srv:agent/status` 在 207 里**放开到整棵树**（决策 35 横读全开）：调用者自己也在清单里、
+标着 `(你)`。那道「只看后代」的过滤是 `status_tool.rs` 里的一道人为收窄，不是 core 的
+可见性——`agent_tree()` 从来是全树的纯派生快照。
 
 > **那两道闸的数字从哪来**（决策 32，M18）：`AgentLimits { max_depth, max_children }`
 > 默认 3/8，但**是部署方可配的参数**，不是硬编码——`agent-server`/`agent-cli` 的
@@ -107,8 +124,9 @@ observe/react。决策 20 是这个模型的一个特例，不是被推翻。
    `subtree::final_text`（`messages_of(child)` 末条 assistant，`subtree.rs:134`）——**运行时侧
    读，非 core 跨读**，和阻塞 spawn 今天读子正文同一条路。
 3. **status**（`dispatch.rs` 新截获 + 复用 `observe.rs`）：`status(id?)` → `session.agent_tree()`
-   收窄到「调用者的后代」（`is_descendant_of` 过滤 `live_agents`）→ 序列化成 tool_result 正文。
-   纯读、无 Pending、当场回写。
+   → 序列化成 tool_result 正文。纯读、无 Pending、当场回写。
+   **207 起不再收窄到「调用者的后代」**：决策 35 横读全开之后那道过滤没有理由再留
+   （兄弟看得见兄弟是这一波的行为核心，而这份清单里的 id 正是 `send`/`await` 的目标）。
 4. **孤儿收尾**（`runner.rs` 的 B 点，`:140`）——**不是**「修静止条件」。043 之后 B 点是
    `calls.is_empty() && mcp_calls.is_empty()`，而后台子自己的 provider 调用就住 `calls` 里，
    所以 root 落终态时泵**自然继续**把子驱动到静止再返回（「一轮结束 = root 终态 **且** 后台子
@@ -120,6 +138,21 @@ observe/react。决策 20 是这个模型的一个特例，不是被推翻。
    agent 字段、且会把轮次判成取消，而 root 明明答成功了。完整推导 + 验收断言见
    [issue 052](issues/052-spawn-background.md) §「孤儿收尾的机制」（主会话 opus 定）。
 
+   > **M20 的修正：一轮结束不再只看这两条。** 收尾之后还有两层：
+   >
+   > - **214（唤醒）**：投给一个已终态 agent 的 `when="now"` 会把它在**同一个 turn 内**
+   >   拉回泵里（`Event::Wake`）。于是「泵为什么会停」的论证换了依据——052 之前是结构性的
+   >   （没有任何 agent 能把别人重新拉起来，工作量只随 spawn 往下长、树被两道闸封顶），
+   >   现在靠**每个 agent 自己的 `MaxTurns`**：这一轮 provider 调用总数 ≤ 活 agent 数 ×
+   >   各自的 `max_turns`。写错的形状只有一个而且不报错：唤醒时重置 `TurnsUsed`。
+   > - **211（自驱动）**：root 收件箱里还有 `when="next_turn"` 的留言时，会话**自己**
+   >   开下一轮。那个循环在 `run_turn` **外面**（每一轮都是一次完整的新 turn，
+   >   `turn_id`/undo 粒度/孤儿收尾一个字都不用改），闸是 `AgentLimits::max_auto_turns`
+   >   ——**只有真实用户输入能把它加满**，`begin_turn` 一个字都不碰。
+   >
+   > 所以「用户按一次回车之后最坏花多少钱」= 树的大小 × 每人的 `max_turns` × 自驱动预算，
+   > 三个数相乘。这也是它们必须是三道分开的闸的理由。
+
 ## 五、红线账（逐条过）
 
 - **红线 6（在飞 effect 带 epoch、回写前校验）**：detached 子的结果带 spawn 时的
@@ -127,11 +160,16 @@ observe/react。决策 20 是这个模型的一个特例，不是被推翻。
   （`event.epoch() != self.epoch` 丢弃）。undo/cancel bump epoch → 幽灵子结果被丢。**不新造
   一套**，复用异步路已有的门。这是 052/053 里 opus 要盯死并写「在飞时 bump epoch、结果被丢弃」
   断言的那条。
-- **红线 10（只上下读、禁横读）**：`status` 读的是 `Status` 槽派生（`AgentActivity`）——
-  `Status` 是 **Downward-visible**（`visibility.rs:77`），下读合法。`collect` 读子正文走**运行时
-  harvest**（不是 core 的 `read_descendant`——`Messages` 是 Upward-only，core 跨读拿不到子正文，
-  Explore 问题 4）：harvest 是宿主给自己写回 `ToolResult` 的既有合法路，不经 core 跨读 API，
-  不违反可见性。**status 只暴露 activity，不暴露子正文**；只有 collect 暴露正文，且经既有回写路。
+- **红线 10**：M8 时这条是「只上下读、禁横读」，`status` 靠「`Status` 是 Downward-visible」
+  过关。**决策 35 整条改写了它**：跨 agent 读**不限方向**，判据变成两条——那个槽位不是
+  内部账本（`Slot::visibility()` 那张穷举表），且**依赖图上的跨 agent 边只许指向 primitive**。
+  旧论证（「两个方向可读的 slot 集合不相交 ⇒ 环不可能」）的前提在这个仓里从来没成立过：
+  `cross_read.rs` 的读走 `Session::peek` → `store.get`，**一条边都不建**。
+  本节这几条结论不变，只是理由换了：`status` 仍然只暴露 activity 不暴露正文（那是**工具层**
+  的收窄，不是 core 的可见性）；`collect` 仍然走运行时 harvest。
+  **第一条真的跨 agent 依赖边由 `srv:agent/await` 的 derived 建出来**（212），新红线 10 的
+  断言也在那里。另有一类这条红线不管的危险：**等待成环**（A 等 B、B 等 A）——图上一条边都
+  不多，症状是两个槽永远 `Pending` 而泵安静地返回，所以 `await` 在**建立那一刻**查环。
 - **红线 11（进 prompt 的东西逐字节确定）**：`status` 的 tool_result 正文进下一轮 prompt →
   `AgentTree` 序列化必须逐字节确定：`nodes` 按 `AgentId` 路径排序，禁 `HashMap`/`HashSet`。
   （`collect` 回写子正文，和阻塞 spawn 今天一样，已确定。）
@@ -144,7 +182,11 @@ observe/react。决策 20 是这个模型的一个特例，不是被推翻。
 
 ## 六、不做（延后，等真实反馈）
 
-- **跨 turn 后台 agent**（子活过一次 `run_turn`）：见 §二代价。
+- **跨 turn 复活已死的子 agent**（turn N 的子在 turn N+2 被叫醒接着干）：见 §二代价。
+  M20 之后要说清它跟什么不是一回事——**`when="next_turn"` 已经解决了它想解决的问题**：
+  留的是**话**不是 agent，落点是 root 头上一个普通 primitive 槽位，§二 列的三样机械
+  （pending-slot 跨 `run_turn` 重挂、`turn_id`/undo 重写、per-child 取消）一样都不需要。
+  真要复活一个已死的子 agent 仍然不做。
 - **per-child cancel 工具**（`cancel(id)` 单独杀一个后台子）：现在 cancel 是 session 级、无
   agent 字段（Explore 问题 5）。turn 收尾的孤儿取消用 session 级够了（turn 反正要结束）；
   mid-turn 单杀一个要 per-child epoch，延后。
