@@ -71,7 +71,7 @@ pub(super) fn hold_reason(reason: &AutoTurnHold) -> String {
             "你喊了停。已经跑完的那几轮不算失败，剩下的留言还在收件箱里。".to_string()
         }
         AutoTurnHold::Recovered => {
-            "刚从上次崩溃恢复出来——**恢复不自动往下跑**（不然打开就开始烧钱，\
+            "刚从上次崩溃恢复出来——恢复不自动往下跑（不然打开就开始烧钱，\
              而你还没看上一轮发生了什么）。留言还在，你说句话它就会被读到。"
                 .to_string()
         }

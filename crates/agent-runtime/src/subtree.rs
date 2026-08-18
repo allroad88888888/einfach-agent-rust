@@ -114,6 +114,37 @@ impl Subtree {
         self.slots.contains(child)
     }
 
+    /// 214：**这个后台子刚被叫醒**——它会再落一次终态，而那一次的答案才是最新的。
+    ///
+    /// 把它从 stash 里取回、放回 detached 名单，于是下一次收割用**新答案**重新
+    /// 入 stash，`collect` 领到的就是它醒来之后说的话。
+    ///
+    /// # 这是真机 dogfood 逮到的
+    ///
+    /// 214（唤醒）和 053（stash + collect）是不同时候写的，交互处没人测过：
+    /// 后台子落终态时 `harvest_detached` 把它**从 detached 划掉**了，所以它被
+    /// 叫醒、重新作答之后再也不会被收割——`collect` 领回的是**叫醒之前**那一份。
+    /// 真机上表现成「兄弟把数字发过去了，被叫醒的那个也算对了，可 root 领回来的
+    /// 还是它没算之前说的那句话」。没有任何东西报错。
+    ///
+    /// `epoch` 用**现在**这一代而不是当初 spawn 那一代：这一次重新作答发生在
+    /// 现在的世界里，拿旧世代去比会让它下一次收割时被红线 6 那道闸当成迟到结果
+    /// 丢掉——那正好又把新答案弄丢一次。
+    ///
+    /// 没在 stash 里（还在跑、或者绑着 collect 槽）就什么都不做：那两种情况下
+    /// 它本来就还在收割名单上。
+    pub(crate) fn rearm_after_wake(&mut self, child: &AgentId, epoch: Epoch) {
+        let Some(at) = self.stash.iter().position(|entry| &entry.child == child) else {
+            return;
+        };
+        let stashed = self.stash.remove(at);
+        self.detached.push(Detached {
+            child: stashed.child,
+            parent: stashed.parent,
+            epoch,
+        });
+    }
+
     /// 053 的**领取即消费**：stash 里有这个子的结果就端走，同时从 stash 划掉。
     /// 第二次 collect 同一个 id 因此拿到 `None`——一份结果只能领一次。
     pub(crate) fn take_stashed(&mut self, child: &AgentId) -> Option<Stashed> {

@@ -40,6 +40,7 @@ use crate::ctx::RunnerCtx;
 use crate::dispatch::Dispatched;
 use crate::event::RunnerEvent;
 use crate::reply;
+use crate::subtree::Subtree;
 
 /// 工具全名。`srv:` = 服务端本地执行（`Location::Server`，docs/TOOLS.md 的命名
 /// 约定），`agent/send` = 这一族里的 send。
@@ -99,6 +100,7 @@ pub fn send_spec() -> ToolSpec {
 pub(crate) fn intercept(
     session: &mut Session,
     ctx: &mut RunnerCtx,
+    subtree: &mut Subtree,
     agent: &AgentId,
     call_id: ToolCallId,
     input: &Arc<Value>,
@@ -124,7 +126,13 @@ pub(crate) fn intercept(
             let body = format!("已经投给 {} 了。{}", to.as_str(), when_note(when));
             let settled = reply::ok(ctx, agent, call_id, epoch, SEND_TOOL, body);
             match wake_needed(session, &to, when) {
-                Some(wake) => also(settled, wake),
+                Some(wake) => {
+                    // 214 + 053：被叫醒的后台子要**重新进收割名单**，否则它醒来
+                    // 之后给出的新答案没人收，`collect` 领回的还是叫醒之前那一份
+                    // （真机 dogfood 逮到的，见 `Subtree::rearm_after_wake`）。
+                    subtree.rearm_after_wake(&to, session.epoch());
+                    also(settled, wake)
+                }
                 None => settled,
             }
         }

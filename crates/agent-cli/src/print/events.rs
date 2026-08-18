@@ -124,7 +124,7 @@ impl EventPrinter {
             RunnerEvent::AutoTurnStarted { remaining } => {
                 self.finish_line();
                 eprintln!(
-                    "{at}[自驱动] 这一轮是留言自己开的（不是你），之后还能自己开 {remaining} 轮。                     Ctrl-C 随时停，剩下的留言不会丢"
+                    "{at}[自驱动] 这一轮是留言自己开的（不是你），之后还能自己开 {remaining} 轮。Ctrl-C 随时停，剩下的留言不会丢"
                 );
             }
             // 211：有留言等着但没自己开。三种成因都不是错误，但都得说出来

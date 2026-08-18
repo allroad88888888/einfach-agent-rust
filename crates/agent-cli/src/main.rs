@@ -274,6 +274,17 @@ fn main() {
          /mcp 看 MCP server 状态。",
         provider_names(&root)
     );
+    // 211：恢复出来的会话里还躺着 `when="next_turn"` 的留言时，**说一声，但一轮
+    // 都不开**（决策 35 §二）。放在横幅之后、进 REPL 之前：用户看到提示符的那
+    // 一刻就该知道「有话等着，我不会自己去处理」。
+    //
+    // **这一行是真机 dogfood 补的**：server 与浏览器两个宿主当时都接了，唯独
+    // CLI 漏了——留言好端端在收件箱里，而终端上一个字都没有。所有单元/集成测试
+    // 都直接调 `report_recovered_mail`，没有一条走 CLI 的 `main`，于是这条
+    // 「看得见」的承诺在**人真正用的那个宿主**上是空的，而且不报错。
+    if !is_new_session {
+        agent_runtime::report_recovered_mail(&session, &mut ctx);
+    }
     repl::run(&mut session, &mut ctx, &root, &mcp.status);
 }
 

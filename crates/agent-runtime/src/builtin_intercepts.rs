@@ -133,13 +133,14 @@ fn send_intercept() -> InterceptFn {
         let InterceptArgs {
             session,
             ctx,
+            subtree,
             agent,
             call_id,
             input,
             epoch,
             ..
         } = args;
-        send_tool::intercept(session, ctx, agent, call_id, input, epoch)
+        send_tool::intercept(session, ctx, subtree, agent, call_id, input, epoch)
     })
 }
 
