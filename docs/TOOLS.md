@@ -42,7 +42,9 @@ pub struct ToolTable { /* specs + skill registry + 宿主/mcp 的 <tool> → Rev
 
 **没有 `Source` 枚举**（`Builtin | Mcp(ServerId) | Skill(SkillId)`）。工具从哪来今天只体现在
 「谁把它 `push` 进这张表」——`builtin()` / `with_shell()` / `with_skills()` / `with_spawn()` /
-`with_status()` / `with_collect()` / `with_mcp()` 各是一档独立授权，表里不留来源。
+`with_status()` / `with_collect()` / `with_send()` / `with_self()` / `with_notes()` /
+`with_await()`（后四档是 M20，决策 35）/ `with_mcp()` 各是一档独立授权，表里不留来源。
+子 agent 那一族的七档连同它们的陷阱组合住在 `tool_table_agent.rs`（208 拆出）。
 `capabilities` 校验里的 `Origin` 只用于错误文案，不回填工具表。要加 `Source` 之前先答
 「谁读它」：今天没有读者，加了就是第二份要维护的真相。
 
