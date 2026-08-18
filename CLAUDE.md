@@ -62,7 +62,7 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 
 ## 当前状态
 
-**M1–M18 全部完成**（2026-08-01 ~ 08-13，无尾巴）；**L 波（对外推广）2026-08-13
+**M1–M19 全部完成**（2026-08-01 ~ 08-18，无尾巴）；**L 波（对外推广）2026-08-13
 推进到「只剩用户动作」**——见 [docs/issues/README.md](docs/issues/README.md) §L。
 L 波带出五条进主线的改动：`openai` 通用兼容 adapter（决策 33，ROADMAP §一/§二）、
 CI 门禁复活（`.github/workflows/ci.yml`，三个 job）、Pages 部署
@@ -72,6 +72,16 @@ CI 门禁复活（`.github/workflows/ci.yml`，三个 job）、Pages 部署
 不落本机——升版本照走这条）、
 以及 `scripts/clean-build-cache.sh` +
 `scripts/check-build-cache.sh`（构建缓存 35G→9G，见 §Workspace）。
+
+M19 可逆性从标签改成交付物（决策 34，199–203，2026-08-17~18）：**「这一步能不能撤销」
+从一个声明的枚举变成一个交回来的函数**。工具执行完交回三态 `Aftermath`
+（`Nothing`/`Undo(f)`/`Irreversible`），译成 core 记账的三态 `Undoability`
+（`StateOnly`/`Hooked`/`Blocked`）；undo 路上还原钩子在回滚状态**之前**逐条逆序跑。
+起点是一次清账：`Reversibility::Reversible` 当时唯一的差别是打印给人看的字符串，
+宿主声明 `reversible` 的工具 `/undo` 会静默跳过、副作用原样留着。**执行体在别的进程里
+的两类**（宿主 `web:`/`desk:`、MCP）交不回函数，判据是**声明的是事实还是承诺**：
+`pure`/`readOnlyHint:true` 是事实，采信不挡；`reversible` 是交不出的承诺，挡。
+`Reversibility` 枚举自此**只是显示标签**——看到任何拿它当 undo 行为依据的说法，那是过期的。
 
 M18 子 agent 上限
 的配置面（决策 32）：决策 20 的两道闸从「代码可配、运行时无入口」变成进程级启动参数
