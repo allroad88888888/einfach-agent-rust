@@ -14,8 +14,14 @@
 //! 不可信输出路径必须从空表开始，不能先装部署期工具再靠名称黑名单回减」。
 //! 黑名单回减错一个名字就是一件本不该出现的工具漏进了 prompt，而且**不报错**。
 //!
-//! 于是业务 `srv:` 工具不出现在 prompt 里是**结构性成立**的，不靠过滤：这张表
-//! 从来没有过它们。声明 skill 是明确的唯一例外：`SkillRegistry` 只加入 runtime
+//! 于是**要文件系统的**那些 `srv:` 工具不出现在 prompt 里是**结构性成立**的，
+//! 不靠过滤：这张表从来没有过它们。
+//!
+//! **M20 起有第二类例外：`srv:agent/*` 那一族**（决策 35）。判据跟上面那条是
+//! 同一条，只是答案相反——分界线是「**这个工具在浏览器里执行得了吗**」：
+//! shell/fs 要文件系统，执行不了，声明了就是骗模型；子 agent 那一族的执行体
+//! 就在本进程里（dispatch 截获，一行 IO 都没有），wasm 上跟 native 上跑的是
+//! 同一段代码。声明 skill 是第三类例外：`SkillRegistry` 只加入 runtime
 //! 实现的 `srv:skill/read`，由模型读取已持久化的 skill 正文；页面声明一条 `srv:`
 //! 工具仍会被当场拒掉（建宿主就失败），不是默默接受也不是默默丢掉。
 //!
@@ -130,6 +136,26 @@ pub(crate) fn browser_tool_table(
 ) -> ToolTable {
     ToolTable::empty()
         .with_host_tools(builtin_tools())
+        // M20（决策 35，213 §三 点名「**别假定 wasm 白拿**」）：子 agent 那一族。
+        //
+        // **为什么它跟上面那条「浏览器没有 `srv:`」不矛盾**：那条挡的是
+        // `agent-tools` 的 shell/fs——它们要文件系统，浏览器里压根执行不了，
+        // 声明了就是骗模型。这一族反过来，**执行体就在本进程里**（dispatch 截获，
+        // 一行 IO 都没有），wasm 上跟 native 上跑的是同一段代码。
+        //
+        // **代价说清楚**：开了它，页面上一次对话可以自己长出一棵 agent 树，
+        // 每个节点都花使用者自己填的那把 key；`--max-auto-turns` 的默认值
+        // （3）在这里也生效，会话可能在没人碰键盘时自己再跑几轮。
+        // 两条兜底都在：`AgentLimits` 那三道闸照常拦人，页面的 Cancel 按钮接的是
+        // 同一个取消标志（`try_one_auto_turn_async` 在开每一轮之前先看它）。
+        // 浏览器里没有 Ctrl-C，所以那个按钮是唯一的出口——213 §三 把它列成验收。
+        .with_spawn(agent_core::AgentLimits::default())
+        .with_status()
+        .with_collect()
+        .with_send()
+        .with_self()
+        .with_notes()
+        .with_await()
         .with_skills(SkillRegistry::from_host_skills(skills))
         .with_host_tools(declared.to_vec())
         .with_host_prefix(prefix)

@@ -1076,7 +1076,7 @@ token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget
 | [211](211-auto-driven-turns.md) | **自驱动轮次**：自驱动预算（**住在原子图外**，见该 issue 实做记录）+ 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | ✅ 完成 |
 | [212](212-await-tool-and-wait-graph.md) | **`srv:agent/await`**：真订阅 + 等待图 + 建立时查环 | 205 | **opus** | ✅ | ✅ 完成（独测在飞） |
 | [214](214-wake-a-terminal-agent.md) | **唤醒一个已终态的 agent**（含 core 转移 `Event::Wake`）——206 开工时拆出来的 | 206 | **opus** | ✅ | ✅ 完成 |
-| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | 🚧 文档 10 处已改；真机 7/7 已跑（1b 反向那半用确定性夹具钉，理由见该 issue） |
+| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | ✅ 完成（含浏览器 demo 开族 + 真机验收；两处「只做了一半」的理由见该 issue） |
 
 **M20 验收**（可判定，不用形容词，全表在 [213](213-agent-mesh-docs-and-dogfood.md) §三）：
 

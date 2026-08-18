@@ -1,6 +1,6 @@
 # 213 文档同步 + 真机 dogfood ← M20 终点
 
-**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md)+[207](207-status-whole-tree.md)+[208](208-self-tool.md)+[209](209-notes-slot.md)+[211](211-auto-driven-turns.md)+[212](212-await-tool-and-wait-graph.md) · **模型** sonnet · **独测** — · **状态** 🚧 进行中（文档 9 处已改；真机 6/7 已跑，2026-08-18）
+**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md)+[207](207-status-whole-tree.md)+[208](208-self-tool.md)+[209](209-notes-slot.md)+[211](211-auto-driven-turns.md)+[212](212-await-tool-and-wait-graph.md) · **模型** sonnet · **独测** — · **状态** ✅ 完成（2026-08-18）：文档十二处逐处核过；真机 7/7 已跑（第 4 条一半、1b 反向那半的理由见下）；浏览器 demo 已开并验收
 
 ## 目标
 
@@ -162,10 +162,12 @@
 凡是「必须在一轮里连着做完 N 步」的场景，真机上都不稳。下次设计 dogfood 剧本时，
 把每一步拆成独立的一轮（用户输入驱动），比在提示词里喊「不要停下来」可靠得多。
 
-## 一处**没做**的验收，要人拍板（2026-08-18）
+## 浏览器 demo 那条：**做了**（2026-08-18）
 
-§三 有一条：「浏览器 demo 里 `send` / `await` / `status` 全树看得见」。**没做**，
-因为它不是接线问题，是一次**产品决策**：
+一开始判成「产品决策，等人拍板」，但 §三 的原文点名了「**别假定 wasm 白拿**，
+157 那次就是后置之后才发现要补做」——那是计划的一部分，不是一个开放问题。
+所以照做了，把代价写清楚而不是卡在问句上。下面这一段是当时的判断，留着记录
+为什么它看起来像个决策：
 
 `agent-wasm`（Pages 上那个没有服务端进程的浏览器宿主）的工具表是
 `ToolTable::empty()` 起步——`crates/agent-wasm/src/tools.rs` 的模块文档写着
@@ -180,5 +182,35 @@
 M20 五个工具都已经在表里，事件（`auto_turn_started`/`auto_turn_held`/
 `unread_messages`）也都接到了 `render/notice.ts`。）
 
-**要开的话是一行**（`browser_tool_table` 那条链上加 `.with_spawn(..)` 起的几档），
-外加一条真机浏览器验收。要不要开、开哪几档，等一句话。
+### 实际怎么做的
+
+`browser_tool_table` 上开了整族七档（spawn/status/collect/send/self/notes/await），
+判据在 `tools.rs` 的模块文档里写成一条**可以照着判下一个工具的规则**：
+
+> 分界线是「**这个工具在浏览器里执行得了吗**」。shell/fs 要文件系统，执行不了，
+> 声明了就是骗模型；子 agent 那一族的执行体就在本进程里（dispatch 截获，
+> 一行 IO 都没有），wasm 上跟 native 上跑的是同一段代码。
+
+**代价如实写在那段注释里**：页面上一次对话可以自己长出一棵 agent 树，每个节点都花
+使用者自己填的那把 key；`--max-auto-turns` 的默认值（3）在这里也生效。两条兜底
+都在：`AgentLimits` 三道闸照常拦人；页面的 **Cancel 按钮接的是同一个取消标志**
+（`try_one_auto_turn_async` 在开每一轮之前先看它），而自驱动的循环就跑在
+`turn::run` 里，所以那个按钮在自驱动期间是**亮着的**。浏览器里没有 Ctrl-C，
+那是唯一的出口。
+
+### 真机浏览器验收（playwright，本地 http 起页面）
+
+1. **工具表页面上看得见**：建宿主之后 `#tools` 里 14 条，M20 那一族全在——
+   `srv:agent/spawn` / `status` / `collect` / `send` / `self` / `notes` /
+   `notes/set` / `await`。**用的是一把假 key**：建宿主不发任何网络请求，
+   这一条因此零成本、也不动用真 key。
+2. **自驱动那两条事件页面上画得出来**：把合成事件喂给 `transcript.js` 同一段
+   渲染代码，四行如实渲染（`⟳ 这一轮是留言自己开的（不是你），之后还能自己开
+   2 轮——按 Cancel 随时停，剩下的留言不会丢`，以及三种 hold 成因各一句）。
+   **不是落进 `default:` 那条兜底**——那条只会打一行 `[auto_turn_started] `，
+   载荷字段叫 `remaining`/`pending`，不叫 `detail`/`status`/`name`。
+
+**没做的那一半，如实记**：浏览器里跑一轮**真的**自驱动对话（真 key、真模型）
+没做——那要把使用者的真 key 打进一个我驱动的浏览器页面，而上面两条已经把
+「声明齐了」和「画得出来」分别钉住，剩下的那一段（事件真的从 runner 流到页面）
+跟 CLI 上跑过的是同一段 Rust。这一条留给页面的真实使用者。
