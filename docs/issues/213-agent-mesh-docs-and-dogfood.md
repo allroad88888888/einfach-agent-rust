@@ -1,0 +1,85 @@
+# 213 文档同步 + 真机 dogfood ← M20 终点
+
+**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md)+[207](207-status-whole-tree.md)+[208](208-self-tool.md)+[209](209-notes-slot.md)+[211](211-auto-driven-turns.md)+[212](212-await-tool-and-wait-graph.md) · **模型** sonnet · **独测** — · **状态** 待做
+
+## 目标
+
+红线 10 被整条改写了（方向约束 → **边只许指向 primitive**），而它今天在多处被当成
+「兄弟互读不存在」引用；`ORCHESTRATION` §二/§六 那套「子 agent 不跨 turn」的论述要接上
+「消息跨 turn」这半句；而**会话现在能自己往下跑**——这件事今天所有文档里一个字都没有。
+**不改就是假话。**
+
+外加一次真 provider 的 dogfood——照本仓每个里程碑的规矩，测试绿不等于世界对。
+
+## 一、逐处改（**十二处**，做的时候逐条核，别信这份清单是全的）
+
+| 位置 | 现在写着什么 | 该改成 |
+|---|---|---|
+| `docs/INVARIANTS.md` §10 | 「跨 agent 读取只走 `read_ancestor` / `read_descendant`。**不提供第三个 API**」「兄弟之间要交换数据经共同祖先中转」「横读还会让 O(n) 汇聚悄悄混进来」 | **整条重写**成 204 §一 的新判据：**不限方向，但边只许指向 primitive**。「违反后」那段也要重写——旧的说「依赖成环」，新的失败模式是「跨 agent 读到一个 derived，环从此可能，而撞上是 `read.rs:151` 的 panic」 |
+| `docs/INVARIANTS.en.md` §10 | 同上 | 同步，并按仓规把头部 hash 更新成**最后改动中文源的那个 commit** |
+| `CLAUDE.md` §红线摘要 第 10 条 | 「agent 之间只允许上下读，禁止横读」 | 一行标题就说反了。改成「跨 agent 的边只许指向 primitive」 |
+| `CLAUDE.md` §当前状态 | M1–M19 | 补 M20 一段，**并把「会话能自己往下跑」写进去**——它是这个仓第一次在没有用户输入时消耗 token，比新增几个工具重要得多 |
+| `graph/visibility.rs` 模块文档 | `U ∩ D = ∅ ⇒ 无环` 的完整证明 | **整段替换**（205 里做）。旧证明每一句都建立在「两个方向不相交」上，删掉方向之后一句都不成立——留半句比全删更糟 |
+| 启动参数文档（`agent-server-bin` / `agent-cli` 的 `--help` 与 ARCHITECTURE） | `--max-agent-depth` / `--max-children` | 加 `--max-auto-turns`，并写清**三层闸各管什么**：树多大 / 一轮说多少话 / 没人看着时能跑几轮。部署方是靠这三个数相乘估账的 |
+| `docs/STATE-MODEL.md`（中英） §「读取边界」 | 两个读口的完整论述 | 改成四个口（`read_agent` / `peek_agent` + 两个方向断言封装），`Visibility` 两态，无环论证换成新的 |
+| `docs/ORCHESTRATION.md` §二 | 「子 agent 不跨 turn」的完整论述 | **结论不变**，但要加一句：**消息跨 turn，agent 不跨 turn**——`when="next_turn"` 靠的是 root 头上的槽位状态，§二说的那些机械（pending-slot 跨 `run_turn` 重挂、`turn_id`/undo 重写、per-child 取消）**一样都不需要** |
+| `docs/ORCHESTRATION.md` §三 / §五 / §六 | 「三个工具」那张表 | 现在是八个（+ `send` / `await` / `self` / `notes` 读写）。§五 红线账里红线 10 那条按 204 重写；§六「不做」里把「跨 turn 后台 agent」改写成「跨 turn 复活已死的子 agent」，并说明 `next_turn` 已经解决了它想解决的问题 |
+| `docs/ORCHESTRATION.md` §四.4（孤儿收尾） | 「root 终态 + 后台子静止 = 一轮结束」 | **这句话不再是全部**：收尾之后还要看 `NextTurn` 收件箱与 `AutoTurnBudget`。停机论证从一层变三层，按 204 §二 重写 |
+| `docs/STATE-MODEL.md`（中英） §「子 agent」 | 父子之间怎么传数据 | 补两种送达时机与各自的定点；`Slot::Inbox` 的 `when` 标记为什么是一个槽两个标记、不是两个槽；等待图（`AwaitingOn`）为什么必须是 journaled 状态 |
+| `docs/TOOLS.md` | 内置工具表 | 补五个新名字与它们的 `Aftermath` 档（全是 `Nothing`） |
+| `docs/OBSERVABILITY.md` | 活树面板给人看什么 | 加两样：**这一轮是不是自驱动开的**、**剩余 `AutoTurnBudget`**。一个会自己往下跑的会话，用户失去的第一样东西是「我知道现在在干什么」 |
+
+`cross_read.rs` 与 `visibility.rs` 的模块文档在 [205](205-core-peek-and-inbox.md) 里改，
+不重复。`build.rs` 的模块文档在 [212](212-await-tool-and-wait-graph.md) 里改（新 derived）。
+
+> **别只 grep「横读 / 兄弟 / lateral」。** 203 的教训写在那份 issue 的实做记录里：
+> `HOST-CAPABILITIES.md` §五 当时整节是过期的，而它一个关键词都不命中。
+> **判断依据只能是拿代码的当前行为逐格核。**
+
+## 二、真机 dogfood（真 provider，不是 mock）
+
+照 049 / 054 的规矩。七条，每条都要能在终端上看见结果：
+
+1. **兄弟对话**：父 spawn A、B → A `send` 给 B 一个中间结论 → B 用上它 →
+   两边都答对。**这是「横读开了」的行为证据。**
+1b. **兄弟互等**（212）：A `await` 兄弟 B → B 干完 → A 继续。
+   再让 B 反向 `await` A → **B 当场拿到错误、两边都没卡住、这一轮正常结束**。
+1c. **自驱动**（211，本波最该亲眼看的一条）：留言链 + `--max-auto-turns 3` →
+   **人不碰键盘，会话自己跑三轮然后停住**；面上从头到尾看得出「这轮是它自己开的」、
+   剩几格预算；中途按一次停，剩余留言还在。再 `kill -9` 重启 → **它不自己跑**。
+2. **中途纠偏**（`when="now"`）：父 spawn 一个后台子 → `status` 看到它在往错方向走 →
+   `send` 一条「改做 X」→ 子改了 → `collect` 拿到改过的结果。
+2b. **下轮留言**（`when="next_turn"`）：后台子在轮末给 root 留一条 → **这一轮照常结束、
+   不被延长、面上不告警** → 下一轮用户随便说句话，模型答得出那条留言的内容。
+   `kill -9` 插在两轮之间再走一遍——留言得活过重启。
+3. **草稿纸 + undo**（209 的卖点，要**演出来**）：模型写几条 notes → `/undo` →
+   **条目真的没了**；再 `kill -9` + 恢复 → 条目**真的回来了**。
+4. **自读收敛**：把 `max_turns` 调到很小 → 模型调 `self` 看到快没轮次 →
+   **主动收敛输出**而不是被闸硬切断。
+
+第 4 条**可能不过**——模型会不会真的据此收敛是它自己的事，不是代码的事。
+不过就如实记「模型没有据此改变行为」，**别改判据凑绿**，也别因此加提示词去哄它。
+这一条的价值在于知道答案，不在于答案是绿的。
+
+## 三、M20 验收（可判定，不用形容词）
+
+- 上面七条真机（1 / 1b / 1c / 2 / 2b / 3 / 4），前六条过，第 4 条如实记录。
+- `cargo test --workspace` 全绿；`check-invariants.sh --all` 退出码 0，
+  **红线 9 提示与基线逐条相同**（本波新增/改动的文件一个都没被点名）。
+- `build-wasm.sh` 绿；`pnpm -r typecheck` 过；
+  `cargo clippy --workspace --all-targets -- -D warnings` 干净。
+- 浏览器 demo 里 `send` / `await` / `status` 全树看得见，**且自驱动那一轮在页面上
+  看得出来、停得下来**（wasm 宿主同路，照 157 的先例——**别假定 wasm 白拿**，
+  那次就是后置之后才发现要补做）。浏览器里没有 Ctrl-C，这条比 CLI 上更要紧。
+- 上面那张表十二处**逐处核过**，且核的方式是拿代码的当前行为对，不是 grep 关键词。
+
+## 注意
+
+- **`.en.md` 的头部 hash** 按仓规是「最后改动中文源的那个 commit」
+  （`STATE-MODEL.en.md` → `064126a`、`ARCHITECTURE.en.md` → `5e45a2a` 是既有先例）。
+  别写成「请后人记得更新」那种留话给下一个人的形式——203 踩过一次。
+- **`ORCHESTRATION.md` §二那段「后来的修正」不要删。** 它记录的是「无定义状态」
+  那句判断怎么被推翻的，而 206 的唤醒边正好又动了同一条停机论证——两段放在一起
+  才读得出这条线索是怎么走的。
+- 改完 `CLAUDE.md` 的红线摘要之后，回头看一眼 §当前状态那几段有没有跟着过期
+  （M19 那次就是连带改了一整段）。
