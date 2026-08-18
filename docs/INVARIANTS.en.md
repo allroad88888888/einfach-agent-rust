@@ -138,6 +138,15 @@ the epoch.
 **Why**: a tool call is in flight and the user hits undo — the result comes home and would
 be written into a world that has been rolled back.
 
+**Where this rule lands on the undo-hook path** (M19, decision 34): the undo hook isn't a
+new rule — it's this same rule showing up at a new stage. `undo_turn` / `undo_step` take a
+caller-supplied undo hook and call it, entry by entry, **before** `apply_prev` (writing
+values back to state) — but there's a step earlier still: **the hook must run after the
+epoch has been bumped**. The reason is the same reason as the rest of this rule: if the
+hook ran before the epoch bump, an in-flight tool result landing during that window would
+still carry the old epoch, get accepted as a legitimate result, and land straight in a
+world that is in the middle of being undone.
+
 **Breaking it**: a "ghost result" lands in rolled-back state. Intermittent, timing-
 dependent, hard to reproduce.
 

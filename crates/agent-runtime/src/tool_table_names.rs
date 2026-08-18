@@ -75,12 +75,20 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // 让「拆了任务的那一轮」一律撤不掉，哪怕子 agent 只读了两个文件。
         //
         // **201 之后这个值只进显示**（决策 199 §八）。行为面上 spawn 走的是
-        // `Undoability::StateOnly`（它的截获压根不标任何位）：三态里那一档的定义
+        // `Undoability::StateOnly`（它的截获是内部层 `InterceptFn`，不经
+        // `SessionToolFn` 那条公开路径，所以不构造 `Aftermath` 值、也不标任何位
+        // ——语义上就是 `Aftermath::Nothing` 那一格）：三态里那一档的定义
         // 就是「没碰外部世界，状态回滚就够了」，而 spawn 恰好如此——子 agent 的
         // 状态跟父的这一步在**同一条日志**上，回滚它就是补偿。**没有给它挂一个
         // 空的还原钩子**：`Hooked` 的语义是「碰了外部世界、交了逆」，而且钩子表
         // 不跨进程——恢复之后一条 `Hooked` 的 spawn entry 会变成 `HookLost` 屏障，
         // 正好是上面那段注释拒绝过的「拆了任务的那一轮一律撤不掉」。
+        //
+        // 换个说法钉一遍：spawn 是内部层 `InterceptFn`，不经 `SessionToolFn` 那条
+        // 公开路径，所以它不会真的构造一个 `Aftermath` 值——但它「压根不标位」
+        // 这件事，语义上就是 201 分类表里的 `Aftermath::Nothing` 那一格：在**外部
+        // 世界**留下的是零，子树回滚由同一条日志承担。挡不挡 undo 由这个决定，
+        // 不由下面这行 `Reversible` 决定——那行只喂 CLI/Web 的显示。
         SPAWN_TOOL => Reversibility::Reversible,
         // status 是**纯读**：一次 `Session::agent_tree()` 派生读，不写任何
         // primitive、不落 entry、没有需要补偿的动作——`Pure` 的定义本身，

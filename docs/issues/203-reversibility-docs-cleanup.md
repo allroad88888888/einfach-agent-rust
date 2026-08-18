@@ -1,6 +1,6 @@
 # 203 文档同步：把「声明可逆性」的说法从五份文档里换掉 ← M19 终点
 
-**里程碑** M19 · **依赖** [201](201-runtime-undo-fn-delivery.md) + [202](202-host-mcp-undo-none.md) · **模型** sonnet · **独测** — · **状态** 未开始
+**里程碑** M19 · **依赖** [201](201-runtime-undo-fn-delivery.md) + [202](202-host-mcp-undo-none.md) · **模型** sonnet · **独测** — · **状态** 完成（见文末，2026-08-18）
 
 ## 目标
 
@@ -105,3 +105,61 @@ server 交不出函数（202 §2）。
   （040/042/062/073/076/146–149），那些是当时的真实决策记录。本条只改**现行文档**。
 - 别顺手重写 §可逆性判据表里那句「拿不准就 `Irreversible`」的精神。落点变了，
   判据没变——而那句判据是这套东西里最值钱的一句。
+
+## 实做记录（2026-08-18，四个 sonnet agent 按文件切分并跑，review 已过）
+
+五道门禁全绿：`cargo test --workspace` 2161 passed / 0 failed；`check-invariants.sh --all`
+退出码 0，13 条红线 9 提示与基线逐条相同；`build-wasm.sh` 绿；`pnpm -r typecheck` 绿；
+`cargo clippy --workspace --all-targets -- -D warnings` 干净。
+
+**原清单 18 项里有 6 项已经被 201/202 顺手做掉**（EXTENSIONS §一、§「可逆性：没有缺省」、
+§五，HOST-CAPABILITIES §五，ROADMAP §一 决策 34、§四 未决问题）。§8 那条「动手前先重核行号」
+是对的，而且比预计更值——盘点草稿写于 199 还是两态时期，行号也已整体后移。
+
+### §五 那一节是**假完成**——本次真正的收获
+
+202 落地时 §「五、可逆性」看起来「已整节重写」，但它写的是 **202 撞额度前的 B 版初稿**：
+标题写「宿主工具**一律挡** undo」、表里 `pure` 那行是「不挡 → **挡**」。而决策 34 review
+时改成的是「承诺挡、事实不挡」，代码里 `undo_promise.rs` 明写 `Reversibility::Pure => false`。
+**文档与代码正好相反，且看起来是完整的一节。**
+
+这跟 202 那条没来得及反转的测试断言（`a_host_tool_declaring_pure_blocks_undo_too`）
+是同一次中断留下的两个尾巴，测试那条被 `cargo test` 逼出来了，文档这条没有任何东西会报错。
+主会话上一轮盘点时也**漏了它**：grep 用的是「可逆/reversib」，而表里那行是
+`| `pure` | 不挡 | **挡** |`——一个模式都不命中。
+
+**教训**：一节文档「已重写」不等于「重写对了」。判断依据只能是**拿代码的当前行为逐格核**，
+不能靠 grep 关键字，更不能靠上一轮的完成记录。
+
+### 盘点清单外另修的四处
+
+1. **`docs/EXTENSIONS.md` §四 的签名代码块还停在旧的** `Result<Arc<str>, Arc<str>>`——
+   §一 改了、§四 漏了，而 §四 正是教人怎么写扩展执行体的地方。
+2. **`docs/EXTENSIONS.md` §四 补了 `Err` 的语义警告**：`Err` 是「没碰」不是「失败」。
+   碰了一半才失败的调用要交 `Ok((失败说明, Aftermath::Irreversible))`。
+   模块文档 `session_tool_ext.rs:66-67` 早有这句，文档侧漏了——用 `Err` 报这种失败
+   等于告诉账本「外部世界干净」。
+3. **两个死符号**：`docs/HOST-CAPABILITIES.md` 与 `crates/agent-runtime/src/undo_promise.rs:43`
+   的 `mark_irreversible`（201 已改名 `mark_no_undo`）、HOST-CAPABILITIES 的
+   `repo_cannot_compensate`（202 已改名 `is_unkeepable_promise`）。
+   `crates/agent-tools/tests/it/shell_undo_barrier.rs:6` 同款。
+4. **`docs/HOST-CAPABILITIES.md` §一 那笔「文档欠账」删掉**——它记的是「TOOLS.md 画了一个
+   代码里不存在的 `ToolDescriptor`」，而 TOOLS.md 今天画的就是三个真结构、还专门有一段
+   「没有 `Source` 枚举」。欠账早还清了，且那段自己的描述也过期（可逆性早就是三级查表，
+   不是它说的「不查表的自由函数」）。
+
+### 顺手修正的两处 TOOLS.md 陈述
+
+- `:21` 伪码行尾注释 `// …—— undo / 崩溃恢复`：两件事现在都不成立（`is_replayable()` 已删，
+  恢复走 `apply_next` 重放 journal 状态值、从不重新执行工具）。
+- `:250`「撞上 `Irreversible` 的 entry」混了两层词：entry 上落的是 `Undoability::Blocked`，
+  `Irreversible` 是那次调用交回的 `Aftermath`。M19 整件事就是要把这两层分清楚。
+
+### §7-④ 那条自查表建议**本身是过期的**
+
+原文让在 MCP §自查表加一行「把 `readOnlyHint=true` 当成不挡 undo → 错」。但决策 A
+（事实/承诺）之后 `true` **确实**落 `StateOnly`、**确实**不挡，照写会得出「错在哪」与
+「正确做法」同一个结论。根因同 §8：这条建议写于两态时期。改成真正的陷阱——
+**以为 MCP server 能交回还原函数**（「让 server 多加一个补偿工具就不用挡了」）。
+
+这是 203 草稿栽在两态遗留上的第四处，前三处在 199 §一/§六/§七。

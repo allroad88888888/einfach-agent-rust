@@ -18,23 +18,27 @@ pub struct ToolCallRequest {
     pub tool: Arc<str>,
     pub input: Arc<serde_json::Value>,
     pub location: Location,           // Server | Web | Desktop —— router 派发
-    pub reversibility: Reversibility, // Pure | Reversible | Irreversible —— undo / 崩溃恢复
+    pub reversibility: Reversibility, // Pure | Reversible | Irreversible —— 决策 34 起只喂显示
 }
 
 // ③ agent-runtime/src/tool_table.rs —— 宿主侧的判定表，②由它产出
-pub struct ToolTable { /* specs + skill registry + mcp:<server>/<tool> → Reversibility */ }
+pub struct ToolTable { /* specs + skill registry + 宿主/mcp 的 <tool> → Reversibility 两张映射 */ }
 ```
 
-**位置与可逆性不是 spec 的字段，是宿主现算出来的。** `ToolTable::snapshot(name, input)`
-造 `ToolCallRequest` 时：`location_of(name)` 按名字前缀推（外加一条白名单，见下），
-`reversibility_of(name)` 按名字查一张硬编码的 `match`——**只有 `mcp:` 前缀走真正的查表**
-（`mcp_reversibility`，由 server 的 `readOnlyHint` 翻译而来，查不到落保守 `Irreversible`）。
-「每个工具带着自己的元数据」是设计方向，今天只有 MCP 那一路真的是元数据，其余是名字规则。
+**位置是宿主现算出来的；可逆性字段今天也是现算的，但它从决策 34（199 §八）起只是一张
+显示标签，不再是任何行为的依据。** `ToolTable::snapshot(name, input)` 造 `ToolCallRequest`
+时：`location_of(name)` 按名字前缀推（外加一条白名单，见下）；`reversibility` 三级查表——
+`host_reversibility`（宿主声明的映射）→ `mcp:` 前缀查 `mcp_reversibility`（由 server 的
+`readOnlyHint` 翻译而来）→ 都没命中退到 `reversibility_of(name)` 那张硬编码的名字规则，
+查不到落保守 `Irreversible`（三级优先级写死在 `tool_table.rs` 的 `snapshot` 里，062 已经
+落装配）。
 
-M10 的宿主声明（`capabilities.tools[].reversibility`）是第二个真元数据入口，协议层已经收
-（[061](issues/061-capabilities-protocol.md)），但装配还没接上——`ToolTable::snapshot` 的
-查表分支门今天仍然只认 `mcp:` 前缀，宿主声明的等级会被 `reversibility_of` 的兜底盖成
-`Irreversible`。**朝安全方向失效**（只会多问一次），但 062 落装配时必须一并拓宽那个门。
+**但查得对不等于它决定 undo。** 真正决定 `/undo` 挡不挡的是两条路，都不看这个字段：
+执行体在本进程内的（内置截获、M16 扩展包），看它跑完交回的 `Aftermath`——见下面
+「Aftermath 三态怎么选」；执行体在别的进程里的（宿主 `web:`/`desk:`、MCP `mcp:`），
+交不回函数，看「事实 vs 承诺」判据——见下面 MCP 一节与
+[HOST-CAPABILITIES.md](HOST-CAPABILITIES.md) §五。查出来的这张 `reversibility`
+从此只喂 CLI/Web 的显示。
 
 **没有 `Source` 枚举**（`Builtin | Mcp(ServerId) | Skill(SkillId)`）。工具从哪来今天只体现在
 「谁把它 `push` 进这张表」——`builtin()` / `with_shell()` / `with_skills()` / `with_spawn()` /
@@ -217,24 +221,34 @@ POST /sessions/:id/tool_result   { agent, tool_call_id, result: { content, is_er
 epoch 已经 bump，而且取消/undo/会话终止都会 `discard_remote_tools()` 清空等待槽——
 迟到的回写连槽都找不到，走既有的拒绝路。
 
-### reversibility 等级怎么定
+### Aftermath 三态怎么选，什么时候该不写还原函数
 
-这个字段决定 undo 能不能越过它，以及崩溃恢复时能不能重发。**定错了是数据事故**，
-不是体验问题。
+这个字段决定 `/undo` 会不会在这条 entry 上停下来问。**定错了是数据事故**，不是体验
+问题——但它不再决定崩溃恢复要不要重放工具：恢复从不重新执行工具，只重放 journal 里的
+状态值，`is_replayable()` 已经随枚举一起删掉（决策 34/199 §八，`value/tool.rs` 有明文）。
 
-| 等级 | 判据 | 例 |
+决策 34（199）把依据从「注册时填一个等级」换成「执行体跑完之后交回一个 `Aftermath`」
+（`crates/agent-runtime/src/undo_hook.rs`）。**是三态，不是 `Option<UndoFn>`**——`Option`
+会把「没碰外部世界」和「碰了但撤不回」压成同一个 `None`，而落盘那一位（`Undoability`）
+是三态，返回类型必须与它同构：
+
+| `Aftermath` | 判据 | 例 |
 |---|---|---|
-| `Pure` | 重复执行任意次，外部世界不变 | 读文件、查询、搜索 |
-| `Reversible` | 有明确的补偿动作，且补偿本身可靠 | 创建资源（补偿=删除）、写入有版本的记录 |
-| `Irreversible` | 其余全部 | 发邮件、支付、删数据、跑 shell |
+| `Nothing` | 没碰外部世界，或者只写了本仓自己的 store 状态——回滚 journal 就是补偿 | 读文件、查询、搜索；`srv:agent/spawn`（子 agent 的全部状态活在同一条日志上，父级 entry 回滚时子级原子自动跟着退） |
+| `Undo(f)` | 碰了外部世界，且能当场写出一个可靠的还原函数 | 创建资源前记下新资源 id（还原=删除）、覆盖文件前先记旧内容（还原=写回） |
+| `Irreversible` | 其余全部——碰了，写不出可靠的还原函数，或者压根没打算写 | 发邮件、支付、删数据、跑 shell |
 
-**拿不准就是 `Irreversible`。** 判错成 Pure 的代价是重复发邮件；判错成 Irreversible
-的代价只是多问用户一次。所以 `reversibility_of` 的兜底是 `_ => Irreversible`，
-显式列出来的只有那几个已知纯读的名字（`srv:fs/read`、`read_file`、`rg_search`、
-`srv:agent/status`、`srv:agent/collect`…）与两个有补偿动作的（`srv:agent/spawn` 的补偿是
-`despawn_child`，skill 激活/停用的补偿是彼此）。
+**拿不准就交 `Aftermath::Irreversible`（等价于以前的「拿不准就是 `Irreversible`」）。**
+判据没变，变的是落点：过去是往哪个格子填一个标签，现在是交不交这个函数——**不交函数
+就是挡 undo，作者想躲也躲不掉**，比枚举时代更硬：枚举时代填错一个 `Pure` 就能悄悄放行
+一次本该拦住的副作用，现在没有对应函数就没有 `Undo` 分支可选，结构上蒙不过去。判错代价
+依旧不对称：判成 `Nothing` 的代价是重复发一次邮件；判成 `Irreversible` 的代价只是多问
+用户一次。同一个工具的三次调用可以交出三种不同的 `Aftermath`（`fs/write` 建新文件 /
+覆盖旧文件 / 写失败，还原方式各不相同）——**可逆性从此是每次调用的属性，不是每个工具
+的属性**，枚举表达不了，函数天然表达了。
 
-`undo` 往回走时撞上 `Irreversible` 的 entry → 停下，走 `UndoOutcome::Blocked`
+`undo` 往回走时撞上一条 `Undoability::Blocked` 的 entry（那次调用交回的是
+`Aftermath::Irreversible`，或者根本交不出函数）→ 停下，走 `UndoOutcome::Blocked`
 （SSE 上是 `undo` 事件里嵌一个 `blocked`），让用户确认「继续（副作用不回滚）」还是取消。
 落盘依据是 `EntryMeta.undoability`（决策 199 §九起是三态，之前是 `barrier: bool`）：
 宿主派发不可逆工具前调 `Session::mark_no_undo`，随后那条 `tool_result` entry 就带上
@@ -339,16 +353,8 @@ stdio 传输只有 server 和桌面侧有，浏览器只能 http。所以 regist
 **「这个源在这个 host 上不可用」**，而不是假装它存在然后调用时才失败。
 （落点是 `ServerConfig::available_on(host)` + `status::Availability`，经 loader 交给宿主。）
 
-### reversibility 等级从哪来
+### MCP 工具的可逆性标签从哪来
 
-MCP 协议不提供副作用等级。所以：
-
-- 有 `annotations.readOnlyHint == true` 的，映射成 `Pure`
-- 其余**一律 `Irreversible`**（没有 annotations、字段缺失、为 false 都算）
-
-不要猜。一个未知来源的 MCP 工具默认可重放，是把数据事故的开关交给第三方。
-
-**没有「本地配置里显式标注」这个逃生口**：`.mcp.json` 的 `StdioServer{command,args,env}` /
-`RemoteServer{transport_type,url,headers}` 里没有任何 per-tool 可逆性字段，
-[040](issues/040-mcp-seam.md) 的拍板也没给。真要开这个口子，是一次显式的协议扩展，
-不是「文档里已经写了」。
+翻译规则、以及为什么 `readOnlyHint` 从决策 34 起只影响显示、不影响 undo（MCP 协议里
+没有撤销这个概念，server 交不出还原函数），见 [MCP.md](MCP.md)
+§「枢纽：可逆性不能再从名字推」——不在这里维护第二份正文。

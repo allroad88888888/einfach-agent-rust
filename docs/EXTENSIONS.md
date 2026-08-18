@@ -123,7 +123,7 @@ pub type UndoFn = Box<dyn FnOnce() -> Result<(), Arc<str>> + Send + Sync>;
 
 | 半边 | 装进哪儿 | 那一刻宿主手上有什么 |
 |---|---|---|
-| specs + 可逆性 + timed | `ToolTable` | 只有表——`RunnerCtx::new` 还没调 |
+| specs + timed | `ToolTable` | 只有表——`RunnerCtx::new` 还没调 |
 | 截获执行体 | `RunnerCtx` | ctx 已经建好，而它**吃掉了**那张表 |
 
 这不是设计得不好，是既有结构的事实：`RunnerCtx::new` 按值收 `ToolTable`，而截获注册表住在
@@ -157,18 +157,6 @@ Rust 没有线性类型，做不到「不装就不编译」；`Drop` 是「值�
 但它照样炸。纪律要对宿主统一：宿主不该知道某个包里有没有截获工具，今天空、下个版本加了
 一条截获的包，会让一个「反正是空的就没写 install」的宿主在**升级依赖那一刻**静默半开。
 
-### 可逆性存哪儿：复用注入映射，不新开第三张表
-
-扩展工具的可逆性走**跟 M10 注入工具同一张映射**（`ToolTable::snapshot` 三级优先级的第一级）。
-
-1. **语义逐字相同**：那一级答的是「有人在装配期按名字**显式声明**过吗」。差别只在声明来源
-   （编译期 Rust 依赖 vs 一次 HTTP 请求体），而来源**没有读者**——`snapshot` 只问值是多少。
-   为一个没人读的维度新开一张表，就是 TOOLS.md §「没有 `Source` 枚举」拒绝过的第二份真相。
-2. **那张表的门按表查、不按前缀查**（062 特意选的），对 `ext:` 天然成立，一个字节不用改；
-   新开一张表反而要在 `snapshot` 里加第四个分支，行为却跟第一级逐字一样。
-3. **撞不了键**：注入名强制 `web:`/`desk:`、扩展名强制 `ext:`；即便有人绕过前缀闸，
-   `push_spec` 也会先在 specs 区拦下后来的那一条，映射根本走不到 `insert`。
-
 ### 顺序（红线 11）
 
 包内条目顺序 = 源码写死的 push 顺序，**不排序**（`with_host_tools` 排序是因为客户端给的数组
@@ -177,25 +165,38 @@ Rust 没有线性类型，做不到「不装就不编译」；`Drop` 是「值�
 
 ## 四、正门：`Session` 手套的能与不能
 
-截获式工具是扩展访问状态的**唯一**正门。它拿到的是收窄过的公开签名：
+截获式工具是扩展访问状态的**唯一**正门。它拿到的是收窄过的公开签名（照抄
+`crates/agent-runtime/src/session_tool_ext.rs:93-95` 的当前定义，别凭记忆写）：
 
 ```rust
-pub type SessionToolFn =
-    Box<dyn Fn(&mut Session, &AgentId, &Value) -> Result<Arc<str>, Arc<str>> + Send + Sync>;
+pub type SessionToolFn = Box<
+    dyn Fn(&mut Session, &AgentId, &Value) -> Result<(Arc<str>, Aftermath), Arc<str>> + Send + Sync,
+>;
 ```
 
 **能**：
 - 读整棵 `Session::agent_tree()` 与各类型化读口；
 - 写——但只能经 `Session` 的公开命令方法（`set_max_turns`/`mark_no_undo`/`spawn_child`/
   `replace_send_plan`/……），它们内部都经 `commit`/`commit_as` 落一条 journaled `Entry`；
-- 返回 `Ok` = 给模型看的 tool_result 正文，`Err` = 拒绝文案（决策 20：不 panic、不卡这一轮，
-  让模型自己收敛）。
+- 返回 `Ok((正文, Aftermath))`——正文是给模型看的 tool_result，`Aftermath`（§一）如实
+  交代这次调用在外部世界留下了什么；`Err` = 拒绝文案（决策 20：不 panic、不卡这一轮，
+  让模型自己收敛），按「什么都没碰」记账，不进 `Aftermath` 的三选一。
+  **`Err` 的语义是「没碰」，不是「失败」**——碰了一半才失败的调用要返回
+  `Ok((失败说明, Aftermath::Irreversible))`，或者交回一个只收拾做了那一半的
+  `Aftermath::Undo`。用 `Err` 报这种失败，等于告诉账本「外部世界干净」，
+  而它不干净（`session_tool_ext.rs` 模块文档同款警告）。
 
 **不能**：
 - 碰 `Subtree`/`CompactSlots`/`IoBus`（内部层才有，扩展签名上够不着）；
 - 绕过 command 层直接写 store（[红线 2](INVARIANTS.md)）——`Session` 没有暴露那个口；
 - 产出 effect、起异步、等远端回写：这条路是**当场算完当场回**（无 Pending、无在飞凭据）。
-  要异步就是另一条路（MCP 或宿主侧远端工具），不是这条签名的隐藏能力。
+  要异步就是另一条路（MCP 或宿主侧远端工具），不是这条签名的隐藏能力；
+- **还原函数捕获 `&Session`**（`UndoFn` 是 `'static` 且 `FnOnce`，类型上就装不下一个借用）。
+  它跑在 undo 路上，那时 core 正在回滚状态；让它同时写状态就是在一次回滚中间插一次
+  前向写入，红线 6 的账当场乱。状态那半边由 journal 的回滚承担，还原函数**只管外部
+  世界**（201 §注意）；
+- **timed 钩子没有还原函数**：`TimedRun` 的副作用本来就不进 command log（决策 30 /
+  153，`turn_end.rs` §审计面），没有对应的 `Entry` 可挂——这不是漏了一刀，是另一件事。
 
 **纪律（机制不强制，如实写）**：
 
@@ -301,7 +302,7 @@ turn=6 entries=25/25 agents=1 tools=2
 | 谁写的 | 自家/受信的 Rust 作者 | 任意第三方 server | 客户端自己 |
 | 名字 | `ext:<pack>/<tool>` | `mcp:<server>/<tool>` | `web:`/`desk:` 强制 |
 | 位置 | `Server`（本进程） | `Server`（宿主本地起子进程） | `Web`/`Desktop` |
-| 可逆性从哪来 | **执行体每次调用现交**（`Aftermath`，决策 34） | server 的 `readOnlyHint` 翻译，查不到落 `Irreversible` | 客户端声明，没说落 `Irreversible` |
+| 可逆性从哪来 | **执行体每次调用现交**（`Aftermath`，决策 34） | `readOnlyHint: true` 这个**事实**被采信、不挡；其余（含查不到、`Reversible`）一律 `Blocked`（202） | 声明只是**自我描述**，不影响行为；`pure` 这个**事实**不挡，`reversible`/`irreversible` 一律 `Blocked`（决策 34/202，见 [HOST-CAPABILITIES.md](HOST-CAPABILITIES.md) §五） |
 | 何时装 | 编译期决定，装配期一行 | 握手时 `tools/list` | 每次 `POST /sessions` 的请求体 |
 | **能不能碰 `Session`** | **能**（截获正门，本文档 §四） | 不能 | 不能 |
 | 撞名怎么办 | 前缀强制 → 结构上撞不了；同名重复 = 后来的整条丢 | 名字自带 server id → 撞不了 | 整份 400，会话不创建 |

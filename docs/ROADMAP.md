@@ -63,6 +63,58 @@ providers.example.toml    key 模板（providers.toml 已 gitignore）
 验收事后补，整体删除按流程重写（教训在 [WORKFLOW.md](WORKFLOW.md) §四）。重写后的
 版本经独立测试 agent 与真实调用双重验收，质量差异见各 issue 的实做记录。
 
+### 已完成：M19 可逆性从标签改成交付物（199 决策 2026-08-17，200/201/202 落地 08-17～08-18）
+
+决策 34 落地，见 [199](issues/199-reversibility-as-delivery-decision.md)–
+[202](issues/202-host-mcp-undo-none.md)。起点是一次清账（199 §现状清账）：
+`Reversibility::Reversible` 在当时的生产代码里唯一的差别是打印给人看的一个字符串
+——**没有任何人执行补偿**。宿主声明 `"reversibility": "reversible"` 的工具，
+`/undo` 会直接跳过它，外部副作用原样留在那儿，且不报任何提示。用户读 Cordis
+（PKU + DeepSeek-AI 的 spatiotemporal composability 论文）后点破：不是工具该
+提供还原函数吗，没提供就该默认不能退。
+
+**改成什么**：工具执行完顺手交回一个三态 `Aftermath`（`Nothing`/`Undo(f)`/
+`Irreversible`，住 runtime），译成 core 记账用的三态 `Undoability`
+（`StateOnly`/`Hooked`/`Blocked`）。可逆性从「我们给一件看不见的事分类」变成
+「工具自己交出一个能被调用的函数」，因此是**每次调用**的属性，不是每个工具的
+属性——同一个 `fs/write`，写新文件、覆盖旧文件、磁盘满写失败，三次调用三种
+还原，枚举表达不了，函数天然表达了。undo 路上，还原钩子在 `apply_prev`
+（store 回滚）**之前**逐条逆序跑，失败复用既有屏障（`UndoReport::Blocked`
+加成因字段，`/undo!` 逐条越过），不新开 `ignore_undo_errors` 一类开关。
+
+**同一个「两态压成一态」的错误在 199 初稿里犯了三次，三次都是执行的人撞到
+具体后果才浮出来，两次 review 都没看出来**：§一 的返回类型
+（`Option<UndoFn>` 表达不出「没碰」与「碰了但撤不回」两件事，写文档的 agent
+抓到，改成三态 `Aftermath`）；§七 的宿主/MCP 判据（初稿「一律挡」会把
+`ask_user_question` 这类字面上不可能有副作用的工具一起挡住，202 落地时抓到，
+改判据为「承诺挡、事实不挡」——`pure`/`readOnlyHint:true` 声明的是「没碰外部
+世界」这个事实，采信不挡；`reversible` 声明的是「有补偿动作」这个交不出来的
+承诺，挡；决策 22 因此不被反转）；§六 spawn 的档位（初稿判 `Hooked`，会让
+恢复后钩子表查不到、每次 spawn 都变成 `HookLost` 屏障，201 落地时抓到，改判
+`Nothing`——spawn 在外部世界留下的是零，子树回滚由同一条日志承担）。教训值得
+记一句：**写决策的人看不见自己的合并错误，因为那个错误在他脑子里本来就是
+一件事；只有真去实现、撞到「那这个怎么办」的人才会发现它是两件。**
+
+**最硬的一条验收**（[200](issues/200-core-undo-hook-path.md)）：顺序（钩子
+先跑、成功了才 `apply_prev`）是本次唯一会静默出错的地方——写反了不报错、
+多数测试也不红，只在还原失败那条罕见路径上浮出来。钉法是让「正确」「先整批
+回滚再跑钩子」「这一条先回滚再跑它的钩子」三种实现读到三个不同的值
+（2 / 0 / 1），review 时独立注入过第三种写法验证测试真的会红（9 条测试红
+6 条）。**老会话迁移**用的是真的完整 journal 字节，不是手搓结构体；
+`PersistedMeta` 特意**没加** `#[serde(default)]`——加了会把老文件的
+`barrier:true` 静默读成 `StateOnly`，正是「一次真实不可逆操作从此不再挡
+undo」那类静默错值。
+
+**门禁**（201+202 合并后主会话跑过五道）：`cargo test --workspace`
+2161 passed / 0 failed；`check-invariants.sh --all` 退出码 0，13 条
+红线 9 提示与基线逐条相同；`build-wasm.sh` 绿；`pnpm -r typecheck` 绿；
+`cargo clippy --workspace --all-targets -- -D warnings` 干净。
+
+**M19 没有真机 dogfood 收官**——它是内部机制改造（还原钩子的执行顺序、钩子表
+记账、宿主/MCP 的判据），不涉及任何 provider，跟 M6/M9/M17 那类要真实上游
+验证的里程碑不是同一类。宿主侧还原回调（让宿主声明的 `reversible` 真正能
+兑现）明确列为第二步，本里程碑不做，见 §四。
+
 ### 已完成：L 波 · 通用 OpenAI 兼容 adapter（2026-08-13，真机八条全过）
 
 **这不是 M 序列的一环**，是对外推广（L 波，见 [issues/README.md](issues/README.md)

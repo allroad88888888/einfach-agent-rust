@@ -980,7 +980,7 @@ Composability](https://github.com/cordiverse/paper)（Cordis，PKU + DeepSeek-AI
 | [200](200-core-undo-hook-path.md) | core：undo 路先跑钩子再回滚；`barrier` → 三态 | 199 | **opus** | ✅ | ✅ 完成 |
 | [201](201-runtime-undo-fn-delivery.md) | runtime：执行体交还原函数（`Aftermath` 三态），钩子表按 `seq` | 200 | **opus** | ✅ | ✅ 完成 |
 | [202](202-host-mcp-undo-none.md) | 宿主 / MCP：**承诺挡、事实不挡**；`Reversibility` 降成显示标签 | 200 | **opus** | ✅ | ✅ 完成 |
-| [203](203-reversibility-docs-cleanup.md) | 五份文档同步 ← M19 终点 | 201+202 | sonnet | — | 未开始 |
+| [203](203-reversibility-docs-cleanup.md) | 五份文档同步 ← M19 终点 | 201+202 | sonnet | — | ✅ 完成（另修四处盘点期没点名的，见该 issue §实做记录） |
 
 **M19 验收**（可判定，不用形容词）：
 

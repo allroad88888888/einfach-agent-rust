@@ -54,6 +54,29 @@ capabilities 协商、protocol 版本）**烂在 `agent-mcp` 里**，就像 prov
 只是多问用户一次。**一个未知来源的 MCP 工具默认可重放，等于把数据事故的开关交给
 第三方。** 默认必须落在保守那边。
 
+### M19 之后：这份映射只决定显示，不决定 undo 挡不挡
+
+决策 34（[199](issues/199-reversibility-as-delivery-decision.md)）把可逆性从「声明的
+枚举」改成「工具执行完交回的还原函数」——三态 `Aftermath`（`Nothing` 没碰外部世界 /
+`Undo(f)` 碰了且给出还原函数 / `Irreversible` 碰了还不回去），对应落盘的三态
+`Undoability`（`StateOnly` / `Hooked` / `Blocked`）。MCP 协议里**没有「撤销」这个
+概念**——`tools/call` 只是又发一次 RPC，server 在结构上交不出一个我们能调用的还原
+函数（[202](issues/202-host-mcp-undo-none.md)）。所以上面这份 `readOnlyHint` 映射从
+M19 起**只影响显示**（CLI/Web 打印这一行时用什么字样），不再是「`/undo` 撞上它要不要
+停下来问」的依据。
+
+undo 挡不挡看的是另一条判据：**声明的是事实还是承诺**。`readOnlyHint: true` 声明的是
+「这次调用没碰外部世界」——一个**事实断言**，不需要函数来兑现，照单全收，落
+`StateOnly`，**不挡**。宿主声明的 `reversible` 则相反：声明的是「有补偿动作」这个
+**承诺**，兑现承诺就得交出那个结构上交不出来的函数，落 `Blocked`，**挡**。MCP 的
+`annotations` 里没有第二个字段能声明这种承诺（没有等价于宿主 `reversibility:
+"reversible"` 的档位），所以「承诺挡」这条判据在 MCP 这边**没有对应的落点**——
+`readOnlyHint` 缺失 / `false` / 无 annotations 一律落 `Blocked`，理由从「可逆性等级
+不够」变成「没有事实断言，默认不采信」，结果不变。
+
+**上面那条翻译规则（决策 22）因此不被反转**：`true → 不挡`、其余 `→ 挡`，字面行为
+逐字不变；变的只是「不挡」背后站着的理由。
+
 ## 活句柄住 store 外（红线 3）
 
 stdio server 是一个子进程。它的句柄（stdin/stdout pipe、`Child`、reader 线程）
@@ -161,3 +184,4 @@ host 上没有任何 MCP server——registry 要能表达**「这个源在这�
 | MCP 调用同步阻塞 actor 线程 | 多 agent 并行被掐、undo 卡住 | 走异步在飞路（provider_call 同款） |
 | 一个 server 起不来，整个会话失败 | 失败没隔离 | 标 `Unavailable`，其余照常，会话能起 |
 | 未知 `readOnlyHint` 被当成 `Pure` | 把数据事故开关交给第三方 | 缺失/false/无 annotations 一律 `Irreversible` |
+| 以为 MCP server 能交回还原函数（「让 server 多加一个补偿工具就不用挡了」） | 还原函数是本进程的闭包，跨 JSON-RPC 交不出来；MCP 协议里也没有「撤销」这个概念 | 只有「没碰外部世界」这个**事实**能被采信（`readOnlyHint: true` → `StateOnly`，不挡）；任何「我能补偿」的**承诺**一律落 `Blocked`，挡 |

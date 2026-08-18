@@ -3,7 +3,7 @@
 //! `agent-store`（017）的 `History::undo_turn` 撞上一条标了 irreversible 的
 //! entry 时确实停在门口，不越过去。
 //!
-//! `srv:shell/exec` 交不出还原函数，所以宿主侧派发时会 `mark_irreversible`，
+//! `srv:shell/exec` 交不出还原函数，所以宿主侧派发时会 `mark_no_undo`，
 //! 那条结果 entry 落 `Undoability::Blocked`；undo command 用「是不是 `Blocked`」
 //! 当 barrier 谓词喂给 `undo_turn`（199/200 之前那个谓词是
 //! `Reversibility::blocks_undo()`，枚举降级成显示标签之后已删）。

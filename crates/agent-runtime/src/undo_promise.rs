@@ -40,7 +40,7 @@
 //!
 //! | 消费者 | 用它干什么 |
 //! |---|---|
-//! | [`crate::dispatch`] 的第四路 / 第五路 | 行为：派发那一刻 `mark_irreversible`，让结果那条 entry 落 `Blocked` |
+//! | [`crate::dispatch`] 的第四路 / 第五路 | 行为：派发那一刻 `mark_no_undo`，让结果那条 entry 落 `Blocked` |
 //! | CLI（`agent_cli::print`）与 Web（`packages/web/src/render/tool.ts`）的工具卡片 | 诚实：**只有这一格**要在 `reversibility` 后面补一句「本仓不代为补偿」 |
 //!
 //! 两处各写一遍就是第二份真相：行为改了而文案没跟上，用户看到的仍然是一个孤零零的
