@@ -92,15 +92,20 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     // --- 第一次 status：跟两个 spawn 同批，两个子刚被建出来 ---
     let (first, is_error) = tool_result(&session, &root, "call_r3");
     assert!(!is_error, "纯读不该失败：{first}");
+    // 207（决策 35）：视野是**整棵活树**，调用者 root 自己也在清单里（末尾标 `(你)`）。
     assert_eq!(
         listed_ids(&first),
-        vec!["root/a1", "root/a2"],
-        "该恰好列出两个后代：{first}"
+        vec!["root", "root/a1", "root/a2"],
+        "该列出整棵活树，含调用者自己：{first}"
     );
     assert_eq!(
-        listed_activities(&first),
-        vec!["Idle", "Idle"],
-        "同批建出来、还没轮到它们跑：{first}"
+        &listed_activities(&first)[1..],
+        ["Idle", "Idle"],
+        "两个子同批建出来、还没轮到它们跑：{first}"
+    );
+    assert!(
+        first.lines().any(|l| l.starts_with("root ") && l.ends_with(" (你)")),
+        "调用者那一行该标 (你)：{first}"
     );
     // **这一刻它们还没有 task**，而且这不是 bug：任务文本是子 agent 的第一条 user
     // 消息，它由 spawn 截获产出、排在泵的待办队列里，要等下一次 `step` 才写进去
@@ -115,10 +120,14 @@ fn a_parent_with_two_running_children_sees_both_of_them_and_their_activity() {
     // --- 第二次 status：两个子都收工之后 ---
     let (second, is_error) = tool_result(&session, &root, "call_r4");
     assert!(!is_error, "{second}");
-    assert_eq!(listed_ids(&second), vec!["root/a1", "root/a2"], "{second}");
     assert_eq!(
-        listed_activities(&second),
-        vec!["Done", "Done"],
+        listed_ids(&second),
+        vec!["root", "root/a1", "root/a2"],
+        "{second}"
+    );
+    assert_eq!(
+        &listed_activities(&second)[1..],
+        ["Done", "Done"],
         "同一个工具、同一棵树，activity 该跟着世界变——不变就说明它读的是一句写死的话：{second}"
     );
     assert!(

@@ -126,6 +126,7 @@ mod session_tool_ext;
 mod skill;
 mod spawn_request;
 mod spawn_tool;
+mod status_render;
 mod status_tool;
 mod subagent;
 mod subtree;
