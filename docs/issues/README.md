@@ -1057,7 +1057,8 @@ token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget
 
 ```
 204 拍板（横读全开含订阅 + 两档送达 + 自驱动 + 「改自己状态」换形状）
- ├→ 205 core：读口三条 + Visibility 收两态 + Inbox 槽 ─┬→ 206 send + 唤醒 ─→ 211 自驱动轮次 ─┐
+ ├→ 205 core：读口 + Visibility 收两态 + Inbox 槽 ─┬→ 206 send + 两个定点 ─┬→ 211 自驱动轮次 ─┐
+ │                                                  │                      └→ 214 唤醒终态 agent ┤
  │                                                      ├→ 207 status 放开到全树 ─────────────┤
  │                                                      └→ 212 srv:agent/await + 等待图查环 ──┤
  ├→ 208 srv:agent/self（自读，独立）────────────────────────────────────────────────────────┼→ 213（终点）
@@ -1074,7 +1075,7 @@ token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget
 | [209](209-notes-slot.md) | `Slot::Notes` + 草稿纸两个工具 | 204 | sonnet | ✅ | 待做 |
 | [211](211-auto-driven-turns.md) | **自驱动轮次**：`AutoTurnBudget` + 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | 待做 |
 | [212](212-await-tool-and-wait-graph.md) | **`srv:agent/await`**：真订阅 + 等待图 + 建立时查环 | 205 | **opus** | ✅ | 待做 |
-| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212 | sonnet | — | 待做 |
+| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | 待做 |
 
 **M20 验收**（可判定，不用形容词，全表在 [213](213-agent-mesh-docs-and-dogfood.md) §三）：
 
