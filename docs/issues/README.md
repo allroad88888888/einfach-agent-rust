@@ -1069,13 +1069,14 @@ token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget
 |---|---|---|---|---|---|
 | [204](204-agent-mesh-decision.md) | **拍板**：横读全开含订阅；两档送达 + 自驱动；「改自己状态」= 自己的槽位 | — | **opus** | 决策类 | ✅ 完成（决策 35） |
 | [205](205-core-peek-and-inbox.md) | core：`read_agent` + `Visibility` 两态 + `Inbox` + 三条命令 | 204 | **opus** | ✅ | ✅ 完成 |
-| [206](206-send-tool-and-wakeup.md) | runtime：`srv:agent/send`（`now`/`next_turn`）+ 两个定点 + 唤醒 | 205 | **opus** | ✅ | 待做 |
+| [206](206-send-tool-and-wakeup.md) | runtime：`srv:agent/send`（`now`/`next_turn`）+ 两个定点 + 唤醒 | 205 | **opus** | ✅ | ✅ 完成（唤醒拆去 214） |
 | [207](207-status-whole-tree.md) | runtime：`status` 放开到整棵活树（含拆文件） | 205 | sonnet | ✅ | ✅ 完成 |
-| [208](208-self-tool.md) | `srv:agent/self`：模型看得到自己的账 | 204 | sonnet | ✅ | 待做 |
-| [209](209-notes-slot.md) | `Slot::Notes` + 草稿纸两个工具 | 204 | sonnet | ✅ | 待做 |
-| [211](211-auto-driven-turns.md) | **自驱动轮次**：`AutoTurnBudget` + 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | 待做 |
-| [212](212-await-tool-and-wait-graph.md) | **`srv:agent/await`**：真订阅 + 等待图 + 建立时查环 | 205 | **opus** | ✅ | 待做 |
-| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | 待做 |
+| [208](208-self-tool.md) | `srv:agent/self`：模型看得到自己的账 | 204 | sonnet | ✅ | ✅ 完成 |
+| [209](209-notes-slot.md) | `Slot::Notes` + 草稿纸两个工具 | 204 | sonnet | ✅ | ✅ 完成 |
+| [211](211-auto-driven-turns.md) | **自驱动轮次**：自驱动预算（**住在原子图外**，见该 issue 实做记录）+ 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | ✅ 完成 |
+| [212](212-await-tool-and-wait-graph.md) | **`srv:agent/await`**：真订阅 + 等待图 + 建立时查环 | 205 | **opus** | ✅ | ✅ 完成（独测在飞） |
+| [214](214-wake-a-terminal-agent.md) | **唤醒一个已终态的 agent**（含 core 转移 `Event::Wake`）——206 开工时拆出来的 | 206 | **opus** | ✅ | ✅ 完成 |
+| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | 🚧 文档 10 处已改；真机 7/7 已跑（1b 反向那半用确定性夹具钉，理由见该 issue） |
 
 **M20 验收**（可判定，不用形容词，全表在 [213](213-agent-mesh-docs-and-dogfood.md) §三）：
 

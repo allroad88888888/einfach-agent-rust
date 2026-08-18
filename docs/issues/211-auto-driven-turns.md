@@ -1,6 +1,6 @@
 # 211 自驱动轮次：`AutoTurnBudget` + 收尾自开 + 恢复不自开
 
-**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md) · **模型** **opus** · **独测** ✅ · **状态** 待做
+**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md) · **模型** **opus** · **独测** ✅ · **状态** ✅ 完成（2026-08-18）
 
 ## 目标
 
@@ -98,3 +98,58 @@ CLI / web / 桌面**都要**：
   「看得见 + 喊得停」比在 CLI 上更要紧——那儿没有 Ctrl-C。
 - 这条与 [206](206-send-tool-and-wakeup.md) §4 的孤儿收尾**共用 B 点**。两处都改
   同一段代码，**先做 206 再做本条**，别并行。
+
+## 实做记录（2026-08-18）
+
+### §1 说的「新 primitive 槽 + undo 开一个例外」——**没这么做**
+
+按它写了一版：`Slot::AutoTurnBudget` 一落地，M2 那两条核心验收当场变红
+（`consecutive_undos_walk_turn_by_turn_and_then_report_nothing`、
+`undo_writes_back_exactly_the_prev_of_every_change`）——它们钉的正是「undo 一整
+turn 后**所有** primitive 逐值回退」。为一格计数去弱化那句话，不划算。
+
+改成第三条路：**跟 `epoch` 同一类，住在原子图外**。
+
+| | 加满 | 花掉 | undo |
+|---|---|---|---|
+| `epoch` | — | `Txn::bump_epoch` → `commit_as` | 不回滚（只增不减） |
+| 自驱动预算 | `Txn::mark_refill_auto_turns` → `commit_as` | `Session::spend_auto_turn` | 不回滚（钱已经烧掉了） |
+
+`bump_epoch` 是现成的先例：**转移表提出请求、`commit_as` 落到图外的状态上**。
+于是判断留在该在的地方（`Idle + UserInput` 那一格就是「真实用户输入」的定义），
+而「所有 primitive 都跟着 undo 走」一个字不用改。
+
+**代价如实记**：它不落盘，恢复出来是 **0**（不是崩溃前那个值，也不是上限）。
+观察不到差别——恢复本来就不自开，而下一次真实用户输入会把它加满；0 是保守的
+那一侧。
+
+### 配置面挤进 `AgentLimits`
+
+`--max-auto-turns`（`AGENT_MAX_AUTO_TURNS` 兜底）挤进 `AgentLimits` 而不是自成一个
+参数：`Session::restore` 已经收 `limits`，多一个入参要动 60 处调用点，而漏传一处的
+症状正是 160 那个 bug。类型文档因此重写，把「这三个数量的不是同一件事、只是同一条
+投递通道」写在类型上（决策 35 §二 点名不许混为一谈）。
+
+**值域跟另外两道刻意不同：允许 0**（= 关掉自驱动）。那两道量「树能长多大」，
+0 是荒唐配置所以钉 1；这一道量「没人看着时还能自己跑几轮」，0 是完全正当的部署选择。
+
+### 独立测试 agent 逮到两个真 bug（一个不属于本 issue）
+
+1. **`KNOWN_LABELS` 漏了 `"deliver"`**（206 就埋下的）：任何用过 `srv:agent/send`
+   的会话都过不了一次持久化往返，`recover` 撞 `UnknownLabel` 硬失败。补了五条
+   label + 一条 `known_label_coverage.rs`（**跑一遍真的命令，逐条 entry 问**，
+   不维护一份平行清单）。
+2. **自开的一轮被半路取消时，留言没退回收件箱**：那条承诺之前只在浏览器宿主上
+   成立（它手工调了 `undo_turn`），CLI/server 走的 `run_auto_turns` 没做。
+   修在 `try_one_auto_turn_async` 里，所有宿主一次拿到。
+
+它还报了一次**方法论违规**（grep 时把禁读文件整个打了出来，主动交代）以及**派活单
+自相矛盾**：我要求的注入验证之一是改 `spend_auto_turn`，而那个函数只存在于禁读
+文件里，按规矩根本做不到。下次派活时注入点必须由派活方指定在允许读的文件里。
+
+### 真机 dogfood 补的一条
+
+**CLI 宿主根本没接 `report_recovered_mail`**——`kill -9` 之后重启，留言好端端在
+收件箱里，终端上一个字都没有。server 与浏览器都接了，唯独 CLI 漏了，而所有测试
+都**直接调**那个函数、没有一条走 CLI 的 `main`。详见 [213](213-agent-mesh-docs-and-dogfood.md)
+§真机 dogfood 实录。

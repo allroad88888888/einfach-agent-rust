@@ -234,7 +234,7 @@ epoch 已经 bump，而且取消/undo/会话终止都会 `discard_remote_tools()
 
 | `Aftermath` | 判据 | 例 |
 |---|---|---|
-| `Nothing` | 没碰外部世界，或者只写了本仓自己的 store 状态——回滚 journal 就是补偿 | 读文件、查询、搜索；`srv:agent/spawn`（子 agent 的全部状态活在同一条日志上，父级 entry 回滚时子级原子自动跟着退）；**M20 那一族全在这一格**——`srv:agent/status`/`self`/`notes` 是纯读，`srv:agent/send`/`notes/set` 只写本仓 store（决策 35） |
+| `Nothing` | 没碰外部世界，或者只写了本仓自己的 store 状态——回滚 journal 就是补偿 | 读文件、查询、搜索；`srv:agent/spawn`（子 agent 的全部状态活在同一条日志上，父级 entry 回滚时子级原子自动跟着退）；**M20 那一族全在这一格**——`srv:agent/status`/`self`/`notes`/`await` 是纯读，`srv:agent/send`/`notes/set` 只写本仓 store（决策 35） |
 | `Undo(f)` | 碰了外部世界，且能当场写出一个可靠的还原函数 | 创建资源前记下新资源 id（还原=删除）、覆盖文件前先记旧内容（还原=写回） |
 | `Irreversible` | 其余全部——碰了，写不出可靠的还原函数，或者压根没打算写 | 发邮件、支付、删数据、跑 shell |
 
