@@ -1,6 +1,6 @@
 # Invariants
 
-> Translated from [INVARIANTS.md](INVARIANTS.md) as of commit `9ae84d5`.
+> Translated from [INVARIANTS.md](INVARIANTS.md) as of commit `b840fa1`.
 > **The Chinese version is authoritative** — development happens in Chinese, so this file
 > can lag. If the two disagree, the Chinese one is right and this one is a bug.
 >
