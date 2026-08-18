@@ -70,7 +70,7 @@ entry 上的位」是同一条路的镜像，**不新发明记账**。
 
 | 工具 | 交什么 | 落成 | 理由 |
 |---|---|---|---|
-| `srv:agent/spawn` | `Undo(no-op)` | `Hooked` | 199 §六：还原由 store 回滚本身完成，但它**确实写了状态**，所以不是 `Nothing`。**代码里要写清这条理由**，否则下一个人看到「交了个什么都不做的函数」会以为是占位 |
+| `srv:agent/spawn` | `Nothing` | `StateOnly` | 199 §六（**已按 201 落地时的发现修正**）：它在**外部世界**留下的是零，子 agent 状态活在同一条日志上、回滚父那步就跟着回滚。判 `Hooked` 会让恢复后查不到钩子 → `HookLost` → 每次 spawn 都变屏障 |
 | `srv:fs/read`、`fs/list`、`status`、`collect`、`skill/read` | `Nothing` | `StateOnly` | 纯读，没碰外部世界。**这跟 `Irreversible` 的区别是本次改动的全部要点**——不是「碰了但撤不回」 |
 | `srv:shell/exec` | `Irreversible` | `Blocked` | 行为与今天逐字相同 |
 | `ext:stats` 的截获工具（`agent-cli/src/ext_stats.rs`） | `Nothing` | `StateOnly` | 纯读；教材要同步 |
@@ -87,12 +87,14 @@ entry 上的位」是同一条路的镜像，**不新发明记账**。
   执行时在 `scratchpad` 建一个文件、交回「删掉它」的还原函数。
   1. 调它 → 文件在
   2. `/undo` → **文件没了**，`UndoReport::Applied`
-  3. 把文件设成只读让删除失败，重跑一次 → `Blocked{ HookFailed }`，**文件还在**，
+  3. 让还原函数真的失败（**别用 chmod 只读**：Unix 删文件看父目录权限，root 还绕过权限位，
+     容器里以 root 跑 CI 会静默变成「删成功了」；201 落地时改用 `remove_dir` 撞非空目录），
+     重跑一次 → `Blocked{ HookFailed }`，**文件还在**，
      且那条 entry 的状态**没回滚**
   4. `/undo!`（force）→ 越过它继续退，文件仍然在（用户已确认接受）
-- 交 `None` 的工具行为与 199 之前逐字节相同（`shell/exec` 的既有屏障测试一条不改）。
+- 交 `Irreversible` 的工具行为与 199 之前逐字节相同（`shell/exec` 的既有屏障测试一条不改）。
 - spawn 仍然不挡 undo（`subagent_parallel.rs:213` 那条断言不改，但理由从
-  「它是 `Reversible`」变成「它交了 no-op 钩子」——注释要跟上）。
+  「它是 `Reversible`」变成「它交了 `Aftermath::Nothing`，在外部世界什么都没留下」——注释要跟上）。
 - 钩子表随 history cap 清理：跑满 `DEFAULT_HISTORY_CAP + 10` 条带钩子的 entry，
   断言表长 ≤ cap。
 - `cargo test --workspace` 全绿 + `check-invariants` 过 + `build-wasm` 绿
@@ -108,4 +110,7 @@ entry 上的位」是同一条路的镜像，**不新发明记账**。
   让它同时写状态就是在一次回滚中间插一次前向写入，红线 6 的账当场乱掉。
 - 别顺手给 `TimedRun` 也加还原函数。timed 钩子的副作用**本来就不进 command log**
   （153 决策 30 / `turn_end.rs` §审计面），没有对应的 entry 可挂，是另一件事。
-- 宿主工具 / MCP 这条路上**什么都不做**——它们恒 `None`，见 [202](202-host-mcp-undo-none.md)。
+- 宿主工具 / MCP 这条路上**什么都不做**，那是 [202](202-host-mcp-undo-none.md) 的范围。
+  （202 的判据 review 时也修正过：**事实可以采信，承诺不能空转**——`pure`/`readOnlyHint:true`
+  声明的是「没碰外部世界」这个事实，落 `StateOnly` 不挡；`reversible` 声明的是一个交不出
+  函数的承诺，落 `Blocked`。见 199 §七。）
