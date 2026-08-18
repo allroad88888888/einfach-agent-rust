@@ -52,6 +52,26 @@ pump 的静止条件是 `calls.is_empty()`（043 后加上 `&& mcp_calls.is_empt
 （Explore 问题 3）、要重写 `turn_id`/undo 语义、要 per-child 取消（Explore 问题 5）。等真实
 使用反馈证明「turn 内」不够再开，别提前造。
 
+> **M20 的修正：消息跨 turn，agent 不跨 turn**（决策 35 §二）。
+>
+> 上面那句「不做」原封不动成立，但它想解决的问题**已经被绕过去了**：
+> `srv:agent/send` 的 `when="next_turn"` 把一条**话**留到下一轮，落点是 root 头上的
+> `Slot::Inbox`（一个普通 primitive 槽位），`run_turn_async` 开头 `drain_next_turn`
+> 一次搬进 `Messages`。
+>
+> **§二 列的那些机械一样都不需要**：没有 pending-slot 跨 `run_turn` 重挂（收件箱不是
+> 槽位，没有谁在等它收敛）、没有 `turn_id`/undo 重写（那条 entry 属于**投递方**那一轮，
+> `/undo` 掉它留言就退回收件箱，语义天生对）、没有 per-child 取消（子 agent 照旧在
+> 轮末被拆，活下来的只有它说的那句话）。
+>
+> 所以 `next_turn` **只能投给 root**：子 agent 活不到下一轮，投给别人等于投进一个
+> 下一轮不存在的收件箱（`DeliverDenied::NextTurnMustTargetRoot` 显式拒，不静默丢）。
+>
+> 另一半是 `when="now"`：投给一个**已经落终态**的 agent 会把它**在同一个 turn 内
+> 叫醒**（`Event::Wake`，214）。那也不是跨 turn——`turn_id` 继承、undo 连带子树，
+> 上面三条「全部一行不改」原样成立。它唯一动到的是**泵为什么会停**的论证：
+> 边界从「树的大小」变成「树的大小 × 每人的 `max_turns`」，见 `runner.rs` 模块文档。
+
 ## 三、三个工具（都 `Server` 位置，dispatch 截获）
 
 截获位置照 spawn/skill 同款（`dispatch.rs:70` 的 `Effect::ExecuteTool` 内按工具名截）。

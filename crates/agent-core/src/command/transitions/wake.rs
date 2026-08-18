@@ -23,6 +23,13 @@
 //! **三、撞顶了怎么办？** **不唤醒，什么都不写**，条目留在收件箱里，落回 206 §3
 //! 的行为（轮末由 `agent_runtime::unread_inbox` 告警）。
 //!
+//! # 211 把入口从「终态」放宽到「没在跑」
+//!
+//! 自驱动的一轮（`agent_runtime::auto_turn`）是 `begin_turn` + `drain_next_turn`
+//! + 这条转移：`begin_turn` 之后 root 是 `Idle`，而这一轮**没有用户那句话可喂**
+//! ——要发的料全在刚搬进 `Messages` 的那几条留言里。判据因此是「没在跑」而不是
+//! 「已经跑完」，那本来就是这条转移的意思。
+//!
 //! 不能直接把这一格交给 `try_call_provider`：它撞顶时落 `Done{truncated:true}`，
 //! 而这个 agent **已经是终态了**——再落一次终态没有意义，还会把「因为预算耗尽而
 //! 没被叫醒」和「自己正常答完了」两件事在状态上抹平。所以闸在调用之前自己问一次。
@@ -33,20 +40,39 @@
 use std::sync::Arc;
 
 use crate::engine::effect::Effect;
+use crate::engine::state::TurnStatus;
 
 use super::super::txn::Txn;
 use super::{protocol_violation, try_call_provider};
 
-/// 入口是**终态**，别的状态一律 `protocol_violation`——跟 `on_user_input` 只认
-/// `Idle` 是同一种严格。
+/// 入口是**没在跑的两态**：`Idle` 与终态（`Done`/`Failed`）。在飞的两态
+/// （`Thinking` / `ToolsPending`）一律 `protocol_violation`。
 ///
 /// 「还在跑的 agent 收到 Wake」不是「顺便也行」：它下一次请求本来就会带上那条话
-/// （206 的定点在 `CallProvider` 派发处），这里再推一次只会凭空多烧一轮。
+/// （206 的定点在 `CallProvider` 派发处），这里再推一次就是同一轮里并排两次
+/// provider 调用。
+///
+/// **`Idle` 那一支是 211 加的**（自驱动轮次）：`begin_turn` 之后 root 是 `Idle`，
+/// 而一轮自开的轮次没有用户那句话可喂——它要发的请求，料全在
+/// `drain_next_turn` 刚搬进 `Messages` 的那几条留言里。这条判据因此从「终态」
+/// 放宽成「**没在跑**」，而那本来就是这条转移的意思：用你历史里已经有的东西
+/// 再发一次请求。
+///
+/// 放宽的**不是** `on_user_input` 的闸（214 §缘起 点名不许动的那一处）：Wake
+/// 不 `push_message`、也不开新 turn，「一轮从哪开始」仍然只由
+/// `Session::begin_turn` 一处回答。
+///
+/// # 空历史不叫醒
+///
+/// `Messages` 空着说明没有任何可发的料——那种 Wake 只会让 adapter 收到一份
+/// 没有消息的请求体。它不是协议违规（发的人没做错什么），但也没有任何事可做，
+/// 所以跟撞顶一样：什么都不写、不留 entry。
 pub(super) fn on_wake(txn: &mut Txn, event_desc: &Arc<str>) -> Vec<Effect> {
-    if !txn.status().is_terminal() {
+    let status = txn.status();
+    if !status.is_terminal() && status != TurnStatus::Idle {
         return protocol_violation(txn, event_desc);
     }
-    if txn.turns_exhausted() {
+    if txn.turns_exhausted() || txn.messages().is_empty() {
         return Vec::new();
     }
     try_call_provider(txn)
