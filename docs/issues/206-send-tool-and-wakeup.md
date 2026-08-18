@@ -1,6 +1,6 @@
 # 206 runtime：`srv:agent/send` + 两个定点排空
 
-**里程碑** M20 · **依赖** [205](205-core-peek-and-inbox.md) · **模型** **opus** · **独测** ✅ · **状态** 待做
+**里程碑** M20 · **依赖** [205](205-core-peek-and-inbox.md) · **模型** **opus** · **独测** ✅ · **状态** ✅ 完成（2026-08-18，见文末）
 
 ## 目标
 
@@ -154,3 +154,59 @@ root 落终态、泵静止时（`runner.rs` 的 B 点）：
 - **本 issue 不动泵的停机边界**（唤醒才动，那是 214）。`runner.rs` 模块文档里那段
   「一轮结束 = root 终态且后台子静止」这次一个字不用改——排空是命令，不产生在飞调用。
   别顺手去改它，那会让下一个人以为唤醒已经落地了。
+
+## 实做记录（2026-08-18）
+
+六道门禁全绿：`cargo test --workspace` **2206 passed / 0 failed**；
+`check-invariants --all` 退出码 0（红线 9 提示 12，与 207 之后的基线相同）；
+`build-wasm.sh` 绿；`pnpm -r typecheck` 过；`clippy --all-targets -D warnings`
+零 error；`cargo test -p agent-server --features ts` 全绿。
+
+### 唤醒拆走了（见文首那段），本 issue 的范围因此小一圈
+
+拆的判据不是工作量，是 `Effect::CallProvider` 的四个入口**都要求那个 agent 正走在
+流程里**，而 `on_user_input` 明确拒绝终态并把理由写死在模块文档里。单开
+[214](214-wake-a-terminal-agent.md)。
+
+### 一条验收写错了，测试 agent 落地时点出来的
+
+原文：「下一轮 `drain_next_turn` 之后 `/undo` 掉**新**这一轮 → 留言退回收件箱；
+**再 `/undo` 掉上一轮，它照旧在**」。**后半句不成立**——留言是在上一轮被 `deliver`
+进收件箱的，那条 entry 就属于上一轮，undo 掉上一轮必然把 `deliver` 一起退掉，
+它只能消失。原意是「老那一轮不受影响」，而那正是前半句本身。已在 §验收 就地改正
+并留了说明。
+
+**这正是独立测试 agent 该抓的东西**：它只读规格，所以规格自相矛盾时它会撞上；
+实现者写测试会不自觉地按实现的行为去理解那句话。
+
+### 注入验证：头号那条是承重的
+
+把「投递即追加」（`deliver` 之后当场 `drain_now`，绕过定点）注入进 `send_tool` →
+**5 条红**，其中就有 `send_indep_injection_order`。那正是 204 §二 点名的、不报错
+的坑。测试 agent 自己另做了两次变异验证（改断言方向确认真会红），实测下标
+`reply@1 / injected@3`、`note@4 / ask@5`——是真实相邻的位置，不是空跑。
+
+### `UnreadMessages` 一路接到四个壳，三道穷举 match 逐个逼出来
+
+`RunnerEvent` 加一个变体，被三处无通配的 `match` 当场逮住：`agent-cli` 的
+`print/events.rs`、`agent-server` 的 `SessionEvent`+`from_runner`+`ts_protocol`
+（变体数钉子 19→20，重新生成 `packages/protocol/src/generated`）、`agent-wasm`
+的 `events.rs`。
+
+> **第 4 处 TS 没被编译器逮住。** `packages/web` 的 `switch` 没有 `never` 兜底，
+> `pnpm typecheck` 照样过——`unread_messages` 会**悄悄什么都不显示**。是手工核出来
+> 补的。这条记下来：**typecheck 过 ≠ web 会显示它**，加 `SessionEvent` 变体时
+> web 那一处得自己去看，护栏在那儿是缺的。
+
+（`build-wasm.sh` 那一道倒是逮住了 `agent-wasm`——157 那次「别假定 wasm 白拿」的
+教训在这次真的兑现了一回。）
+
+### 没能覆盖的四条（测试 agent 报的，都成立）
+
+1. **「B 真的用上了」**——脚本化的假 provider 不会真用收到的信息，只能断「它进了
+   B 下一次请求的 prompt」。要证明模型真用上，只有真机 dogfood（[213](213-agent-mesh-docs-and-dogfood.md) §二.1）。
+2. **红线 6 用 `Event::Cancel` 推世代，不是 mid-turn `/undo`**——`run_turn` 是同步的，
+   从外部拿不到那个时刻。沿用 `spawn_bg_epoch_writeback.rs` 的既有手法并在文档里标注。
+3. **崩溃恢复那条**归持久化层，`inbox_indep_undo_restore.rs` 已覆盖「落盘往返带着
+   `when` 回来」。
+4. 门禁不在测试 agent 的范围里（它只跑 `agent-core` + `agent-runtime`），由实现方收官。
