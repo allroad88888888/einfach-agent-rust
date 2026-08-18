@@ -25,6 +25,9 @@
 use agent_core::{Location, Reversibility};
 
 use crate::collect_tool::COLLECT_TOOL;
+use crate::notes_tool::{NOTES_SET_TOOL, NOTES_TOOL};
+use crate::self_tool::SELF_TOOL;
+use crate::send_tool::SEND_TOOL;
 use crate::skill::SKILL_READ;
 use crate::spawn_tool::SPAWN_TOOL;
 use crate::status_tool::STATUS_TOOL;
@@ -106,6 +109,19 @@ pub(super) fn reversibility_of(tool: &str) -> Reversibility {
         // read 同理是**纯读**（137）：按 id 查内存里装载期就位的正文，不写任何
         // primitive、不落 entry、没有需要补偿的动作——`Pure` 的定义本身。
         SKILL_READ => Reversibility::Pure,
+        // M20 那一族（决策 35）。`self` 与 `notes` 读是纯读，跟 `status` 同一格。
+        //
+        // `send` 与 `notes/set` **写状态但不碰外部世界**：它们各自落一条 entry，
+        // 回滚那条 entry 就是全部补偿——跟 `SPAWN_TOOL` 判 `Reversible` 是同一套账
+        // （`Aftermath::Nothing` 那一格：在**外部世界**留下的是零）。
+        //
+        // **这三行是真机 dogfood 补的**：漏了它们的话，终端上每一次 `srv:agent/notes`
+        // 都印着 `reversibility=Irreversible`，而 `docs/TOOLS.md` 写着这一族全在
+        // `Nothing` 那一格——两处说法对不上，用户读到的是错的那一个。
+        // 行为上今天没差别（截获路从不 `mark_no_undo`），但 202 的教训正是
+        // 「印给人看的那个字要么是真的，要么别印」。
+        SELF_TOOL | NOTES_TOOL => Reversibility::Pure,
+        SEND_TOOL | NOTES_SET_TOOL => Reversibility::Reversible,
         _ => Reversibility::Irreversible,
     }
 }
