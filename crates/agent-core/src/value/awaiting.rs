@@ -43,6 +43,12 @@ pub enum AwaitUntil {
 }
 
 impl AwaitUntil {
+    /// 三档全在这儿。**给需要「把这个目标的所有 await derived 一次找齐」的地方
+    /// 用**——`despawn` 的读者预检与逐出就是（`AwaitReached` 的键带 `until`，
+    /// 同一个目标最多三条边）。加第四档时编译器不会提醒这里，所以下面那条
+    /// 单元测试拿 `match` 钉住了「变体数 = 这个数组的长度」。
+    pub const ALL: [AwaitUntil; 3] = [AwaitUntil::Settled, AwaitUntil::Done, AwaitUntil::Failed];
+
     /// 落盘/线上的那个词。**不用 `Debug`**：那个字符串是 Rust 的实现细节，
     /// 改个变体名就悄悄改了落盘格式，而这个值要跨进程读回来。
     pub fn as_str(self) -> &'static str {
@@ -182,6 +188,25 @@ mod tests {
         ]);
         assert_eq!(bytes(&a), bytes(&b));
         assert_eq!(bytes(&a), r#"[["root/a","settled"],["root/b","done"]]"#);
+    }
+
+    /// `ALL` 真的装着全部三档——加第四档而忘了往里加，这条会红。
+    ///
+    /// **穷举 `match` 是那个「编译器提醒」**：加变体时它编译不过，人被逼到这儿，
+    /// 然后这条断言告诉他还要改哪个数组。光有数组长度断言的话，加变体只会让
+    /// `despawn` 悄悄漏掉一条边不逐出，而那会在 `destroy_atom` 上 panic。
+    #[test]
+    fn all_really_lists_every_variant() {
+        for until in AwaitUntil::ALL {
+            match until {
+                AwaitUntil::Settled | AwaitUntil::Done | AwaitUntil::Failed => {}
+            }
+        }
+        assert_eq!(AwaitUntil::ALL.len(), 3);
+        let mut sorted = AwaitUntil::ALL.to_vec();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 3, "ALL 里有重复");
     }
 
     /// **落盘的词不是 `Debug`**：改个变体名不该改落盘格式。

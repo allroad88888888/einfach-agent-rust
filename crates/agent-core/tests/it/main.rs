@@ -4,6 +4,10 @@
 //! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
 
 mod await_edges_point_at_primitives;
+mod await_indep_epoch_gate;
+mod await_indep_restore_survives_cycle_check;
+mod await_indep_target_despawned;
+mod await_indep_undo_releases_edge;
 mod advance_boundary_command;
 mod advance_boundary_window_clear;
 mod apply_summary_atomic_write;

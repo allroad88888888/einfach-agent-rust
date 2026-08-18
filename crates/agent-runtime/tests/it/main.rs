@@ -9,6 +9,11 @@
 //! 是夹具结构的改动，不该混进「让 CI 变绿」（195）这件事。
 #![allow(clippy::duplicate_mod)]
 
+mod await_indep_cycle_direct_rejected;
+mod await_indep_cycle_triangle_rejected;
+mod await_indep_invalid_targets_rejected;
+mod await_indep_siblings_resolve;
+mod await_indep_support;
 mod auto_turn_indep_begin_turn_preserves_budget;
 mod auto_turn_indep_cancel_holds;
 mod auto_turn_indep_chain_runs_and_stops;
