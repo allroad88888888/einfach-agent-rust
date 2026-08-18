@@ -47,7 +47,7 @@ pub use compaction::{
 // 都通），跟 `engine` 一侧的惯例一致。
 pub use command::{
     AgentEntry, AgentLimits, BarrierInfo, BlockedCause, BoundaryRejected, ChildConfig,
-    ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_CHILDREN,
+    ClearOutcome, DEFAULT_HISTORY_CAP, DEFAULT_MAX_AGENT_DEPTH, DEFAULT_MAX_AUTO_TURNS, DEFAULT_MAX_CHILDREN,
     DeliverDenied, DespawnRefused, DespawnReport, EntryMeta, HookOutcome, MAX_NOTES,
     NOTE_KEY_CAP, NOTE_VALUE_CAP, NoteDenied, ReadDenied, Session, SpawnRefused,
     UndoReport, Undoability, known_label,

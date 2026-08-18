@@ -213,6 +213,7 @@ fn tight() -> AgentLimits {
     AgentLimits {
         max_depth: 2,
         max_children: 2,
+        ..AgentLimits::default()
     }
 }
 

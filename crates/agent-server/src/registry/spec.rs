@@ -253,6 +253,7 @@ mod tests {
             spawn_limits: AgentLimits {
                 max_depth: 2,
                 max_children: 3,
+                ..AgentLimits::default()
             },
         }
         .build();

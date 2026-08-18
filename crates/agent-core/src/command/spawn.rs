@@ -44,17 +44,45 @@ pub const DEFAULT_MAX_AGENT_DEPTH: usize = 3;
 /// 「一共能 spawn 多少个」由子树轮预算管（029），两件事不该合并成一个数。
 pub const DEFAULT_MAX_CHILDREN: usize = 8;
 
-/// 子 agent 树的结构性硬限。**数字参数，不是分支**（红线 12）。
+/// 一次用户输入之后，会话**自己**还能往下开几轮的默认上限（决策 35，issue 211）。
 ///
-/// 不进原子图、不进 undo log：它是这个会话的**配置**，跟 `History` 的 cap 同一类
+/// 3 是一个刻意小的数：这是本仓第一次在没有用户输入的情况下继续消耗 token，
+/// 默认值该让人第一次撞上它时觉得「怎么这么快就停了」，而不是「怎么烧了这么多」。
+pub const DEFAULT_MAX_AUTO_TURNS: u32 = 3;
+
+/// 这个会话的几道**数字闸**。**数字参数，不是分支**（红线 12）。
+///
+/// 不进原子图、不进 undo log：它们是这个会话的**配置**，跟 `History` 的 cap 同一类
 /// ——「用户把上限调大了」不是一次可以撤销的状态变更，撤回去只会让一批已经存在的
-/// 子 agent 变成非法。
+/// 子 agent 变成非法。恢复时由宿主再说一遍（`Session::restore` 的 `limits` 入参，
+/// 160 的教训）。
+///
+/// # 里面装的**不是同一件事**，只是同一条投递通道
+///
+/// 决策 35 §二 点名这三道闸不能混为一谈，它们量的东西不同：
+///
+/// | 闸 | 量什么 | 住哪 |
+/// |---|---|---|
+/// | `max_depth` / `max_children` | **树有多大** | 这里 |
+/// | `MaxTurns`（槽位） | **一轮里说几次话** | 原子图 |
+/// | `max_auto_turns` | **没人看着时能跑几轮** | 这里 |
+///
+/// 后两者放在不同的地方不是随意的：`MaxTurns` 每一轮都要被 `begin_turn` 重置，
+/// 是**状态**；`max_auto_turns` 是配置，重置的是它派生出的那个槽位
+/// （`Slot::AutoTurnBudget`）。**部署方估账时把三个数相乘**，那是这三条唯一
+/// 该被放在一起看的时刻。
+///
+/// `max_auto_turns` 挤进这个结构而不是自成一个参数，纯粹是为了走同一条投递
+/// 通道：`Session::restore` 已经收 `limits`，多一个入参要动 60 处调用点，
+/// 而漏传一处的症状正是 160 那个 bug（恢复之后闸悄悄退回默认值）。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct AgentLimits {
     /// `AgentId::depth()` 的上限（root = 0）。
     pub max_depth: usize,
     /// 每个 agent 活着的直接子 agent 数上限。
     pub max_children: usize,
+    /// 一次用户输入之后，会话自己还能往下开几轮（211）。0 = 关掉自驱动。
+    pub max_auto_turns: u32,
 }
 
 impl Default for AgentLimits {
@@ -62,6 +90,7 @@ impl Default for AgentLimits {
         AgentLimits {
             max_depth: DEFAULT_MAX_AGENT_DEPTH,
             max_children: DEFAULT_MAX_CHILDREN,
+            max_auto_turns: DEFAULT_MAX_AUTO_TURNS,
         }
     }
 }

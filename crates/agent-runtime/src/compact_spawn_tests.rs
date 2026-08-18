@@ -162,6 +162,7 @@ fn a_refused_spawn_yields_compact_failed_with_the_same_epoch_and_records_nothing
     session.set_agent_limits(agent_core::AgentLimits {
         max_depth: 0,
         max_children: 8,
+        ..agent_core::AgentLimits::default()
     });
     session.step(Event::UserInput {
         agent: root.clone(),

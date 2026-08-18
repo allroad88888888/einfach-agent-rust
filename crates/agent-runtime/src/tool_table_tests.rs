@@ -191,6 +191,7 @@ fn the_declared_limits_follow_the_limits_that_are_actually_enforced() {
     let tighter = ToolTable::builtin().with_spawn(AgentLimits {
         max_depth: 1,
         max_children: 2,
+        ..AgentLimits::default()
     });
     let text = |t: &ToolTable| t.specs().last().unwrap().description.to_string();
     assert!(text(&default).contains('8'));

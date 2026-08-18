@@ -49,11 +49,13 @@ impl Session {
         f: impl FnOnce(&mut Txn) -> R,
     ) -> R {
         let epoch_at_write = self.epoch;
+        let is_root = agent == &self.agent;
         let mut txn = Txn::new(
             &self.store,
             &self.sources,
             &self.derived,
             agent,
+            is_root,
             epoch_at_write,
             &self.tool_marks,
         );
@@ -68,6 +70,13 @@ impl Session {
         let commit = txn.finish();
         if commit.bump_epoch {
             self.epoch = self.epoch.next();
+        }
+        // 211：跟 `bump_epoch` 并排——两者都是**图外**的会话状态，由转移表提出
+        // 请求、这里落地。自驱动预算不进原子图，`/undo` 因此天然退不还它
+        // （钱已经烧掉了），而「所有 primitive 都跟着 undo 走」那句话一个字
+        // 都不用改。
+        if commit.refill_auto_turns {
+            self.auto_turn_budget = self.limits.max_auto_turns;
         }
         let meta = EntryMeta {
             turn_id: self.turn_id,

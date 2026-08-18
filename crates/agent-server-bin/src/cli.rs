@@ -40,6 +40,13 @@ pub struct Cli {
     /// `--max-children <n>`：每个 agent 活着的直接子 agent 数上限（默认 8）。
     /// 没给就退 `AGENT_MAX_CHILDREN`。
     pub max_children: Option<usize>,
+    /// `--max-auto-turns <n>`：一次用户输入之后，会话**自己**还能往下开几轮
+    /// （211，决策 35 §二；默认 3，**0 = 关掉自驱动**）。没给就退
+    /// `AGENT_MAX_AUTO_TURNS`。
+    ///
+    /// 跟上面两道闸量的不是同一件事：它们量「树有多大」，这一道量「没人看着时
+    /// 还能自己跑几轮」——部署方估账时把三个数连同 `MaxTurns` 一起相乘。
+    pub max_auto_turns: Option<u32>,
 }
 
 pub enum ParsedArgs {
@@ -66,6 +73,7 @@ pub fn parse(args: &[String]) -> ParsedArgs {
         private_capability_stdin: false,
         max_agent_depth: None,
         max_children: None,
+        max_auto_turns: None,
     };
     let mut i = 0;
     while i < args.len() {
@@ -114,6 +122,21 @@ pub fn parse(args: &[String]) -> ParsedArgs {
             i += 1;
             match agent_limits::parse_count("--max-children", args.get(i).map(String::as_str)) {
                 Ok(n) => cli.max_children = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
+        } else if let Some(v) = arg.strip_prefix("--max-auto-turns=") {
+            // **允许 0**（关掉自驱动），所以走 `parse_auto_turns` 而不是
+            // `parse_count`——后者钉死下限 1，那是给两道结构闸的（见
+            // `agent_limits` 模块文档）。
+            match agent_limits::parse_auto_turns("--max-auto-turns", Some(v)) {
+                Ok(n) => cli.max_auto_turns = Some(n),
+                Err(e) => return ParsedArgs::Invalid(e),
+            }
+        } else if arg == "--max-auto-turns" {
+            i += 1;
+            match agent_limits::parse_auto_turns("--max-auto-turns", args.get(i).map(String::as_str))
+            {
+                Ok(n) => cli.max_auto_turns = Some(n),
                 Err(e) => return ParsedArgs::Invalid(e),
             }
         } else if arg.starts_with('-') {

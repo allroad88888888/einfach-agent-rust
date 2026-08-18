@@ -28,6 +28,8 @@ const DEPTH_FLAG: &str = "--max-agent-depth";
 const DEPTH_ENV: &str = "AGENT_MAX_AGENT_DEPTH";
 const CHILDREN_FLAG: &str = "--max-children";
 const CHILDREN_ENV: &str = "AGENT_MAX_CHILDREN";
+const AUTO_TURNS_FLAG: &str = "--max-auto-turns";
+const AUTO_TURNS_ENV: &str = "AGENT_MAX_AUTO_TURNS";
 
 /// 一个上限参数的取值：正整数，**解析不出来或小于 1 就是错误**。
 ///
@@ -76,6 +78,7 @@ pub fn resolve(
     cli: &Cli,
     depth_env: Option<&str>,
     children_env: Option<&str>,
+    auto_turns_env: Option<&str>,
 ) -> Result<AgentLimits, String> {
     let fallback = AgentLimits::default();
     Ok(AgentLimits {
@@ -93,6 +96,13 @@ pub fn resolve(
             children_env,
             fallback.max_children,
         )?,
+        max_auto_turns: pick_auto_turns(
+            AUTO_TURNS_FLAG,
+            AUTO_TURNS_ENV,
+            cli.max_auto_turns,
+            auto_turns_env,
+            fallback.max_auto_turns,
+        )?,
     })
 }
 
@@ -100,7 +110,44 @@ pub fn resolve(
 pub fn from_cli_and_environment(cli: &Cli) -> Result<AgentLimits, String> {
     let depth = std::env::var(DEPTH_ENV).ok();
     let children = std::env::var(CHILDREN_ENV).ok();
-    resolve(cli, depth.as_deref(), children.as_deref())
+    let auto_turns = std::env::var(AUTO_TURNS_ENV).ok();
+    resolve(
+        cli,
+        depth.as_deref(),
+        children.as_deref(),
+        auto_turns.as_deref(),
+    )
+}
+
+/// 自驱动预算的取值：**允许 0**（= 关掉自驱动），跟另外两道闸的下限 1 刻意不同。
+///
+/// 那两道量的是「树能长多大」，0 会造出一个连一个子 agent 都开不了的荒唐配置，
+/// 所以钉 1；这一道量的是「没人看着时还能自己跑几轮」，**0 是一个完全正当的
+/// 部署选择**——不想让会话在没人看着时花钱，就配 0。
+pub fn parse_auto_turns(source: &str, value: Option<&str>) -> Result<u32, String> {
+    let Some(value) = value else {
+        return Err(format!("{source} 需要一个 ≥ 0 的整数"));
+    };
+    value
+        .parse::<u32>()
+        .map_err(|_| format!("{source} 需要 ≥ 0 的整数，收到 {value:?}"))
+}
+
+/// 同 [`pick`]，值域不同（允许 0）。
+fn pick_auto_turns(
+    flag: &str,
+    env: &str,
+    from_cli: Option<u32>,
+    from_env: Option<&str>,
+    fallback: u32,
+) -> Result<u32, String> {
+    if let Some(n) = from_cli {
+        return Ok(n);
+    }
+    let Some(raw) = from_env else {
+        return Ok(fallback);
+    };
+    parse_auto_turns(env, Some(raw)).map_err(|e| format!("{e}（对应命令行参数 {flag}）"))
 }
 
 /// 命令行给了就用它（`cli.rs` 解析时已经过 [`parse_count`]），否则看环境变量的
@@ -135,6 +182,7 @@ mod tests {
             private_capability_stdin: false,
             max_agent_depth: depth,
             max_children: children,
+            max_auto_turns: None,
         }
     }
 
@@ -164,7 +212,7 @@ mod tests {
     #[test]
     fn no_flags_and_no_env_is_the_decision_20_default() {
         assert_eq!(
-            resolve(&cli(None, None), None, None).unwrap(),
+            resolve(&cli(None, None), None, None, None).unwrap(),
             AgentLimits::default()
         );
     }
@@ -172,25 +220,25 @@ mod tests {
     /// **部分覆盖不连坐**：只配一项，另一项必须留在默认值上。
     #[test]
     fn setting_one_limit_leaves_the_other_at_its_default() {
-        let only_children = resolve(&cli(None, Some(2)), None, None).unwrap();
+        let only_children = resolve(&cli(None, Some(2)), None, None, None).unwrap();
         assert_eq!(only_children.max_children, 2);
         assert_eq!(only_children.max_depth, AgentLimits::default().max_depth);
 
-        let only_depth = resolve(&cli(Some(1), None), None, None).unwrap();
+        let only_depth = resolve(&cli(Some(1), None), None, None, None).unwrap();
         assert_eq!(only_depth.max_depth, 1);
         assert_eq!(only_depth.max_children, AgentLimits::default().max_children);
     }
 
     #[test]
     fn both_limits_come_through() {
-        let both = resolve(&cli(Some(2), Some(3)), None, None).unwrap();
+        let both = resolve(&cli(Some(2), Some(3)), None, None, None).unwrap();
         assert_eq!(both.max_depth, 2);
         assert_eq!(both.max_children, 3);
     }
 
     #[test]
     fn the_environment_fills_in_what_the_command_line_left_out() {
-        let got = resolve(&cli(None, None), Some("2"), Some("5")).unwrap();
+        let got = resolve(&cli(None, None), Some("2"), Some("5"), None).unwrap();
         assert_eq!(got.max_depth, 2);
         assert_eq!(got.max_children, 5);
     }
@@ -198,7 +246,7 @@ mod tests {
     /// 命令行优先于环境变量——跟 `--port`/`AGENT_SERVER_PORT` 同一个既有取舍。
     #[test]
     fn the_command_line_wins_over_the_environment() {
-        let got = resolve(&cli(Some(1), Some(2)), Some("9"), Some("9")).unwrap();
+        let got = resolve(&cli(Some(1), Some(2)), Some("9"), Some("9"), None).unwrap();
         assert_eq!(got.max_depth, 1);
         assert_eq!(got.max_children, 2);
     }
@@ -207,10 +255,10 @@ mod tests {
     /// 环境变量名和对应的 flag。
     #[test]
     fn a_bad_environment_value_is_rejected_and_names_both_spellings() {
-        let err = resolve(&cli(None, None), None, Some("0")).unwrap_err();
+        let err = resolve(&cli(None, None), None, Some("0"), None).unwrap_err();
         assert!(err.contains(CHILDREN_ENV), "{err}");
         assert!(err.contains(CHILDREN_FLAG), "{err}");
 
-        assert!(resolve(&cli(None, None), Some("abc"), None).is_err());
+        assert!(resolve(&cli(None, None), Some("abc"), None, None).is_err());
     }
 }

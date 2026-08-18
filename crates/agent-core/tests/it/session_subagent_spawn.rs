@@ -123,13 +123,15 @@ fn limits_are_parameters_and_can_be_dialed() {
         s.agent_limits(),
         AgentLimits {
             max_depth: 3,
-            max_children: 8
+            max_children: 8,
+            ..AgentLimits::default()
         }
     );
 
     s.set_agent_limits(AgentLimits {
         max_depth: 1,
         max_children: 1,
+        ..AgentLimits::default()
     });
     let a1 = s.spawn_child(&root(), cfg(&[]), None).unwrap();
     assert_eq!(

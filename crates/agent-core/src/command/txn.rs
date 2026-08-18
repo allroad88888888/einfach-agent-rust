@@ -45,6 +45,9 @@ pub(crate) struct Commit {
     pub(crate) changes: Vec<AgentChange>,
     pub(crate) undoability: Undoability,
     pub(crate) bump_epoch: bool,
+    /// 211：这一步要不要把自驱动预算加满。**跟 `bump_epoch` 同一类**——转移表
+    /// 提出请求，`commit_as` 落到**不在原子图里**的那份会话状态上。
+    pub(crate) refill_auto_turns: bool,
 }
 
 /// 一次转移的写入事务。转移表只看得见这个类型。
@@ -53,11 +56,17 @@ pub(crate) struct Txn {
     sources: SourceFamily,
     derived: DerivedFamily,
     agent: AgentId,
+    /// 这一步是不是替 **root** 做的（211）。自驱动预算是会话级的，只有 root
+    /// 头上那一步算数；`Txn` 只知道「替谁做」、不知道谁是 root，所以这个判断
+    /// 在 `commit_as` 里做一次，不让转移表自己去猜。
+    is_root: bool,
     epoch: Epoch,
     tool_marks: Vec<(ToolCallId, Undoability)>,
     changes: Vec<AgentChange>,
     undoability: Undoability,
     bump_epoch: bool,
+    /// 211：见 [`Txn::mark_refill_auto_turns`]。
+    refill_auto_turns: bool,
 }
 
 impl Txn {
@@ -66,6 +75,7 @@ impl Txn {
         sources: &SourceFamily,
         derived: &DerivedFamily,
         agent: &AgentId,
+        is_root: bool,
         epoch: Epoch,
         tool_marks: &[(ToolCallId, Undoability)],
     ) -> Self {
@@ -74,11 +84,13 @@ impl Txn {
             sources: sources.clone(),
             derived: derived.clone(),
             agent: agent.clone(),
+            is_root,
             epoch,
             tool_marks: tool_marks.to_vec(),
             changes: Vec::new(),
             undoability: Undoability::StateOnly,
             bump_epoch: false,
+            refill_auto_turns: false,
         }
     }
 
@@ -89,6 +101,7 @@ impl Txn {
             changes: self.changes,
             undoability: self.undoability,
             bump_epoch: self.bump_epoch,
+            refill_auto_turns: self.refill_auto_turns,
         }
     }
 
@@ -233,6 +246,32 @@ impl Txn {
         messages.push_back(Message { id, role, blocks });
         self.set(Slot::Messages, AgentValue::Messages(messages));
         id
+    }
+
+    /// **请求把自驱动预算加满**（211）。只有 `on_user_input` 那一条路会调它。
+    ///
+    /// # 为什么是「请求」而不是一次写入
+    ///
+    /// 自驱动预算**不在原子图里**，它是会话级的一格状态，跟 `epoch` 同一类：
+    /// `/undo` 不该退还它（钱已经烧掉了，退还等于交出一条「撤销 → 重跑 → 再撤销」
+    /// 的无限循环）。把它做成 primitive 就得在 undo 的回滚循环里开一个例外，
+    /// 而「所有 primitive 都跟着 undo 走」是这套机制最值钱的一句话，不该为一格
+    /// 计数破掉。
+    ///
+    /// 所以走 [`Commit::refill_auto_turns`] 这条既有形状——**`bump_epoch` 就是
+    /// 先例**：转移表提出请求，`commit_as` 落到图外的那份状态上。判断留在转移表
+    /// （`Idle + UserInput` 那一格就是「真实用户输入」的定义），状态留在图外。
+    ///
+    /// # 为什么只有真实用户输入能加满
+    ///
+    /// 按时间续期、按「有进展」续期、`begin_turn` 顺手重置，三种写法都是把闸
+    /// 接回被它约束的循环里 = 等于没有闸，而且不报错（决策 35 §五）。
+    ///
+    /// 非 root 的一步什么都不做：子 agent 不跨 turn，也就没有「下一轮」可以自开。
+    pub(crate) fn mark_refill_auto_turns(&mut self) {
+        if self.is_root {
+            self.refill_auto_turns = true;
+        }
     }
 
     /// 本轮预算还有没有——**只问，不动账**。

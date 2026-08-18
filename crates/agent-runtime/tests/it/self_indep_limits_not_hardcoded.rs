@@ -74,6 +74,7 @@ fn self_reflects_a_reconfigured_agent_limits_not_the_default_3_and_8() {
     let reconfigured = AgentLimits {
         max_depth: 5,
         max_children: 2,
+        ..AgentLimits::default()
     };
     assert_ne!(reconfigured, AgentLimits::default());
     session.set_agent_limits(reconfigured);
