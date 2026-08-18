@@ -31,6 +31,7 @@ use agent_core::{AgentLimits, Reversibility, ToolCallRequest, ToolSpec};
 use serde_json::Value;
 
 use crate::collect_tool::collect_spec;
+use crate::send_tool::send_spec;
 use crate::skill::SkillRegistry;
 use crate::spawn_request::spawn_spec;
 use crate::status_tool::status_spec;
@@ -197,6 +198,17 @@ impl ToolTable {
     /// 追加在末尾（红线 11：既有顺序是契约，只加不改）。
     pub fn with_collect(mut self) -> Self {
         self.push_spec(collect_spec());
+        self
+    }
+
+    /// 206 开闸：追加 `srv:agent/send`，模型从此能给会话里**任意**活 agent 说一句话
+    /// （决策 35 §二，横读全开之后兄弟也发得到）。
+    ///
+    /// 跟 `with_spawn`/`with_status`/`with_collect` 各自一档，理由同 `with_status`：
+    /// 部署方决定开哪些，不是一个「多 agent 模式」的总开关。**只开 send 不开 status
+    /// 是合法但难用的组合**——模型拿不到别人的 id，只能靠自己 spawn 时记下的那些。
+    pub fn with_send(mut self) -> Self {
+        self.push_spec(send_spec());
         self
     }
 

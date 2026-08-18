@@ -125,6 +125,19 @@ pub async fn run_turn_async(
 ) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.cancel.store(false, Ordering::Relaxed);
     let root = session.agent().clone();
+    // 206：**这就是 `Deliver::NextTurn` 的定点**——上一轮留给 root 的话，在这一轮
+    // 的第一条 user 消息**之前**进历史。
+    //
+    // 顺序是刻意的：那条留言是上一轮末尾说的，时间上排在用户这句新话前面。
+    //
+    // 位置也是刻意的：调用方已经调过 `session.begin_turn()`（见本函数文档），
+    // 所以这条 entry 属于**新**的 turn——`/undo` 掉新这一轮会把留言退回收件箱，
+    // 老那一轮不受影响。放在 `begin_turn` 之前，它会挂在上一轮尾巴上，
+    // undo 掉上一轮就把一条还没被读过的话一起吞了。
+    //
+    // 只在 `run_turn_async` 里做，**不在 `resume_async`**：远端工具的回传不是
+    // 新的用户轮次（见 `resume_async` 的文档），那条路上没有新的 turn 边界。
+    session.drain_next_turn();
     resume_async(
         session,
         ctx,
@@ -205,6 +218,9 @@ pub(crate) async fn resume_after_first_commit(
     // 才会跟它比出差异、触发一次回调，`run_turn` 被反复调用（一轮接一轮）也不会
     // 在每轮开头都白白重发一次跟上一轮收尾时完全相同的树（见 `maybe_emit_tree`）。
     let mut last_tree: Option<AgentTree> = ctx.tree_events_enabled().then(|| session.agent_tree());
+    // 206：轮末「还有几条没被读到」只报一次——终态之后泵可能还转不止一圈
+    // （B0 的清算和 B 的收工判定各自还要过一遍）。
+    let mut unread_reported = false;
     let mut after_commit = Some(after_commit);
 
     pending.push_back(initial);
@@ -281,6 +297,15 @@ pub(crate) async fn resume_after_first_commit(
         //     （不走会话级取消，理由见 `crate::orphan`），跑完没人领的告警丢掉。
         //     放在 B **之前**：这一圈可能就是收工的那一圈（后台子已经静止但还活
         //     着），拆干净了再返回，别把一棵没人要的子树留给下一轮。
+        // B0'. 206：还没被读到的 `Deliver::Now` 报一句。**在 reap 之前**——
+        //      reap 会把没人领的后台子拆掉、它们的收件箱跟着被逐出，而「给一个
+        //      已经答完的子 agent 发了话」恰恰是这条告警最想抓的场景。
+        //      终态之后泵可能还转不止一圈，所以自己记一笔只报一次。
+        if !unread_reported && session.status().is_terminal() {
+            unread_reported = true;
+            crate::unread_inbox::report(session, ctx);
+        }
+
         if orphan::reap(session, ctx, &mut subtree) {
             // 拆掉一棵子树改变了 `agent_tree()`，而 A 那段的变化检测只跟着
             // `session.step` 走 —— 这条路不经过 step，得自己补一次。

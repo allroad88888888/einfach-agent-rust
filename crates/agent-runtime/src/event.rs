@@ -111,6 +111,21 @@ pub enum RunnerEvent {
     /// `packages/web/src/render/agent_tree.ts` 各有一份呈现是同一条规矩。
     OrphanedChild { child: AgentId, fate: OrphanFate },
 
+    /// 206：轮末这个 agent 的收件箱里还有 `count` 条 `Deliver::Now` 的话**没被
+    /// 读到**——有人给它发了消息，而它在这一轮里再也没有组装过 provider 请求
+    /// （多半是发的时候它已经答完了）。
+    ///
+    /// 这是**编排失误的信号，不是错误**：轮次结果照旧是它本来的样子，泵不会因此
+    /// 多转一圈（决策 204 §二：一轮结束就是结束）。
+    ///
+    /// **`Deliver::NextTurn` 的条目不算在里面**，它们本来就该留到下一轮
+    /// （206 §4 那条直觉陷阱：孤儿收尾「收件箱非空就告警」的写法会把正常情况
+    /// 报成异常，接着有人会顺手清干净）。
+    ///
+    /// 载荷是**事实**不是句子（同 [`RunnerEvent::OrphanedChild`]）：措辞由看的人
+    /// 组，CLI 一份、web 一份。
+    UnreadMessages { agent: AgentId, count: usize },
+
     /// 109：一份摘要被写进状态了（[`agent_core::Session::apply_summary`] 成功）
     /// ——压缩点在时间线上可见的信号。判据同本文件顶部：`upto` **只有 runner
     /// 自己知道**（105 定死 `Event::CompactDone` 不带它，`crate::compact_slot::

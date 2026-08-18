@@ -121,6 +121,7 @@ mod remote_tool_status;
 mod remote_tool_submission;
 mod reply;
 mod runner;
+mod send_tool;
 mod session_start;
 mod session_tool_ext;
 mod skill;
@@ -147,6 +148,7 @@ mod transient_source_vault;
 mod turn_end;
 mod undo_hook;
 mod undo_promise;
+mod unread_inbox;
 
 pub mod ctx;
 pub mod event;
@@ -161,6 +163,7 @@ pub mod undo;
 pub use agent_mcp::McpRegistry;
 pub use block_on::block_on;
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
+pub use send_tool::{SEND_TOOL, send_spec};
 pub use ctx::RunnerCtx;
 /// 072：远端等待槽的只读投影形状。`ctx_remote_tools` 本身是私有模块（等待槽只能
 /// 由 actor 线程改），但**投影是要跨层出去的**——`agent-server` 拿它填
