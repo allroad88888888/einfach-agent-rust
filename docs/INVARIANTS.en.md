@@ -1,11 +1,11 @@
 # Invariants
 
-> Translated from [INVARIANTS.md](INVARIANTS.md) as of commit `b840fa1`.
+> Translated from [INVARIANTS.md](INVARIANTS.md) as of commit `cb08e58`.
 > **The Chinese version is authoritative** — development happens in Chinese, so this file
 > can lag. If the two disagree, the Chinese one is right and this one is a bug.
 >
 > To find out whether it has lagged, and by how much:
-> `git log --oneline 9ae84d5..HEAD -- docs/INVARIANTS.md`. Empty output means this
+> `git log --oneline cb08e58..HEAD -- docs/INVARIANTS.md`. Empty output means this
 > translation is current. If you update the translation, move the hash.
 
 Break any of the rules below and undo / crash recovery will go wrong **silently** — no
@@ -209,23 +209,47 @@ path / flush and pending scheduling / subscription dispatch / debug introspectio
 
 ---
 
-## 10. Agents may read up and down, never sideways
+## 10. Cross-agent edges may only point at primitives
 
-**Rule**: cross-agent reads go through `read_ancestor` (reading `messages` / `config` /
-`skills` upward) and `read_descendant` (reading `status` / `result` / `usage` downward).
-There is no third API. Siblings exchanging data do it via a common ancestor.
+**Rule**: cross-agent reads are **unrestricted in direction** (ancestor, descendant, sibling
+— decision 35). Only two things decide whether a read is allowed:
 
-**Why**: the whole agent tree lives in one store, so everything is physically reachable.
-The dependency graph has to be kept a tree by API constraint. The slot sets readable in the
-two directions are disjoint, which makes a cycle structurally impossible.
+1. **The slot is not an internal ledger** — the exhaustive `Slot::visibility()` table
+   decides; anything `Private` is refused.
+2. **Cross-agent edges in the dependency graph may only point at primitives** — when a
+   derived's read fn reaches across agents with `args.get`, the key can only be
+   `AtomKey::Agent(id, slot)`, and every `Slot` is a source. **No edge may read another
+   agent's derived.**
 
-**Breaking it**: a dependency cycle. Upstream has `CyclicRef` detection and a 256-depth
-budget, so this surfaces as a runtime error rather than a silent wrong value — but that's a
-backstop, not a design. Sideways reads also let an O(n) "read all my siblings" aggregation
-sneak in.
+**Why**: the whole agent tree lives in one store, so everything is physically reachable and
+acyclicity has to come from a constraint. Before decision 35 that constraint was
+*direction*, argued as "the slot sets readable in the two directions are disjoint ⇒ a cycle
+is structurally impossible". **That argument's premise was never true in this repo**:
+`cross_read.rs` reads through `Session::peek` → `store.get`, a non-tracked command-layer
+read that **builds no edge at all**. The direction rule was guarding a class of edge that
+did not exist.
 
-**Check**: needs judgment → skill `agent-state-design`. Exposing exactly two functions is
-itself the primary constraint.
+What actually holds acyclicity up is rule 2. Every `Slot` is a source (in `build.rs`, source
+and derived are two tables keyed by different types — "snapshots hold only primitives" is a
+*type-level* fact), and primitives have no outgoing edges, so every cross-agent edge is a
+**length-1 dangling edge** that cannot loop back. Direction is no longer a criterion.
+
+**Breaking it**: the moment an edge reads another agent's derived, cycles become possible
+again, and hitting one lands on `panic!("circular dependency detected")` in
+`store/read.rs` — a panic a *model* can trigger. That is why this cannot be downgraded to
+"just be careful".
+
+There is a second hazard this rule does **not** cover: **wait-for cycles** (A awaits B, B
+awaits A). That is not a dependency cycle — not one extra edge exists in the graph. The
+symptom is two slots stuck `Pending` while the pump **quietly returns** (its quiescence
+condition is "no in-flight calls", and neither of the two mutually-waiting agents has one).
+No panic, no timeout, no warning. So `srv:agent/await` checks for a cycle **at the moment
+the wait edge is established** and refuses on the spot, rather than trying to rescue a
+deadlock at runtime.
+
+**Check**: needs judgment → skill `agent-state-design`. The decidable half is a test: walk
+`Slot::ALL`, build `AtomKey::Agent(id, slot)` for each, and assert it lands in the source
+family.
 
 ---
 

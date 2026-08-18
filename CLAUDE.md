@@ -51,7 +51,7 @@ M5 之后每个里程碑各留一份**接缝文档**，按需读，别一次全�
 7. `agent-core` / `agent-store` 不得做 IO
 8. `bind` 地址默认 `127.0.0.1`
 9. 文件行数：普通 ≤300，复杂 ≤500
-10. agent 之间只允许上下读，禁止横读
+10. 跨 agent 的边只许指向 primitive（读**不限方向**，兄弟互读是允许的）
 11. 会进 prompt 的东西，序列化必须逐字节确定（禁 `HashMap`/`HashSet`）
 12. **core 里不许有任何模型相关的判断**——没有 `match provider`，也没有 `if caps.xxx()`
 
