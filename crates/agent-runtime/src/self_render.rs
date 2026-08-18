@@ -35,6 +35,12 @@ pub(crate) struct SelfFacts {
     /// 上下文压过没有。**只回布尔不回正文**：摘要正文是压缩边界那一侧的账，
     /// 塞进 tool_result 等于让同一段文字在 prompt 里出现两次。
     pub compacted: bool,
+    /// 这个**会话**还能自己往下开几轮（211）。跟上面那些不同，它不是「这个
+    /// agent 的账」，是会话级的——但它照样该给模型看：模型要决定值不值得留一条
+    /// `when="next_turn"` 的话，而**没人会来读的留言等于白写**。
+    pub auto_turns_left: u32,
+    /// 配置的自驱动上限，跟 `auto_turns_left` 一起给才说得清「还剩」是相对什么。
+    pub auto_turns_max: u32,
 }
 
 /// 一份账 → 一段正文。
@@ -59,7 +65,30 @@ pub(crate) fn render(f: &SelfFacts) -> String {
     out.push_str(&format!("- {}\n", depth(f)));
     out.push_str(&format!("- 你这一轮看得到 {} 个工具。\n", f.tools));
     out.push_str(&format!("- 上下文压缩：{}\n", compaction(f)));
+    out.push_str(&format!("- {}\n", auto_turns(f)));
     out
+}
+
+/// 自驱动那一行。**说清它管的是留言，不是这一轮**——不说的话模型会把它跟
+/// 「本轮还能请求几次」混起来，那是完全不同的一道闸。
+fn auto_turns(f: &SelfFacts) -> String {
+    if f.auto_turns_max == 0 {
+        return "留言（srv:agent/send 的 when=\"next_turn\"）这一档在这个部署上是关的\
+                ——留了也没人会自己来读，除非用户主动再说一句话。"
+            .to_string();
+    }
+    if f.auto_turns_left == 0 {
+        return format!(
+            "这个会话的自驱动预算已经用完（上限 {} 轮）——**现在留 \
+             when=\"next_turn\" 的话没人会自己来读**，要等用户再说一句话。",
+            f.auto_turns_max,
+        );
+    }
+    format!(
+        "这个会话还能自己往下开 {} 轮（上限 {} 轮）：你留一条 \
+         when=\"next_turn\" 的话，这一轮结束后它会被自动读到。用完就得等用户开口。",
+        f.auto_turns_left, f.auto_turns_max,
+    )
 }
 
 /// 轮次那一行的后半句。**撞顶要说清后果**——「还剩 0 次」跟「再说一句就被切断」

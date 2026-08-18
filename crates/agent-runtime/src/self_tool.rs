@@ -59,13 +59,15 @@ pub fn self_spec() -> ToolSpec {
         name: Arc::from(SELF_TOOL),
         description: Arc::from(
             "看一眼你自己现在还剩多少额度：本轮还能请求几次、还能开几个子 agent、\
-             还能往下几层、看得到几个工具、上下文压过没有。**不阻塞**，当场返回，\
+             还能往下几层、看得到几个工具、上下文压过没有、\
+             以及这个会话还能自己往下开几轮。**不阻塞**，当场返回，\
              不用填任何参数。\n\
              **它给的是你调用那一刻的数**——不是一个以后还成立的事实。\
              你在历史里读到的上一次结果早就过期了，要最新的就再调一次。\n\
              什么时候用：动手拆任务之前（先看还能开几个子、还能往下几层），\
              以及一轮里干了不少事之后（看还剩几次请求，**快用完就先把结论说出来**，\
-             别一路调工具到被切断）。\n\
+             别一路调工具到被切断）；还有留 when=\"next_turn\" 的话之前——\
+             自驱动预算见底的时候**没人会自己来读那条留言**。\n\
              它只回你自己的账，不回别人的——要看这个会话里还有谁、谁在干啥，\
              用 srv:agent/status。",
         ),
@@ -129,6 +131,12 @@ fn collect(session: &Session, ctx: &RunnerCtx, agent: &AgentId) -> SelfFacts {
         // 同一个函数，两处各数一遍就会有「说的 12 个、实际给 11 个」的一天。
         tools: crate::subagent::tools_for(session, ctx, agent).len(),
         compacted: !session.summary_library(agent).is_empty(),
+        // 211：会话级的一道闸，但它决定「留言值不值得留」——没人会来读的留言
+        // 等于白写。两个数一起给（还剩多少 / 上限多少），跟别的几行一样：
+        // 这里的数字必须跟真正拦人的是同一组（`Session::spend_auto_turn` 与
+        // `AgentLimits::max_auto_turns`），不写死。
+        auto_turns_left: session.auto_turn_budget(),
+        auto_turns_max: limits.max_auto_turns,
     }
 }
 

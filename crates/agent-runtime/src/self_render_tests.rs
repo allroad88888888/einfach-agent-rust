@@ -20,6 +20,8 @@ fn facts() -> SelfFacts {
         max_children: 8,
         tools: 12,
         compacted: false,
+        auto_turns_left: 3,
+        auto_turns_max: 3,
     }
 }
 
@@ -128,6 +130,44 @@ fn compaction_is_a_yes_or_no() {
         ..facts()
     };
     assert!(render(&f).contains("压过"));
+}
+
+/// 211：自驱动那一行要说清它管的是**留言**，不是这一轮的请求次数——两者是
+/// 完全不同的一道闸，混起来模型会以为「还能自己开 3 轮」= 「还能再调 3 次工具」。
+#[test]
+fn the_auto_turn_line_is_about_notes_not_this_turn() {
+    let body = render(&facts());
+    assert!(body.contains("next_turn"), "{body}");
+    assert!(body.contains("自己往下开 3 轮"), "{body}");
+}
+
+/// 预算见底要说清后果：**现在留言没人会来读**。只说「0」模型不会改变行为。
+#[test]
+fn an_exhausted_auto_turn_budget_says_the_note_will_not_be_read() {
+    let f = SelfFacts {
+        auto_turns_left: 0,
+        ..facts()
+    };
+    let body = render(&f);
+    assert!(body.contains("已经用完"), "{body}");
+    assert!(body.contains("没人会自己来读"), "{body}");
+}
+
+/// 部署方把这一档关掉（上限 0）跟「跑完了」是两句话：前者是「这个部署没有
+/// 这个功能」，后者是「这次用完了」。
+#[test]
+fn a_disabled_auto_turn_budget_reads_differently_from_an_exhausted_one() {
+    let off = render(&SelfFacts {
+        auto_turns_left: 0,
+        auto_turns_max: 0,
+        ..facts()
+    });
+    let used_up = render(&SelfFacts {
+        auto_turns_left: 0,
+        ..facts()
+    });
+    assert!(off.contains("这个部署上是关的"), "{off}");
+    assert_ne!(off, used_up);
 }
 
 /// 子 agent 那一份是**它自己的** id 和深度，不是 root 的。
