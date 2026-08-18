@@ -105,3 +105,8 @@ mod subagent_indep_undo_spawn;
 mod subagent_indep_visibility;
 mod support;
 mod turn_status_terminal;
+mod wake_indep_empty_inbox;
+mod wake_indep_protocol_violation;
+mod wake_indep_turn_boundary;
+mod wake_indep_turn_cap;
+mod wake_indep_wakes_and_counts;
