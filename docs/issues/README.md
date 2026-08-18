@@ -1067,9 +1067,9 @@ token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget
 | # | 任务 | 依赖 | 模型 | 独测 | 状态 |
 |---|---|---|---|---|---|
 | [204](204-agent-mesh-decision.md) | **拍板**：横读全开含订阅；两档送达 + 自驱动；「改自己状态」= 自己的槽位 | — | **opus** | 决策类 | ✅ 完成（决策 35） |
-| [205](205-core-peek-and-inbox.md) | core：`read_agent`/`peek_agent` + `Visibility` 两态 + `Inbox` + 三条命令 | 204 | **opus** | ✅ | 待做 |
+| [205](205-core-peek-and-inbox.md) | core：`read_agent` + `Visibility` 两态 + `Inbox` + 三条命令 | 204 | **opus** | ✅ | ✅ 完成 |
 | [206](206-send-tool-and-wakeup.md) | runtime：`srv:agent/send`（`now`/`next_turn`）+ 两个定点 + 唤醒 | 205 | **opus** | ✅ | 待做 |
-| [207](207-status-whole-tree.md) | runtime：`status` 放开到整棵活树（含拆文件） | 205 | sonnet | ✅ | 待做 |
+| [207](207-status-whole-tree.md) | runtime：`status` 放开到整棵活树（含拆文件） | 205 | sonnet | ✅ | ✅ 完成 |
 | [208](208-self-tool.md) | `srv:agent/self`：模型看得到自己的账 | 204 | sonnet | ✅ | 待做 |
 | [209](209-notes-slot.md) | `Slot::Notes` + 草稿纸两个工具 | 204 | sonnet | ✅ | 待做 |
 | [211](211-auto-driven-turns.md) | **自驱动轮次**：`AutoTurnBudget` + 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | 待做 |

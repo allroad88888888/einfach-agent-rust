@@ -1,6 +1,6 @@
 # 205 core：横读全开（含订阅）+ `Visibility` 收两态 + `Inbox` 槽 + 三条命令
 
-**里程碑** M20 · **依赖** [204](204-agent-mesh-decision.md)（拍板） · **模型** **opus** · **独测** ✅ · **状态** 待做
+**里程碑** M20 · **依赖** [204](204-agent-mesh-decision.md)（拍板） · **模型** **opus** · **独测** ✅ · **状态** ✅ 完成（2026-08-18，见文末）
 
 ## 目标
 
@@ -169,3 +169,68 @@ pub fn drain_next_turn(&mut self) -> usize;
   顶破 300 就拆：读口留 `cross_read.rs`，`ReadDenied` 与拒绝理由拆出去。
 - **`visibility.rs` 那段无环证明是整段替换，不是修修补补。** 旧证明的每一句都建立在
   「两个方向的集合不相交」上，删掉方向之后它一句都不成立了——留半句比全删更糟。
+
+## 实做记录（2026-08-18）
+
+三门禁全绿：`cargo test --workspace` **2190 passed / 0 failed**（基线 2161）；
+`check-invariants.sh --all` 退出码 0；红线 9 提示 **13 → 12**——**不是「与基线逐条
+相同」**，是少了一条：207 拆掉了 `status_tool_tests.rs`（392 行），它本来就在基线
+名单上。
+
+### issue 原文错了两处，都在落地前被 grep 推翻
+
+1. **「两个新读口，一个建边一个不建边」——查错了。** `read_ancestor`/`read_descendant`
+   走 `Session::peek` → `store.get`（`tree.rs:126`）是**命令层的非追踪读，本来就
+   不建边**；建边只发生在 derived 的 read fn 里调 `args.get`，而那在生产代码里只有
+   `build.rs:103` 一处、读的是自己 agent 的槽位。**全系统在此之前一条跨 agent 的
+   依赖边都没有**，那两个口还**没有任何生产调用方**（四十处引用全在测试里）。
+   所以本 issue 只落了**一个**读口 `read_agent`，「边只许指向 primitive」的落地与
+   测试挪去 [212](212-await-tool-and-wait-graph.md)——那里才第一次真的建出边。
+   完整推导见 [204](204-agent-mesh-decision.md) §一末节。
+2. **「现有测试一行都不用改」——错得不小。** 凡是断言「方向决定可读性」的测试都
+   必然红，因为那正是被决策 35 删掉的性质。实际动了：`subagent_indep_visibility.rs`
+   （028 的独立测试，整个前提「兄弟互读在 API 面上不存在」没了，重写）、
+   `session_subagent_read_boundary.rs`、`collect_omits_child_turns.rs`，
+   外加**十一条钉死 `Slot::ALL.len()` 的**（21 → 22，照 154 加 `HostPrefix` 的做法
+   连注释一起改，不只改数字）。
+
+### 一处比原设计更强的收获
+
+`collect_omits_child_turns.rs` 原来断言「父读子的正文被 core 结构性拒绝」。
+`Messages` 变 `Shared` 之后那条必然失败，换成了**更强的一条**：断言子的正文非空
+（它真跑过好几轮）**且**父的历史仍是定值 8。原来只证明「core 不让父读」，
+现在证明「就算读得到也没有一个字漏进父的历史」——而后者才是 `child_outcome.rs`
+那条运行时侧读路真正要保证的东西。
+
+### 编译器真的在守红线 10
+
+加 `Slot::Inbox` 时 `session_indep_accounting.rs` 里那个无通配的 `match` 当场编译
+不过。那是「新增槽位不站队就编译不过」这条纪律唯一的物理落点——`Visibility` 收成
+两态之后它**更要紧了**：以前站错方向最多多一条单向边，现在站错就是所有人都读得到。
+
+### 测试：独立 agent 写的，且注入错误验过承重
+
+按 WORKFLOW §三 派了独立测试 agent（只给验收标准 + 公开签名 + 红线条目，
+四个实现文件明确列为禁读），19 条一次全绿，按职责拆成三份。
+
+**没有只看绿就收**，照 200 那次的规矩注入了两个错误实现：
+
+| 注入 | 结果 |
+|---|---|
+| `drain` 一次搬空、不分档 | **5 条红**，含两条「互不相吃」和落盘往返 |
+| 排空顺手重置 `TurnsUsed` | `drain_now_does_not_touch_turns_used` 红，报「left: 0 / 排空收件箱不是新一轮」 |
+
+agent 自己加严了两处：`TurnsUsed` 那条不只比数值，还断言**那条 entry 的 `changes`
+里根本没有这个键**；消息格式测的是性质而不是把 `[来自 root/a1] ` 前缀抄死
+（抄死了改一个字就要改测试，而红线 11 要的是「确定」不是「长这样」）。
+
+三条没能覆盖的，都成立且都不是本 issue 能解的：**「读不建边」黑盒面测不了**
+（`Session` 没有拿依赖集合的口，测试代码本身也不是 derived）——真正的断言点在 212；
+「工具层没有按槽位读 `Messages` 的入口」是 `agent-runtime` 的事；
+**子 agent 的 `turns_used` 没有读口**，所以那条在 root 上造。
+
+### 一次流程失手，记在这里
+
+收工提交时用了 `git add -A`，把测试 agent 已经写在工作树里的三个文件扫进了 **207**
+那个 commit，而它的说明里一个字没提。已 `reset --soft` 拆成两条。
+**教训**：后台有 agent 在同一棵工作树上写文件时，`git add -A` 不安全，要按路径加。

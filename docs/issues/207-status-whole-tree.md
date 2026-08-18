@@ -1,6 +1,6 @@
 # 207 runtime：`srv:agent/status` 放开到整棵活树
 
-**里程碑** M20 · **依赖** [205](205-core-peek-and-inbox.md) · **模型** sonnet · **独测** ✅ · **状态** 待做
+**里程碑** M20 · **依赖** [205](205-core-peek-and-inbox.md) · **模型** sonnet · **独测** ✅ · **状态** ✅ 完成（2026-08-18，见文末）
 
 ## 目标
 
@@ -72,3 +72,45 @@
   `TASK_CHARS = 100` 是不是还合适**先别猜**——等 210 真机 dogfood 看实际长度再说。
 - 别顺手把 `collect` 也放开。`collect` 是**领取**不是观测：领谁的结果关系到「一份结果
   只能领一次」的记账，放开它要重新算账，而 204 没有拍这件事。
+
+## 实做记录（2026-08-18）
+
+`cargo test --workspace` 2190 passed / 0 failed；`check-invariants --all` 退出码 0。
+
+### 拆了五个文件，红线 9 提示 13 → 12
+
+`status_tool.rs` 278 → 173（收窄与拒绝的**判定**）、`status_render.rs` 120（**渲染**，新）、
+`status_tool_tests.rs` 392 → 268、`status_render_tests.rs` 140（新）、
+`status_spec_tests.rs` 51（新——工具说明书是一段每轮都进 prompt 的字符串，
+它自己就是一份要守的契约，跟收窄判定不是一件事）。
+
+`status_tool_tests.rs` 那 392 行**本来就在基线的红线 9 名单上**，所以这次不是
+「与基线逐条相同」，是少了一条。
+
+### 逮到一个假绿灯
+
+`status_indep_only_descendants` 原来断言 `!body.contains("right branch")`，
+而兄弟的 task 恰好是 `"TASKBRIGHT work the right branch"`——**子串同时命中 task 和
+answer**。老测试一直绿是因为那时两样都不出现；视野一放开它就现形了。改成断完整的
+回答串（`"right branch answer"` 等三个）。
+
+讽刺的是这个文件自己在 `listed_ids` 的注释里就警告过同一类陷阱
+（`root/a1` 是 `root/a1/a1` 的子串）。**警告写在注释里，没写进断言里。**
+
+### 两个端到端测试的前提被删了，翻过来用
+
+- `status_indep_only_descendants.rs` → **`status_indep_whole_tree.rs`**。脚手架原样
+  留着（让兄弟正在飞、用服务器时间窗把「读树那一刻它确实在飞」钉死），现在证明的是
+  更强的一件事：**一个还在飞的兄弟也看得见**，视野就是真的树而不是「恰好都收敛了
+  的那些」。同时守住**没有**被放开的那条边界：兄弟的 `task` 该出现，兄弟的回答正文
+  仍然不许。
+- `status_indep_rejects_non_descendant_id.rs` → **`status_indep_absent_id.rs`**。
+  原来一次跑「上读祖先 + 横读兄弟」两条非法方向，现在两条都合法。改成同时钉两件事：
+  兄弟的 id 通得过（且它真的活着），以及只剩「不在活树上」一种拒绝、被拒之后 loop
+  照常往下走。
+
+### 一处欠账留给 206
+
+`status_spec_tests.rs` 里断言描述提到 send 用的是**字面量** `"srv:agent/send"`，
+因为 `crate::SEND_TOOL` 常量还不存在。206 落地后换成常量——那样「send 改了名而这段
+描述没跟上」也一样红（照同一个文件里 `COLLECT_TOOL` 那条的写法）。文件里有注释标着。
