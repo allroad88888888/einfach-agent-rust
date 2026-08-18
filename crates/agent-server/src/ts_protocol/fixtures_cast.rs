@@ -11,7 +11,7 @@ use agent_core::{
 };
 
 use crate::{
-    BlockedCause, OrphanFate, SessionEvent, TransientSourceFailureCause,
+    AutoTurnHold, BlockedCause, OrphanFate, SessionEvent, TransientSourceFailureCause,
     TransientSourceFailureEvent, UndoOutcome,
 };
 
@@ -124,6 +124,15 @@ pub(super) fn cast_sample(ev: SessionEvent) -> SessionEvent {
         SessionEvent::UnreadMessages { .. } => SessionEvent::UnreadMessages {
             agent: AgentId::root(),
             count: 0,
+        },
+        // 211：`AutoTurnStarted` 的样本给一个**非零**剩余预算——0 是「刚好用完」
+        // 那一格的值，拿它当样本会让「字段真的被序列化出去了」和「字段恒是默认值」
+        // 在 fixtures 上长得一样。`AutoTurnHeld` 挑 `Cancelled`：三个成因里它是
+        // 唯一一个**用户动作**造成的，页面上最该被认出来的那一个。
+        SessionEvent::AutoTurnStarted { .. } => SessionEvent::AutoTurnStarted { remaining: 2 },
+        SessionEvent::AutoTurnHeld { .. } => SessionEvent::AutoTurnHeld {
+            pending: 3,
+            reason: AutoTurnHold::Cancelled,
         },
         SessionEvent::OrphanedChild { .. } => SessionEvent::OrphanedChild {
             child: AgentId::root().child(1),

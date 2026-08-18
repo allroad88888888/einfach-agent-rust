@@ -237,6 +237,27 @@ export const events = [
   {
     "agent": "root",
     "event": {
+      "type": "auto_turn_started",
+      "data": {
+        "remaining": 2
+      }
+    }
+  },
+  {
+    "agent": "root",
+    "event": {
+      "type": "auto_turn_held",
+      "data": {
+        "pending": 3,
+        "reason": {
+          "type": "cancelled"
+        }
+      }
+    }
+  },
+  {
+    "agent": "root",
+    "event": {
       "type": "transient_source_failure",
       "data": {
         "epoch": 7,

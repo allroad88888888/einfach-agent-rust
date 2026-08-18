@@ -3,7 +3,7 @@
 // `gap`/`lagged`/`session_died`,全部是「一行小字」量级的通报,放在一个文件里
 // 而不是拆七个是因为它们共享同一种渲染形状（一行文字 + 一个状态色），
 // 拆开反而制造七个几乎相同的文件（`one-file-one-thing` skill「假拆分」判据）。
-import type { AgentId, DriftVerdict, Notice, OrphanFate } from "@agent/protocol";
+import type { AgentId, AutoTurnHold, DriftVerdict, Notice, OrphanFate } from "@agent/protocol";
 
 import { appendToTimeline, el, shortAgentLabel } from "../dom";
 
@@ -69,6 +69,40 @@ export function renderOrphanedChild(child: AgentId, fate: OrphanFate, agent: Age
 export function renderUnreadMessages(target: AgentId, count: number, agent: AgentId): void {
   const line = `⚠ ${shortAgentLabel(target)} 还有 ${count} 条消息没看到——发的时候它多半已经答完了`;
   appendToTimeline(el("div", "warn-line", line), agent);
+}
+
+/** 211：这一轮是**留言自己开的**，不是人开的。
+ *
+ * 这条要显眼——本仓第一次在没有用户输入的情况下继续烧 token，用户失去的第一样东西
+ * 是「我知道现在在干什么」。剩余预算一并给出：那是它还会自己跑几轮的上界。
+ *
+ * **浏览器里这条比在 CLI 上更要紧**：那儿没有 Ctrl-C，页面的停止按钮是唯一的出口。 */
+export function renderAutoTurnStarted(remaining: number, agent: AgentId): void {
+  const line = `⟳ 这一轮是留言自己开的（不是你），之后还能自己开 ${remaining} 轮——随时可以停，剩下的留言不会丢`;
+  appendToTimeline(el("div", "notice-line", line), agent);
+}
+
+/** 211：有留言等着，但这一轮没有自己开。三种成因都不是错误。
+ *
+ * 三句话都要说清同一件事：**留言没丢**，只是这一轮没人替你处理它。不说这句，
+ * 用户读到「还有 3 条留言」只会以为它们被吞了。 */
+export function renderAutoTurnHeld(
+  pending: number,
+  reason: AutoTurnHold,
+  agent: AgentId,
+): void {
+  const line = `⟳ 还有 ${pending} 条留言没处理：${describeAutoTurnHold(reason)}`;
+  appendToTimeline(el("div", "notice-line", line), agent);
+}
+
+function describeAutoTurnHold(reason: AutoTurnHold): string {
+  if (reason.type === "budget_exhausted") {
+    return "自驱动预算用完了。留言还在，你说句话它就会被读到（说话也把预算加满）。";
+  }
+  if (reason.type === "cancelled") {
+    return "你喊了停。已经跑完的那几轮不算失败，剩下的留言还在收件箱里。";
+  }
+  return "刚从上次崩溃恢复出来——恢复不自动往下跑（不然打开就开始烧钱，而你还没看上一轮发生了什么）。留言还在。";
 }
 
 function describeOrphanFate(fate: OrphanFate): string {

@@ -57,14 +57,17 @@
 //! | [`from_runner`] | `From<RunnerEvent> for SessionEvent`——那条翻译线本身 + 逐变体的映射断言（109 拆出，`mod.rs` 顶着行数天花板） |
 //! | [`undo_outcome`] | `UndoOutcome`：undo/redo 结果的可序列化姊妹类型，034 起带 `Blocked` 富化 |
 //! | [`orphan_fate`] | 054：`OrphanFate`——轮末孤儿收场的可序列化姊妹类型（`agent_runtime::OrphanFate`） |
+//! | [`auto_turn_hold`] | 211：`AutoTurnHold`——一轮自驱动的轮次为什么没自己开，同款姊妹类型 |
 //! | [`frame`] | 034：`Frame { agent, event }`——SSE 帧 data 的信封 |
 
+mod auto_turn_hold;
 mod frame;
 mod from_runner;
 mod orphan_fate;
 mod transient_source_failure;
 mod undo_outcome;
 
+pub use auto_turn_hold::AutoTurnHold;
 pub use frame::Frame;
 pub use orphan_fate::OrphanFate;
 pub use transient_source_failure::{TransientSourceFailureCause, TransientSourceFailureEvent};
@@ -169,6 +172,18 @@ pub enum SessionEvent {
     /// 不算在里面（它们本来就该留到下一轮）。载荷是事实不是句子，措辞归呈现层
     /// ——跟 [`SessionEvent::OrphanedChild`] 同一条规矩。
     UnreadMessages { agent: AgentId, count: usize },
+    /// 211：**这一轮不是人开的，是留言自己开的**。`remaining` 是扣掉这一轮之后
+    /// 还剩几格自驱动预算。[`agent_runtime::RunnerEvent::AutoTurnStarted`] 的原样翻译。
+    ///
+    /// 这是本仓第一次在没有用户输入的情况下继续消耗 token，所以「这一轮是自己开的」
+    /// 和「还能自己开几轮」都不能只进日志（决策 35 §二）。帧的 `agent` 恒是 root。
+    AutoTurnStarted { remaining: u32 },
+    /// 211：**有留言等着，但这一轮没有自己开**。`pending` 是收件箱里还剩几条，
+    /// `reason` 是三种成因之一（[`AutoTurnHold`]）。
+    ///
+    /// 三种都不是错误，但都必须说出来——**留言原地留着、不丢弃**是三条共有的承诺，
+    /// 而一个不说话的「什么都没发生」跟「留言被吞了」在外面长得一模一样。
+    AutoTurnHeld { pending: usize, reason: AutoTurnHold },
     /// A terminal provider failure from a request that consumed transient source material.
     /// The payload carries the raw runtime fact; presentation belongs to the embedding host.
     TransientSourceFailure(TransientSourceFailureEvent),

@@ -49,6 +49,13 @@ impl From<RunnerEvent> for SessionEvent {
             RunnerEvent::UnreadMessages { agent, count } => {
                 SessionEvent::UnreadMessages { agent, count }
             }
+            RunnerEvent::AutoTurnStarted { remaining } => {
+                SessionEvent::AutoTurnStarted { remaining }
+            }
+            RunnerEvent::AutoTurnHeld { pending, reason } => SessionEvent::AutoTurnHeld {
+                pending,
+                reason: reason.into(),
+            },
             RunnerEvent::CompactionApplied {
                 turn_id,
                 upto,

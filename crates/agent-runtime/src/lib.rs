@@ -183,7 +183,7 @@ pub use deadline::remote_tool_deadline_in;
 #[cfg(not(target_arch = "wasm32"))]
 pub use deadline::sweep_remote_tool_deadlines;
 pub use deadline::sweep_remote_tool_deadlines_async;
-pub use event::{AgentEvent, OrphanFate, RunnerEvent};
+pub use event::{AgentEvent, AutoTurnHold, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
 /// 148：一个 Rust 扩展的交付物（决策 29）。宿主 `with_extension` 一次吃一包，
 /// 装配是两阶段的——ctx 半边那个必须被消费的中间产物是

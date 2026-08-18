@@ -136,5 +136,5 @@ fn a_childs_notes_and_the_parents_notes_do_not_leak_into_each_other() {
         Some("a1 的版本")
     );
     assert_eq!(session.notes_of(&root).len(), 1, "root 不该多出 a1 专属的 key");
-    assert!(session.notes_of(&root).get("only_on_a1").is_none());
+    assert!(!session.notes_of(&root).contains_key("only_on_a1"));
 }

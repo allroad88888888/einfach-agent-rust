@@ -18,7 +18,7 @@ use agent_core::{
 };
 
 use crate::{
-    BlockedCause, Frame, OrphanFate, SessionEvent, TransientSourceFailureCause,
+    AutoTurnHold, BlockedCause, Frame, OrphanFate, SessionEvent, TransientSourceFailureCause,
     TransientSourceFailureEvent, UndoOutcome,
 };
 
@@ -96,6 +96,11 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
         SessionEvent::UnreadMessages {
             agent: AgentId::root(),
             count: 0,
+        },
+        SessionEvent::AutoTurnStarted { remaining: 0 },
+        SessionEvent::AutoTurnHeld {
+            pending: 0,
+            reason: AutoTurnHold::BudgetExhausted,
         },
         SessionEvent::TransientSourceFailure(TransientSourceFailureEvent {
             epoch: 0,

@@ -25,10 +25,10 @@
 //!
 //! # 211 把入口从「终态」放宽到「没在跑」
 //!
-//! 自驱动的一轮（`agent_runtime::auto_turn`）是 `begin_turn` + `drain_next_turn`
-//! + 这条转移：`begin_turn` 之后 root 是 `Idle`，而这一轮**没有用户那句话可喂**
-//! ——要发的料全在刚搬进 `Messages` 的那几条留言里。判据因此是「没在跑」而不是
-//! 「已经跑完」，那本来就是这条转移的意思。
+//! 自驱动的一轮（`agent_runtime::auto_turn`）是三步：`begin_turn`、
+//! `drain_next_turn`、这条转移。`begin_turn` 之后 root 是 `Idle`，而这一轮
+//! **没有用户那句话可喂**——要发的料全在刚搬进 `Messages` 的那几条留言里。
+//! 判据因此是「没在跑」而不是「已经跑完」，那本来就是这条转移的意思。
 //!
 //! 不能直接把这一格交给 `try_call_provider`：它撞顶时落 `Done{truncated:true}`，
 //! 而这个 agent **已经是终态了**——再落一次终态没有意义，还会把「因为预算耗尽而
