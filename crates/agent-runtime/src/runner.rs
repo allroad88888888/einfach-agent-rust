@@ -32,6 +32,23 @@
 //! 需要补的只是别把没人要的子跑到底（浪费）：B 之前加一道定点 `despawn_child`，
 //! 见 [`crate::orphan`]。原先这段文档说那个世界「没有答案」，是过虑。
 //!
+//! **214 的修正：泵为什么还停得下来。**
+//!
+//! 052 之前这个问题不用问——工作量只随 spawn 往下长，树被 `max_depth` /
+//! `max_children` 封顶，**没有任何 agent 能把别人重新拉起来**，所以有限是结构性的。
+//! 214 加了一条唤醒边（`Event::Wake`：投一条 `Deliver::Now` 给已经落终态的 agent
+//! 会把它拉回来），A 能叫醒 B、B 能叫醒 A，那条结构性论证没了。
+//!
+//! 新的上界靠**每个 agent 自己的 `MaxTurns`**：唤醒走的是
+//! `transitions::try_call_provider` 那条共用出口，跟别的调用一视同仁地计
+//! `TurnsUsed`（`Event::Wake` 刻意**不**碰 `clear_turn_budget`——那是 `begin_turn`
+//! 的事）。撞顶之后 `on_wake` 什么都不写，条目留在收件箱里由 [`crate::unread_inbox`]
+//! 报一句。所以这一轮 provider 调用的总数 ≤ **活 agent 数 × 各自的 `max_turns`**：
+//! 边界从「树的大小」变成「树的大小 × 每人的轮次预算」，仍然有限，只是不再免费。
+//!
+//! 写错的形状只有一个，而它不报错：**唤醒时重置 `TurnsUsed`**。那样两个 agent
+//! 互相喊话就是真无界——测试全绿，只把 token 烧到见底（214 §三）。
+//!
 //! 真正需要单独说的是另一支：在飞表空了但 root **不是**终态。那是 016 裁决过的
 //! 「转移表判了 `ProtocolViolation` 但状态没落终态」（例子见 `provider_done` 模块
 //! 文档：响应自称 `ToolUse` 却一个 `ToolUse` 块都没有）。泵没有更多能喂的事件，
@@ -47,8 +64,8 @@
 //!
 //! # 116/117：泵是 `async fn`，D 点是真的 await 点
 //!
-//! 115 拍板「一套路径、两边都 async」之后，泵本体（[`run_turn_async`]/
-//! [`resume_after_first_commit`]）从 116 起是 `async fn`。116 只改了「怎么等」
+//! 115 拍板「一套路径、两边都 async」之后，泵本体（[`resume_after_first_commit`]
+//! 与 [`crate::runner_entry`] 里那三个入口）从 116 起是 `async fn`。116 只改了「怎么等」
 //! 不改「等什么」，在同步 channel 与 async 泵之间搭了一座临时桥（`receive` 里
 //! 还是那句真阻塞的 `rx.recv_timeout`）；**117 把桥拆了**：IO 载体从
 //! `std::thread` 换成同一个事件循环上的并发 future，`sync_channel(0)` 换成
@@ -69,9 +86,12 @@
 //!
 //! wasm 上没有同步壳，因为 [`crate::block_on`] 靠 `thread::park` 停住当前线程，
 //! 而浏览器主线程停住就等于连驱动 `fetch` 的事件循环一起停住（死锁）。
+//!
+//! **三个入口本身住在 [`crate::runner_entry`]**（214 拆出，红线 9）：它们只在
+//! 「进泵之前允许重置什么」上不同（取消标志、`NextTurn` 收件箱），而那是一格
+//! 写错了不报错的判断，值得自己一个文件。这个文件从这里往下只讲泵怎么转。
 
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -98,91 +118,6 @@ use crate::turn_end;
 /// 是 `crate::heartbeat` 的心跳间隔，值和含义都没变）。不需要跟超时预算同量级，
 /// 只要比测试用的超时预算（毫秒级）小得多，超时就能在可接受的粒度内被发现。
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
-
-/// 跑一整轮：喂 `user_input`，驱动整棵 agent 树直到没有任何东西在飞。
-///
-/// `session` 原地推进，返回值只是 **root** 终态的一份拷贝，方便调用方立即判断
-/// 结果——真正的历史/状态变化都已经写进 `session`（并已经同步进持久化后端）。
-///
-/// 正常收尾的状态仍在 `Ok` 中；如果一条消耗 transient source 的 provider 调用
-/// 无法收尾，原始失败事实在 `Err` 中交给嵌入宿主。宿主决定错误策略，泵只负责
-/// 释放本轮的 transient source 状态。
-///
-/// 取消标志只在这里清零一次（每轮开始各清一次，理由跟 022 的 `agent-cli::
-/// repl::run` 一致：上一轮遗留的标志不该提前打断这一轮还没开始的请求）；
-/// 轮内的重试**不**清——那会把重试等待期间真实按下的 Ctrl-C 抹掉。
-///
-/// **调用方必须先 `session.begin_turn()`**（除了会话的第一轮，`Session::new`
-/// 已经是 `Idle`）——`Session::begin_turn` 是显式命令（026 判断 13：turn 边界
-/// 是会话层面的概念，不藏进转移表），这个函数不替调用方决定「新一轮从哪开始」。
-///
-/// 这是泵本体，两个目标共用；native 上另有一个同名不带后缀的同步壳
-/// （[`run_turn`]），见模块文档「但公开入口在 native 上仍然是同步的」。
-pub async fn run_turn_async(
-    session: &mut Session,
-    ctx: &mut RunnerCtx,
-    user_input: &str,
-) -> Result<TurnStatus, TransientSourceFailure> {
-    ctx.cancel.store(false, Ordering::Relaxed);
-    let root = session.agent().clone();
-    // 206：**这就是 `Deliver::NextTurn` 的定点**——上一轮留给 root 的话，在这一轮
-    // 的第一条 user 消息**之前**进历史。
-    //
-    // 顺序是刻意的：那条留言是上一轮末尾说的，时间上排在用户这句新话前面。
-    //
-    // 位置也是刻意的：调用方已经调过 `session.begin_turn()`（见本函数文档），
-    // 所以这条 entry 属于**新**的 turn——`/undo` 掉新这一轮会把留言退回收件箱，
-    // 老那一轮不受影响。放在 `begin_turn` 之前，它会挂在上一轮尾巴上，
-    // undo 掉上一轮就把一条还没被读过的话一起吞了。
-    //
-    // 只在 `run_turn_async` 里做，**不在 `resume_async`**：远端工具的回传不是
-    // 新的用户轮次（见 `resume_async` 的文档），那条路上没有新的 turn 边界。
-    session.drain_next_turn();
-    resume_async(
-        session,
-        ctx,
-        Event::UserInput {
-            agent: root,
-            text: Arc::from(user_input),
-        },
-    )
-    .await
-}
-
-/// [`run_turn_async`] 的同步壳：把整条 await 链在调用线程上跑到底。
-///
-/// **签名与 116 之前逐字一致**，所以 `agent-cli`、`agent-server` 的 actor 线程
-/// 和所有集成测试一个字都不用改。行为也逐字一致：它们本来就是「在一条裸
-/// `std::thread` 上把这一轮跑完」，只是「等」的实现从 `recv_timeout` 换成了
-/// [`crate::block_on`] 的 `thread::park`。
-///
-/// **wasm 上没有这个壳**（`cfg` 掉了），不是遗漏：`block_on` 靠停住当前线程来
-/// 等，浏览器主线程一停，驱动 `fetch` 的事件循环跟着停 = 死锁。wasm 宿主直接用
-/// [`run_turn_async`]，由浏览器的事件循环驱动。
-///
-/// 顺带说清这处 `cfg` 为什么可接受：它长在**公开 API 的便利壳**上，不在核心执行
-/// 逻辑里——泵本体、IO 载体、落地规则两个目标共用同一份代码（红线 12 管的是
-/// core 里的平台判断）。
-#[cfg(not(target_arch = "wasm32"))]
-pub fn run_turn(
-    session: &mut Session,
-    ctx: &mut RunnerCtx,
-    user_input: &str,
-) -> Result<TurnStatus, TransientSourceFailure> {
-    crate::block_on(run_turn_async(session, ctx, user_input))
-}
-
-/// 从一项已发生的事件继续驱动会话。
-///
-/// 远端工具的回传不是新的用户轮次，不能清除取消标志或调用 `begin_turn`；因此由
-/// 受控的远端回传入口走这里，和普通工具执行完成后进入泵的路径完全一致。
-pub(crate) async fn resume_async(
-    session: &mut Session,
-    ctx: &mut RunnerCtx,
-    initial: Event,
-) -> Result<TurnStatus, TransientSourceFailure> {
-    resume_after_first_commit(session, ctx, initial, |_| {}).await
-}
 
 /// Resume the pump, invoking `after_commit` once after the initial event is committed and
 /// persisted, but before any effect from that event is dispatched.
@@ -220,6 +155,10 @@ pub(crate) async fn resume_after_first_commit(
     let mut last_tree: Option<AgentTree> = ctx.tree_events_enabled().then(|| session.agent_tree());
     // 206：轮末「还有几条没被读到」只报一次——终态之后泵可能还转不止一圈
     // （B0 的清算和 B 的收工判定各自还要过一遍）。
+    //
+    // **214 起这一笔要能重新上膛**：唤醒会把 root 从终态拉回来接着跑，之后它会
+    // 再落一次终态，而那一次可能有新的没被读到的话。一路 `true` 到底的话，
+    // 第二次终态的漏读一条都报不出来——报过一次就再也不报，不报错。
     let mut unread_reported = false;
     let mut after_commit = Some(after_commit);
 
@@ -301,9 +240,15 @@ pub(crate) async fn resume_after_first_commit(
         //      reap 会把没人领的后台子拆掉、它们的收件箱跟着被逐出，而「给一个
         //      已经答完的子 agent 发了话」恰恰是这条告警最想抓的场景。
         //      终态之后泵可能还转不止一圈，所以自己记一笔只报一次。
-        if !unread_reported && session.status().is_terminal() {
-            unread_reported = true;
-            crate::unread_inbox::report(session, ctx);
+        if session.status().is_terminal() {
+            if !unread_reported {
+                unread_reported = true;
+                crate::unread_inbox::report(session, ctx);
+            }
+        } else {
+            // 214：被唤醒（或者别的什么把它拉回非终态）→ 重新上膛，下一次终态
+            // 再盘一遍。
+            unread_reported = false;
         }
 
         if orphan::reap(session, ctx, &mut subtree) {

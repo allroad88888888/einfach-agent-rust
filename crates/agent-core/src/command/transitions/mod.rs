@@ -50,6 +50,7 @@ mod provider_failed;
 mod timeout;
 mod tool_outcome;
 mod user_input;
+mod wake;
 
 /// 入口。**转移表唯一对外暴露的东西**——六个 `on_*` 处理器都是内部分支。
 pub(super) fn transition(txn: &mut Txn, event: Event) -> Vec<Effect> {
@@ -100,6 +101,10 @@ pub(super) fn transition(txn: &mut Txn, event: Event) -> Vec<Effect> {
         Event::CompactDone { .. } => vec![Effect::Emit(Notice::CompactionSummaryReceived)],
         Event::CompactFailed { .. } => vec![Effect::Emit(Notice::CompactionFailed)],
         Event::Cancel { .. } => cancel::on_cancel(txn, &event_desc),
+        // 唤醒（214）。**不进上面那张 5 态 × 7 的网格**，跟压缩那两条同一个理由：
+        // 它只有一格合法（终态）、其余全是 `protocol_violation`，摊进网格只会得到
+        // 五行里四行同样的答案。判据全在 `wake` 那个文件里。
+        Event::Wake { .. } => wake::on_wake(txn, &event_desc),
     }
 }
 
@@ -117,11 +122,12 @@ pub(super) fn label_of(event: &Event) -> &'static str {
         Event::CompactDone { .. } => "compact_done",
         Event::CompactFailed { .. } => "compact_failed",
         Event::Cancel { .. } => "cancel",
+        Event::Wake { .. } => "wake",
     }
 }
 
 /// 非法组合的共用出口：状态不变，报一条 `Notice::ProtocolViolation`。
-fn protocol_violation(txn: &Txn, event_desc: &Arc<str>) -> Vec<Effect> {
+pub(super) fn protocol_violation(txn: &Txn, event_desc: &Arc<str>) -> Vec<Effect> {
     vec![Effect::Emit(Notice::ProtocolViolation {
         state: txn.status(),
         event: event_desc.clone(),
@@ -130,13 +136,17 @@ fn protocol_violation(txn: &Txn, event_desc: &Arc<str>) -> Vec<Effect> {
 
 /// 合法但可能撞顶的共用出口：**想发一次 `CallProvider`**（新一轮或重试）。
 /// `max_turns` 没到就落 `Thinking`、计数、发 `CallProvider`；到了就落
-/// `Done{truncated:true}`。四个入口共用这一处（`user_input`、`tool_outcome` 的
-/// 收敛分支、`provider_failed`、`timeout` 的 provider 超时分支），散着写四份等于
-/// 给这条闸开四个漏判的机会。
+/// `Done{truncated:true}`。**五个**入口共用这一处（`user_input`、`tool_outcome`
+/// 的收敛分支、`provider_failed`、`timeout` 的 provider 超时分支，以及 214 的
+/// `wake`），散着写五份等于给这条闸开五个漏判的机会。
+///
+/// 214 的 `wake` 在调用它**之前**自己问一次 `Txn::turns_exhausted`：撞顶时它要的
+/// 是「什么都不做」，不是这里的 `Done{truncated:true}`（那个 agent 已经是终态了，
+/// 见 `wake` 模块文档）。那是一处刻意的例外，不是漏走这条出口。
 ///
 /// 只在状态**真的变了**才发 `TurnStatusChanged`：重试路径是 `Thinking → Thinking`，
 /// 没有变化，不该喊一声。
-fn try_call_provider(txn: &mut Txn) -> Vec<Effect> {
+pub(super) fn try_call_provider(txn: &mut Txn) -> Vec<Effect> {
     let prev = txn.status();
 
     if txn.record_turn_attempt() {

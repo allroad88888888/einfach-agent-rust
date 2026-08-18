@@ -76,6 +76,12 @@ fn message_text(message: &agent_core::Message) -> String {
         .collect()
 }
 
+/// 一条消息里有没有 `needle`。214 要数「同一句话进了几次历史」——`index_of`
+/// 只给第一条，数不出「恰好一次」。
+pub fn message_contains(message: &agent_core::Message, needle: &str) -> bool {
+    message_text(message).contains(needle)
+}
+
 /// 某个 agent 的 `Messages` 里，第一条含 `needle` 的消息下标。
 pub fn index_of(session: &Session, agent: &AgentId, needle: &str) -> Option<usize> {
     session

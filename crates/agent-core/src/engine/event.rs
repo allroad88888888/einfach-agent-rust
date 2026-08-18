@@ -162,6 +162,27 @@ pub enum Event {
     /// 在飞的一切」，带上一个 epoch 反而会出现「取消一个已经过期的世代」这种没有
     /// 意义的语义。
     Cancel { agent: AgentId },
+
+    /// **把一个已经落终态的 agent 在同一个 turn 内重新拉回泵里**（214，决策 35 §二）。
+    ///
+    /// 缘起：`Deliver::Now` 的消息投给了一个已经答完的 agent。206 落地时那条消息
+    /// 只能躺在收件箱里等轮末告警——因为 `Effect::CallProvider` 全系统只从
+    /// `try_call_provider` 一处发出，而它的四个入口每一个都要求那个 agent 正走在
+    /// 流程里。
+    ///
+    /// **为什么是一条新事件，而不是放宽 `on_user_input` 的闸**：那个处理器的模块
+    /// 文档写死了「终态之后开新一轮走 `Session::begin_turn`，不是靠这里对终态网开
+    /// 一面——那会把『一轮从哪开始』这个 turn 边界（`undo_turn` 的分组依据）藏进
+    /// 一格转移里」。唤醒不是新一轮，它是**同一轮里再动一次**，所以它得有自己的
+    /// 名字。
+    ///
+    /// **不带正文**：话已经由 `Session::drain_now` 进了 `Messages`（206 的定点）。
+    /// 这条事件只负责「再动起来」——两处都写就是同一句话进两次历史。
+    ///
+    /// 带 `epoch`，要过闸（红线 6）：泵决定唤醒和真的 `step` 之间，用户可能已经
+    /// 取消或 undo 了这一轮。唤醒一个已经被埋掉的世代 = 在一个没人要的世界里重新
+    /// 起一次 provider 调用，花钱且不报错。
+    Wake { agent: AgentId, epoch: Epoch },
 }
 
 impl Event {
@@ -187,7 +208,8 @@ impl Event {
             | Event::Timeout { agent, .. }
             | Event::CompactDone { agent, .. }
             | Event::CompactFailed { agent, .. }
-            | Event::Cancel { agent } => agent,
+            | Event::Cancel { agent }
+            | Event::Wake { agent, .. } => agent,
         }
     }
 
@@ -205,7 +227,8 @@ impl Event {
             | Event::ToolFailed { epoch, .. }
             | Event::Timeout { epoch, .. }
             | Event::CompactDone { epoch, .. }
-            | Event::CompactFailed { epoch, .. } => Some(*epoch),
+            | Event::CompactFailed { epoch, .. }
+            | Event::Wake { epoch, .. } => Some(*epoch),
         }
     }
 }

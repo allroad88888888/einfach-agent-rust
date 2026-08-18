@@ -8,10 +8,17 @@
 //! 组装 provider 请求之前（`dispatch` 的 `CallProvider` 臂），`Deliver::NextTurn`
 //! 在 root 下一轮开始时（`runner::run_turn_async` 顶部）。
 //!
-//! **不唤醒任何人。** 收信人已经落终态时条目就留在收件箱里，轮末告警
-//! （[`crate::orphan`]）。唤醒要新增一条 core 转移，是 issue 214——`Effect::CallProvider`
-//! 全系统只从 `try_call_provider` 一处发出，而它的四个入口每一个都要求那个 agent
-//! 正走在流程里。
+//! **214 起它会唤醒收信人**：投的是 `Deliver::Now`、而收信人已经落终态 → 这次
+//! 截获额外产出一条 [`Event::Wake`]，把它在**同一个 turn 内**拉回泵里。
+//!
+//! 206 落地时做不到这件事：`Effect::CallProvider` 全系统只从 `try_call_provider`
+//! 一处发出，而它当时的四个入口每一个都要求那个 agent 正走在流程里。214 给了
+//! 第五个入口——**一条名字叫得出自己在干什么的转移**，不是把 `on_user_input`
+//! 的闸放宽（那会把 turn 边界藏进一格转移里，见 `transitions::wake` 模块文档）。
+//!
+//! 叫不醒的两种情况仍然落回 206 的行为（条目留在收件箱、轮末由
+//! [`crate::unread_inbox`] 告警）：收信人的 `max_turns` 已经用完，
+//! 或者投的是 `NextTurn`。
 //!
 //! # 为什么两档的合法目标不一样
 //!
@@ -26,7 +33,7 @@
 
 use std::sync::Arc;
 
-use agent_core::{AgentId, Deliver, DeliverDenied, Epoch, Session, ToolCallId, ToolSpec};
+use agent_core::{AgentId, Deliver, DeliverDenied, Epoch, Event, Session, ToolCallId, ToolSpec};
 use serde_json::{Value, json};
 
 use crate::ctx::RunnerCtx;
@@ -49,8 +56,8 @@ pub fn send_spec() -> ToolSpec {
              `when` 决定它什么时候被对方读到，两档差别很大：\n\
              - `\"now\"`（缺省）= 加入对方本轮的 loop，**它下一次请求就带上**。\
              用来中途纠偏：你看到某个 agent 在往错方向走，喊一嗓子。\
-             **对方要是已经答完了，这条会留在它的收件箱里没人读**——发之前先用 \
-             srv:agent/status 看它是不是还在跑。\n\
+             **对方已经答完了也发得动**——这条会把它叫醒，它在这一轮里接着干；\
+             唯一叫不醒的情况是它自己的轮次预算用光了，那样这条就没人读。\n\
              - `\"next_turn\"` = **这一轮结束之后**、下一轮开始时才送达。\
              用来留话：你后台干完的事，想让下一轮有人知道。\
              它**只能发给 root**（最上面那个），因为子 agent 活不到下一轮。\n\
@@ -115,11 +122,55 @@ pub(crate) fn intercept(
     match session.deliver(agent, &to, text, when) {
         Ok(()) => {
             let body = format!("已经投给 {} 了。{}", to.as_str(), when_note(when));
-            reply::ok(ctx, agent, call_id, epoch, SEND_TOOL, body)
+            let settled = reply::ok(ctx, agent, call_id, epoch, SEND_TOOL, body);
+            match wake_needed(session, &to, when) {
+                Some(wake) => also(settled, wake),
+                None => settled,
+            }
         }
         Err(denied) => {
             let message = explain(&denied, session);
             reply::refuse(ctx, agent, call_id, epoch, SEND_TOOL, message)
+        }
+    }
+}
+
+/// 这次投递要不要顺带把收信人叫醒（214）。
+///
+/// 三个条件缺一不可：
+///
+/// - **`Deliver::Now`**：`NextTurn` 的条目本来就该等到下一轮，叫醒它等于把一条
+///   刻意延后的话当场灌进去。
+/// - **收信人已经落终态**：还在跑的下一次请求本来就会带上那条话（206 的定点在
+///   `CallProvider` 派发处），再推一次只会凭空多烧一轮——而且会撞
+///   `on_wake` 的 `protocol_violation`。
+/// - 消息**已经投进去了**（这个函数只在 `deliver` 成功之后调）。
+///
+/// **这里不 `drain_now`**：唤醒转移发出 `Effect::CallProvider`，而排空的定点就在
+/// 它的派发处（`crate::dispatch`）。在这儿再排一次等于把话搬进 `Messages` 两遍。
+fn wake_needed(session: &Session, to: &AgentId, when: Deliver) -> Option<Event> {
+    if when != Deliver::Now || !session.status_of(to).is_terminal() {
+        return None;
+    }
+    Some(Event::Wake {
+        agent: to.clone(),
+        epoch: session.epoch(),
+    })
+}
+
+/// 一次截获产出两件事：先收敛发送方那个槽，再叫醒收信人。
+///
+/// 顺序有意义——反过来的话，收信人这一轮的活会排在发送方的 `tool_result` 之前，
+/// 而那条 result 才是发送方接着往下走的凭据。
+fn also(settled: Dispatched, extra: Event) -> Dispatched {
+    match settled {
+        Dispatched::Event(first) => Dispatched::Events(vec![first, extra]),
+        // `reply::ok` 今天恒回 `Dispatched::Event`。真走到这儿说明它改了形状，
+        // 而那种情况下静默丢掉唤醒会变成「消息投进去了、没人叫醒、轮末才告警」
+        // ——一个只在改了别处之后才浮出来的静默降级。
+        other => {
+            debug_assert!(false, "reply::ok 不再回 Dispatched::Event，214 的唤醒被丢了");
+            other
         }
     }
 }
@@ -130,7 +181,8 @@ pub(crate) fn intercept(
 /// 已经知道了」。
 fn when_note(when: Deliver) -> &'static str {
     match when {
-        Deliver::Now => "它下一次请求就会带上——前提是它还在跑；已经答完的不会再看。",
+        Deliver::Now => "它下一次请求就会带上——已经答完的会被这条叫醒接着干，\
+                         除非它的轮次预算已经用光。",
         Deliver::NextTurn => "这一轮结束之后、下一轮开始时它才会读到。",
     }
 }

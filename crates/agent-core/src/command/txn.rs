@@ -235,14 +235,23 @@ impl Txn {
         id
     }
 
+    /// 本轮预算还有没有——**只问，不动账**。
+    ///
+    /// 214 单独要这个读口：唤醒撞顶时它要的是「什么都不做」，而不是
+    /// [`record_turn_attempt`](Self::record_turn_attempt) 撞顶时那条
+    /// `Done{truncated:true}`——被唤醒的 agent 本来就是终态，再落一次终态会把
+    /// 「因为预算耗尽而没被叫醒」和「自己正常答完了」在状态上抹平。
+    pub(crate) fn turns_exhausted(&self) -> bool {
+        self.count(Slot::TurnsUsed) >= self.count(Slot::MaxTurns)
+    }
+
     /// 想发一次 `CallProvider`（新一轮或重试）之前先问它「预算还有吗」：到了
     /// `max_turns` 返回 `false`（不增），没到就 `turns_used += 1` 并返回 `true`。
     pub(crate) fn record_turn_attempt(&mut self) -> bool {
-        let used = self.count(Slot::TurnsUsed);
-        if used >= self.count(Slot::MaxTurns) {
+        if self.turns_exhausted() {
             return false;
         }
-        self.set_count(Slot::TurnsUsed, used + 1);
+        self.set_count(Slot::TurnsUsed, self.count(Slot::TurnsUsed) + 1);
         true
     }
 

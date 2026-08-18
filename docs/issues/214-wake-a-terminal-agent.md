@@ -1,6 +1,6 @@
 # 214 唤醒一个已终态的 agent（**含 core 转移**）
 
-**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md) · **模型** **opus** · **独测** ✅ · **状态** 待做
+**里程碑** M20 · **依赖** [206](206-send-tool-and-wakeup.md) · **模型** **opus** · **独测** ✅ · **状态** ✅ 完成（2026-08-18）
 
 ## 目标
 
@@ -106,3 +106,70 @@
 - **别在唤醒里 `push_message`**。消息由 206 的 `drain_now` 进历史，两处都写就是重复。
 - **206 的断言只该改一条**：「投给终态的 agent 不唤醒任何人」变成「唤醒了，
   且 `turns_used` 没被重置」。别顺手动别的。
+
+## 实做记录（2026-08-18）
+
+### 形状拍板：`Event::Wake { agent, epoch }`
+
+「形状待定」那一条落成一个**新事件变体**，转移住 `command/transitions/wake.rs`。
+三个选择及理由：
+
+- **是事件不是命令**：`Effect::CallProvider` 只能由转移产出，而转移只由
+  `Session::step(event)` 驱动。写成一条 `Session::wake()` 命令的话，它要么自己
+  造 effect（绕开转移表，红线 2 的精神破了），要么返回一批 effect 给调用方
+  （命令层从此有两种返回形状）。
+- **带 `epoch`，过闸**：泵决定唤醒和真的 `step` 之间，用户可能已经 Ctrl-C 或
+  `/undo`。唤醒一个已经被埋掉的世代 = 在没人要的世界里重新起一次 provider 调用，
+  花钱且不报错。`Event::agent()` / `Event::epoch()` 那两个穷举 match 当场逼着
+  回答了这两个问题——它们存在的全部理由就是这个。
+- **不进 5 态 × 7 的网格**：它只有一格合法（终态），其余全是 `protocol_violation`，
+  摊进网格只会得到五行里四行同样的答案。跟 105 的两条压缩事件同一条理由，
+  转移表模块文档里照那两条的先例记了一句。
+
+### 撞顶那一格没走 `try_call_provider`
+
+`try_call_provider` 撞顶时落 `Done{truncated:true}`。被唤醒的 agent **本来就是
+终态**，再落一次终态会把「因为预算耗尽而没被叫醒」和「自己正常答完了」在状态上
+抹平。所以 `on_wake` 在调用它**之前**自己问一次新加的 `Txn::turns_exhausted()`
+（`record_turn_attempt` 也改成复用它，两处判据从此是同一行代码），撞顶就
+`Vec::new()` ——不写 primitive ⇒ 空 batch ⇒ `History::append` 拒绝空步 ⇒ 不留 entry。
+
+### 唤醒点在 `send_tool`，不在泵里扫
+
+`send_tool::wake_needed`：`Deliver::Now` + 目标已终态 → 额外产出一条
+`Event::Wake`（`Dispatched::Events`，复用后台 spawn 那条既有的「一次 effect 两件事」
+的路）。**顺序是先 `ToolResult` 再 `Wake`**：反过来收信人的活会排在发送方那条
+result 之前，而那条 result 才是发送方接着往下走的凭据。
+
+**这里不 `drain_now`。** 唤醒转移发出 `Effect::CallProvider`，而 206 的排空定点
+就在它的派发处——在投递处再排一次就是同一句话搬进 `Messages` 两遍。验收里
+「被投递的正文恰好出现一次」守的就是这个。
+
+### 泵的停机论证重写了（`runner.rs` 模块文档）
+
+052 之前不用问：工作量只随 spawn 往下长、树被两道闸封顶，**没有任何 agent 能把
+别人重新拉起来**。214 加了唤醒边之后那条结构性论证没了，新的上界是
+**活 agent 数 × 各自的 `max_turns`**——「树的大小」变成「树的大小 × 每人的轮次
+预算」。写错的形状只有一个而且不报错：唤醒时重置 `TurnsUsed`。
+
+### 顺带修一处 206 留下的漏
+
+`unread_reported` 那个「只报一次」的闩要能**重新上膛**：唤醒会把 root 从终态拉回来
+接着跑，之后它会再落一次终态，而那一次可能有新的漏读。一路 `true` 到底的话第二次
+终态一条都报不出来——不报错。
+
+### 206 的两条测试都动了，不止一条
+
+issue §注意 说「只该改一条」。实际是两条，第二条是**规格没预见到的连带**：
+`turn_end_warns_about_the_now_item_and_keeps_the_next_turn_one_untouched` 靠「`Now`
+那条剩在收件箱里」跟 `NextTurn` 做对比，而 214 之后 `Now` 不会再剩下。改法是把它
+重新聚焦到它真正守的东西（`NextTurn` 原地不动、且从不被当成未读），并在文件头
+写明「对比那一半移交给 214 自己的『撞顶不唤醒』用例」——那时 `Now` 才会真的剩。
+
+### 红线 9：`runner.rs` 顶破 500 硬上限 → 拆出 `runner_entry.rs`
+
+模块文档加了停机论证那一段之后 503 行。拆的位置是**三个入口**
+（`run_turn_async` / `run_turn` / `resume_async`）：它们只在「进泵之前允许重置
+什么」上不同（取消标志、`NextTurn` 收件箱），而那正是一格写错了不报错的判断
+——`resume_async` 清了取消标志，用户在等待期间按的 Ctrl-C 就被抹掉了。
+泵本体留在 `runner.rs`（417 行，仍在复杂文件的 500 之内）。

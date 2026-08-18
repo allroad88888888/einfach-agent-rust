@@ -34,7 +34,7 @@ use web_time::Instant;
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::provider_call::ProviderCall;
-use crate::runner;
+use crate::runner_entry;
 use crate::transient_source_failure::TransientSourceFailure;
 
 /// 泵里的一次截止线扫描：到点的 provider 调用和到点的远端等待都翻成待办事件。
@@ -85,11 +85,11 @@ pub(crate) fn sweep(
 /// 调用的原始失败事实（`agent-server` 的
 /// `commands::handle_remote_tool_timeout`）。
 ///
-/// 多个槽同时过期时逐个恢复：每次 [`runner::resume_async`] 把泵驱动到静止，剩下
+/// 多个槽同时过期时逐个恢复：每次 [`runner_entry::resume_async`] 把泵驱动到静止，剩下
 /// 的槽让下一次继续——`Session::step` 一次只吃一条事件，攒成一批喂进去也是同一
 /// 条路。
 ///
-/// 116：`async fn`，因为循环体里的 `runner::resume_async` 本身就是 await 链的
+/// 116：`async fn`，因为循环体里的 `runner_entry::resume_async` 本身就是 await 链的
 /// 一环；逐个 `.await` 而不是并发等待——语义跟改动前逐个同步调用完全一致，槽位
 /// 过期的处理顺序不该被并发打乱。native 上的同步入口见
 /// [`sweep_remote_tool_deadlines`]。
@@ -100,7 +100,7 @@ pub async fn sweep_remote_tool_deadlines_async(
     let events = expired(ctx, Instant::now());
     let mut status = None;
     for event in events {
-        status = Some(runner::resume_async(session, ctx, event).await?);
+        status = Some(runner_entry::resume_async(session, ctx, event).await?);
     }
     Ok(status)
 }

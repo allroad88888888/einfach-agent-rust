@@ -4,7 +4,7 @@
 //!
 //! `Session::step` 是纯函数：喂一个 [`agent_core::Event`]，吐一批
 //! [`agent_core::Effect`]，不做 IO。这个 crate 是把 `Effect` 真的执行掉、把
-//! 执行结果翻译回 `Event` 再喂回去的那一圈——`run_turn`（[`runner::run_turn`]）
+//! 执行结果翻译回 `Event` 再喂回去的那一圈——`run_turn`（[`runner_entry::run_turn`]）
 //! 循环到 [`agent_core::TurnStatus::is_terminal`] 为止（`TurnStatusChanged`
 //! 通报是 loop 说「停」的唯一出口，见 agent-core engine/mod.rs 的文档）。
 //! 027 额外接上两件事：每条命令之后经 [`persist`] 转发进 `SessionStore`
@@ -123,6 +123,7 @@ mod remote_tool_status;
 mod remote_tool_submission;
 mod reply;
 mod runner;
+mod runner_entry;
 mod self_render;
 mod self_tool;
 mod send_tool;
@@ -224,8 +225,8 @@ pub use remote_tool_submission::submit_remote_tool_result_async;
 /// `cancel_pending_remote_tools`、`submit_remote_tool_result`、
 /// `sweep_remote_tool_deadlines`）同款成对。
 #[cfg(not(target_arch = "wasm32"))]
-pub use runner::run_turn;
-pub use runner::run_turn_async;
+pub use runner_entry::run_turn;
+pub use runner_entry::run_turn_async;
 pub use session_start::{SessionStartError, run_session_start};
 pub use skill::{SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};
