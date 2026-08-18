@@ -93,6 +93,10 @@ pub fn sample_session_events() -> Vec<SessionEvent> {
             child: AgentId::root(),
             fate: OrphanFate::Despawned { descendants: 0 },
         },
+        SessionEvent::UnreadMessages {
+            agent: AgentId::root(),
+            count: 0,
+        },
         SessionEvent::TransientSourceFailure(TransientSourceFailureEvent {
             epoch: 0,
             cause: TransientSourceFailureCause::PromptPreparation,

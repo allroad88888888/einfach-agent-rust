@@ -121,6 +121,10 @@ pub(super) fn cast_sample(ev: SessionEvent) -> SessionEvent {
         // 照到嵌套那一层的字段形状，跟上面 `Undo` 选 `Blocked`、`AgentTree` 选
         // 带子 agent 的样本同一条理由。`child` 挑一个非 root 的 id：孤儿按定义
         // 就不可能是 root（`despawn_child` 拒绝拆 root）。
+        SessionEvent::UnreadMessages { .. } => SessionEvent::UnreadMessages {
+            agent: AgentId::root(),
+            count: 0,
+        },
         SessionEvent::OrphanedChild { .. } => SessionEvent::OrphanedChild {
             child: AgentId::root().child(1),
             fate: OrphanFate::Discarded {

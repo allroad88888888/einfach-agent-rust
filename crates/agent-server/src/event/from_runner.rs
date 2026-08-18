@@ -46,6 +46,9 @@ impl From<RunnerEvent> for SessionEvent {
                 child,
                 fate: fate.into(),
             },
+            RunnerEvent::UnreadMessages { agent, count } => {
+                SessionEvent::UnreadMessages { agent, count }
+            }
             RunnerEvent::CompactionApplied {
                 turn_id,
                 upto,

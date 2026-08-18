@@ -85,6 +85,13 @@ fn body(event: &RunnerEvent) -> Value {
             "child": child.as_str(),
             "detail": format!("{fate:?}"),
         }),
+        // 206：轮末还有话没被读到。**逐字段给**而不是落 `Debug`——载荷本来就只有
+        // 两样事实（谁、几条），`format!("{:?}")` 在这里只会把它包成一句更难读的话。
+        RunnerEvent::UnreadMessages { agent, count } => json!({
+            "type": "unread_messages",
+            "target": agent.as_str(),
+            "count": count,
+        }),
         // 109（M12）：压缩点在时间线上的两条可见信号。**只报「发生了」，不带
         // 正文**——摘要原文与被清掉的工具结果原文都不在事件里（server 形态下
         // 它们走 `GET /sessions/{id}/compaction_record`；这个宿主还没有对应的

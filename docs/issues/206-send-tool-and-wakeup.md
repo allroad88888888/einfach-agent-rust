@@ -130,8 +130,13 @@ root 落终态、泵静止时（`runner.rs` 的 B 点）：
 - `send(when="next_turn")` 投给一个子 agent → `is_error`，且拒绝文本里含
   「留给 root」这层意思，不是干巴巴一句「不允许」。
 - **`/undo` 的归属**（§2 那条脚注）：下一轮 `drain_next_turn` 之后 `/undo` 掉**新**
-  这一轮 → 那条留言**退回收件箱**（不是消失、也不是留在 `Messages` 里）；
-  再 `/undo` 掉上一轮，它照旧在。
+  这一轮 → 那条留言**退回收件箱**（不是消失、也不是留在 `Messages` 里）。
+
+  > **原文这里还有半句「再 `/undo` 掉上一轮，它照旧在」——写错了**（测试 agent
+  > 落地时点出来的）。留言是在**上一轮**被 `deliver` 进收件箱的，那条 entry 就属于
+  > 上一轮；undo 掉上一轮必然把 `deliver` 一起退掉，它只能消失。想说的是
+  > 「**老那一轮不受影响**」（即 undo 新这一轮不会连带退掉旧的），而那正是上面
+  > 那条断言本身。
 - **崩溃恢复**：投一条 `next_turn` → `kill -9` → 恢复 → 它还在收件箱里，
   下一轮照常送达。
 - `cargo test --workspace` 全绿 + `check-invariants --all` 过 + `build-wasm.sh` 绿。

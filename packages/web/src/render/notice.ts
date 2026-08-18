@@ -60,6 +60,17 @@ export function renderOrphanedChild(child: AgentId, fate: OrphanFate, agent: Age
   appendToTimeline(el("div", "warn-line", line), agent);
 }
 
+/** 206：轮末还有话没被读到——有人给这个 agent 发了 `srv:agent/send`，而它在这一轮里
+ * 再也没有组装过 provider 请求（多半是发的时候它已经答完了）。
+ *
+ * **编排失误的信号，不是错误**：轮次结果照旧。`next_turn` 的留言不算在里面——那些
+ * 本来就该留到下一轮。载荷是事实不是句子（只有 `count`），措辞在这里组，CLI 那份在
+ * `agent-cli::print::events`，跟 `renderOrphanedChild` 是同一条规矩。 */
+export function renderUnreadMessages(target: AgentId, count: number, agent: AgentId): void {
+  const line = `⚠ ${shortAgentLabel(target)} 还有 ${count} 条消息没看到——发的时候它多半已经答完了`;
+  appendToTimeline(el("div", "warn-line", line), agent);
+}
+
 function describeOrphanFate(fate: OrphanFate): string {
   if (fate.type === "despawned") {
     const { descendants } = fate.data;

@@ -227,6 +227,16 @@ export const events = [
   {
     "agent": "root",
     "event": {
+      "type": "unread_messages",
+      "data": {
+        "agent": "root",
+        "count": 0
+      }
+    }
+  },
+  {
+    "agent": "root",
+    "event": {
       "type": "transient_source_failure",
       "data": {
         "epoch": 7,

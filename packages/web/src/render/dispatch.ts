@@ -115,6 +115,13 @@ export function createRenderer(
         stream.interrupt();
         notice.renderOrphanedChild(event.data.child, event.data.fate, agent);
         return;
+      case "unread_messages":
+        // 206：轮末未读告警。帧的 `agent` 是收信人自己（那条话是投给它的），
+        // `event.data.agent` 是同一个 id——保留字段不硬编码，跟 `orphaned_child`
+        // 那条一样：归属规则住在服务端的 `frame.rs`，分发点不替它做判断。
+        stream.interrupt();
+        notice.renderUnreadMessages(event.data.agent, event.data.count, agent);
+        return;
       case "agent_tree":
         // 049：树面板跟时间线是两块独立 DOM（`#agent-tree` vs `#timeline`），
         // 不写进时间线,因此不打断 `stream` 的连续增量气泡——树变化和文本流是

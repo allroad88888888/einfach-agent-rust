@@ -161,6 +161,14 @@ pub enum SessionEvent {
     /// 帧的 `agent`（[`Frame::agent`]）是**父**——没领是父的编排失误；出事的那个
     /// 子在 `child` 字段里。载荷是事实不是句子（[`OrphanFate`]），措辞归呈现层。
     OrphanedChild { child: AgentId, fate: OrphanFate },
+    /// 206：轮末这个 agent 的收件箱里还有 `count` 条 `Deliver::Now` 的话没被读到
+    /// ——有人给它发了消息，而它在这一轮里再也没有组装过 provider 请求。
+    /// [`agent_runtime::RunnerEvent::UnreadMessages`] 的原样翻译。
+    ///
+    /// **编排失误的信号，不是错误**：轮次结果照旧。`Deliver::NextTurn` 的条目
+    /// 不算在里面（它们本来就该留到下一轮）。载荷是事实不是句子，措辞归呈现层
+    /// ——跟 [`SessionEvent::OrphanedChild`] 同一条规矩。
+    UnreadMessages { agent: AgentId, count: usize },
     /// A terminal provider failure from a request that consumed transient source material.
     /// The payload carries the raw runtime fact; presentation belongs to the embedding host.
     TransientSourceFailure(TransientSourceFailureEvent),

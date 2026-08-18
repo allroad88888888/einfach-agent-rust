@@ -109,6 +109,15 @@ impl EventPrinter {
                     describe_fate(&fate)
                 );
             }
+            // 206：轮末还有话没被读到——**编排失误的信号，不是错误**。
+            // 措辞在这里组（载荷只带事实），跟 `OrphanedChild` 一条规矩。
+            RunnerEvent::UnreadMessages { agent, count } => {
+                self.finish_line();
+                eprintln!(
+                    "{at}[消息未读] {} 还有 {count} 条没看到——发的时候它多半已经答完了",
+                    agent.as_str()
+                );
+            }
             // 109：压缩点在时间线上可见的两条信号——core 的 `Notice` 那两条
             // （`CompactionSummaryReceived`/`CompactionFailed`）说的是「闸放行
             // 没放行」，这两条带着 runner 才知道的 `upto`/`call_ids`，是「盖住
