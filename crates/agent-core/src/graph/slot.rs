@@ -232,39 +232,65 @@ pub enum Slot {
     /// 的、也不知道它们会被怎么用（红线 12 的精神）——那是 155/156 装配期的事，
     /// 这里只是一处「声明」的状态位。
     HostPrefix,
-}
-
-impl Slot {
-    /// 一个 agent 的全部 source 槽位。`Session::new` 建图、`Session::primitives`
-    /// 出快照都用它——**新增槽位只要加进这个数组，两条路径自动跟上**，
-    /// 忘了改其中一条正是「快照缺一块」的来源。
+    /// **别的 agent 投进来、本 agent 还没消费的消息**（205，决策 35）。值是
+    /// [`AgentValue::Json`] 里一个 `[[from, text, when], …]` 数组
+    /// （`value::inbox` 那一处编解码），`Json([])` = 收件箱是空的（默认值）。
     ///
-    /// 新槽位**追加在末尾**：旧快照里找不到新键，按 [`Slot::default_value`] 落值
-    /// （schema 演进白拿的那一条），而追加不改动既有槽位的相对次序，
-    /// 快照的排序输出因此在版本之间是稳定的。
-    pub const ALL: [Slot; 21] = [
-        Slot::Messages,
-        Slot::Status,
-        Slot::ToolSlots,
-        Slot::PrevPrefix,
-        Slot::NextMessageId,
-        Slot::TurnsUsed,
-        Slot::MaxTurns,
-        Slot::RetriesUsed,
-        Slot::MaxRetries,
-        Slot::ToolsAllowed,
-        Slot::SkillsActive,
-        Slot::HostTools,
-        Slot::HostSkills,
-        Slot::DisabledBuiltins,
-        Slot::ExecutionProfile,
-        Slot::SendPlan,
-        Slot::PrevSendPlan,
-        Slot::Summaries,
-        Slot::PrefixChunks,
-        // 144 追加 PrefixAllowed。
-        Slot::PrefixAllowed,
-        // 154 追加 HostPrefix。
-        Slot::HostPrefix,
-    ];
+    /// **两档送达时机共用这一个槽位**，靠每条自带的 `when` 区分（`Deliver::Now`
+    /// 加入本轮 loop / `Deliver::NextTurn` 这一轮结束之后才送达）。不拆成两个槽位
+    /// 是因为它们的落盘、恢复、undo、可见性**逐字相同**，差别只有「哪个定点来收」
+    /// ——拆开就要把那四样各写一遍，而它们必须永远一致。
+    ///
+    /// **站 `Private`**（见 [`visibility`](super::visibility)）：**发得进去 ≠ 读得
+    /// 出来**。A 能往 B 的收件箱投递（那是一条命令，不是读），但 A 读不到 B 的
+    /// 收件箱——包括自己投的那条被没被消费。要确认就等对方回一条，跟人一样。
+    /// 一旦开成 `Shared`，「谁给谁发过什么」就成了所有人都订阅得到的东西。
+    ///
+    /// **默认值必须是空数组**——019 的按需重建拿的就是它，若默认成别的，undo 路径上
+    /// 凭空重建出来的 atom 会给一个从没收到过消息的 agent 平添几句话，而那几句话
+    /// 会被排空进它的 `Messages`、从此每轮都进 prompt。链通、值错、不报错。
+    Inbox,
+    /// **这个 agent 自己记的东西**（209，决策 35 §三）。值是
+    /// [`AgentValue::Json`] 里一个按 key 升序的 `[[key, value], …]` 数组
+    /// （`value::notes` 那一处编解码），`Json([])` = 草稿纸是空的（默认值）。
+    ///
+    /// 这是**整张表里唯一属于模型自己的一格**。其余每一格都是别人的账——
+    /// `MaxTurns` 是部署方的、`ToolsAllowed` 是父给的、`SendPlan`/`Summaries`
+    /// 是 adapter 的、`Status` 是父要读的。用户要「改本 agent 状态」，正确的
+    /// 形状是给它一个自己的槽位，而不是给现有槽位开写口：**那等于让被约束者
+    /// 改自己的约束**。
+    ///
+    /// 新槽位不碰任何现有不变量，而且白拿全套机制：`/undo` 连带撤销、崩溃恢复
+    /// 自动带回、审计看得到每一次改。这是本仓架构直接掉出来的，不是新造的机制。
+    ///
+    /// **站 `Private`**（见 [`visibility`](super::visibility)）：只有它自己读得到、
+    /// 写得到。开成 `Shared` 听起来方便，但横读全开之后那就是**所有人都读得到**，
+    /// 而且「一个 agent 改一个 key」会变成影响别人下一轮 prompt 的事，模型完全
+    /// 看不到这条因果。要共享上下文有 `Messages`，要传话有 `Slot::Inbox`。
+    ///
+    /// **容器必须有序**（红线 11）：它以 tool_result 的形式进 prompt。`HashMap`
+    /// 写起来一样、功能完全正常，只是每一轮全价且不报错——所以内存里那一份是
+    /// [`Notes`](crate::value::notes::Notes)（`BTreeMap` 的别名），落盘那一份是
+    /// 按 key 升序的数组。
+    ///
+    /// **默认值必须是空数组**——019 的按需重建拿的就是它（同 `Inbox` 那条理由）。
+    Notes,
+    /// **这个 agent 此刻在等谁**（212 追加）：等待图的一行。值是
+    /// [`AgentValue::Json`] 里一个 `[[target, until], …]` 数组（`value::awaiting`
+    /// 那一处编解码），`Json([])` = 谁也没在等（默认值）。
+    ///
+    /// **站 `Private`**（见 [`visibility`](super::visibility)）：它是内部账本，
+    /// 开成 `Shared` = 所有人都订阅得到「谁在等谁」——那不是任何一个已知需求要的。
+    ///
+    /// **为什么必须是状态，不是内存里的一张表**：查环要遍历这张图，而恢复之后
+    /// 还得查得了环。放内存里，一次崩溃恢复就把查环能力丢了，而丢了不报错——
+    /// 恢复出来的会话上，一条本该被拒的反向 `await` 会被放行，然后两个 agent
+    /// 互相等到天荒地老，泵安静地返回，没有 panic、没有超时、没有告警。
+    ///
+    /// **有序**（红线 11）：它进 `await` 的**拒绝文本**（把环上那条链原样列出来
+    /// 给模型看），所以落盘与读回都必须逐字节确定，`value::awaiting::to_value`
+    /// 按 target 排序。
+    ///
+    /// 写入点在 `command/await.rs`（`await_on` / `clear_await`）。
+    AwaitingOn,
 }

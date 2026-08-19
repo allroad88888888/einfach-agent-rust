@@ -8,7 +8,7 @@
 //!
 //! # 顺序是契约，不是风格（红线 11）
 //!
-//! `builtin → shell → spawn → status/collect → skills → MCP → vision → 扩展`
+//! `builtin → shell → spawn → status/collect → send/self/notes/await → skills → MCP → vision → 扩展`
 //! 这个次序**只加不改**：进 prompt 的东西序列化必须逐字节确定，工具表在 prompt
 //! 最前面，任何一次插队都会让那一段之后的全部字节位移，缓存整段作废
 //! （038 探针实测：DeepSeek 上「中途改工具数组」把命中率归零，120 倍差价）。
@@ -57,6 +57,16 @@ pub fn assemble(
         .with_spawn(parts.limits)
         .with_status()
         .with_collect()
+        // M20（决策 35）追加在编排三件套之后、skills/MCP 之前——同一条「静态那
+        // 一段在所有会话里逐字节相同」的规矩。`send`（206）给会话里任意活 agent
+        // 说一句话，`self`（208）看自己还剩多少额度，`notes`（209）是它自己的
+        // 草稿纸。**不声明就等于没有**：
+        // 截获注册跟着 `declares()` 走（`agent_runtime::builtin_intercepts`），
+        // 表里没有这一行，模型连这个工具存在都不知道。
+        .with_send()
+        .with_self()
+        .with_notes()
+        .with_await()
         .with_skills(parts.skills)
         // MCP 工具追加在最后：server 之间按 id、server 内按 tools/list，
         // 已经在 `mcp::bootstrap` 排好序了。

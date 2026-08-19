@@ -43,7 +43,7 @@ use agent_core::{AgentValue, AtomKey};
 /// 猜出来的默认值——而 undo 的语义正是要精确回到 spawn 那一刻，不是回到一个
 /// 看起来差不多的状态。`HostPrefix`（154）跟 `HostTools` 同一条理由：不进快照
 /// = 一次落快照之后声明就丢了，恢复出来的会话没有当初那份开局块且不报错。
-const EXPECTED_SLOT_COUNT: usize = 21;
+const EXPECTED_SLOT_COUNT: usize = 24;
 
 #[test]
 fn a_fresh_session_has_exactly_the_documented_number_of_primitives() {

@@ -11,6 +11,7 @@ use agent_core::{AgentId, Event, Session, ToolCallId, TurnStatus};
 use crate::ctx::RunnerCtx;
 use crate::event::RunnerEvent;
 use crate::runner;
+use crate::runner_entry;
 use crate::transient_source_failure::TransientSourceFailure;
 use crate::{RemoteToolTerminalOrigin, RemoteToolTerminalStatus};
 
@@ -144,14 +145,14 @@ pub fn resolve_remote_tool(
 /// actor 处理 `Cancel` 时既已翻转共享取消标记，又会调用此函数，因此等待 Web
 /// 回传的空闲会话也能立即结束；迟到结果会因等待槽已清空被安全拒绝。
 ///
-/// 116：同上，`async fn` 只是跟着 `runner::resume_async` 走。native 上的同步入口
+/// 116：同上，`async fn` 只是跟着 `runner_entry::resume_async` 走。native 上的同步入口
 /// 见 [`cancel_pending_remote_tools`]。
 pub async fn cancel_pending_remote_tools_async(
     session: &mut Session,
     ctx: &mut RunnerCtx,
 ) -> Result<TurnStatus, TransientSourceFailure> {
     ctx.discard_remote_tools();
-    runner::resume_async(
+    runner_entry::resume_async(
         session,
         ctx,
         Event::Cancel {

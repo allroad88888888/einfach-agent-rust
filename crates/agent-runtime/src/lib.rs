@@ -4,7 +4,7 @@
 //!
 //! `Session::step` 是纯函数：喂一个 [`agent_core::Event`]，吐一批
 //! [`agent_core::Effect`]，不做 IO。这个 crate 是把 `Effect` 真的执行掉、把
-//! 执行结果翻译回 `Event` 再喂回去的那一圈——`run_turn`（[`runner::run_turn`]）
+//! 执行结果翻译回 `Event` 再喂回去的那一圈——`run_turn`（[`runner_entry::run_turn`]）
 //! 循环到 [`agent_core::TurnStatus::is_terminal`] 为止（`TurnStatusChanged`
 //! 通报是 loop 说「停」的唯一出口，见 agent-core engine/mod.rs 的文档）。
 //! 027 额外接上两件事：每条命令之后经 [`persist`] 转发进 `SessionStore`
@@ -83,6 +83,9 @@
 //! `max_children` 默认 8，长会话压 8 次之后自动压缩永久失效。
 //!
 
+mod auto_turn;
+mod await_slot;
+mod await_tool;
 mod block_on;
 mod builtin_intercepts;
 mod child_outcome;
@@ -107,6 +110,8 @@ mod io_bus;
 mod io_stream;
 mod io_task;
 mod mcp_call;
+mod notes_render;
+mod notes_tool;
 mod orphan;
 mod provider_attempt;
 mod provider_call;
@@ -121,11 +126,16 @@ mod remote_tool_status;
 mod remote_tool_submission;
 mod reply;
 mod runner;
+mod runner_entry;
+mod self_render;
+mod self_tool;
+mod send_tool;
 mod session_start;
 mod session_tool_ext;
 mod skill;
 mod spawn_request;
 mod spawn_tool;
+mod status_render;
 mod status_tool;
 mod subagent;
 mod subtree;
@@ -146,6 +156,7 @@ mod transient_source_vault;
 mod turn_end;
 mod undo_hook;
 mod undo_promise;
+mod unread_inbox;
 
 pub mod ctx;
 pub mod event;
@@ -158,8 +169,21 @@ pub mod persist;
 pub mod undo;
 
 pub use agent_mcp::McpRegistry;
+/// 211：自驱动的轮次——留言自己就能把下一轮启动（决策 35 §二）。
+/// **恢复路径该调的是 `report_recovered_mail`，不是 `run_auto_turns*`**，
+/// 那条选择刻意长在调用点上，不藏在一个 `if recovered` 里。
+pub use auto_turn::{
+    AutoTurnStep, pending_next_turn_mail, report_recovered_mail, run_auto_turns_async,
+    try_one_auto_turn_async,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use auto_turn::run_auto_turns;
 pub use block_on::block_on;
+pub use await_tool::{AWAIT_TOOL, await_spec};
 pub use collect_tool::{COLLECT_TOOL, collect_spec};
+pub use notes_tool::{NOTES_SET_TOOL, NOTES_TOOL, notes_set_spec, notes_spec};
+pub use self_tool::{SELF_TOOL, self_spec};
+pub use send_tool::{SEND_TOOL, send_spec};
 pub use ctx::RunnerCtx;
 /// 072：远端等待槽的只读投影形状。`ctx_remote_tools` 本身是私有模块（等待槽只能
 /// 由 actor 线程改），但**投影是要跨层出去的**——`agent-server` 拿它填
@@ -172,7 +196,7 @@ pub use deadline::remote_tool_deadline_in;
 #[cfg(not(target_arch = "wasm32"))]
 pub use deadline::sweep_remote_tool_deadlines;
 pub use deadline::sweep_remote_tool_deadlines_async;
-pub use event::{AgentEvent, OrphanFate, RunnerEvent};
+pub use event::{AgentEvent, AutoTurnHold, OrphanFate, RunnerEvent};
 pub use execution_binding::ExecutionBinding;
 /// 148：一个 Rust 扩展的交付物（决策 29）。宿主 `with_extension` 一次吃一包，
 /// 装配是两阶段的——ctx 半边那个必须被消费的中间产物是
@@ -214,8 +238,8 @@ pub use remote_tool_submission::submit_remote_tool_result_async;
 /// `cancel_pending_remote_tools`、`submit_remote_tool_result`、
 /// `sweep_remote_tool_deadlines`）同款成对。
 #[cfg(not(target_arch = "wasm32"))]
-pub use runner::run_turn;
-pub use runner::run_turn_async;
+pub use runner_entry::run_turn;
+pub use runner_entry::run_turn_async;
 pub use session_start::{SessionStartError, run_session_start};
 pub use skill::{SkillLoadError, SkillRegistry};
 pub use spawn_request::{SPAWN_TOOL, spawn_spec};

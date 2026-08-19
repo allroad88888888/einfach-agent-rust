@@ -34,6 +34,9 @@ export type { ToolCallRequest } from "./generated/ToolCallRequest";
 // 054：轮末孤儿告警（`SessionEvent::orphaned_child`）的 `fate` 载荷——
 // `render/notice.ts` 直接按它的三个变体组措辞，同上一条注释的道理收拢一份。
 export type { OrphanFate } from "./generated/OrphanFate";
+// 211：自驱动的一轮为什么没自己开（`SessionEvent::auto_turn_held` 的 `reason`
+// 载荷）——`render/notice.ts` 按它的三个变体组措辞，同上一条注释的道理。
+export type { AutoTurnHold } from "./generated/AutoTurnHold";
 
 // 049：web 活树面板（`render/agent_tree.ts`）直接点名了 `AgentTree` 本身
 // （`GET /sessions/:id/agents` 的响应体、也是 `SessionEvent::agent_tree` 变体

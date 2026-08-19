@@ -14,7 +14,7 @@ use std::io::{self, Write};
 use agent_core::{AgentId, Notice};
 use agent_runtime::{AgentEvent, RunnerEvent};
 
-use super::event_text::{describe_fate, describe_reversibility, print_turn_guard};
+use super::event_text::{describe_fate, describe_reversibility, hold_reason, print_turn_guard};
 
 const DIM_ON: &str = "\x1b[2m";
 const RESET: &str = "\x1b[0m";
@@ -108,6 +108,30 @@ impl EventPrinter {
                     child.as_str(),
                     describe_fate(&fate)
                 );
+            }
+            // 206：轮末还有话没被读到——**编排失误的信号，不是错误**。
+            // 措辞在这里组（载荷只带事实），跟 `OrphanedChild` 一条规矩。
+            RunnerEvent::UnreadMessages { agent, count } => {
+                self.finish_line();
+                eprintln!(
+                    "{at}[消息未读] {} 还有 {count} 条没看到——发的时候它多半已经答完了",
+                    agent.as_str()
+                );
+            }
+            // 211：这一轮是**留言自己开的**，不是人开的。这条必须显眼——本仓第一次
+            // 在没有用户输入的情况下继续烧 token，用户失去的第一样东西是「我知道
+            // 现在在干什么」。剩余预算一并打出来，因为那是它还会自己跑几轮的上界。
+            RunnerEvent::AutoTurnStarted { remaining } => {
+                self.finish_line();
+                eprintln!(
+                    "{at}[自驱动] 这一轮是留言自己开的（不是你），之后还能自己开 {remaining} 轮。Ctrl-C 随时停，剩下的留言不会丢"
+                );
+            }
+            // 211：有留言等着但没自己开。三种成因都不是错误，但都得说出来
+            // ——不说的话「什么都没发生」跟「留言被吞了」在外面长得一模一样。
+            RunnerEvent::AutoTurnHeld { pending, reason } => {
+                self.finish_line();
+                eprintln!("{at}[自驱动] 还有 {pending} 条留言没处理：{}", hold_reason(&reason));
             }
             // 109：压缩点在时间线上可见的两条信号——core 的 `Notice` 那两条
             // （`CompactionSummaryReceived`/`CompactionFailed`）说的是「闸放行

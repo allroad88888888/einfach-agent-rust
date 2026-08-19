@@ -64,6 +64,16 @@ pub struct Session {
     pub(super) turn_id: u64,
     pub(super) tool_marks: Vec<(ToolCallId, Undoability)>,
     pub(super) limits: AgentLimits,
+    /// 211：这个会话还能**自己**往下开几轮（决策 35 §二）。
+    ///
+    /// **不在原子图里**，跟 `epoch` 同一类：`/undo` 不退还它。完整理由与那张
+    /// 对照表在 [`super::auto_turn`] 的模块文档——做成 primitive 就得在 undo 的
+    /// 回滚循环里开一个例外，而「所有 primitive 都跟着 undo 走」不该为一格计数破掉。
+    ///
+    /// 新建/恢复出来都是 **0**：一句话都还没人说过（或者刚回到现场），
+    /// 没有任何东西该自己跑起来。只有一次真实用户输入把它加满到
+    /// `limits.max_auto_turns`。
+    pub(super) auto_turn_budget: u32,
 }
 
 impl Session {
@@ -95,6 +105,7 @@ impl Session {
             turn_id: 1,
             tool_marks: Vec::new(),
             limits: AgentLimits::default(),
+            auto_turn_budget: 0,
         }
     }
 

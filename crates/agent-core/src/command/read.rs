@@ -12,9 +12,10 @@
 //!
 //! 下面那批 `*_of(agent)` 是宿主替**某一个** agent 组它自己的 `Ingredients` 时
 //! 读的口子——028 推给 029 的第 4 条点名要求的东西，也点名了怎么写错：
-//! **它不是第三个跨 agent 读 API**。跨 agent 读只有 `read_ancestor` /
-//! `read_descendant` 两个（`cross_read.rs`，红线 10 的方向与 `Visibility` 校验
-//! 都在那里），本节一条都不碰：宿主替 root 取 root 自己的消息、替子 agent 取
+//! **它不是另一个跨 agent 读 API**。跨 agent 读的正门是 `read_agent`
+//! （`cross_read.rs`，红线 10 的 `Visibility` 校验在那里；决策 35 之后方向不再
+//! 是判据，`read_ancestor`/`read_descendant` 只是它的两个亲缘断言封装），
+//! 本节一条都不碰：宿主替 root 取 root 自己的消息、替子 agent 取
 //! 子 agent 自己的消息，读的是「它自己的」槽位，不产生图上的边，也没有「方向」
 //! 可校验。不带参数的那批（`messages()` / `status()` / …）从此就是它们在 root
 //! 上的特化，**同一条实现**——分成两条的那一刻，root 和子 agent 的取料就会开始
@@ -34,7 +35,6 @@ use crate::value::message::Message;
 use crate::value::send_plan::SendPlan;
 use crate::value::send_plan_codec;
 
-use super::meta::{AgentEntry, AgentHistory};
 use super::session::Session;
 
 impl Session {
@@ -211,8 +211,12 @@ impl Session {
         )
     }
 
+    fn count_of(&self, agent: &AgentId, slot: Slot) -> u32 {
+        self.slot_of(agent, slot).as_u64().expect("计数槽位持 U64") as u32
+    }
+
     fn count(&self, slot: Slot) -> u32 {
-        self.read(slot).as_u64().expect("计数槽位持 U64") as u32
+        self.count_of(&self.agent, slot)
     }
 
     /// 本轮已经发起的 `CallProvider` 次数——新一轮和重试都算。
@@ -233,59 +237,25 @@ impl Session {
         self.count(Slot::MaxRetries)
     }
 
-    /// **完整状态**：所有 primitive 的当前值，按逻辑键排序。
+    /// 四个预算计数的 per-agent 版（208）。
     ///
-    /// 这就是 010 的 `Snapshot` 形状（`Vec<(AtomKey, Value)>`，只存 primitive）。
-    /// 排序不是装饰：两份快照要能逐值比对（「undo 一整 turn 后所有 primitive 逐值
-    /// 回退」是 M2 验收的核心句），顺序不定的快照比不出来。
-    ///
-    /// derived 一个都不在里面，也进不来——它们的键是 `DerivedKey`，另一张表
-    /// （`graph::slot` 的裁决）。
-    pub fn primitives(&self) -> Vec<(AtomKey, AgentValue)> {
-        let ids: Vec<(AtomKey, agent_store::AtomId)> = self
-            .sources
-            .borrow()
-            .iter()
-            .map(|(key, id)| (key.clone(), id))
-            .collect();
-        let mut out: Vec<(AtomKey, AgentValue)> = ids
-            .into_iter()
-            .map(|(key, id)| (key, self.store.get(id)))
-            .collect();
-        out.sort_by(|a, b| a.0.cmp(&b.0));
-        out
+    /// **不是新的跨 agent 读**（见本文件顶部）：这四个槽位站 `Private`，意思是
+    /// 「**别的 agent** 读不到」，宿主不是 agent。`srv:agent/self` 要回的就是
+    /// 「**这个** agent 自己的账」，而不带参数的那四个读的恒是 root——子 agent
+    /// 调 `self` 时若走那一条，它会拿到 root 的预算当成自己的，**不报错**。
+    pub fn turns_used_of(&self, agent: &AgentId) -> u32 {
+        self.count_of(agent, Slot::TurnsUsed)
     }
 
-    /// 只读的 command log。011 的持久化从这里读整份日志，测试从这里数条目。
-    ///
-    /// 是 `&` 不是 `&mut`：日志的写入口只有命令（`step` / `begin_turn` / …），
-    /// 借出可变引用等于给「手写一条 entry」开了门。
-    pub fn history(&self) -> &AgentHistory {
-        &self.history
+    pub fn max_turns_of(&self, agent: &AgentId) -> u32 {
+        self.count_of(agent, Slot::MaxTurns)
     }
 
-    /// 日志条数（含被 undo 掉、还能 redo 回来的尾巴）。
-    pub fn history_len(&self) -> usize {
-        self.history.len()
+    pub fn retries_used_of(&self, agent: &AgentId) -> u32 {
+        self.count_of(agent, Slot::RetriesUsed)
     }
 
-    /// 游标 = 已生效条数。`history_len() - cursor()` 就是能 redo 回来的条数。
-    pub fn cursor(&self) -> usize {
-        self.history.cursor()
-    }
-
-    /// 最后一条 entry（物理最后，不一定是 undo 要弹的那一条）。测试与审计用。
-    pub fn last_entry(&self) -> Option<&AgentEntry> {
-        self.history.last()
-    }
-
-    /// 诊断探针：derived 到目前为止真的重算了多少次。
-    ///
-    /// 存在的理由是「undo 之后 derived **重算**一致」和「停在旧值碰巧也一致」在
-    /// 断言上长得一模一样，只有这个计数分得开。跟 `agent-store` 的
-    /// `debug_recompute_count` 一样是 `#[doc(hidden)]`——它不是公开面的一部分。
-    #[doc(hidden)]
-    pub fn debug_recompute_count(&self) -> usize {
-        self.store.debug_recompute_count()
+    pub fn max_retries_of(&self, agent: &AgentId) -> u32 {
+        self.count_of(agent, Slot::MaxRetries)
     }
 }

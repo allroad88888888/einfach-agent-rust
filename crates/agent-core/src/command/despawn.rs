@@ -45,6 +45,7 @@ use agent_store::AtomId;
 
 use crate::graph::{AtomKey, DerivedKey, Slot};
 use crate::ids::AgentId;
+use crate::value::awaiting::AwaitUntil;
 
 use super::session::Session;
 
@@ -169,6 +170,22 @@ impl Session {
     /// 子树**自己的** derived 不算外人——它们马上会被销掉，而且销的顺序就在
     /// primitive 之前。除此之外的任何下游边或订阅都意味着「有人还在读」：
     /// 029 的汇聚 derived 若还把这个子 agent 当活的，就会落在这里。
+    ///
+    /// # 212 起「自己的」多了一类：盯着这棵子树的 `AwaitReached`
+    ///
+    /// `srv:agent/await` 的 derived 键是 `{ target, until }`——**目标在子树里**的
+    /// 那几条同样算自己人。不算的话，**一个被 `await` 盯着的后台子就永远拆不掉**：
+    /// 运行时每转一圈都要读一次它的进度（那正是「等到了没有」的判据），读一次就
+    /// 建起一条边，于是轮末 `orphan::reap` 恒回 `Kept`，那个子以活着的状态跨过
+    /// 这一轮、又再也不会跑——**等待方的槽从此永远 `Pending`**。
+    ///
+    /// 那正是 212 要防的死等，只是从另一扇门进来的：查环挡得住「A 等 B、B 等 A」，
+    /// 挡不住「A 等一个已经没人驱动的 B」。**这个 bug 是 212 的独立测试 agent
+    /// 逮到的**——它写「等的对象死了」那条验收时发现那条路根本走不到。
+    ///
+    /// 等待方那边不会因此读到一份幽灵状态：`await_slot::decide` **先判
+    /// `is_live`**，目标一旦不活就当场把槽收敛成 `is_error`，根本不去问那个
+    /// derived。
     fn refuse_if_still_read(
         &self,
         agents: &[AgentId],
@@ -176,11 +193,8 @@ impl Session {
     ) -> Result<(), DespawnRefused> {
         let own_derived: Vec<AtomId> = agents
             .iter()
-            .filter_map(|a| {
-                self.derived
-                    .borrow()
-                    .get(&DerivedKey::ToolsConverged(a.clone()))
-            })
+            .flat_map(|a| self.own_derived_keys(a))
+            .filter_map(|key| self.derived.borrow().get(&key))
             .collect();
 
         for key in keys {
@@ -199,6 +213,21 @@ impl Session {
         Ok(())
     }
 
+    /// 「属于这个 agent 的 derived」有哪些——**读者预检与逐出用的是同一份清单**。
+    ///
+    /// 两处必须是同一份：预检放行了、逐出漏销一条，`destroy_atom` 会因为还有
+    /// 反向边直接 panic（本文件那条既有注释点名的「坏结局」）。所以它是一个函数，
+    /// 不是两处各写一遍。
+    fn own_derived_keys(&self, agent: &AgentId) -> Vec<DerivedKey> {
+        let mut keys = vec![DerivedKey::ToolsConverged(agent.clone())];
+        // 212：`AwaitReached` 的键带 `until`，同一个目标最多三条边。
+        keys.extend(AwaitUntil::ALL.map(|until| DerivedKey::AwaitReached {
+            target: agent.clone(),
+            until,
+        }));
+        keys
+    }
+
     /// 019 硬约束 1：自叶向根，先 derived 后 primitive，`ToolsAllowed` 留作墓碑。
     ///
     /// 顺序反了引擎会当场教做人——`AtomFamily::evict` 有下游就返回 false（好），
@@ -207,11 +236,13 @@ impl Session {
     fn evict_subtree(&mut self, agents: &[AgentId], keys: &[AtomKey]) -> usize {
         let mut evicted = 0;
         for agent in agents {
-            // 先销这个 agent 的 derived：它读着自己的 `ToolSlots`，不销掉的话
-            // 下一行的 primitive 逐出会被拒。
-            self.derived
-                .borrow_mut()
-                .evict(&self.store, &DerivedKey::ToolsConverged(agent.clone()));
+            // 先销这个 agent 的 derived：它们读着这个 agent 的 primitive，
+            // 不销掉的话下一行的 primitive 逐出会被拒——**而且是 `destroy_atom`
+            // 直接 panic 那种坏结局**（见本函数文档）。212 起这里不只一条：
+            // 盯着它的 `AwaitReached` 也要一起销（见 `refuse_if_still_read`）。
+            for key in self.own_derived_keys(agent) {
+                self.derived.borrow_mut().evict(&self.store, &key);
+            }
 
             for key in keys.iter().filter(|k| k.agent() == agent) {
                 if matches!(key, AtomKey::Agent(_, Slot::ToolsAllowed)) {

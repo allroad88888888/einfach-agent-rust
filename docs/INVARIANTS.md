@@ -160,19 +160,36 @@ mock tool executor，状态流转 / undo / 恢复全部可测。
 
 ---
 
-## 10. agent 之间只允许上下读，禁止横读
+## 10. 跨 agent 的边只许指向 primitive
 
-**规则**：跨 agent 读取只走 `read_ancestor`（往上读 `messages` / `config` / `skills`）
-和 `read_descendant`（往下读 `status` / `result` / `usage`）。不提供第三个 API，
-兄弟之间要交换数据经共同祖先中转。
+**规则**：跨 agent 读**不限方向**（祖先、后代、兄弟都行，决策 35），判据只剩两条：
 
-**为什么**：整棵 agent 树在同一个 store 里，谁都物理可达。依赖图必须靠 API 约束保持是树。
-两个方向可读的 slot 集合不相交，环在结构上就不可能。
+1. **那个槽位不是内部账本**——`Slot::visibility()` 那张穷举表说了算（`Private` 一律拒）；
+2. **依赖图上的跨 agent 边只许指向 primitive**——derived 的 read fn 里用
+   `args.get` 跨 agent 取值时，键只能是 `AtomKey::Agent(id, slot)`，而 `Slot` 全是
+   source。**不许出现「跨 agent 读一个 derived」的边。**
 
-**违反后**：依赖成环。上游有 `CyclicRef` 检测和 256 深度预算，所以是运行时报错不是静默
-错值——但那是兜底，不是设计。横读还会让「读所有兄弟」这种 O(n) 汇聚悄悄混进来。
+**为什么**：整棵 agent 树在同一个 store 里，谁都物理可达，所以无环得靠约束保证。
+决策 35 之前那条约束是「方向」，论证是「两个方向可读的 slot 集合不相交 ⇒ 环不可能」
+——**那个论证的前提在这个仓里从来没成立过**：`cross_read.rs` 的读走
+`Session::peek` → `store.get`，是命令层的**非追踪读，一条边都不建**。方向约束防的是
+一类当时还不存在的边。
 
-**检查**：需要判断 → skill `agent-state-design`。API 只暴露两个函数本身就是主要约束。
+真正撑住无环的是第 2 条：`Slot` 全部是 source（`build.rs` 里 source 与 derived 是两张
+按不同键类型索引的表，「快照只存 primitive」是**类型上的事实**），primitive 没有出边，
+所以跨 agent 的边全是**长度 1 的悬边**，绕不回来。方向从此不是判据。
+
+**违反后**：跨 agent 读到一个 derived 的那一刻，环重新变得可能，而撞上时
+`store/read.rs` 是 `panic!("circular dependency detected")`——一个**模型可以触发的
+panic**。这也是为什么这条不能降级成「小心点就行」。
+
+另有一类不靠这条防的危险：**等待成环**（A 等 B、B 等 A）。它不是依赖环，图上一条
+边都不多，症状是两个 agent 的槽永远 `Pending` 而泵**安静地返回**（静止条件是在飞表
+空，两个互等的谁都没有在飞调用）。没有 panic、没有超时、没有告警。所以
+`srv:agent/await` 在**建立等待边的那一刻**查环并当场拒绝，不留到运行期再救。
+
+**检查**：需要判断 → skill `agent-state-design`。可判定的那一半是一条测试：遍历
+`Slot::ALL`，对每个构造 `AtomKey::Agent(id, slot)`，断言它落在 source family 上。
 
 ---
 

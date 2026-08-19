@@ -3,6 +3,11 @@
 //! 两天就把 target 堆到 58GB/88 万文件（2026-08-05 诊断）。
 //! 新增测试 = 在 tests/it/ 下建文件 + 在这里加一行 mod。
 
+mod await_edges_point_at_primitives;
+mod await_indep_epoch_gate;
+mod await_indep_restore_survives_cycle_check;
+mod await_indep_target_despawned;
+mod await_indep_undo_releases_edge;
 mod advance_boundary_command;
 mod advance_boundary_window_clear;
 mod apply_summary_atomic_write;
@@ -45,10 +50,18 @@ mod guard_indep_reconcile;
 mod guard_indep_report;
 mod guard_indep_window;
 mod host_prefix_indep;
+mod inbox_indep;
+mod known_label_coverage;
+mod inbox_indep_deny;
+mod inbox_indep_undo_restore;
 mod host_skills_indep_restore;
 mod host_tools_indep_restore;
 mod ladder_core_order_and_replay;
 mod no_clock_meta_test;
+mod notes_indep_basic;
+mod notes_indep_deny;
+mod notes_indep_isolation;
+mod notes_indep_undo_restore;
 mod observe_046;
 mod prefix_allowed_indep;
 mod prefix_chunks_indep;
@@ -98,3 +111,8 @@ mod subagent_indep_undo_spawn;
 mod subagent_indep_visibility;
 mod support;
 mod turn_status_terminal;
+mod wake_indep_empty_inbox;
+mod wake_indep_protocol_violation;
+mod wake_indep_turn_boundary;
+mod wake_indep_turn_cap;
+mod wake_indep_wakes_and_counts;

@@ -146,6 +146,19 @@ const KNOWN_LABELS: &[&str] = &[
     "apply_summary",
     "prefix_init",
     "declare_host_prefix",
+    // M20（决策 35）：205 的三条收件箱命令、209 的草稿纸写入、214 的唤醒转移。
+    //
+    // **漏一条的症状是「用过这个功能的会话恢复不回来」**——`recover` 撞
+    // `UnknownLabel` 直接硬失败，而不是退化成别的什么。206 落地时就漏了
+    // `"deliver"`，一直到 211 的独立测试 agent 造一个「带留言的会话落盘再恢复」
+    // 的场景才浮出来：**当时没有任何测试同时做过「用 send」和「持久化往返」
+    // 这两件事**。新增一条命令就要往这张表里加一行，忘了不会编译错。
+    "deliver",
+    "drain_now",
+    "drain_next_turn",
+    "set_note",
+    "wake",
+    "await_agent",
 ];
 
 /// 把落盘的 label 字符串映射回编译期常量 `&'static str`。

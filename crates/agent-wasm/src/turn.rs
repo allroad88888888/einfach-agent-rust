@@ -39,7 +39,8 @@ use agent_runtime::{
     RemoteToolClaimDecision, RemoteToolClaimRequest, RemoteToolFailure, RemoteToolOutput,
     RemoteToolSubmitOutcome, RemoteToolSubmitRequest, RemoteToolWaiting, ResolveRemoteToolError,
     RunnerCtx, TransientSourceFailure, cancel_pending_remote_tools_async, claim_remote_tool,
-    is_transient_source, resolve_remote_tool_async, run_turn_async,
+    AutoTurnStep, is_transient_source, resolve_remote_tool_async, run_turn_async,
+    try_one_auto_turn_async,
     submit_remote_tool_result_async, sweep_remote_tool_deadlines_async,
 };
 
@@ -80,6 +81,23 @@ pub(crate) async fn run(
     let status = run_turn_async(session, ctx, text).await?;
     let status = drain_host_tools(session, ctx, status).await?;
     if !matches!(status, TurnStatus::Failed(Failure::Cancelled)) {
+        // 211：留言自己把下一轮开起来（决策 35 §二）。**逐轮驱动**而不是调
+        // `run_auto_turns_async`：这个宿主每一轮之后还要排空 `web:` 工具的等待槽
+        // （`drain_host_tools`），而 `agent-runtime` 不认识那件事。
+        //
+        // **浏览器里「看得见 + 喊得停」比在 CLI 上更要紧**：这儿没有 Ctrl-C。
+        // 停的入口是同一个取消标志（`AgentHost::cancel()` 置上，
+        // `try_one_auto_turn_async` 在开每一轮之前先看它），面上那两条通报
+        // （`auto_turn_started` / `auto_turn_held`）由 `crate::events` 送给页面。
+        //
+        // `Outcome.status` 仍然是**用户那一轮**的终态，不被自开的轮次改写：
+        // 页面靠事件流看自驱动那几轮，靠这个返回值判断刚才那句话的结果。
+        while let AutoTurnStep::Ran(auto) = try_one_auto_turn_async(session, ctx).await? {
+            // 被取消的那一轮走不到这里：`try_one_auto_turn_async` 自己丢掉半轮
+            // （留言退回收件箱）并回 `Held`，循环当场结束。这里只需要把这一轮
+            // 里模型发起的 `web:` 工具排空——那件事 `agent-runtime` 不认识。
+            let _ = drain_host_tools(session, ctx, auto).await?;
+        }
         return Ok(Outcome {
             status,
             cancelled_turn: None,

@@ -13,6 +13,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::{AgentId, ToolCallId};
+use crate::value::awaiting::AwaitUntil;
 
 use super::slot::Slot;
 
@@ -55,4 +56,21 @@ impl AtomKey {
 pub enum DerivedKey {
     /// 「本 agent 的工具槽全都不是 `Pending` 了吗」。003 预言的那个 derived。
     ToolsConverged(AgentId),
+    /// 「`target` 到达 `until` 了吗」——`srv:agent/await` 的那个（212，决策 35 §一）。
+    ///
+    /// **这是全系统第二种 derived，也是第一条跨 agent 的边**。在它之前，
+    /// `args.get` 在生产代码里只有 `build` 一处、读的还是**自己 agent** 的
+    /// `ToolSlots`；跨 agent 的读走的是命令层的非追踪读（`cross_read`），
+    /// 一条边都不建。
+    ///
+    /// **键里没有等待方**：值只取决于「谁、等到什么」。两个 agent 等同一个目标、
+    /// 同一个条件时共用一个 derived——那正是想要的（一次重算，两个人都看得到）。
+    ///
+    /// 无环的判据落在它身上：read fn 里的 `args.get` 只能拿 `Slot` 去构
+    /// `AtomKey::Agent`，而那永远落在 source family 上，**primitive 没有出边**
+    /// ——所以这条边是一条长度 1 的悬边，绕不回来（红线 10 的新形态）。
+    AwaitReached {
+        target: AgentId,
+        until: AwaitUntil,
+    },
 }

@@ -289,6 +289,27 @@ registry:  call_id → JoinHandle / oneshot sender  不进快照，重建
 3. **跨 agent 的 undo 天生一致**：父 agent 回滚一步，那一步 spawn 的子 agent 状态在同一条
    command log 里，一起回滚。分 store 的话这是分布式事务。
 
+**M20 又白拿了第四件：agent 之间说话不需要任何消息中间件。** `srv:agent/send` 就是往
+目标那个 `Slot::Inbox` 槽位写一次（一条普通命令），于是「撤销发信人那一轮，投出去的话
+跟着消失」不需要分布式事务——那条 entry 记在**发送方**头上（`commit_as(from, …)`），
+`/undo` 一并退掉。
+
+两档送达时机**共用一个槽位**，靠每条自带的 `when` 标记区分（`Deliver::Now` 加入本轮
+loop、`Deliver::NextTurn` 这一轮结束后才送达）。不拆成两个槽位是因为它们的落盘、恢复、
+undo、可见性**逐字相同**，差别只有「哪个定点来收」——拆开就要把那四样各写一遍，
+而它们必须永远一致。
+
+`Inbox` 站 `Private`：**发得进去 ≠ 读得出来**。投递是一条命令（写），不是读——A 能往 B
+的收件箱放话，但读不到 B 的收件箱，包括自己投的那条被没被消费。要确认对方收到没有，
+等他回一条，跟人一样。
+
+**消息跨 turn，agent 不跨 turn**：`next_turn` 那一档只能投给 root（子 agent 活不到下一
+轮），落点是 root 头上一个普通 primitive 槽位——所以「跨 turn 后台 agent」需要的那套机械
+（pending-slot 跨 `run_turn` 重挂、`turn_id`/undo 重写、per-child 取消）一样都不需要。
+
+**等待图（`srv:agent/await` 的 `Slot::AwaitingOn`）必须是 journaled 状态**，不是内存里的
+一张表：恢复之后还得查得了环。放内存里，一次崩溃恢复就把查环能力丢了，而丢了不报错。
+
 ### AgentId 用路径编码
 
 `root/a1/a1.2`。祖先/后代判断是前缀匹配，不读 store 就能算。
@@ -296,33 +317,45 @@ registry:  call_id → JoinHandle / oneshot sender  不进快照，重建
 不要用「parent 指针存在 atom 里」——那样读取边界的判定就依赖了 store 状态，而 undo 正在
 回滚 store 状态，会绕成死结。
 
-### 读取边界：只允许上下，禁止横读
+### 读取边界：不限方向，但边只许指向 primitive
 
-依赖图因此恒为树。API 只有两个，没有第三个：
+**决策 35（M20）整条改写了这一节。** 之前写的是「只允许上下，禁止横读」，论证是
+「两个方向可读的 slot 集合不相交 + 图恒为树 ⇒ 环不可能」——**那个论证的前提在这个仓里
+从来没成立过**：`cross_read.rs` 的读走 `Session::peek` → `store.get`，是命令层的
+**非追踪读，一条边都不建**。方向约束防的是一类当时还不存在的边。
+
+正门只有一个：
 
 ```rust
 // agent-core/src/command/cross_read.rs
-fn read_ancestor  (&self, reader: &AgentId, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
-fn read_descendant(&self, reader: &AgentId, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
+fn read_agent(&self, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
 ```
 
-**越界是被显式拒绝，不是返回默认值**——`ReadDenied` 有四个变体：`NotAnAncestor` /
-`NotADescendant`（方向不对，横读死在这一条上）、`NotVisible`（方向对了但这个槽位不朝
-这个方向开）、`NoSuchAtom`（图上没有这个 atom，**不顺手建一个**）。这一层是红线 10 的
-运行时落点；结构面在 `graph/visibility.rs`，那里是**穷举 match，一个 `_` 通配都没有**：
-新增槽位不显式站队就编译不过。
+`read_ancestor` / `read_descendant` 还在，但它们只是它的两个**亲缘断言封装**
+（调用方自己说得出「我要读的是我的祖先」时用它多一道自检），不再是判据。
 
-今天的两个方向：往上 `Messages`、`SkillsActive`、`HostTools`（子 agent 干活要的上下文；
-后两者都是「这个会话有哪些能力」，属于会话不属于某一个 agent）；
-往下 `Status`、`ToolsAllowed`（父要知道子干完了没；`ToolsAllowed` 兼活名单，
-汇聚 derived 得先知道有哪些活着的子）。其余全是 `Private`——**开放一个方向要有理由，
-封闭不需要**。`config` / `system_base` 落地时按语义补进 `Upward`。
+**越界是被显式拒绝，不是返回默认值**——`ReadDenied` 的变体：`NotVisible`（这个槽位是
+内部账本，谁都读不到）、`NoSuchAtom`（图上没有这个 atom，**不顺手建一个**），
+加上那两个封装各自的亲缘断言。结构面在 `graph/visibility.rs`，那里是**穷举 match，
+一个 `_` 通配都没有**：新增槽位不显式站队就编译不过。**横读全开之后这条纪律更要紧了**
+——以前站错方向最多是多一条单向边，现在站错就是所有人都读得到。
 
-两个方向可读的 slot 集合**不相交**，加上图恒为树，环在结构上不可能——不靠运行时的
-`CyclicRef` 兜底。（论证：跨 agent 的边只有「后代读祖先的 `Upward` 槽位」和「祖先读后代的
-`Downward` 槽位」两种，一个环必须同时含这两种边，于是环上存在某个槽位既被往上读又被往下
-读，那要求两集合相交。所以测试断言的是**集合性质本身**，不是几个用例。）
-兄弟之间要交换数据，经共同祖先中转。
+`Visibility` 只剩两态：`Shared`（别的 agent 读得到，不限方向）与 `Private`
+（谁都读不到——一个 agent 的内部账本）。今天 `Shared` 的是 `Messages`、`Status`、
+`ToolsAllowed`、`SkillsActive`、`HostTools`、`HostSkills`、`DisabledBuiltins`、
+`PrefixChunks`、`PrefixAllowed`、`HostPrefix`；其余全是 `Private`——**开放要有理由，
+封闭不需要**。
+
+**那无环靠什么**：跨 agent 的 `args.get` 只能拿 `Slot` 去构 `AtomKey::Agent`，
+而那永远落在 source family 上（`build.rs` 里 source 与 derived 是两张按不同键类型
+索引的表，「快照只存 primitive」是**类型上的事实**）。primitive 没有出边，于是跨 agent
+的边全是**长度 1 的悬边**，绕不回来。这条判据的落点不在 `cross_read.rs`（那里的读一条边
+都不建，证不了它），而在第一条真的跨 agent 边诞生的地方：`srv:agent/await` 的 derived。
+
+**真正的危险是等待成环**（A 等 B、B 等 A），而它不是依赖环：图上一条边都不多，症状是
+两个槽永远 `Pending` 而泵**安静地返回**（静止条件是在飞表空，互等的谁都没有在飞调用）。
+没有 panic、没有超时、没有告警。所以 `await` 在**建立等待边的那一刻**查环并当场拒绝，
+不留到运行期再救。
 
 ### evict 与 undo
 

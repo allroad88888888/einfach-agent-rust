@@ -20,7 +20,7 @@
 
 use crate::harvest_omits_child_turns_support::{n_round_script, spawn_bg_and_collect_call, text_end};
 use crate::support;
-use agent_core::{AgentId, AgentLimits, ContentBlock, ReadDenied, Session, Slot, TurnStatus};
+use agent_core::{AgentId, AgentLimits, ContentBlock, Session, Slot, TurnStatus};
 use agent_runtime::{ToolTable, run_turn};
 
 const TASK_A: &str = "TASKA 三轮就答完";
@@ -126,18 +126,30 @@ fn three_background_children_collect_into_a_fixed_shape_no_matter_their_round_co
         "根历史消息数该是跟三个子的轮数无关的定值：{root_messages:#?}"
     );
 
-    // --- 结构闸：父读不到子的正文槽位 ---
+    // --- 子确实说过话，而那些话确实没进父的历史 ---
     //
-    // 红线 10：`Slot::Messages` 是 Upward-only（子读父），`read_descendant` 该
-    // 结构性拒绝，不是「读到了但恰好是空的」。这条路径本来就不经过这道闸
-    // （`child_outcome.rs` 走的是运行时侧读，见它的模块文档），这里补的是核心层
-    // 那道闸本身没被破坏。
+    // **决策 35 之前这里断言的是相反的事**：`Slot::Messages` 曾是 Upward-only，
+    // 父读子的正文在 core 那层被 `NotVisible` 结构性拒绝，这里断言那道闸没被破坏。
+    // 横读全开之后 `Messages` 是 `Shared`，父读得到了——所以这段改成断言**真正
+    // 重要的那件事**：子的正文非空（它真的跑过好几轮），而父的历史仍然是那个定值。
+    //
+    // 这比原来那条强：原来只证明「core 不让父读」，现在证明「就算读得到，
+    // 也没有一个字漏进父的历史」——而后者才是 `child_outcome.rs` 那条运行时侧
+    // 读路要保证的东西（见它的模块文档）。
     let child_a = AgentId::new("root/a1");
-    match session.read_descendant(&root, &child_a, Slot::Messages) {
-        Err(ReadDenied::NotVisible { slot, visibility }) => {
-            assert_eq!(slot, Slot::Messages);
-            assert_eq!(visibility, agent_core::Visibility::Upward);
-        }
-        other => panic!("期望 Err(NotVisible)，拿到 {other:?}"),
-    }
+    let child_messages = session
+        .read_agent(&child_a, Slot::Messages)
+        .expect("决策 35 起 Messages 是 Shared，跨 agent 读得到")
+        .as_messages()
+        .expect("Messages 槽位持 Messages")
+        .clone();
+    assert!(
+        child_messages.len() > 1,
+        "子该真的跑过好几轮，否则下面那条「没漏进来」就是空断言：{child_messages:#?}"
+    );
+    assert_eq!(
+        root_messages.len(),
+        8,
+        "子的轮次一条都不该漏进父的历史"
+    );
 }

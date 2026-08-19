@@ -24,8 +24,20 @@
 //! 一样排序（同一个不可靠来源——宿主一次 HTTP 请求里的数组），但反序列化跟
 //! `prefix_chunks` 一样 all-or-empty（同一个理由——一次原子写入的整体，不是清单）。
 
+//! [`inbox`] 是第二类里最新的一个（205，决策 35）：`Slot::Inbox` 的编解码。
+//! 它跟 [`prefix_chunks`] 站同一边——**不排序**，因为顺序就是话被说出来的先后。
+//! [`notes`]（209）站另一边：它是**一张表**不是流水账（同一个 key 写第二次是
+//! 覆盖），容器因此是 `BTreeMap`——有序是类型自带的，不是某个函数记得排一下。
+//! [`awaiting`] 是第二类里最新近的一个（212）：`Slot::AwaitingOn` 的编解码——
+//! 等待图一行 ↔ [`AgentValue::Json`] 数组。它也**排序**（红线 11：进 `await` 的
+//! 拒绝文本），但它必须 journaled 才能恢复后查环——放内存里，一次崩溃恢复就把
+//! 查环能力丢了，而丢了不报错（理由见它自己的模块文档）。
+
 pub mod atom_value;
+pub mod awaiting;
 pub mod host_prefix;
+pub mod inbox;
+pub mod notes;
 pub mod host_skills;
 pub mod host_tools;
 pub mod message;

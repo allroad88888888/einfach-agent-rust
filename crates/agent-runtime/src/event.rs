@@ -111,6 +111,39 @@ pub enum RunnerEvent {
     /// `packages/web/src/render/agent_tree.ts` 各有一份呈现是同一条规矩。
     OrphanedChild { child: AgentId, fate: OrphanFate },
 
+    /// 206：轮末这个 agent 的收件箱里还有 `count` 条 `Deliver::Now` 的话**没被
+    /// 读到**——有人给它发了消息，而它在这一轮里再也没有组装过 provider 请求
+    /// （多半是发的时候它已经答完了）。
+    ///
+    /// 这是**编排失误的信号，不是错误**：轮次结果照旧是它本来的样子，泵不会因此
+    /// 多转一圈（决策 204 §二：一轮结束就是结束）。
+    ///
+    /// **`Deliver::NextTurn` 的条目不算在里面**，它们本来就该留到下一轮
+    /// （206 §4 那条直觉陷阱：孤儿收尾「收件箱非空就告警」的写法会把正常情况
+    /// 报成异常，接着有人会顺手清干净）。
+    ///
+    /// 载荷是**事实**不是句子（同 [`RunnerEvent::OrphanedChild`]）：措辞由看的人
+    /// 组，CLI 一份、web 一份。
+    UnreadMessages { agent: AgentId, count: usize },
+
+    /// 211：**这一轮不是人开的，是留言自己开的**（决策 35 §二，自驱动轮次）。
+    ///
+    /// `remaining` 是扣掉这一轮之后**还剩几格**自驱动预算。两样都要给出去，
+    /// 因为这是本仓第一次在没有用户输入的情况下继续消耗 token——用户失去的第一样
+    /// 东西是「我知道现在在干什么」，所以「这一轮是自己开的」和「还能自己开几轮」
+    /// 都不能只进日志。
+    ///
+    /// 归属恒是 **root**：自驱动的轮次只有 root 能开（`Deliver::NextTurn` 只投给
+    /// root，子 agent 活不到下一轮）。
+    AutoTurnStarted { remaining: u32 },
+
+    /// 211：**有留言等着，但这一轮没有自己开**。`pending` 是收件箱里还剩几条。
+    ///
+    /// 三种成因（[`AutoTurnHold`]）都不是错误，但都必须说出来——**留言原地留着、
+    /// 不丢弃**是这三条共有的承诺，而一个不说话的「什么都没发生」跟「留言被吞了」
+    /// 在外面长得一模一样。
+    AutoTurnHeld { pending: usize, reason: AutoTurnHold },
+
     /// 109：一份摘要被写进状态了（[`agent_core::Session::apply_summary`] 成功）
     /// ——压缩点在时间线上可见的信号。判据同本文件顶部：`upto` **只有 runner
     /// 自己知道**（105 定死 `Event::CompactDone` 不带它，`crate::compact_slot::
@@ -147,4 +180,19 @@ pub enum OrphanFate {
     /// 已经跑完，结果在「已完成未领取」stash 里躺到轮末没人领，`bytes` 字节被
     /// 丢弃。`is_error` 说的是**子自己**成没成，不是这次丢弃成没成。
     Discarded { bytes: usize, is_error: bool },
+}
+
+/// 为什么这一轮没有自己开（211）。载荷是**事实**不是句子，同 [`OrphanFate`]。
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum AutoTurnHold {
+    /// 自驱动预算见底。**只有真实用户输入能把它加满**——按时间或按「有进展」自动
+    /// 续期都是把闸接回被它约束的循环里，那就等于没有闸（决策 35 §五）。
+    BudgetExhausted,
+    /// 用户在自驱动跑到一半时喊了停。已经跑完的那几轮**不算失败**，剩下的留言
+    /// 留在收件箱里等下一次真实驱动。
+    Cancelled,
+    /// 刚从崩溃里恢复出来。**恢复不自动开轮**，两条理由都不能让步：打开应用它
+    /// 自己就开始烧钱；以及用户还没来得及看上一轮发生了什么。恢复是「回到现场」，
+    /// 不是「接着跑」。
+    Recovered,
 }

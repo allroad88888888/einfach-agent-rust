@@ -115,6 +115,25 @@ export function createRenderer(
         stream.interrupt();
         notice.renderOrphanedChild(event.data.child, event.data.fate, agent);
         return;
+      case "unread_messages":
+        // 206：轮末未读告警。帧的 `agent` 是收信人自己（那条话是投给它的），
+        // `event.data.agent` 是同一个 id——保留字段不硬编码，跟 `orphaned_child`
+        // 那条一样：归属规则住在服务端的 `frame.rs`，分发点不替它做判断。
+        stream.interrupt();
+        notice.renderUnreadMessages(event.data.agent, event.data.count, agent);
+        return;
+      case "auto_turn_started":
+        // 211：这一轮是留言自己开的。打断连续气泡——它是一条独立的通报，
+        // 而且是用户最需要一眼看到的那种（会话在没人碰键盘时继续烧 token）。
+        stream.interrupt();
+        notice.renderAutoTurnStarted(event.data.remaining, agent);
+        return;
+      case "auto_turn_held":
+        // 211：有留言等着但没自己开。三种成因都不是错误，但都得说出来
+        // ——不说的话「什么都没发生」跟「留言被吞了」在外面长得一模一样。
+        stream.interrupt();
+        notice.renderAutoTurnHeld(event.data.pending, event.data.reason, agent);
+        return;
       case "agent_tree":
         // 049：树面板跟时间线是两块独立 DOM（`#agent-tree` vs `#timeline`），
         // 不写进时间线,因此不打断 `stream` 的连续增量气泡——树变化和文本流是

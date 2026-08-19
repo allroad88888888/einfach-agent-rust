@@ -7,7 +7,9 @@ use super::*;
 use crate::collect_tool::COLLECT_TOOL;
 use crate::spawn_tool::SPAWN_TOOL;
 use crate::status_tool::STATUS_TOOL;
-use agent_core::Location;
+// 208 把子 agent 一族的五档挪进 `tool_table_agent.rs` 之后，`AgentLimits` 也
+// 不再顺着 `tool_table.rs` 的 `use` 白拿进来——同上，测试自己点名。
+use agent_core::{AgentLimits, Location};
 
 #[test]
 fn builtin_specs_are_exposed_in_order() {
@@ -189,6 +191,7 @@ fn the_declared_limits_follow_the_limits_that_are_actually_enforced() {
     let tighter = ToolTable::builtin().with_spawn(AgentLimits {
         max_depth: 1,
         max_children: 2,
+        ..AgentLimits::default()
     });
     let text = |t: &ToolTable| t.specs().last().unwrap().description.to_string();
     assert!(text(&default).contains('8'));

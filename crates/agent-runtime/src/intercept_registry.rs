@@ -99,6 +99,9 @@ pub(crate) struct InterceptArgs<'a> {
     pub ctx: &'a mut RunnerCtx,
     /// 147 迁移进来的 spawn/collect 读它（`crate::builtin_intercepts`）。
     pub subtree: &'a mut Subtree,
+    /// 212 的 `srv:agent/await` 读它：等到之前调用方那个工具槽保持 `Pending`，
+    /// 这张表记着「哪个 call_id 在等谁」，泵每转一圈问一次。
+    pub awaits: &'a mut crate::await_slot::AwaitSlots,
     // `Effect::Compact` 的路由这条**不迁**（模块文档「两层签名」一节）：这两个
     // 字段到 147 收尾时仍然只为跟 `run_effect` 的入参面严格对齐留着，没有任何
     // 闭包读它们。真要迁 `Effect::Compact`/MCP 相关截获进来那天再摘掉这行
@@ -222,6 +225,7 @@ pub(crate) fn dispatch(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     subtree: &mut Subtree,
+    awaits: &mut crate::await_slot::AwaitSlots,
     compactions: &mut CompactSlots,
     bus: &IoBus,
     agent: &AgentId,
@@ -241,6 +245,7 @@ pub(crate) fn dispatch(
         session,
         ctx,
         subtree,
+        awaits,
         compactions,
         bus,
         agent,

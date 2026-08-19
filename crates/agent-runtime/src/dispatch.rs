@@ -82,10 +82,17 @@ pub(crate) enum Dispatched {
     CancelAll,
 }
 
+// 212 起入参到了 8 个。**不为了压这个数把它们打成一个结构体**：这些引用的
+// 生命周期各不相同（`session`/`ctx`/三张本轮表都是 `&mut`，`bus` 是 `&`），
+// 装进一个结构体要给它挂一串生命周期参数，比现在难读。参数多是这个函数
+// 「按 effect 分派、不做任何包装」定位的直接后果——同 `intercept_registry::dispatch`
+// 那条既有的同款豁免。
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_effect(
     session: &mut Session,
     ctx: &mut RunnerCtx,
     subtree: &mut Subtree,
+    awaits: &mut crate::await_slot::AwaitSlots,
     compactions: &mut CompactSlots,
     bus: &IoBus,
     source: &AgentId,
@@ -93,6 +100,18 @@ pub(crate) fn run_effect(
 ) -> Dispatched {
     match effect {
         Effect::CallProvider { agent, epoch } => {
+            // 206：**这就是 `Deliver::Now` 的定点**——收信人组装这次请求之前，
+            // 把别人投给它的话搬进它的 `Messages`。
+            //
+            // 放在这里而不是「投递的那一刻直接追加」是刻意的（决策 204 §二）：
+            // 对方可能正有一个 provider 请求在飞，那个请求带的是旧消息列表，
+            // 回来的 assistant 消息会落在被投递的那条**后面**，历史里因此长出
+            // 一段「答非所问」——而这不报错。
+            //
+            // 不在这里 `persist::sync`：它按 seq 高水位判，随后那条回执经
+            // `Session::step` 时会把这条 entry 一起带上。真崩在这个窗口里，
+            // 恢复出来的收件箱里那条还在，下一次组装请求照样送到。
+            session.drain_now(&agent);
             match provider_call::start(session, ctx, bus, agent, epoch) {
                 Ok(call) => Dispatched::Call(call),
                 Err(provider_call::StartFailure::Event(event)) => Dispatched::Event(event),
@@ -121,6 +140,7 @@ pub(crate) fn run_effect(
                     session,
                     ctx,
                     subtree,
+                    awaits,
                     compactions,
                     bus,
                     &agent,

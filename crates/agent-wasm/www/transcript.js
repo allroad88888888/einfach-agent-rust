@@ -50,6 +50,20 @@ export function mountTranscript({ transcript, logPre }) {
     scrollToBottom();
   }
 
+  // `auto_turn_held` 的三种成因 → 人话。**三句都要说清同一件事：留言没丢**，
+  // 只是这一轮没人替你处理它。不说这句，用户读到「还有 3 条留言」只会以为
+  // 它们被吞了。标签取的是 `events.rs` 里 `hold_reason_tag` 那组（跟 server
+  // 形态的 serde snake_case 同一组词）。
+  function holdReason(reason) {
+    if (reason === "budget_exhausted")
+      return "自驱动预算用完了。留言还在，你说句话它就会被读到（说话也把预算加满）。";
+    if (reason === "cancelled")
+      return "你按了 Cancel。已经跑完的那几轮不算失败，剩下的留言还在收件箱里。";
+    if (reason === "recovered")
+      return "刚从上次崩溃恢复出来——恢复不自动往下跑（不然打开页面就开始烧钱，而你还没看上一轮发生了什么）。留言还在。";
+    return reason;
+  }
+
   // runner 事件 → 页面。形状见 crates/agent-wasm/src/events.rs。
   function onEvent(json) {
     const ev = JSON.parse(json);
@@ -69,6 +83,24 @@ export function mountTranscript({ transcript, logPre }) {
         log(`[usage] prompt=${ev.prompt_tokens} completion=${ev.completion_tokens} cached=${ev.cached_tokens}`);
         break;
       case "text_delta_end":
+        break;
+      // M20（决策 35）。这四条**必须显式画出来**，不能落进下面那个 default：
+      // 它只会打一行 `[auto_turn_started] `——事件名后面什么都没有，因为这几条
+      // 的载荷字段叫 remaining/pending/count，不叫 detail/status/name。
+      //
+      // 自驱动那两条尤其要紧：**浏览器里没有 Ctrl-C**，用户唯一的出口是上面那个
+      // Cancel 按钮，而他得先知道「现在跑的这一轮不是我开的」才会去按它。
+      case "auto_turn_started":
+        note(`⟳ 这一轮是留言自己开的（不是你），之后还能自己开 ${ev.remaining} 轮——按 Cancel 随时停，剩下的留言不会丢`);
+        break;
+      case "auto_turn_held":
+        note(`⟳ 还有 ${ev.pending} 条留言没处理：${holdReason(ev.reason)}`);
+        break;
+      case "unread_messages":
+        note(`⚠ ${ev.target} 还有 ${ev.count} 条消息没看到——发的时候它多半已经答完了`);
+        break;
+      case "orphaned_child":
+        note(`⚠ 后台子 agent ${ev.child} 没人领：${ev.detail}`);
         break;
       default:
         log(`[${ev.type}] ${ev.detail ?? ev.status ?? ev.name ?? ""}`);

@@ -1007,3 +1007,105 @@ Composability](https://github.com/cordiverse/paper)（Cordis，PKU + DeepSeek-AI
 让模型「想办法撤销」（失败模式是「看起来成功了」）、宿主侧还原回调（第二步，
 等真实宿主要它）、论文的空间维（我们的工具表一次性装配、运行实例内不变，
 那半边解决的问题在这里从源头不存在，而运行期重连正是红线 11 的对面）。
+
+---
+
+## M20 · agent 之间互相看得见、说得上话
+
+**缘起**：用户 2026-08-18——
+
+> 加几个 tool 可以获取其它 agent 的状态，也可以发送一条消息给指定的 agent。
+> 再加一个 获取本 agent 状态，还能改本 agent 状态。红线 10 干掉（**我的意思是可以横着读**）。
+> agent 的 message 分两种，一种是这一轮结束之后、下一轮开启的；另外一种是直接加入
+> 本轮 loop，加入 prompt，下一次发给 AI 请求带上。
+
+> 1 可以互相订阅 2 自己开一轮
+
+**它改的是红线 10**：方向约束整条去掉，换成「**跨 agent 的边只许指向 primitive**」。
+横读全开，**含互相订阅**。`Visibility` 三态收成两态（`Shared` / `Private`）。
+
+**核心发现**（[204](204-agent-mesh-decision.md) §一）：`build.rs:71` 的
+`let DerivedKey::ToolsConverged(agent) = key;` —— **整个系统只有一种 derived**，
+`Slot` 里每一个都是 primitive，而且这是**类型上的事实**（source 与 derived 是两张按
+不同键类型索引的 family）。跨 agent 读读的是 `AtomKey::Agent(id, slot)`，**永远落在
+source family 上、永远是叶子**；而环需要 derived → derived 绕回来。所以**横向订阅
+造不出环，跟方向没关系**——`U ∩ D = ∅` 那个证明防的是一件在当前实现下已经不可能的事。
+
+新判据**比旧的更简单也更强**，而且今天由类型系统守着。（幸好它成立：真撞上时
+`store/read.rs:151` 是 `panic!`，不是错误返回。）
+
+**开工核查又推翻了一层**（204 §一 末节，WORKFLOW §四第 0 步的一次兑现——被推翻的文档
+是一小时前自己写的）：红线 10 那两个口走 `Session::peek` → `store.get`（`tree.rs:126`）
+是**命令层的非追踪读，从不建边**，而且**没有任何生产调用方**（四十处引用全在测试里）；
+`args.get`（唯一建边的读）在生产代码里此前只有 `build.rs:103` 一处、读的还是自己 agent
+的槽位。**所以全系统在此之前一条跨 agent 的依赖边都没有**——红线 10 是一道架在没人调的
+API 上、防着一类还不存在的边的策略闸，放开它的代价是**零**。响应式那条边第一次出现是在
+[212](212-await-tool-and-wait-graph.md) 的 `await` derived 里，**新判据的落地与测试因此
+都在 212**；205 只有一个不建边的读口。
+
+**真正要花钱的是两样，都不是环**：`Messages` 从 Upward-only 变成 `Shared`
+（谁都读得到谁的完整正文——core 放行，**工具层不给模型开这条路**）；以及**死锁**
+（A `await` B、B `await` A，两边都不会动，而泵会**安静地返回**——不 panic、不超时、
+不告警）。后者靠一张 journaled 的等待图 + **建立那一刻查环**挡住。
+
+**消息两档送达时机**（用户拍的）：`now` 加入本轮 loop，目标是本轮任意活 agent（含兄弟）；
+`next_turn` 这一轮结束之后才送达，**目标只能是 root**——子 agent 不跨 turn。落点是一句话：
+**消息跨 turn，agent 不跨 turn**，所以 ORCHESTRATION §六 延后的那套跨 turn 机械一样都不需要。
+
+**而留言会自己把下一轮开起来**（用户拍的）：会话第一次能在**没有用户输入**时继续消耗
+token。这把停机保证拆掉了，所以配一道新闸——`AutoTurnBudget`，**只有真实用户输入才加满**。
+
+```
+204 拍板（横读全开含订阅 + 两档送达 + 自驱动 + 「改自己状态」换形状）
+ ├→ 205 core：读口 + Visibility 收两态 + Inbox 槽 ─┬→ 206 send + 两个定点 ─┬→ 211 自驱动轮次 ─┐
+ │                                                  │                      └→ 214 唤醒终态 agent ┤
+ │                                                      ├→ 207 status 放开到全树 ─────────────┤
+ │                                                      └→ 212 srv:agent/await + 等待图查环 ──┤
+ ├→ 208 srv:agent/self（自读，独立）────────────────────────────────────────────────────────┼→ 213（终点）
+ └→ 209 Slot::Notes + srv:agent/notes（草稿纸，独立）───────────────────────────────────────┘
+```
+
+| # | 任务 | 依赖 | 模型 | 独测 | 状态 |
+|---|---|---|---|---|---|
+| [204](204-agent-mesh-decision.md) | **拍板**：横读全开含订阅；两档送达 + 自驱动；「改自己状态」= 自己的槽位 | — | **opus** | 决策类 | ✅ 完成（决策 35） |
+| [205](205-core-peek-and-inbox.md) | core：`read_agent` + `Visibility` 两态 + `Inbox` + 三条命令 | 204 | **opus** | ✅ | ✅ 完成 |
+| [206](206-send-tool-and-wakeup.md) | runtime：`srv:agent/send`（`now`/`next_turn`）+ 两个定点 + 唤醒 | 205 | **opus** | ✅ | ✅ 完成（唤醒拆去 214） |
+| [207](207-status-whole-tree.md) | runtime：`status` 放开到整棵活树（含拆文件） | 205 | sonnet | ✅ | ✅ 完成 |
+| [208](208-self-tool.md) | `srv:agent/self`：模型看得到自己的账 | 204 | sonnet | ✅ | ✅ 完成 |
+| [209](209-notes-slot.md) | `Slot::Notes` + 草稿纸两个工具 | 204 | sonnet | ✅ | ✅ 完成 |
+| [211](211-auto-driven-turns.md) | **自驱动轮次**：自驱动预算（**住在原子图外**，见该 issue 实做记录）+ 收尾自开 + 恢复不自开 | 206 | **opus** | ✅ | ✅ 完成 |
+| [212](212-await-tool-and-wait-graph.md) | **`srv:agent/await`**：真订阅 + 等待图 + 建立时查环 | 205 | **opus** | ✅ | ✅ 完成（独测在飞） |
+| [214](214-wake-a-terminal-agent.md) | **唤醒一个已终态的 agent**（含 core 转移 `Event::Wake`）——206 开工时拆出来的 | 206 | **opus** | ✅ | ✅ 完成 |
+| [213](213-agent-mesh-docs-and-dogfood.md) | 十二处文档同步 + 七条真机 ← M20 终点 | 206+207+208+209+211+212+214 | sonnet | — | ✅ 完成（含浏览器 demo 开族 + 真机验收；两处「只做了一半」的理由见该 issue） |
+
+**M20 验收**（可判定，不用形容词，全表在 [213](213-agent-mesh-docs-and-dogfood.md) §三）：
+
+- 两个**兄弟** agent 一来一回对上话，都答对（横读开了的行为证据）
+- A `await` 兄弟 B 成功；B 反向 `await` A **当场拿到错误**，两边都没卡住，这一轮正常结束
+- **人不碰键盘，会话自己跑三轮然后停住**；面上看得出「这轮是它自己开的」、剩几格预算；
+  中途按一次停，剩余留言还在；`kill -9` 重启之后**它不自己跑**
+- 模型 `status` 看到子跑偏 → `send(now)` 一条纠偏 → `collect` 拿到**改过的**结果
+- 模型写几条 notes → `/undo` **条目真的没了** → `kill -9` 恢复 **真的回来了**
+- 六道门禁全绿，且红线 9 提示与基线**逐条相同**
+
+**五条最容易做错的地方**（前三条都是**不报错**的那种）：
+
+- **「唤醒不重置 `TurnsUsed`」**（[205](205-core-peek-and-inbox.md)/[206](206-send-tool-and-wakeup.md)）。
+  `TurnsUsed` 在 `begin_turn` 时重置为 0（`txn.rs:274`）；唤醒要是走了那条路，
+  两个 agent 互相喊话就是**真无界**——不报错、测试也不红，只把 token 烧到见底。
+- **「`begin_turn` 不许碰 `AutoTurnBudget`」**（[211](211-auto-driven-turns.md)）。
+  同一个陷阱的第二次：碰了就是把闸接回被它约束的那个循环里，等于没有闸。
+- **死锁挡在建立那一刻，不是卡住之后再救**（[212](212-await-tool-and-wait-graph.md)）。
+  卡住之后**没有人有能力发现它**：两个互等的 agent 都没有 provider 调用在飞，
+  泵的静止条件成立，它会安静地返回，留下两个永远 `Pending` 的槽。
+- **[206](206-send-tool-and-wakeup.md) 的注入时机**：不能直接往对方 `Messages` 追加。
+  对方可能正有一个 provider 请求在飞，回来的 assistant 消息会落在被投递的那条**后面**，
+  历史里长出一段「答非所问」。要 `Inbox` 私有槽 + 组装请求之前定点排空。
+- **[209](209-notes-slot.md) 的形状**：用户原话是「改本 agent 状态」，但现有槽位
+  **没有一格是模型自己的**（[204](204-agent-mesh-decision.md) §三 那张表）。给它们开写口
+  = 让被约束者改自己的约束。所以是新槽位，不是新写口。
+
+**明确不做**（[204](204-agent-mesh-decision.md) §五，别在子 issue 里重开）：跨 turn 复活
+已死的子 agent、给现有槽位开写口、**跨 agent 读一个 derived**（新红线 10 挡它）、
+读/订阅 `Private` 槽位、Inbox 的已读回执、等待环卡住后的自动解救、
+`AutoTurnBudget` 的自动续期。

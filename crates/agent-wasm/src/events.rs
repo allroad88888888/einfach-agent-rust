@@ -85,6 +85,25 @@ fn body(event: &RunnerEvent) -> Value {
             "child": child.as_str(),
             "detail": format!("{fate:?}"),
         }),
+        // 206：轮末还有话没被读到。**逐字段给**而不是落 `Debug`——载荷本来就只有
+        // 两样事实（谁、几条），`format!("{:?}")` 在这里只会把它包成一句更难读的话。
+        RunnerEvent::UnreadMessages { agent, count } => json!({
+            "type": "unread_messages",
+            "target": agent.as_str(),
+            "count": count,
+        }),
+        // 211：自驱动的两条。逐字段给，同 `unread_messages` 那条理由——载荷本来
+        // 就只有事实，`Debug` 只会把它包成一句更难读的话。**浏览器里这两条比在
+        // CLI 上更要紧**：那儿没有 Ctrl-C，页面得自己给出停的入口。
+        RunnerEvent::AutoTurnStarted { remaining } => json!({
+            "type": "auto_turn_started",
+            "remaining": remaining,
+        }),
+        RunnerEvent::AutoTurnHeld { pending, reason } => json!({
+            "type": "auto_turn_held",
+            "pending": pending,
+            "reason": hold_reason_tag(reason),
+        }),
         // 109（M12）：压缩点在时间线上的两条可见信号。**只报「发生了」，不带
         // 正文**——摘要原文与被清掉的工具结果原文都不在事件里（server 形态下
         // 它们走 `GET /sessions/{id}/compaction_record`；这个宿主还没有对应的
@@ -120,5 +139,19 @@ fn notice_json(notice: &Notice) -> Value {
             "type": "notice",
             "detail": format!("{other:?}"),
         }),
+    }
+}
+
+/// [`AutoTurnHold`] → 一个稳定的字符串标签（211）。
+///
+/// **不用 `format!("{:?}")`**：那个字符串是 Rust 的 `Debug` 输出，改个变体名
+/// 就悄悄改了跨语言协议；页面那边靠它收窄分支。跟 server 形态那份
+/// （`agent-server` 的 `AutoTurnHold` 姊妹类型，serde `snake_case`）取同一组
+/// 标签，两个宿主的页面代码因此能共用同一套判断。
+fn hold_reason_tag(reason: &agent_runtime::AutoTurnHold) -> &'static str {
+    match reason {
+        agent_runtime::AutoTurnHold::BudgetExhausted => "budget_exhausted",
+        agent_runtime::AutoTurnHold::Cancelled => "cancelled",
+        agent_runtime::AutoTurnHold::Recovered => "recovered",
     }
 }

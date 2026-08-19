@@ -1,28 +1,33 @@
-//! 跨 agent 读的**两个口，没有第三个**（红线 10）。
+//! 跨 agent 读（红线 10，**决策 35 起不限方向**）。
 //!
-//! 整棵 agent 树在同一个 store 里，谁都**物理可达**——依赖图必须靠 API 约束保持是树。
-//! 所以这个文件的全部价值不在它有什么，在它**没有**什么：没有
-//! `read_sibling`，没有 `read_any(agent, slot)`，也没有一个「拿到 store 自己去 get」
-//! 的逃生口（`Session` 不暴露 `store()`，那是红线 2 的结构面，红线 10 顺带白拿）。
-//! 兄弟互读在 API 面上不存在，环因此在结构上不可能——不靠运行时的 `CyclicRef` 兜底。
+//! 整棵 agent 树在同一个 store 里，谁都**物理可达**。决策 35 之前这里只开两个方向
+//! （子读父 / 父读子），论证是「`U ∩ D = ∅` + 图恒为树 ⇒ 环不可能」。
+//! **那个论证的前提在这个仓里从来没成立过**——见下。
 //!
-//! ## 两道校验，缺一不可
+//! ## 这里的读一条依赖边都不建
+//!
+//! 三个口最后都走 [`Session::peek`](super::session::Session) → `store.get`，
+//! 那是**非追踪**读：调用它的是命令层，不是某个 derived 的 read fn，所以没有任何
+//! atom 因此依赖 `target`。建边只发生在 derived 里调 `args.get`——决策 35 之前，
+//! 那样的调用在生产代码里只有 `graph::build` 一处，读的还是**自己 agent** 的槽位。
+//!
+//! 换句话说：**方向约束防的是一类当时还不存在的边**，而且这三个口在 028～M19 期间
+//! **没有任何生产调用方**（引用全在测试里）。决策 35 把它去掉，判据只剩一条：
 //!
 //! | 校验 | 挡住什么 |
 //! |---|---|
-//! | **方向**：目标必须真的是祖先 / 后代（`AgentId` 的路径代数，不读 store） | 兄弟、自己、方向传反了、别的会话的 id |
-//! | **可见性**：槽位的 [`Visibility`] 必须与方向一致 | 「往上读一个只该往下读的槽位」——这正是 `U ∩ D = ∅` 会被破坏的那一下 |
+//! | **可见性**：槽位不是 [`Visibility::Private`] | 别人的内部账本（预算 / 消息号 / 前缀镜像 / 工具槽 / 压缩账 / 收件箱） |
 //!
-//! 两道分别对应「图恒为树」和「两个方向的槽位集合不相交」，合起来才推出无环
-//! （证明写在 `graph/visibility.rs` 的模块文档里）。少一道都不成立：只查方向的话，
-//! 一个既能上读又能下读的槽位就能在两个 agent 之间连出一对反向边。
+//! 无环从此挂在别处：**跨 agent 的边只许指向 primitive**（`graph::visibility`
+//! 模块文档），第一条真的跨 agent 边由 `srv:agent/await` 的 derived 建出来
+//! （issue 212），断言在那里。
 //!
 //! ## 为什么读口是**非创建**的
 //!
 //! 命令层写槽位走 `graph::source_atom`（get-or-create），读口走
-//! `Session::peek`（非创建）。差别是刻意的：写入必须保证目标存在，而读取有副作用
-//! 就意味着「宿主传错一个 `AgentId`」会在 family 里静静留下十个没人写的 atom，
-//! 它们还会跟着进快照。读不到就说读不到（[`ReadDenied::NoSuchAtom`]）。
+//! [`Session::peek`](super::session::Session)（非创建）。差别是刻意的：写入必须保证
+//! 目标存在，而读取有副作用就意味着「宿主传错一个 `AgentId`」会在 family 里静静留下
+//! 十个没人写的 atom，它们还会跟着进快照。读不到就说读不到（[`ReadDenied::NoSuchAtom`]）。
 
 use crate::graph::{AtomKey, Slot, Visibility};
 use crate::ids::AgentId;
@@ -36,26 +41,44 @@ use super::session::Session;
 /// 之后，调用方只能靠猜来决定要不要重试、要不要报错。
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ReadDenied {
-    /// `target` 不是 `reader` 的祖先。**兄弟、自己、以及把后代传给
-    /// [`Session::read_ancestor`] 都落在这里**——横读在这一条上被挡住。
+    /// `target` 不是 `reader` 的祖先。只有 [`Session::read_ancestor`] 会给出它
+    /// ——那是一个**带方向断言的封装**，不是 [`Session::read_agent`] 的行为。
     NotAnAncestor { reader: AgentId, target: AgentId },
     /// `target` 不是 `reader` 的后代（同上，方向相反）。
     NotADescendant { reader: AgentId, target: AgentId },
-    /// 方向对了，但这个槽位不朝这个方向开（`graph::visibility`）。
-    NotVisible { slot: Slot, visibility: Visibility },
-    /// 方向和可见性都对，但这个 atom 不在图上：从没建过，或者已经被 despawn
-    /// 逐出了。**不顺手建一个**（见模块文档）。
+    /// 这个槽位是 [`Visibility::Private`]——别的 agent 一律读不到
+    /// （`graph::visibility`）。
+    NotVisible { slot: Slot },
+    /// 可见性没问题，但这个 atom 不在图上：从没建过、已经被 despawn 逐出、
+    /// 或者这个 id 根本不属于本会话这棵树。**不顺手建一个**（见模块文档）。
     NoSuchAtom { key: AtomKey },
 }
 
 impl Session {
+    /// 跨 agent 读：**任意方向**取一次值（决策 35）。
+    ///
+    /// 祖先、后代、**兄弟**都行——判据只有「这个槽位是不是别人的内部账本」。
+    /// 兄弟互读就是靠这一条开出来的：`srv:agent/status`（207）看得见整棵树、
+    /// `srv:agent/send`（206）发得到兄弟，都建立在它上面。
+    ///
+    /// **不建依赖边**（见模块文档）。所以它跟环无关，也没有必要为「订阅」再开
+    /// 第二个口——`Session` 这一层没有「建边的读」这回事，两个名字会是同一个实现。
+    pub fn read_agent(&self, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied> {
+        if slot.visibility() == Visibility::Private {
+            return Err(ReadDenied::NotVisible { slot });
+        }
+        let key = AtomKey::Agent(target.clone(), slot);
+        self.peek(&key).ok_or(ReadDenied::NoSuchAtom { key })
+    }
+
     /// 往上读：`reader` 读它的祖先 `target` 的 `slot`。
     ///
-    /// 这是决策 3 承诺的「子读父是一次 `get`」那一下——不需要任何消息传递机制，
-    /// 走依赖图自动追踪、自动失效。放行的槽位见 [`Visibility::Upward`]。
+    /// **决策 35 起这是 [`Session::read_agent`] 加一道方向断言的薄封装**，
+    /// 断言的是**两个 agent 的亲缘关系**，不再是槽位的方向——`Slot` 的方向分类
+    /// 已经不存在了（`Visibility` 只剩 `Shared`/`Private`）。
     ///
-    /// `target` 可以是任意层的祖先，不限于直接父：相隔两层去读祖父**不会**多出
-    /// 一条绕过中间那层的边，方向仍然是往树根的，环的论证不受影响。
+    /// 留着不删有两个理由：现有测试一行不用改；以及调用点说出「我读的是我祖先」
+    /// 这个意图是有价值的——决策 3 承诺的「子读父是一次 `get`」就长在这个方向上。
     pub fn read_ancestor(
         &self,
         reader: &AgentId,
@@ -68,14 +91,15 @@ impl Session {
                 target: target.clone(),
             });
         }
-        self.read_visible(target, slot, Visibility::Upward)
+        self.read_agent(target, slot)
     }
 
     /// 往下读：`reader` 读它的后代 `target` 的 `slot`。
     ///
-    /// 029 的「等所有子 agent 完成」就长在这个方向上：`Pending` 沿依赖图自动汇聚，
-    /// 不用写调度器（STATE-MODEL §「子 agent」第 2 条）。放行的槽位见
-    /// [`Visibility::Downward`]。
+    /// 同 [`Session::read_ancestor`]，方向相反。029 的「等所有子 agent 完成」
+    /// 长在这个方向上（`Pending` 沿依赖图自动汇聚，STATE-MODEL §「子 agent」）
+    /// ——**那个汇聚 derived 至今没有被建出来**，运行时用 `Subtree::harvest`
+    /// 命令式地做了同一件事，所以别把这个封装的存在当成它已经存在的证据。
     pub fn read_descendant(
         &self,
         reader: &AgentId,
@@ -88,24 +112,6 @@ impl Session {
                 target: target.clone(),
             });
         }
-        self.read_visible(target, slot, Visibility::Downward)
-    }
-
-    /// 两个口共用的后半段：可见性 + 非创建取值。
-    ///
-    /// 合成一处是刻意的——两份拷贝就是两处可以判错的地方，而判错的后果是
-    /// 「多了一条本不该有的边」，不报错。
-    fn read_visible(
-        &self,
-        target: &AgentId,
-        slot: Slot,
-        direction: Visibility,
-    ) -> Result<AgentValue, ReadDenied> {
-        let visibility = slot.visibility();
-        if visibility != direction {
-            return Err(ReadDenied::NotVisible { slot, visibility });
-        }
-        let key = AtomKey::Agent(target.clone(), slot);
-        self.peek(&key).ok_or(ReadDenied::NoSuchAtom { key })
+        self.read_agent(target, slot)
     }
 }

@@ -164,6 +164,9 @@ fn help_documents_the_limit_flags_and_their_env_vars() {
         "--max-children",
         "AGENT_MAX_AGENT_DEPTH",
         "AGENT_MAX_CHILDREN",
+        // 211：第三道闸，同一条规矩——不写进 --help 等于没有。
+        "--max-auto-turns",
+        "AGENT_MAX_AUTO_TURNS",
     ] {
         assert!(HELP.contains(needle), "--help 该提到 {needle}");
     }

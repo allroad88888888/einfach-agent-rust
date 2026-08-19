@@ -10,17 +10,20 @@ fn the_fixed_template_is_byte_stable_for_a_given_limit_pair() {
     let a = subagent_prompt(AgentLimits {
         max_depth: 3,
         max_children: 8,
+        ..AgentLimits::default()
     });
     let b = subagent_prompt(AgentLimits {
         max_depth: 3,
         max_children: 8,
+        ..AgentLimits::default()
     });
     assert_eq!(a, b);
     assert_ne!(
         a,
         subagent_prompt(AgentLimits {
             max_depth: 2,
-            max_children: 8
+            max_children: 8,
+            ..AgentLimits::default()
         })
     );
 }

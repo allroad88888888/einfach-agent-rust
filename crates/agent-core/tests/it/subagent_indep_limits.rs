@@ -69,12 +69,14 @@ fn set_agent_limits_does_not_retroactively_kill_existing_children() {
     session.set_agent_limits(AgentLimits {
         max_depth: 3,
         max_children: 2,
+        ..AgentLimits::default()
     });
     assert_eq!(
         session.agent_limits(),
         AgentLimits {
             max_depth: 3,
-            max_children: 2
+            max_children: 2,
+            ..AgentLimits::default()
         }
     );
 
@@ -110,6 +112,7 @@ fn lowering_max_depth_does_not_kill_an_existing_deep_agent() {
     session.set_agent_limits(AgentLimits {
         max_depth: 1,
         max_children: 8,
+        ..AgentLimits::default()
     });
 
     assert!(

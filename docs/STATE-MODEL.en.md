@@ -346,6 +346,34 @@ Skip this and it will eventually blow up — in the intermittent, hard-to-reprod
    sub-agents spawned by that step are in the same command log and roll back with it. With
    separate stores this would be a distributed transaction.
 
+**M20 got a fourth one for free: agents talking to each other needs no message broker.**
+`srv:agent/send` is one write into the target's `Slot::Inbox` (an ordinary command), so
+"undo the sender's turn and the delivered message disappears with it" needs no distributed
+transaction — that entry is booked against the **sender** (`commit_as(from, …)`) and `/undo`
+takes it back along with everything else.
+
+Both delivery timings **share one slot**, distinguished by a `when` marker on each item
+(`Deliver::Now` joins the current loop; `Deliver::NextTurn` is delivered only after this turn
+ends). They aren't split into two slots because their persistence, recovery, undo, and
+visibility are **byte-for-byte identical** — the only difference is which drain point picks
+them up. Splitting would mean writing those four things twice and keeping them forever
+consistent.
+
+`Inbox` is `Private`: **being able to deliver ≠ being able to read**. Delivery is a command
+(a write), not a read — A can put a message in B's inbox but cannot read B's inbox, not even
+to see whether its own message was consumed. To confirm someone got it, wait for them to
+reply, same as with people.
+
+**Messages cross turns; agents don't.** The `next_turn` timing can only target root
+(sub-agents don't live to the next turn), and it lands in an ordinary primitive slot on root
+— which is why none of the machinery a true cross-turn background agent would need
+(re-attaching pending slots across `run_turn`, rewriting `turn_id`/undo semantics, per-child
+cancellation) is required.
+
+**The wait graph (`Slot::AwaitingOn`, behind `srv:agent/await`) has to be journaled state**,
+not an in-memory table: cycle detection must survive recovery. Keep it in memory and one
+crash recovery silently loses the ability to detect cycles at all.
+
 ### `AgentId` encodes a path
 
 `root/a1/a1.2`. Ancestor/descendant checks are prefix matches, computable without reading
@@ -354,38 +382,53 @@ the store.
 Don't store a parent pointer in an atom — then the read-boundary decision would depend on
 store state, while undo is in the middle of rolling store state back. That ties a knot.
 
-### Read boundaries: up and down only, never sideways
+### Read boundaries: any direction, but edges may only point at primitives
 
-Which keeps the dependency graph a tree. There are exactly two APIs and no third:
+**Decision 35 (M20) rewrote this section wholesale.** It used to say "up and down only,
+never sideways," argued from "the slot sets readable in the two directions are disjoint +
+the graph is a tree ⇒ a cycle is impossible." **That argument's premise was never true in
+this repo**: `cross_read.rs` reads through `Session::peek` → `store.get`, a non-tracked
+command-layer read that **builds no edge at all**. The direction rule was guarding a class
+of edge that did not exist.
+
+There is one front door:
 
 ```rust
-fn read_ancestor  (&self, reader: &AgentId, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
-fn read_descendant(&self, reader: &AgentId, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
+fn read_agent(&self, target: &AgentId, slot: Slot) -> Result<AgentValue, ReadDenied>;
 ```
 
-**Crossing the boundary is explicitly refused, not defaulted** — `ReadDenied` has four
-variants: `NotAnAncestor` / `NotADescendant` (wrong direction; sideways reads die here),
-`NotVisible` (right direction, but this slot doesn't open that way), and `NoSuchAtom` (no
-such atom in the graph — **and it does not helpfully create one**). This layer is red line
-10's runtime landing point; the structural half is in `graph/visibility.rs`, which is an
-**exhaustive match with not a single `_` wildcard**: adding a slot without declaring its
-direction doesn't compile.
+`read_ancestor` / `read_descendant` still exist, but only as **kinship-assertion wrappers**
+around it (use them when the caller can state "what I'm reading is my ancestor" and wants
+that checked). They are no longer the criterion.
 
-Today's two directions: upward — `Messages`, `SkillsActive`, `HostTools` (context a
-sub-agent needs to work; the latter two are "what capabilities does this session have,"
-which belongs to the session rather than to any one agent). Downward — `Status`,
-`ToolsAllowed` (a parent needs to know whether a child is done; `ToolsAllowed` doubles as
-the live roster, and an aggregating derived value has to know which children are alive
-first). Everything else is `Private` — **opening a direction requires a reason; closing one
-doesn't.**
+**Crossing the boundary is explicitly refused, not defaulted** — `ReadDenied` variants:
+`NotVisible` (this slot is an internal ledger; nobody can read it) and `NoSuchAtom` (no such
+atom in the graph — **and it does not helpfully create one**), plus each wrapper's kinship
+assertion. The structural half is in `graph/visibility.rs`, an **exhaustive match with not a
+single `_` wildcard**: adding a slot without declaring its visibility doesn't compile. That
+discipline matters *more* now — getting a direction wrong used to cost one extra one-way
+edge; getting visibility wrong now means **everyone can read it**.
 
-The slot sets readable in the two directions are **disjoint**, and combined with the graph
-being a tree that makes a cycle structurally impossible — no reliance on the runtime
-`CyclicRef` backstop. (The argument: cross-agent edges are only "a descendant reads an
-ancestor's `Upward` slot" or "an ancestor reads a descendant's `Downward` slot," a cycle must
-contain both kinds, therefore some slot on the cycle is read in both directions, which
-requires the two sets to intersect. So the test asserts **the set property itself**, not a
-handful of cases.) Siblings exchanging data go via a common ancestor.
+`Visibility` has only two states: `Shared` (other agents can read it, in any direction) and
+`Private` (nobody can — an agent's internal ledger). `Shared` today: `Messages`, `Status`,
+`ToolsAllowed`, `SkillsActive`, `HostTools`, `HostSkills`, `DisabledBuiltins`,
+`PrefixChunks`, `PrefixAllowed`, `HostPrefix`. Everything else is `Private` — **opening
+requires a reason; closing doesn't.**
+
+**So what keeps it acyclic**: a cross-agent `args.get` can only build an `AtomKey::Agent`
+from a `Slot`, and that always lands in the source family (in `build.rs`, source and derived
+are two tables keyed by different types — "snapshots hold only primitives" is a *type-level*
+fact). Primitives have no outgoing edges, so every cross-agent edge is a **length-1 dangling
+edge** that cannot loop back. This criterion does not land in `cross_read.rs` (the reads
+there build no edge, so they cannot demonstrate it) but where the first real cross-agent edge
+is born: the derived behind `srv:agent/await`.
+
+**The real hazard is a wait-for cycle** (A awaits B, B awaits A), and that is not a
+dependency cycle: not one extra edge exists in the graph. The symptom is two slots stuck
+`Pending` while the pump **quietly returns** (its quiescence condition is "no in-flight
+calls," and neither of the two mutually-waiting agents has one). No panic, no timeout, no
+warning. So `await` checks for a cycle **at the moment the wait edge is established** and
+refuses on the spot, rather than trying to rescue a deadlock at runtime.
 
 ### Eviction and undo
 

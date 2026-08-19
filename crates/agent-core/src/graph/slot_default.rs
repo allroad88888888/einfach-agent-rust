@@ -23,7 +23,10 @@
 
 use crate::engine::state::{DEFAULT_MAX_RETRIES, DEFAULT_MAX_TURNS, TurnStatus};
 use crate::value::atom_value::AgentValue;
-use crate::value::{host_prefix, prefix_chunks, send_plan::SendPlan, send_plan_codec, summaries};
+use crate::value::{
+    awaiting, host_prefix, inbox, notes, prefix_chunks, send_plan::SendPlan, send_plan_codec,
+    summaries,
+};
 
 use super::atom_key::{AtomKey, ToolCallSlot};
 use super::slot::Slot;
@@ -116,6 +119,27 @@ impl Slot {
             // 而开局块跟工具表一样排在 prompt 最前面（红线 11：整份缓存作废，
             // 还不报错）。
             Slot::HostPrefix => host_prefix::to_value(Vec::new()),
+            // 空收件箱的编码，不是 `Null`：**默认值必须是空**——019 的按需重建拿的
+            // 就是它，若默认成别的，undo 路径上凭空重建出来的 atom 会给一个从没
+            // 收到过消息的 agent 平添几句话，而那几句话会被排空进它的 `Messages`、
+            // 从此每一轮都进 prompt（红线 11）。链通、值错、不报错。
+            // 空列表也走同一条编解码路径，读取点因此不必区分「没收到过」和
+            // 「收到过但已经排空了」——它们就是同一个值。
+            Slot::Inbox => inbox::to_value(&[]),
+            // 空草稿纸的编码，不是 `Null`：同 `Inbox` 那条理由——**默认值必须是
+            // 空**，019 的按需重建拿的就是它。若默认成别的，undo 路径上凭空重建
+            // 出来的 atom 会给一个从没记过东西的 agent 平添几条 note，而 note
+            // 是它下一次调 `srv:agent/notes` 时照着干活的依据。链通、值错、
+            // 不报错。空表也走同一条编解码路径，读取点因此不必区分「从没记过」
+            // 和「记了又都删了」——它们就是同一个值。
+            Slot::Notes => notes::to_value(&notes::Notes::new()),
+            // 空等待图的编码，不是 `Null`：同 `Inbox`/`Notes` 那条理由——
+            // **默认值必须是空数组**，019 的按需重建拿的就是它。若默认成别的，
+            // undo 路径上凭空重建出来的 atom 会给一个从没等过谁的 agent 平添一条
+            // 等待边，而那条残边会把后续的反向 `await` 误判成环（查环正是遍历这张
+            // 图）。链通、值错、不报错。空图也走同一条编解码路径，读取点因此不必
+            // 区分「从没等过」和「等过又都清了」——它们就是同一个值。
+            Slot::AwaitingOn => awaiting::to_value(Vec::new()),
         }
     }
 }

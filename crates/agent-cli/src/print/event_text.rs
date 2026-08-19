@@ -4,7 +4,7 @@
 //! 状态机，这里两个函数都不持状态，纯粹是「给一份事件载荷，吐一句人话」。
 
 use agent_core::{Adjustment, GuardReport, TokenUsage, ToolCallRequest};
-use agent_runtime::OrphanFate;
+use agent_runtime::{AutoTurnHold, OrphanFate};
 
 /// 一次工具调用的 `reversibility` 在终端上该怎么写（202，决策 199 §八）。
 ///
@@ -51,6 +51,29 @@ pub(super) fn describe_fate(fate: &OrphanFate) -> String {
                 "干完了"
             };
             format!("已经{how}，但这一轮结束前没有人 collect 它，{bytes} 字节的结果被丢弃。")
+        }
+    }
+}
+
+/// [`AutoTurnHold`] 的可读呈现（211）。同 [`describe_fate`] 那条规矩：事实由
+/// `agent-runtime` 定，措辞由看的人组（web 端那份在
+/// `packages/web/src/render/notice.ts`）。
+///
+/// 三句话都要说清**同一件事**：留言没丢，只是这一轮没人替你处理它。
+/// 不说这句，用户读到「还有 3 条留言」只会以为它们被吞了。
+pub(super) fn hold_reason(reason: &AutoTurnHold) -> String {
+    match reason {
+        AutoTurnHold::BudgetExhausted => {
+            "自驱动预算用完了。留言还在，你说句话它就会被读到（说话也把预算加满）。"
+                .to_string()
+        }
+        AutoTurnHold::Cancelled => {
+            "你喊了停。已经跑完的那几轮不算失败，剩下的留言还在收件箱里。".to_string()
+        }
+        AutoTurnHold::Recovered => {
+            "刚从上次崩溃恢复出来——恢复不自动往下跑（不然打开就开始烧钱，\
+             而你还没看上一轮发生了什么）。留言还在，你说句话它就会被读到。"
+                .to_string()
         }
     }
 }
